@@ -1,0 +1,17 @@
+# Python/test output
+__pycache__/
+output/
+.venv/
+.pytest*/
+.env
+
+# Arduino output and local settings
+build/
+temp/
+.vscode/
+arduino_secrets.h
+*.bat
+*.txt
+
+# Release helper cache
+tools/cache/
