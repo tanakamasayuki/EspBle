@@ -81,6 +81,8 @@ enum class EspBleRole : uint8_t
 };
 
 using EspBleConnectionId = uint32_t;
+using EspBleListenerId = uint32_t;
+constexpr EspBleListenerId EspBleInvalidListenerId = 0;
 
 struct EspBleConnection
 {
@@ -493,6 +495,7 @@ private:
 class EspBleHidKeyboardHost
 {
 public:
+  static constexpr size_t MaxListenersPerEvent = 4;
   using DiscoveryCallback =
     std::function<void(const EspBleHidKeyboardHostDiscovery &result)>;
   using StateCallback = std::function<void(const EspBleHidKeyboardState &state)>;
@@ -509,6 +512,10 @@ public:
   void onDiscovered(DiscoveryCallback callback);
   void onKeyboardState(StateCallback callback);
   void onKeyboard(KeyboardCallback callback);
+  EspBleListenerId addDiscoveredListener(DiscoveryCallback callback);
+  EspBleListenerId addKeyboardStateListener(StateCallback callback);
+  EspBleListenerId addKeyboardListener(KeyboardCallback callback);
+  bool removeListener(EspBleListenerId listenerId);
   void setKeyboardLayout(EspBleKeyboardLayout layout);
   EspBleKeyboardLayout keyboardLayout() const;
   bool ready(EspBleConnectionId connectionId) const;
@@ -525,9 +532,29 @@ private:
 
   EspBle *owner_;
   EspBleHidKeyboardHostImpl *impl_ = nullptr;
+
+  template <typename Callback>
+  struct ListenerSlot
+  {
+    EspBleListenerId id = EspBleInvalidListenerId;
+    Callback callback;
+  };
+
+  template <typename Callback>
+  EspBleListenerId addListener(ListenerSlot<Callback> *slots, Callback callback);
+
+  template <typename Callback>
+  static bool removeListenerFrom(
+    ListenerSlot<Callback> *slots,
+    EspBleListenerId listenerId);
+
   DiscoveryCallback discoveryCallback_;
   StateCallback stateCallback_;
   KeyboardCallback keyboardCallback_;
+  ListenerSlot<DiscoveryCallback> discoveryListeners_[MaxListenersPerEvent];
+  ListenerSlot<StateCallback> stateListeners_[MaxListenersPerEvent];
+  ListenerSlot<KeyboardCallback> keyboardListeners_[MaxListenersPerEvent];
+  EspBleListenerId nextListenerId_ = 1;
   EspBleKeyboardLayout keyboardLayout_ = EspBleKeyboardLayout::EnUs;
 };
 

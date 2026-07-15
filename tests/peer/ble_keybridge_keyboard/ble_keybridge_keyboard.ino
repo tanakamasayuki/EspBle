@@ -78,6 +78,13 @@ void setup()
     Serial.printf("BRIDGE_INIT_FAILED %s\n", ble.lastErrorName());
     return;
   }
+  ble.hidKeyboardHost().onKeyboardState([](const EspBleHidKeyboardState &state) {
+    if (state.wasPressed(0x04))
+    {
+      Serial.printf("SKETCH_STATE a_pressed=1 id=%u\n",
+        static_cast<unsigned>(state.connectionId));
+    }
+  });
   ble.onConnected([](const EspBleConnection &connection) {
     keyboardConnectionId = connection.id;
     Serial.printf("BRIDGE_CONNECTED id=%u\n", static_cast<unsigned>(connection.id));
@@ -122,6 +129,29 @@ void loop()
     {
       Serial.printf("BRIDGE_BONDS_CLEARED success=%u count=%u\n",
         ble.deleteAllBonds() ? 1 : 0, static_cast<unsigned>(ble.bondCount()));
+    }
+    else if (command == 'q')
+    {
+      EspBleListenerId listenerIds[5] = {};
+      size_t added = 0;
+      for (EspBleListenerId &listenerId : listenerIds)
+      {
+        listenerId = ble.hidKeyboardHost().addKeyboardListener(
+          [](const EspBleHidKeyboardEvent &) {});
+        added += listenerId != EspBleInvalidListenerId ? 1 : 0;
+      }
+      const bool overflow =
+        listenerIds[4] == EspBleInvalidListenerId &&
+        ble.lastError() == EspBleError::ResourceExhausted;
+      size_t removed = 0;
+      for (size_t i = 0; i < 4; ++i)
+      {
+        removed += ble.hidKeyboardHost().removeListener(listenerIds[i]) ? 1 : 0;
+      }
+      Serial.printf("BRIDGE_LISTENERS added=%u overflow=%u removed=%u\n",
+        static_cast<unsigned>(added),
+        overflow ? 1 : 0,
+        static_cast<unsigned>(removed));
     }
     else if (command == 's')
     {

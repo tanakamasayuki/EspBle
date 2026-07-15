@@ -2960,6 +2960,86 @@ void EspBleHidKeyboardHost::onKeyboard(KeyboardCallback callback)
   keyboardCallback_ = std::move(callback);
 }
 
+template <typename Callback>
+EspBleListenerId EspBleHidKeyboardHost::addListener(
+  ListenerSlot<Callback> *slots,
+  Callback callback)
+{
+  if (!callback)
+  {
+    owner_->setError(EspBleError::InvalidArgument, "listener callback is empty");
+    return EspBleInvalidListenerId;
+  }
+  for (size_t i = 0; i < MaxListenersPerEvent; ++i)
+  {
+    if (slots[i].id == EspBleInvalidListenerId)
+    {
+      EspBleListenerId id = nextListenerId_++;
+      if (id == EspBleInvalidListenerId)
+      {
+        id = nextListenerId_++;
+      }
+      slots[i].id = id;
+      slots[i].callback = std::move(callback);
+      owner_->clearError();
+      return id;
+    }
+  }
+  owner_->setError(EspBleError::ResourceExhausted, "too many HID Keyboard Host listeners");
+  return EspBleInvalidListenerId;
+}
+
+template <typename Callback>
+bool EspBleHidKeyboardHost::removeListenerFrom(
+  ListenerSlot<Callback> *slots,
+  EspBleListenerId listenerId)
+{
+  for (size_t i = 0; i < MaxListenersPerEvent; ++i)
+  {
+    if (slots[i].id == listenerId)
+    {
+      slots[i] = ListenerSlot<Callback>();
+      return true;
+    }
+  }
+  return false;
+}
+
+EspBleListenerId EspBleHidKeyboardHost::addDiscoveredListener(DiscoveryCallback callback)
+{
+  return addListener(discoveryListeners_, std::move(callback));
+}
+
+EspBleListenerId EspBleHidKeyboardHost::addKeyboardStateListener(StateCallback callback)
+{
+  return addListener(stateListeners_, std::move(callback));
+}
+
+EspBleListenerId EspBleHidKeyboardHost::addKeyboardListener(KeyboardCallback callback)
+{
+  return addListener(keyboardListeners_, std::move(callback));
+}
+
+bool EspBleHidKeyboardHost::removeListener(EspBleListenerId listenerId)
+{
+  if (listenerId == EspBleInvalidListenerId)
+  {
+    owner_->setError(EspBleError::InvalidArgument, "listener ID is invalid");
+    return false;
+  }
+  const bool removed =
+    removeListenerFrom(discoveryListeners_, listenerId) ||
+    removeListenerFrom(stateListeners_, listenerId) ||
+    removeListenerFrom(keyboardListeners_, listenerId);
+  if (!removed)
+  {
+    owner_->setError(EspBleError::NotFound, "listener ID was not found");
+    return false;
+  }
+  owner_->clearError();
+  return true;
+}
+
 void EspBleHidKeyboardHost::setKeyboardLayout(EspBleKeyboardLayout layout)
 {
   keyboardLayout_ = layout;
@@ -3063,18 +3143,46 @@ void EspBleHidKeyboardHost::dispatchPendingEvents()
     }
     if (event.type == EspBleHidKeyboardHostImpl::EventType::Discovery)
     {
-      if (discoveryCallback_)
+      DiscoveryCallback callbacks[MaxListenersPerEvent + 1];
+      callbacks[0] = discoveryCallback_;
+      for (size_t i = 0; i < MaxListenersPerEvent; ++i)
       {
-        discoveryCallback_(event.discovery);
+        callbacks[i + 1] = discoveryListeners_[i].callback;
+      }
+      for (DiscoveryCallback &callback : callbacks)
+      {
+        if (callback)
+        {
+          callback(event.discovery);
+        }
       }
     }
     else
     {
-      if (stateCallback_)
+      StateCallback stateCallbacks[MaxListenersPerEvent + 1];
+      stateCallbacks[0] = stateCallback_;
+      for (size_t i = 0; i < MaxListenersPerEvent; ++i)
       {
-        stateCallback_(event.state);
+        stateCallbacks[i + 1] = stateListeners_[i].callback;
       }
-      if (keyboardCallback_)
+      for (StateCallback &callback : stateCallbacks)
+      {
+        if (callback)
+        {
+          callback(event.state);
+        }
+      }
+
+      KeyboardCallback keyboardCallbacks[MaxListenersPerEvent + 1];
+      keyboardCallbacks[0] = keyboardCallback_;
+      bool hasKeyboardCallback = static_cast<bool>(keyboardCallback_);
+      for (size_t i = 0; i < MaxListenersPerEvent; ++i)
+      {
+        keyboardCallbacks[i + 1] = keyboardListeners_[i].callback;
+        hasKeyboardCallback = hasKeyboardCallback ||
+          static_cast<bool>(keyboardListeners_[i].callback);
+      }
+      if (hasKeyboardCallback)
       {
         uint8_t previousModifiers = event.state.modifiers;
         for (uint8_t bit = 0; bit < 8; ++bit)
@@ -3116,7 +3224,13 @@ void EspBleHidKeyboardHost::dispatchPendingEvents()
               keyboardLayout_,
               event.state.capsLock,
               event.state.numLock);
-            keyboardCallback_(keyboardEvent);
+            for (KeyboardCallback &callback : keyboardCallbacks)
+            {
+              if (callback)
+              {
+                callback(keyboardEvent);
+              }
+            }
           }
         }
       }

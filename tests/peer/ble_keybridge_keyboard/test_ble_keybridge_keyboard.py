@@ -15,6 +15,8 @@ def _connect(dut, device, connection_id):
 def test_ble_keyboard_feeds_keybridge_and_reconnects(dut, peers):
     device = peers["device"]
 
+    dut.write("q")
+    dut.expect_exact("BRIDGE_LISTENERS added=4 overflow=1 removed=4", timeout=10)
     dut.write("x")
     device.write("x")
     dut.expect_exact("BRIDGE_BONDS_CLEARED success=1 count=0", timeout=10)
@@ -25,6 +27,7 @@ def test_ble_keyboard_feeds_keybridge_and_reconnects(dut, peers):
 
     device.write("k")
     device.expect_exact("DEVICE_SHIFT_A_SENT success=1", timeout=10)
+    dut.expect_exact("SKETCH_STATE a_pressed=1 id=1", timeout=20)
     dut.expect_exact("BRIDGE_OUT keyboard:0005 keyboard:00e1", timeout=20)
     device.write("r")
     device.expect_exact("DEVICE_RELEASE_SENT success=1", timeout=10)
@@ -40,6 +43,7 @@ def test_ble_keyboard_feeds_keybridge_and_reconnects(dut, peers):
 
     device.write("k")
     device.expect_exact("DEVICE_SHIFT_A_SENT success=1", timeout=10)
+    dut.expect_exact("SKETCH_STATE a_pressed=1 id=1", timeout=20)
     dut.expect_exact("BRIDGE_OUT keyboard:0005 keyboard:00e1", timeout=20)
     dut.write("d")
     dut.expect_exact("BRIDGE_DISCONNECT_STARTED success=1", timeout=10)
@@ -51,6 +55,7 @@ def test_ble_keyboard_feeds_keybridge_and_reconnects(dut, peers):
     device.expect_exact("DEVICE_LEDS num=0 caps=1 scroll=0", timeout=20)
     device.write("k")
     device.expect_exact("DEVICE_SHIFT_A_SENT success=1", timeout=10)
+    dut.expect_exact("SKETCH_STATE a_pressed=1 id=2", timeout=20)
     dut.expect_exact("BRIDGE_OUT keyboard:0005 keyboard:00e1", timeout=20)
     device.write("r")
     device.expect_exact("DEVICE_RELEASE_SENT success=1", timeout=10)

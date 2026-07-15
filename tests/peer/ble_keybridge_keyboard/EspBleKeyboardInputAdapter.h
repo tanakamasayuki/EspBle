@@ -17,6 +17,18 @@ public:
 
   explicit EspBleKeyboardInputAdapter(EspBle &ble) : ble_(ble) {}
 
+  ~EspBleKeyboardInputAdapter() override
+  {
+    if (discoveryListenerId_ != EspBleInvalidListenerId)
+    {
+      ble_.hidKeyboardHost().removeListener(discoveryListenerId_);
+    }
+    if (stateListenerId_ != EspBleInvalidListenerId)
+    {
+      ble_.hidKeyboardHost().removeListener(stateListenerId_);
+    }
+  }
+
   bool discover(EspBleConnectionId connectionId)
   {
     subscribe();
@@ -93,7 +105,7 @@ private:
       return;
     }
     subscribed_ = true;
-    ble_.hidKeyboardHost().onDiscovered(
+    discoveryListenerId_ = ble_.hidKeyboardHost().addDiscoveredListener(
       [this](const EspBleHidKeyboardHostDiscovery &result) {
         if (result.success)
         {
@@ -109,7 +121,7 @@ private:
           discoveryCallback_(result);
         }
       });
-    ble_.hidKeyboardHost().onKeyboardState(
+    stateListenerId_ = ble_.hidKeyboardHost().addKeyboardStateListener(
       [this](const EspBleHidKeyboardState &state) {
         Keyboard *keyboard = find(state.connectionId);
         if (keyboard != nullptr)
@@ -133,6 +145,8 @@ private:
 
   EspBle &ble_;
   bool subscribed_ = false;
+  EspBleListenerId discoveryListenerId_ = EspBleInvalidListenerId;
+  EspBleListenerId stateListenerId_ = EspBleInvalidListenerId;
   Keyboard keyboards_[MaxKeyboards];
   size_t keyboardCount_ = 0;
   esp32keybridge::KeySet keys_;

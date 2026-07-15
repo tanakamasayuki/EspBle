@@ -88,7 +88,7 @@
 7. `hid_keyboard_host` PeerテストでDiscovery、Battery Read、Input subscription、usage snapshot、LED Output、Pairing/Bondingを確認済み。Device wire形式は別テストで同梱BLE API直接実装により独立検証する。
 8. `EspBleHidKeyboardState`の256-bit usage snapshotはESP32KeyBridgeの`InputAdapter::keys()`へ変換なしで写像できる。試作adapterでは`bridge.update()`からEspBleの`update()`も駆動でき、remap、modifier、切断releaseを確認した。
 9. KeyBridgeのLockStateは`setKeyboardLeds(connectionId, ...)`でBLE keyboardへ返送でき、再接続・再Discovery後にも現在値を再送できる。
-10. 正式adapterが`onDiscovered()`と`onKeyboardState()`を使用するとsketchのcallbackと競合する。単一callback slotのまま内部hubでfan-outするか、EspBle本体へ複数listener登録・解除を追加するかは公開API確定時に決める。
+10. 正式adapterとsketch callbackの競合を避けるため、HID Keyboard Hostは既存の単一`on*()`に加えて、event種別ごとに最大4件の`add*Listener()`とIDによる`removeListener()`を提供する。配送開始時にcallbackをsnapshotし、callback内の登録変更は次eventから反映する。共通Event APIへの一般化は他profileで必要になった時点で判断する。
 11. 再接続時は新しいConnection IDに対してSecurity完了後に再度`discover()`が必要で、Discovery完了後にinputをconnectedとして扱う。自動再接続・自動Discoveryは今回のadapter境界には含めない。
 
 ## 優先順位候補

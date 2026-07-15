@@ -268,6 +268,8 @@ keyboard.onKeyboard([](const EspBleHidKeyboardEvent &event) {
 });
 ```
 
+通常のsketchは単一slotの`onDiscovered()` / `onKeyboardState()` / `onKeyboard()`を使います。adapterなど複数consumerとの共存には、対応する`addDiscoveredListener()` / `addKeyboardStateListener()` / `addKeyboardListener()`を使い、返された`EspBleListenerId`を`removeListener()`へ渡します。追加listenerはevent種別ごとに最大4件で、callback配送中の登録変更は次のeventから反映します。
+
 `EspBleHidKeyboardState`は接続ID、Report ID、modifier、lock状態、現在の256-bit usage bitmap、直前から変化したbitmapを持ちます。modifier usages `0xE0..0xE7`もbitmapへ含めます。`onKeyboard()`はこのsnapshotからusageごとのpress/releaseと任意のASCIIを派生します。ESP32KeyBridgeなどはlayout変換を通さずraw stateを使用できます。切断時にheld keyがあれば全release snapshot/eventを配送します。
 
 LEDは接続単位で返送します。
@@ -293,7 +295,7 @@ keyboard.setKeyboardLeds(connectionId,
 ## Event API
 
 - 通常callbackは`update()` contextで配送する。
-- listener登録と解除を提供する。
+- ✅ HID Keyboard Hostでは単一`on*()`と共存する固定容量listener登録・解除を提供する。他の領域へ共通化するかは利用例を追加して判断する。
 - Connection id、対象UUID、結果、payloadを必要に応じて含める。
 - payloadの寿命を型ごとに明記する。
 - callbackを使わない利用者向けに状態getterを提供する。
