@@ -251,6 +251,8 @@ struct EspBleHidKeyboardHostDiscovery
 {
   EspBleConnectionId connectionId = 0;
   uint8_t reportId = 0;
+  bool hasCountryCode = false;
+  uint8_t countryCode = 0;
   bool hasOutputReport = false;
   bool hasBatteryLevel = false;
   uint8_t batteryLevel = 0;
@@ -270,6 +272,11 @@ struct EspBleHidKeyboardState
   uint8_t keys[BitmapSize] = {};
   uint8_t changedKeys[BitmapSize] = {};
   uint8_t modifiers = 0;
+  bool numLock = false;
+  bool capsLock = false;
+  bool scrollLock = false;
+  bool compose = false;
+  bool kana = false;
 
   bool isDown(uint8_t usage) const
   {
@@ -285,6 +292,45 @@ struct EspBleHidKeyboardState
     return !isDown(usage) &&
       (changedKeys[usage >> 3] & static_cast<uint8_t>(1u << (usage & 7))) != 0;
   }
+};
+
+enum class EspBleKeyboardLayout : uint16_t
+{
+  ZhTw = 0x0404,
+  DaDk = 0x0406,
+  DeDe = 0x0407,
+  EnUs = 0x0409,
+  FiFi = 0x040b,
+  FrFr = 0x040c,
+  HuHu = 0x040e,
+  ItIt = 0x0410,
+  JaJp = 0x0411,
+  KoKr = 0x0412,
+  NlNl = 0x0413,
+  NbNo = 0x0414,
+  PtBr = 0x0416,
+  SvSe = 0x041d,
+  ZhCn = 0x0804,
+  EnGb = 0x0809,
+  PtPt = 0x0816,
+  EsEs = 0x0c0a,
+  FrCh = 0x100c,
+};
+
+struct EspBleHidKeyboardEvent
+{
+  EspBleConnectionId connectionId = 0;
+  uint8_t reportId = 0;
+  uint8_t usage = 0;
+  uint8_t ascii = 0;
+  uint8_t modifiers = 0;
+  bool pressed = false;
+  bool released = false;
+  bool numLock = false;
+  bool capsLock = false;
+  bool scrollLock = false;
+  bool compose = false;
+  bool kana = false;
 };
 
 class EspBle;
@@ -450,6 +496,7 @@ public:
   using DiscoveryCallback =
     std::function<void(const EspBleHidKeyboardHostDiscovery &result)>;
   using StateCallback = std::function<void(const EspBleHidKeyboardState &state)>;
+  using KeyboardCallback = std::function<void(const EspBleHidKeyboardEvent &event)>;
 
   bool discover(EspBleConnectionId connectionId);
   bool setKeyboardLeds(
@@ -461,6 +508,9 @@ public:
     bool kana = false);
   void onDiscovered(DiscoveryCallback callback);
   void onKeyboardState(StateCallback callback);
+  void onKeyboard(KeyboardCallback callback);
+  void setKeyboardLayout(EspBleKeyboardLayout layout);
+  EspBleKeyboardLayout keyboardLayout() const;
   bool ready(EspBleConnectionId connectionId) const;
 
 private:
@@ -477,6 +527,8 @@ private:
   EspBleHidKeyboardHostImpl *impl_ = nullptr;
   DiscoveryCallback discoveryCallback_;
   StateCallback stateCallback_;
+  KeyboardCallback keyboardCallback_;
+  EspBleKeyboardLayout keyboardLayout_ = EspBleKeyboardLayout::EnUs;
 };
 
 class EspBle

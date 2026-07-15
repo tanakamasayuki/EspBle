@@ -1086,6 +1086,11 @@ struct EspBleHidKeyboardHostImpl
     BLERemoteCharacteristic *outputReport = nullptr;
     uint8_t keys[EspBleHidKeyboardState::BitmapSize] = {};
     uint8_t modifiers = 0;
+    bool numLock = false;
+    bool capsLock = false;
+    bool scrollLock = false;
+    bool compose = false;
+    bool kana = false;
   };
 
   enum class EventType : uint8_t
@@ -1135,6 +1140,122 @@ struct EspBleHidKeyboardHostImpl
       containsSequence(data, length, modifiers, sizeof(modifiers)) &&
       containsSequence(data, length, sixKeys, sizeof(sixKeys)) &&
       containsSequence(data, length, keyboardUsages, sizeof(keyboardUsages));
+  }
+
+  static uint8_t keypadUsageToAscii(uint8_t usage, bool numLock)
+  {
+    switch (usage)
+    {
+    case 0x54: return '/';
+    case 0x55: return '*';
+    case 0x56: return '-';
+    case 0x57: return '+';
+    case 0x58: return '\r';
+    case 0x67: return '=';
+    default: break;
+    }
+    if (!numLock)
+    {
+      return 0;
+    }
+    if (usage >= 0x59 && usage <= 0x61)
+    {
+      return static_cast<uint8_t>('1' + usage - 0x59);
+    }
+    if (usage == 0x62) return '0';
+    if (usage == 0x63) return '.';
+    return 0;
+  }
+
+  static uint8_t usageToAscii(
+    uint8_t usage,
+    uint8_t modifiers,
+    EspBleKeyboardLayout layout,
+    bool capsLock,
+    bool numLock)
+  {
+    const bool enUsCompatible =
+      layout == EspBleKeyboardLayout::EnUs ||
+      layout == EspBleKeyboardLayout::KoKr ||
+      layout == EspBleKeyboardLayout::ZhCn ||
+      layout == EspBleKeyboardLayout::ZhTw;
+    if (!enUsCompatible && layout != EspBleKeyboardLayout::JaJp)
+    {
+      // Preserve the raw usage event until this language's complete table is
+      // implemented; partial fallback would produce incorrect letters on
+      // layouts such as de-DE where the Y/Z positions differ.
+      return 0;
+    }
+    if ((usage >= 0x54 && usage <= 0x63) || usage == 0x67)
+    {
+      return keypadUsageToAscii(usage, numLock);
+    }
+    const bool shifted = (modifiers &
+      (EspBleHidKeyboardInputReport::LeftShift |
+       EspBleHidKeyboardInputReport::RightShift)) != 0;
+    if (usage >= 0x04 && usage <= 0x1d)
+    {
+      const uint8_t letter = static_cast<uint8_t>('a' + usage - 0x04);
+      return (shifted != capsLock) ? static_cast<uint8_t>(letter - 'a' + 'A') : letter;
+    }
+    if (usage >= 0x1e && usage <= 0x27)
+    {
+      static const uint8_t normal[] = "1234567890";
+      static const uint8_t enUsShift[] = "!@#$%^&*()";
+      static const uint8_t jaJpShift[] = {'!', '"', '#', '$', '%', '&', '\'', '(', ')', 0};
+      const size_t index = usage - 0x1e;
+      if (!shifted)
+      {
+        return normal[index];
+      }
+      return layout == EspBleKeyboardLayout::JaJp ? jaJpShift[index] : enUsShift[index];
+    }
+    switch (usage)
+    {
+    case 0x28: return '\r';
+    case 0x29: return 0x1b;
+    case 0x2a: return '\b';
+    case 0x2b: return '\t';
+    case 0x2c: return ' ';
+    default: break;
+    }
+
+    if (layout == EspBleKeyboardLayout::JaJp)
+    {
+      switch (usage)
+      {
+      case 0x2d: return shifted ? '=' : '-';
+      case 0x2e: return shifted ? '~' : '^';
+      case 0x2f: return shifted ? '`' : '@';
+      case 0x30: return shifted ? '{' : '[';
+      case 0x31:
+      case 0x32: return shifted ? '}' : ']';
+      case 0x33: return shifted ? '+' : ';';
+      case 0x34: return shifted ? '*' : ':';
+      case 0x36: return shifted ? '<' : ',';
+      case 0x37: return shifted ? '>' : '.';
+      case 0x38: return shifted ? '?' : '/';
+      case 0x87: return shifted ? '_' : '\\';
+      case 0x89: return shifted ? '|' : '\\';
+      default: return 0;
+      }
+    }
+    switch (usage)
+    {
+    case 0x2d: return shifted ? '_' : '-';
+    case 0x2e: return shifted ? '+' : '=';
+    case 0x2f: return shifted ? '{' : '[';
+    case 0x30: return shifted ? '}' : ']';
+    case 0x31: return shifted ? '|' : '\\';
+    case 0x32: return shifted ? '~' : '#';
+    case 0x33: return shifted ? ':' : ';';
+    case 0x34: return shifted ? '"' : '\'';
+    case 0x35: return shifted ? '~' : '`';
+    case 0x36: return shifted ? '<' : ',';
+    case 0x37: return shifted ? '>' : '.';
+    case 0x38: return shifted ? '?' : '/';
+    default: return 0;
+    }
   }
 
   Connection *findConnection(EspBleConnectionId connectionId)
@@ -1220,6 +1341,11 @@ struct EspBleHidKeyboardHostImpl
       {
         return;
       }
+      event.state.numLock = connection->numLock;
+      event.state.capsLock = connection->capsLock;
+      event.state.scrollLock = connection->scrollLock;
+      event.state.compose = connection->compose;
+      event.state.kana = connection->kana;
       bool changed = connection->modifiers != event.state.modifiers;
       for (size_t index = 0; index < EspBleHidKeyboardState::BitmapSize; ++index)
       {
@@ -1292,6 +1418,15 @@ struct EspBleHidKeyboardHostImpl
         }
         else
         {
+          BLERemoteCharacteristic *hidInformation =
+            hidService->getCharacteristic(BLEUUID((uint16_t)0x2a4a));
+          const String hidInformationValue =
+            hidInformation == nullptr ? String() : hidInformation->readValue();
+          if (hidInformationValue.length() >= 3)
+          {
+            result.hasCountryCode = true;
+            result.countryCode = static_cast<uint8_t>(hidInformationValue[2]);
+          }
           std::map<uint16_t, BLERemoteCharacteristic *> *characteristics =
             hidService->getCharacteristicsByHandle();
           for (const auto &entry : *characteristics)
@@ -2774,6 +2909,18 @@ bool EspBleHidKeyboardHost::setKeyboardLeds(
     owner_->setError(EspBleError::BackendFailure, "failed to write HID Keyboard LEDs");
     return false;
   }
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    EspBleHidKeyboardHostImpl::Connection *connection = impl_->findConnection(connectionId);
+    if (connection != nullptr)
+    {
+      connection->numLock = numLock;
+      connection->capsLock = capsLock;
+      connection->scrollLock = scrollLock;
+      connection->compose = compose;
+      connection->kana = kana;
+    }
+  }
   owner_->clearError();
   return true;
 }
@@ -2786,6 +2933,21 @@ void EspBleHidKeyboardHost::onDiscovered(DiscoveryCallback callback)
 void EspBleHidKeyboardHost::onKeyboardState(StateCallback callback)
 {
   stateCallback_ = std::move(callback);
+}
+
+void EspBleHidKeyboardHost::onKeyboard(KeyboardCallback callback)
+{
+  keyboardCallback_ = std::move(callback);
+}
+
+void EspBleHidKeyboardHost::setKeyboardLayout(EspBleKeyboardLayout layout)
+{
+  keyboardLayout_ = layout;
+}
+
+EspBleKeyboardLayout EspBleHidKeyboardHost::keyboardLayout() const
+{
+  return keyboardLayout_;
 }
 
 bool EspBleHidKeyboardHost::ready(EspBleConnectionId connectionId) const
@@ -2815,6 +2977,11 @@ void EspBleHidKeyboardHost::handleDisconnected(EspBleConnectionId connectionId)
   event.type = EspBleHidKeyboardHostImpl::EventType::State;
   event.state.connectionId = connectionId;
   event.state.reportId = connection->reportId;
+  event.state.numLock = connection->numLock;
+  event.state.capsLock = connection->capsLock;
+  event.state.scrollLock = connection->scrollLock;
+  event.state.compose = connection->compose;
+  event.state.kana = connection->kana;
   memcpy(event.state.changedKeys, connection->keys, sizeof(event.state.changedKeys));
   bool hasHeldKey = connection->modifiers != 0;
   for (uint8_t value : connection->keys)
@@ -2881,9 +3048,58 @@ void EspBleHidKeyboardHost::dispatchPendingEvents()
         discoveryCallback_(event.discovery);
       }
     }
-    else if (stateCallback_)
+    else
     {
-      stateCallback_(event.state);
+      if (stateCallback_)
+      {
+        stateCallback_(event.state);
+      }
+      if (keyboardCallback_)
+      {
+        uint8_t previousModifiers = event.state.modifiers;
+        for (uint8_t bit = 0; bit < 8; ++bit)
+        {
+          const uint8_t usage = static_cast<uint8_t>(0xe0 + bit);
+          if ((event.state.changedKeys[usage >> 3] &
+               static_cast<uint8_t>(1u << (usage & 7))) != 0)
+          {
+            previousModifiers ^= static_cast<uint8_t>(1u << bit);
+          }
+        }
+        for (uint8_t transition = 0; transition < 2; ++transition)
+        {
+          const bool pressed = transition == 0;
+          for (uint16_t usageValue = 0; usageValue <= 0xff; ++usageValue)
+          {
+            const uint8_t usage = static_cast<uint8_t>(usageValue);
+            const uint8_t mask = static_cast<uint8_t>(1u << (usage & 7));
+            if ((event.state.changedKeys[usage >> 3] & mask) == 0 ||
+                event.state.isDown(usage) != pressed)
+            {
+              continue;
+            }
+            EspBleHidKeyboardEvent keyboardEvent;
+            keyboardEvent.connectionId = event.state.connectionId;
+            keyboardEvent.reportId = event.state.reportId;
+            keyboardEvent.usage = usage;
+            keyboardEvent.modifiers = event.state.modifiers;
+            keyboardEvent.pressed = pressed;
+            keyboardEvent.released = !pressed;
+            keyboardEvent.numLock = event.state.numLock;
+            keyboardEvent.capsLock = event.state.capsLock;
+            keyboardEvent.scrollLock = event.state.scrollLock;
+            keyboardEvent.compose = event.state.compose;
+            keyboardEvent.kana = event.state.kana;
+            keyboardEvent.ascii = EspBleHidKeyboardHostImpl::usageToAscii(
+              usage,
+              pressed ? event.state.modifiers : previousModifiers,
+              keyboardLayout_,
+              event.state.capsLock,
+              event.state.numLock);
+            keyboardCallback_(keyboardEvent);
+          }
+        }
+      }
     }
   }
 }

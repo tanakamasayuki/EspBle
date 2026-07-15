@@ -47,9 +47,10 @@
 - Battery Service Client / standalone Server
 - ✅ HID Keyboard Device（Peripheral / GATT Server）
 - ✅ HID Keyboard Host（Central / GATT Client、初期6KRO）
-- HID Keyboard Hostの`onKeyboard()` press/release convenience event
-- EN-US / JA-JP layoutと任意のusage-to-character変換
-- HID Information country codeの取得（layout自動決定には使用しない）
+- ✅ HID Keyboard Hostの`onKeyboard()` press/release convenience event
+- ✅ EN-US / JA-JP layoutと任意のusage-to-ASCII変換
+- EspUsbHost互換の各言語ASCII table
+- ✅ HID Information country codeの取得（layout自動決定には使用しない）
 - ✅ HID Output Report
 - ✅ `hid_keyboard_device` Peerテスト（Battery ReadとOutput Reportを含む）
 - ✅ `hid_keyboard_host` Peerテスト

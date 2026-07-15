@@ -20,9 +20,11 @@ void setup()
   auto &keyboard = ble.hidKeyboardHost();
   keyboard.onDiscovered([](const EspBleHidKeyboardHostDiscovery &result) {
     Serial.printf(
-      "HOST_DISCOVERED success=%u report=%u output=%u battery_present=%u battery=%u context=%s detail=%s\n",
+      "HOST_DISCOVERED success=%u report=%u country_present=%u country=%u output=%u battery_present=%u battery=%u context=%s detail=%s\n",
       result.success ? 1 : 0,
       result.reportId,
+      result.hasCountryCode ? 1 : 0,
+      result.countryCode,
       result.hasOutputReport ? 1 : 0,
       result.hasBatteryLevel ? 1 : 0,
       result.batteryLevel,
@@ -37,6 +39,16 @@ void setup()
       state.isDown(0x04) ? 1 : 0,
       state.wasPressed(0x04) ? 1 : 0,
       state.wasReleased(0x04) ? 1 : 0,
+      callbackContext());
+  });
+  keyboard.onKeyboard([](const EspBleHidKeyboardEvent &event) {
+    Serial.printf(
+      "HOST_KEY usage=%u ascii=%u pressed=%u released=%u modifiers=%u context=%s\n",
+      event.usage,
+      event.ascii,
+      event.pressed ? 1 : 0,
+      event.released ? 1 : 0,
+      event.modifiers,
       callbackContext());
   });
 
@@ -101,6 +113,16 @@ void loop()
         "HOST_LEDS_WRITTEN success=%u\n",
         ble.hidKeyboardHost().setKeyboardLeds(
           keyboardConnectionId, true, true, false) ? 1 : 0);
+    }
+    else if (command == 'e')
+    {
+      ble.hidKeyboardHost().setKeyboardLayout(EspBleKeyboardLayout::EnUs);
+      Serial.println("HOST_LAYOUT en-US");
+    }
+    else if (command == 'j')
+    {
+      ble.hidKeyboardHost().setKeyboardLayout(EspBleKeyboardLayout::JaJp);
+      Serial.println("HOST_LAYOUT ja-JP");
     }
     else if (command == 'd')
     {

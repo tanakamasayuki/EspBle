@@ -22,6 +22,7 @@ void setup()
   keyboardConfig.vendorId = 0x303a;
   keyboardConfig.productId = 0x4002;
   keyboardConfig.productVersion = 0x0100;
+  keyboardConfig.countryCode = 33;
   keyboardConfig.initialBatteryLevel = 73;
   if (!keyboard.configure(keyboardConfig))
   {
@@ -91,6 +92,21 @@ void loop()
     {
       Serial.printf("DEVICE_RELEASE_SENT success=%u\n",
         ble.hidKeyboardDevice().releaseAll() ? 1 : 0);
+    }
+    else if (command == 't')
+    {
+      EspBleHidKeyboardInputReport report;
+      report.modifiers = EspBleHidKeyboardInputReport::LeftShift;
+      report.keys[0] = 0x1f; // Keyboard 2 and @ on en-US, " on ja-JP.
+      Serial.printf("DEVICE_LAYOUT_KEY_SENT success=%u\n",
+        ble.hidKeyboardDevice().sendInputReport(report) ? 1 : 0);
+    }
+    else if (command == 'm')
+    {
+      EspBleHidKeyboardInputReport report;
+      report.modifiers = EspBleHidKeyboardInputReport::LeftShift;
+      Serial.printf("DEVICE_MODIFIER_SENT success=%u\n",
+        ble.hidKeyboardDevice().sendInputReport(report) ? 1 : 0);
     }
   }
 

@@ -28,6 +28,13 @@ void setup()
       state.wasPressed(0x04) ? 1 : 0,
       state.wasReleased(0x04) ? 1 : 0);
   });
+  keyboard.setKeyboardLayout(EspBleKeyboardLayout::EnUs);
+  keyboard.onKeyboard([](const EspBleHidKeyboardEvent &event) {
+    if (event.pressed)
+    {
+      Serial.printf("Key pressed: usage=0x%02x ascii=0x%02x\n", event.usage, event.ascii);
+    }
+  });
 
   EspBleConfig config;
   config.deviceName = "EspBle Keyboard Host";

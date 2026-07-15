@@ -262,9 +262,13 @@ keyboard.onKeyboardState([](const EspBleHidKeyboardState &state) {
     // HID Keyboard/Keypad usage 0x04 (A) が押された。
   }
 });
+keyboard.setKeyboardLayout(EspBleKeyboardLayout::JaJp);
+keyboard.onKeyboard([](const EspBleHidKeyboardEvent &event) {
+  // usage単位のpressed/released。変換可能な場合だけasciiが非0になる。
+});
 ```
 
-`EspBleHidKeyboardState`は接続ID、Report ID、modifier、現在の256-bit usage bitmap、直前から変化したbitmapを持ちます。modifier usages `0xE0..0xE7`もbitmapへ含めます。文字やkeyboard layoutへ変換せず、ESP32KeyBridgeなどがraw usageをそのまま扱える境界にします。切断時にheld keyがあれば全release snapshotを配送します。
+`EspBleHidKeyboardState`は接続ID、Report ID、modifier、lock状態、現在の256-bit usage bitmap、直前から変化したbitmapを持ちます。modifier usages `0xE0..0xE7`もbitmapへ含めます。`onKeyboard()`はこのsnapshotからusageごとのpress/releaseと任意のASCIIを派生します。ESP32KeyBridgeなどはlayout変換を通さずraw stateを使用できます。切断時にheld keyがあれば全release snapshot/eventを配送します。
 
 LEDは接続単位で返送します。
 

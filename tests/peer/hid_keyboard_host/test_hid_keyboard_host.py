@@ -19,9 +19,44 @@ def test_hid_keyboard_host_discovery_state_and_leds(dut, peers):
     )
     dut.expect_exact("HOST_DISCOVERY_STARTED success=1", timeout=10)
     dut.expect_exact(
-        "HOST_DISCOVERED success=1 report=1 output=1 battery_present=1 battery=73 context=loop detail=",
+        "HOST_DISCOVERED success=1 report=1 country_present=1 country=33 output=1 battery_present=1 battery=73 context=loop detail=",
         timeout=20,
     )
+
+    dut.write("e")
+    dut.expect_exact("HOST_LAYOUT en-US", timeout=10)
+    keyboard_device.write("t")
+    keyboard_device.expect_exact("DEVICE_LAYOUT_KEY_SENT success=1", timeout=10)
+    dut.expect_exact(
+        "HOST_KEY usage=31 ascii=64 pressed=1 released=0 modifiers=2 context=loop",
+        timeout=20,
+    )
+    keyboard_device.write("r")
+    keyboard_device.expect_exact("DEVICE_RELEASE_SENT success=1", timeout=10)
+
+    keyboard_device.write("m")
+    keyboard_device.expect_exact("DEVICE_MODIFIER_SENT success=1", timeout=10)
+    dut.expect_exact(
+        "HOST_KEY usage=225 ascii=0 pressed=1 released=0 modifiers=2 context=loop",
+        timeout=20,
+    )
+    keyboard_device.write("r")
+    keyboard_device.expect_exact("DEVICE_RELEASE_SENT success=1", timeout=10)
+    dut.expect_exact(
+        "HOST_KEY usage=225 ascii=0 pressed=0 released=1 modifiers=0 context=loop",
+        timeout=20,
+    )
+
+    dut.write("j")
+    dut.expect_exact("HOST_LAYOUT ja-JP", timeout=10)
+    keyboard_device.write("t")
+    keyboard_device.expect_exact("DEVICE_LAYOUT_KEY_SENT success=1", timeout=10)
+    dut.expect_exact(
+        "HOST_KEY usage=31 ascii=34 pressed=1 released=0 modifiers=2 context=loop",
+        timeout=20,
+    )
+    keyboard_device.write("r")
+    keyboard_device.expect_exact("DEVICE_RELEASE_SENT success=1", timeout=10)
 
     keyboard_device.write("k")
     keyboard_device.expect_exact("DEVICE_INPUT_SENT success=1", timeout=10)
