@@ -42,6 +42,22 @@ Report MapがKeyboard Application、modifier usages `0xE0..0xE7`、8-bit × 6個
 
 NKRO bitmap、複合HID、複数Keyboard Input Report、Boot Protocol切替、Consumer Controlは未対応です。未知の形式はDiscovery失敗として明示し、8-byteという長さだけで推測しません。
 
+## Keyboard layoutと一般向けevent
+
+HID Keyboard/Keypad usageは基本的に物理的なkey位置・機能を表し、入力文字そのものではありません。BLE HOGPもUSB HIDのReport descriptorとUsage Tablesを使用するため、通常の文字変換はHost OSまたはEspBle利用者が選んだkeyboard layoutで行います。
+
+HID Informationのcountry codeはDeviceから得られるhintですが、接続時にHostとlayoutを交渉する仕組みではなく、OSが自動的に同じlayoutへ切り替える保証もありません。EspBleはcountry codeを取得できるようにしても、それだけでlayoutを決定しません。
+
+現在の`onKeyboardState()`はlayout非依存のraw usage境界です。今後、一般的なsketch向けに次のconvenience layerを追加します。
+
+- `onKeyboard()`によるusage単位のpress/release event
+- event内のConnection ID、usage、modifier snapshot
+- 選択したlayoutに基づく任意のASCII/文字変換
+- EN-US、JA-JPなどの明示的なlayout設定
+- modifier単独変化、同時押し、rollover時のevent規則
+
+layoutを指定しない利用者やESP32KeyBridgeはraw usageをそのまま使用できます。異なるlayoutの複数keyboardを同時接続する可能性があるため、layout設定をglobalにするかConnection単位にするかは複数接続APIと合わせて確定します。
+
 ## Keyboard state
 
 受信reportは`EspBleHidKeyboardState`へ正規化します。
