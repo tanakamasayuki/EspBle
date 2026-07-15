@@ -11,13 +11,19 @@ USBにおける`EspUsbHost` / `EspUsbDevice`に相当する機能領域を目標
 - Arduino framework
 - Arduino-ESP32 3.x
 - Arduino-ESP32に同梱されたBLEライブラリのNimBLE backend
-- BLE対応ESP32 SoC
+- Arduino-ESP32がNimBLEを利用可能な構成として提供するESP32
 
 外部のNimBLE-Arduinoを必須依存にせず、BLEスタックを本ライブラリへ複製・同梱しません。Bluedroid backendとBluetooth Classicは対応対象に含めません。検証済みArduino-ESP32バージョンはテストの`sketch.yaml`で固定し、対応範囲は実装開始時に確定します。
 
-初期実機ターゲットはESP32-S3です。他のBLE対応SoCはbuild-only testと段階的な実機確認で追加します。ESP32-S2/P4などBLEを内蔵しないSoCは、将来Arduino-ESP32が外部コントローラ経由のBLEを提供しても初期対象には含めません。
+初期実機ターゲットはESP32-S3です。対象可否はSoCがBluetooth LEを内蔵しているかだけでは決めず、Arduino-ESP32がそのボード構成でNimBLE backendを提供するかで判断します。
+
+ESP32-P4はBluetooth LEを内蔵しませんが、Arduino-ESP32が規定するGPIOへESP32-C6などの対応コントローラを接続したHosted BLE構成では、Arduinoスケッチから内蔵構成と同じBLE APIを利用できます。この構成もEspBleの対象候補です。P4 + C6 Hosted BLEは初期の常設Peer環境には含めず、build-only testと専用実機確認を追加してから対応済みとします。
+
+内蔵/Hostedの差、接続可能数、PHY、Advertising機能などはbackend capabilityとして扱い、SoC名だけで利用可能機能を推測しません。
 
 ## 基本要件
+
+公開API、文書、examplesの用語は[TERMINOLOGY.ja.md](TERMINOLOGY.ja.md)に従います。
 
 ### 単一スタックと役割の共存
 

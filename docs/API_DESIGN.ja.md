@@ -2,12 +2,17 @@
 
 この文書は公開APIを実装する前の設計規則です。具体的なclass名とsignatureはPeer用の最小GATT vertical sliceで検証してから確定します。
 
+用語とexampleの変数命名は[TERMINOLOGY.ja.md](TERMINOLOGY.ja.md)に従います。
+
 ## 命名
 
 - library root: `EspBle`
 - standard terms: Central、Peripheral、GATT Client、GATT Server、Connection
 - `Host` / `Device`だけの曖昧な表現を避ける。
 - 公開定数と型は`EspBle`または`ESP_BLE_` prefixで衝突を避ける。
+- Profile型では`HidHost` / `HidDevice`のようにroleを省略しない。
+- examplesでは複数roleが登場する場合、`hidKeyboardHost` / `hidKeyboardDevice`のように変数名でもroleを明示する。
+- 単一roleで文脈が自明なexampleでは`keyboard`などの簡潔な変数名を許容し、個別に判断する。
 
 ## 所有モデル
 

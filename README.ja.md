@@ -26,6 +26,7 @@ Mouse、Consumer Control、複合HID、MIDI、NUS、センサー、Extended Adve
 - [要件](docs/REQUIREMENTS.ja.md)
 - [コア設計](docs/CORE_DESIGN.ja.md)
 - [API設計](docs/API_DESIGN.ja.md)
+- [用語と命名規則](docs/TERMINOLOGY.ja.md)
 - [設計決定](docs/DECISIONS.ja.md)
 - [開発計画](docs/DEVELOPMENT_PLAN.ja.md)
 - [テスト計画](tests/TEST_PLAN.ja.md)

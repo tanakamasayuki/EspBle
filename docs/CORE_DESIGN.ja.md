@@ -78,7 +78,9 @@ BLE処理は非同期を基本とします。スタックcallback内では状態
 
 公開APIはArduino-ESP32同梱BLEライブラリの型を通常利用に要求しません。backend固有のinclude、callback変換、error変換、機能差は内部層へ閉じ込めます。
 
-Arduino-ESP32 3.3.10の同梱BLE API自体はBluedroid/NimBLEの両backendを扱えますが、EspBleはそのうちNimBLE backendだけを対象とします。`CONFIG_NIMBLE_ENABLED`などArduino-ESP32が提供するcompile-time設定を確認し、Bluedroid構成では明示的にunsupportedとします。外部NimBLE-Arduinoとの互換性は保証しません。
+Arduino-ESP32 3.3.10の同梱BLE API自体はBluedroid/NimBLEの両backendを扱えますが、EspBleはそのうちNimBLE backendだけを対象とします。`CONFIG_NIMBLE_ENABLED`またはHosted BLEを示す`CONFIG_ESP_HOSTED_ENABLE_BT_NIMBLE`など、Arduino-ESP32が提供するcompile-time設定を確認し、Bluedroid構成では明示的にunsupportedとします。外部NimBLE-Arduinoとの互換性は保証しません。
+
+Backend境界はnative controllerとHosted controllerの両方を許容します。ESP32-P4へ規定GPIOでESP32-C6などを接続するHosted BLEでも、Arduino-ESP32の共通BLE APIより下のtransport差をアプリケーションへ露出させません。ただし利用可能機能とresource上限はbackend capabilityとして個別に判定します。
 
 Peer testの`s3_peer_host` / `s3_peer_device`はpytest-embedded-cliが2台を識別するprofile名であり、BLE Central / Peripheral、GATT Client / Serverなどのroleを表しません。両方のsketchは転送・実行され、両方のSerialを同じpytestから観測・操作できます。初期構成では親側sketchをCentral、`peer_device/`側sketchをPeripheralに固定し、役割交換は行いません。
 

@@ -3,7 +3,7 @@
 
 #include <sdkconfig.h>
 
-#if !defined(CONFIG_NIMBLE_ENABLED)
+#if !defined(CONFIG_NIMBLE_ENABLED) && !defined(CONFIG_ESP_HOSTED_ENABLE_BT_NIMBLE)
 #error "EspBle requires the NimBLE backend bundled with Arduino-ESP32"
 #endif
 

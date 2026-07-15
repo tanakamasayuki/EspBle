@@ -15,6 +15,9 @@
 11. 初期プロファイルはHID KeyboardとBattery Serviceに絞る。
 12. `memo.ja.md`は正式文書への移行確認後に削除する。
 13. 初期自動Peer環境は常設ESP32-S3 2台とする。3台必要な複数接続またはBLE-to-BLE bridge testは、manual用ESP32-S3を追加Peerとして利用し、Peerディレクトリを増やして拡張する。
+14. 対象可否はBLE内蔵SoCかどうかではなく、Arduino-ESP32がNimBLEを提供する構成かで判断する。ESP32-P4 + ESP32-C6などのHosted BLEも対象候補に含め、専用build/実機試験後に対応済みとする。
+15. 公開APIと文書はBluetooth LEの標準用語を基本とし、Central/Peripheral、GATT Client/Server、HID Host/Deviceを同一視しない。stack ownerは役割中立の`EspBle`とする。
+16. examplesの変数名は役割の明確さを優先する。複数roleが登場する場合は`hidKeyboardHost` / `hidKeyboardDevice`のように明示し、単一roleで自明なexampleでは`keyboard`などの短い名前を個別判断で許容する。
 
 ## 仮置き
 
