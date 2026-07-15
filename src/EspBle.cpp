@@ -9,7 +9,9 @@
 #include <BLEScan.h>
 #include <BLEServer.h>
 #include <BLEService.h>
+#include <BLESecurity.h>
 #include <BLEUtils.h>
+#include <host/ble_store.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <mutex>
@@ -20,6 +22,11 @@ namespace
 constexpr size_t ScanQueueCapacity = 16;
 constexpr size_t ConnectionCapacity = 4;
 constexpr size_t ConnectionEventQueueCapacity = 8;
+#if defined(CONFIG_BT_NIMBLE_MAX_BONDS)
+constexpr size_t BondCapacity = CONFIG_BT_NIMBLE_MAX_BONDS;
+#else
+constexpr size_t BondCapacity = 16;
+#endif
 
 bool uuidEquals(const String &left, const char *right)
 {
@@ -44,6 +51,7 @@ struct EspBleImpl
     ServerSubscription,
     ServerSendResult,
     MtuChanged,
+    SecurityChanged,
   };
 
   struct ConnectionSlot
@@ -64,6 +72,7 @@ struct EspBleImpl
     EspBleGattSubscription serverSubscription;
     EspBleGattSendResult serverSendResult;
     EspBleMtuChanged mtuChanged;
+    EspBleSecurityChanged securityChanged;
   };
 
   class ClientCallbacks : public BLEClientCallbacks
@@ -74,12 +83,18 @@ struct EspBleImpl
     void onConnect(BLEClient *client) override
     {
       BLEAddress peerAddress = client->getPeerAddress();
+      ble_gap_conn_desc description{};
+      ble_gap_conn_find(client->getConnId(), &description);
       if (!owner_->addConnection(
             client->getConnId(),
             peerAddress.toString(),
             peerAddress.getType(),
             EspBleRole::Central,
             client->getMTU(),
+            description.sec_state.encrypted,
+            description.sec_state.authenticated,
+            description.sec_state.bonded,
+            description.sec_state.key_size,
             client))
       {
         client->disconnect();
@@ -109,6 +124,10 @@ struct EspBleImpl
             peerAddress.getType(),
             EspBleRole::Peripheral,
             server->getPeerMTU(description->conn_handle),
+            description->sec_state.encrypted,
+            description->sec_state.authenticated,
+            description->sec_state.bonded,
+            description->sec_state.key_size,
             nullptr))
       {
         server->disconnect(description->conn_handle);
@@ -132,9 +151,31 @@ struct EspBleImpl
     EspBleImpl *owner_;
   };
 
-  explicit EspBleImpl(EspBle *owner)
-      : owner(owner), clientCallbacks(this), serverCallbacks(this)
+  class SecurityCallbacks : public BLESecurityCallbacks
   {
+  public:
+    explicit SecurityCallbacks(EspBleImpl *owner) : owner_(owner) {}
+
+    void onAuthenticationComplete(ble_gap_conn_desc *description) override
+    {
+      if (description != nullptr)
+      {
+        owner_->updateSecurity(description->conn_handle, description->sec_state);
+      }
+    }
+
+  private:
+    EspBleImpl *owner_;
+  };
+
+  explicit EspBleImpl(EspBle *owner)
+      : owner(owner), clientCallbacks(this), serverCallbacks(this), securityCallbacks(this)
+  {
+  }
+
+  ~EspBleImpl()
+  {
+    delete securityBackend;
   }
 
   bool pushEvent(const Event &event)
@@ -156,6 +197,10 @@ struct EspBleImpl
     uint8_t peerAddressType,
     EspBleRole localRole,
     uint16_t mtu,
+    bool encrypted,
+    bool authenticated,
+    bool bonded,
+    uint8_t encryptionKeySize,
     BLEClient *client)
   {
     std::lock_guard<std::mutex> lock(mutex);
@@ -178,6 +223,10 @@ struct EspBleImpl
       slot.connection.peerAddressType = peerAddressType;
       slot.connection.localRole = localRole;
       slot.connection.mtu = mtu;
+      slot.connection.encrypted = encrypted;
+      slot.connection.authenticated = authenticated;
+      slot.connection.bonded = bonded;
+      slot.connection.encryptionKeySize = encryptionKeySize;
 
       Event event;
       event.type = EventType::Connected;
@@ -258,6 +307,35 @@ struct EspBleImpl
         pushEvent(event);
         return;
       }
+    }
+  }
+
+  void updateSecurity(uint16_t connectionHandle, const ble_gap_sec_state &state)
+  {
+    std::lock_guard<std::mutex> lock(mutex);
+    for (ConnectionSlot &slot : connections)
+    {
+      if (!slot.used || slot.connection.handle != connectionHandle)
+      {
+        continue;
+      }
+
+      slot.connection.encrypted = state.encrypted;
+      slot.connection.authenticated = state.authenticated;
+      slot.connection.bonded = state.bonded;
+      slot.connection.encryptionKeySize = state.key_size;
+
+      Event event;
+      event.type = EventType::SecurityChanged;
+      event.securityChanged.connection = slot.connection;
+      event.securityChanged.success = state.encrypted;
+      if (!event.securityChanged.success)
+      {
+        event.securityChanged.error = EspBleError::BackendFailure;
+        event.securityChanged.detail = "BLE pairing or encryption failed";
+      }
+      pushEvent(event);
+      return;
     }
   }
 
@@ -574,6 +652,9 @@ struct EspBleImpl
   uint32_t connectTimeoutMilliseconds = 10000;
   ClientCallbacks clientCallbacks;
   ServerCallbacks serverCallbacks;
+  SecurityCallbacks securityCallbacks;
+  BLESecurity *securityBackend = nullptr;
+  bool securityEnabled = false;
   bool gattOperating = false;
   TaskHandle_t gattTask = nullptr;
   EspBleGattOperation gattOperation = EspBleGattOperation::Discover;
@@ -1215,6 +1296,14 @@ bool EspBleGattServer::addCharacteristic(
     owner_->setError(EspBleError::InvalidArgument, "GATT characteristic has no properties");
     return false;
   }
+  if ((config.encryptedRead && !config.readable) ||
+      (config.encryptedWrite && !config.writable && !config.writableWithoutResponse))
+  {
+    owner_->setError(
+      EspBleError::InvalidArgument,
+      "encrypted GATT access requires the corresponding read or write property");
+    return false;
+  }
   if (impl_ == nullptr)
   {
     owner_->setError(EspBleError::NotFound, "GATT service was not added");
@@ -1545,6 +1634,8 @@ bool EspBleGattServer::realize()
       if (config.writableWithoutResponse) properties |= BLECharacteristic::PROPERTY_WRITE_NR;
       if (config.notifiable) properties |= BLECharacteristic::PROPERTY_NOTIFY;
       if (config.indicatable) properties |= BLECharacteristic::PROPERTY_INDICATE;
+      if (config.encryptedRead) properties |= BLECharacteristic::PROPERTY_READ_ENC;
+      if (config.encryptedWrite) properties |= BLECharacteristic::PROPERTY_WRITE_ENC;
 
       characteristicDefinition.backend = serviceDefinition.backend->createCharacteristic(
         characteristicDefinition.uuid.c_str(), properties);
@@ -1660,8 +1751,34 @@ bool EspBle::begin(const EspBleConfig &config)
     }
   }
 
+  impl_->securityEnabled = config.security.enabled;
+  BLESecurity::setAuthenticationMode(
+    config.security.enabled && config.security.bonding,
+    false,
+    config.security.enabled);
+  BLESecurity::setForceAuthentication(
+    config.security.enabled && config.security.pairOnConnect);
+  if (config.security.enabled)
+  {
+    impl_->securityBackend = new BLESecurity();
+    if (impl_->securityBackend == nullptr)
+    {
+      BLESecurity::setAuthenticationMode(false, false, false);
+      BLESecurity::setForceAuthentication(false);
+      BLEDevice::deinit(false);
+      delete impl_;
+      impl_ = nullptr;
+      setError(EspBleError::ResourceExhausted, "failed to allocate security state");
+      return false;
+    }
+    BLEDevice::setSecurityCallbacks(&impl_->securityCallbacks);
+  }
+
   if (!gattServer_.realize())
   {
+    BLEDevice::setSecurityCallbacks(nullptr);
+    BLESecurity::setAuthenticationMode(false, false, false);
+    BLESecurity::setForceAuthentication(false);
     BLEDevice::deinit(false);
     gattServer_.resetBackend();
     delete impl_;
@@ -1718,6 +1835,9 @@ void EspBle::end()
       delay(1);
     }
   }
+  BLEDevice::setSecurityCallbacks(nullptr);
+  BLESecurity::setAuthenticationMode(false, false, false);
+  BLESecurity::setForceAuthentication(false);
   BLEDevice::deinit(false);
   initialized_ = false;
   gattServer_.resetBackend();
@@ -1869,6 +1989,152 @@ bool EspBle::connection(EspBleConnectionId connectionId, EspBleConnection &conne
   return false;
 }
 
+bool EspBle::requestSecurity(EspBleConnectionId connectionId)
+{
+  if (!initialized_ || impl_ == nullptr)
+  {
+    setError(EspBleError::InvalidState, "BLE stack is not initialized");
+    return false;
+  }
+  if (!impl_->securityEnabled)
+  {
+    setError(EspBleError::InvalidState, "BLE security is not enabled");
+    return false;
+  }
+
+  uint16_t connectionHandle = 0xffff;
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    for (const EspBleImpl::ConnectionSlot &slot : impl_->connections)
+    {
+      if (slot.used && slot.connection.id == connectionId)
+      {
+        connectionHandle = slot.connection.handle;
+        break;
+      }
+    }
+  }
+  if (connectionHandle == 0xffff)
+  {
+    setError(EspBleError::InvalidArgument, "connection ID was not found");
+    return false;
+  }
+
+  int backendCode = 0;
+  if (!BLESecurity::startSecurity(connectionHandle, &backendCode))
+  {
+    setError(
+      EspBleError::BackendFailure,
+      (String("failed to request BLE security, backend code ") + backendCode).c_str());
+    return false;
+  }
+  clearError();
+  return true;
+}
+
+size_t EspBle::bondCount() const
+{
+  if (!initialized_)
+  {
+    return 0;
+  }
+  ble_addr_t peers[BondCapacity];
+  int count = 0;
+  return ble_store_util_bonded_peers(peers, &count, BondCapacity) == 0 && count > 0
+    ? static_cast<size_t>(count)
+    : 0;
+}
+
+bool EspBle::bond(size_t index, EspBleBond &bond) const
+{
+  if (!initialized_)
+  {
+    return false;
+  }
+  ble_addr_t peers[BondCapacity];
+  int count = 0;
+  if (ble_store_util_bonded_peers(peers, &count, BondCapacity) != 0 ||
+      index >= static_cast<size_t>(count))
+  {
+    return false;
+  }
+  const BLEAddress address(peers[index]);
+  bond.peerAddress = address.toString();
+  bond.peerAddressType = address.getType();
+  return true;
+}
+
+bool EspBle::deleteBond(const EspBleBond &bond)
+{
+  if (!initialized_)
+  {
+    setError(EspBleError::InvalidState, "BLE stack is not initialized");
+    return false;
+  }
+  if (connectionCount() != 0)
+  {
+    setError(EspBleError::InvalidState, "disconnect before deleting a BLE bond");
+    return false;
+  }
+
+  ble_addr_t peers[BondCapacity];
+  int count = 0;
+  if (ble_store_util_bonded_peers(peers, &count, BondCapacity) != 0)
+  {
+    setError(EspBleError::BackendFailure, "failed to enumerate BLE bonds");
+    return false;
+  }
+  for (int index = 0; index < count; ++index)
+  {
+    const BLEAddress address(peers[index]);
+    if (address.getType() == bond.peerAddressType &&
+        address.toString().equalsIgnoreCase(bond.peerAddress))
+    {
+      if (ble_store_util_delete_peer(&peers[index]) != 0)
+      {
+        setError(EspBleError::BackendFailure, "failed to delete BLE bond");
+        return false;
+      }
+      clearError();
+      return true;
+    }
+  }
+  setError(EspBleError::NotFound, "BLE bond was not found");
+  return false;
+}
+
+bool EspBle::deleteAllBonds()
+{
+  if (!initialized_)
+  {
+    setError(EspBleError::InvalidState, "BLE stack is not initialized");
+    return false;
+  }
+  if (connectionCount() != 0)
+  {
+    setError(EspBleError::InvalidState, "disconnect before deleting BLE bonds");
+    return false;
+  }
+
+  ble_addr_t peers[BondCapacity];
+  int count = 0;
+  if (ble_store_util_bonded_peers(peers, &count, BondCapacity) != 0)
+  {
+    setError(EspBleError::BackendFailure, "failed to enumerate BLE bonds");
+    return false;
+  }
+  for (int index = 0; index < count; ++index)
+  {
+    if (ble_store_util_delete_peer(&peers[index]) != 0)
+    {
+      setError(EspBleError::BackendFailure, "failed to delete all BLE bonds");
+      return false;
+    }
+  }
+  clearError();
+  return true;
+}
+
 void EspBle::onConnected(ConnectionCallback callback)
 {
   connectedCallback_ = std::move(callback);
@@ -1887,6 +2153,11 @@ void EspBle::onConnectionFailed(ConnectionFailureCallback callback)
 void EspBle::onMtuChanged(MtuChangedCallback callback)
 {
   mtuChangedCallback_ = std::move(callback);
+}
+
+void EspBle::onSecurityChanged(SecurityChangedCallback callback)
+{
+  securityChangedCallback_ = std::move(callback);
 }
 
 bool EspBle::discoverCharacteristic(
@@ -2188,6 +2459,12 @@ void EspBle::dispatchConnectionEvents()
       if (mtuChangedCallback_)
       {
         mtuChangedCallback_(event.mtuChanged);
+      }
+      break;
+    case EspBleImpl::EventType::SecurityChanged:
+      if (securityChangedCallback_)
+      {
+        securityChangedCallback_(event.securityChanged);
       }
       break;
     }

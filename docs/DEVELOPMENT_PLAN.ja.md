@@ -34,10 +34,11 @@
 
 ## 3. Security
 
-- PairingとBonding
-- encrypted Characteristic
-- Bond一覧と削除
-- `security_bond` / `bond_reconnect` Peerテスト
+- ✅ Just Works PairingとBonding
+- ✅ encrypted Characteristic
+- ✅ Bond一覧と削除
+- ✅ `security_bond` Peerテスト（Bond再接続を含む）
+- Passkey / Numeric Comparison / MITMの設計とPeerテスト
 
 ## 4. 初期Profile
 

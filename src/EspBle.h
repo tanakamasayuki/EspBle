@@ -21,10 +21,18 @@ enum class EspBleError : uint8_t
   NotFound,
 };
 
+struct EspBleSecurityConfig
+{
+  bool enabled = false;
+  bool bonding = true;
+  bool pairOnConnect = true;
+};
+
 struct EspBleConfig
 {
   const char *deviceName = "EspBle";
   uint16_t preferredMtu = 23;
+  EspBleSecurityConfig security;
 };
 
 struct EspBleScanConfig
@@ -71,6 +79,10 @@ struct EspBleConnection
   uint8_t peerAddressType = 0;
   EspBleRole localRole = EspBleRole::Central;
   uint16_t mtu = 23;
+  bool encrypted = false;
+  bool authenticated = false;
+  bool bonded = false;
+  uint8_t encryptionKeySize = 0;
 
   size_t maximumNotificationPayload() const;
 };
@@ -88,6 +100,20 @@ struct EspBleMtuChanged
   uint16_t previousMtu = 23;
 };
 
+struct EspBleSecurityChanged
+{
+  EspBleConnection connection;
+  bool success = false;
+  EspBleError error = EspBleError::None;
+  String detail;
+};
+
+struct EspBleBond
+{
+  String peerAddress;
+  uint8_t peerAddressType = 0;
+};
+
 struct EspBleGattCharacteristicConfig
 {
   bool readable = false;
@@ -95,6 +121,8 @@ struct EspBleGattCharacteristicConfig
   bool writableWithoutResponse = false;
   bool notifiable = false;
   bool indicatable = false;
+  bool encryptedRead = false;
+  bool encryptedWrite = false;
 };
 
 enum class EspBleGattOperation : uint8_t
@@ -290,6 +318,7 @@ public:
   using ConnectionCallback = std::function<void(const EspBleConnection &connection)>;
   using ConnectionFailureCallback = std::function<void(const EspBleConnectionFailure &failure)>;
   using MtuChangedCallback = std::function<void(const EspBleMtuChanged &event)>;
+  using SecurityChangedCallback = std::function<void(const EspBleSecurityChanged &event)>;
   using GattResultCallback = std::function<void(const EspBleGattResult &result)>;
 
   EspBle();
@@ -306,11 +335,17 @@ public:
   bool disconnect(EspBleConnectionId connectionId);
   size_t connectionCount() const;
   bool connection(EspBleConnectionId connectionId, EspBleConnection &connection) const;
+  bool requestSecurity(EspBleConnectionId connectionId);
+  size_t bondCount() const;
+  bool bond(size_t index, EspBleBond &bond) const;
+  bool deleteBond(const EspBleBond &bond);
+  bool deleteAllBonds();
 
   void onConnected(ConnectionCallback callback);
   void onDisconnected(ConnectionCallback callback);
   void onConnectionFailed(ConnectionFailureCallback callback);
   void onMtuChanged(MtuChangedCallback callback);
+  void onSecurityChanged(SecurityChangedCallback callback);
 
   bool discoverCharacteristic(
     EspBleConnectionId connectionId,
@@ -390,6 +425,7 @@ private:
   ConnectionCallback disconnectedCallback_;
   ConnectionFailureCallback connectionFailedCallback_;
   MtuChangedCallback mtuChangedCallback_;
+  SecurityChangedCallback securityChangedCallback_;
   GattResultCallback characteristicDiscoveredCallback_;
   GattResultCallback characteristicReadCallback_;
   GattResultCallback characteristicWrittenCallback_;

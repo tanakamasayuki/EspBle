@@ -55,6 +55,15 @@
 13. MTU変更はConnection snapshotと変更前MTUを持つ値イベントとしてqueueへcopyし、`ble.update()` contextで配送できる。
 14. Notification/Indication payloadの上限は`mtu - 3`とし、backendによる黙示的な切詰めを避けるため超過を送信前に拒否する。複数接続ではactiveな全Peripheral Connectionの最小値を使う保守的な判定から開始する。
 
+## Securityスパイクで確認済み（公開API確定前）
+
+1. Securityは`begin()`前の設定で有効化し、初期方式はNo Input / No OutputのJust Works + LE Secure Connectionsとする。Passkey、Numeric Comparison、MITMは別sliceで設計する。
+2. 接続時の自動Security要求と、Connection IDを指定する明示要求の両方を試行する。完了は同期戻り値ではなく値イベントとして`ble.update()` contextへ配送する。
+3. Connection snapshotはencrypted、authenticated、bonded、encryption key sizeを保持する。Just Worksの成功時はencryptedかつbondedだがauthenticatedではない。
+4. GATT Characteristic定義にencrypted read/writeを追加し、同梱NimBLEのATT permissionで強制する。
+5. Bond列挙・特定削除・全削除は同梱NimBLE storeを使用する。現在はactive Connectionがない場合だけ削除を許可する。
+6. `security_bond` Peerテストで初回Pairing、暗号化Read/Write、両側Bond保存、切断後のBond再接続、両側Bond削除を確認済み。
+
 ## 優先順位候補
 
 1. HID Mouse / Consumer Control / composite HID
