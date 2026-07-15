@@ -53,10 +53,36 @@ struct EspBleScanResult
   bool advertisesService(const char *uuid) const;
 };
 
+enum class EspBleRole : uint8_t
+{
+  Central = 0,
+  Peripheral,
+};
+
+using EspBleConnectionId = uint32_t;
+
+struct EspBleConnection
+{
+  EspBleConnectionId id = 0;
+  uint16_t handle = 0xffff;
+  String peerAddress;
+  uint8_t peerAddressType = 0;
+  EspBleRole localRole = EspBleRole::Central;
+  uint16_t mtu = 23;
+};
+
+struct EspBleConnectionFailure
+{
+  String peerAddress;
+  EspBleError error = EspBleError::BackendFailure;
+  String detail;
+};
+
 class EspBle;
 class EspBleAdvertising;
 class EspBleScanner;
 struct EspBleScannerImpl;
+struct EspBleImpl;
 
 class EspBleAdvertising
 {
@@ -112,6 +138,9 @@ private:
 class EspBle
 {
 public:
+  using ConnectionCallback = std::function<void(const EspBleConnection &connection)>;
+  using ConnectionFailureCallback = std::function<void(const EspBleConnectionFailure &failure)>;
+
   EspBle();
   ~EspBle();
 
@@ -121,6 +150,15 @@ public:
   bool begin(const EspBleConfig &config = EspBleConfig());
   void end();
   void update();
+
+  bool connect(const EspBleScanResult &scanResult, uint32_t timeoutMilliseconds = 10000);
+  bool disconnect(EspBleConnectionId connectionId);
+  size_t connectionCount() const;
+  bool connection(EspBleConnectionId connectionId, EspBleConnection &connection) const;
+
+  void onConnected(ConnectionCallback callback);
+  void onDisconnected(ConnectionCallback callback);
+  void onConnectionFailed(ConnectionFailureCallback callback);
 
   bool initialized() const;
   EspBleAdvertising &advertising();
@@ -135,14 +173,21 @@ private:
   friend class EspBleAdvertising;
   friend class EspBleScanner;
   friend struct EspBleScannerImpl;
+  friend struct EspBleImpl;
 
   void setError(EspBleError error, const char *detail = nullptr);
+  bool preparePeripheral();
+  void dispatchConnectionEvents();
 
   bool initialized_ = false;
   EspBleError lastError_ = EspBleError::None;
   String lastErrorDetail_;
   EspBleAdvertising advertising_;
   EspBleScanner scanner_;
+  EspBleImpl *impl_ = nullptr;
+  ConnectionCallback connectedCallback_;
+  ConnectionCallback disconnectedCallback_;
+  ConnectionFailureCallback connectionFailedCallback_;
 };
 
 #endif // ESP_BLE_H

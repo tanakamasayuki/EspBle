@@ -6,7 +6,7 @@ ESP32 Arduino向けの汎用Bluetooth Low Energyライブラリです。**Arduin
 
 現在は仕様策定とテスト基盤整備の段階です。公開APIはまだ確定していません。
 
-Legacy AdvertisingとScanningの最初のvertical sliceを実装し、ESP32-S3 2台の`advertise_scan` Peerテストで検証しています。現在のAPIと`ble.update()`によるevent配送は接続/GATT実装前の試行段階です。
+Legacy Advertising、Scanning、Central/Peripheral接続と切断の最初のvertical sliceを実装し、ESP32-S3 2台の`advertise_scan`と`connect_disconnect` Peerテストで検証しています。現在のAPIと`ble.update()`によるevent配送はGATT実装前の試行段階です。
 
 ## 初期ターゲット
 

@@ -12,10 +12,10 @@
 - ✅ stack lifecycleの最小実装
 - ✅ Legacy Advertising builderの最小実装
 - ✅ Scannerと値型Scan Result
-- Central接続とPeripheral接続受け入れ
-- Connection identityと切断
+- ✅ Central接続とPeripheral接続受け入れ
+- ✅ Connection identityと切断
 - ✅ `advertise_scan` Peerテスト
-- `connect_disconnect` Peerテスト
+- ✅ `connect_disconnect` Peerテスト
 
 この段階で所有権、event context、Result型を実コードで確定します。
 

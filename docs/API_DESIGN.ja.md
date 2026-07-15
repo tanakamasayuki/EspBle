@@ -22,9 +22,9 @@
 - Connectionは切断後に無効化を判定できるlibrary handleで表す。
 - backend native objectはadvanced APIからのみ参照可能にする。
 
-## GAP vertical sliceの試行API
+## GAP / Connection vertical sliceの試行API
 
-Advertising/Scanningの最初の実装では、次の利用形をPeer実機で検証しています。接続/GATTまで通してから公開APIとして確定します。
+GAP/Connectionの最初の実装では、次の利用形をPeer実機で検証しています。汎用GATTまで通してから公開APIとして確定します。
 
 ```cpp
 EspBle ble;
@@ -38,12 +38,26 @@ ble.advertising().start();
 ble.scanner().onResult([](const EspBleScanResult &scanResult) {
   if (scanResult.advertisesService(serviceUuid)) {
     // Scan Resultはcallback中だけのbackend参照ではなく、EspBleが所有する値。
+    ble.scanner().stop();
+    ble.connect(scanResult); // 要求の受理だけを返し、完了はcallbackで通知する。
   }
 });
 ble.scanner().start();
+
+ble.onConnected([](const EspBleConnection &connection) {
+  // idはbackend handleとは別の、接続ごとに生成される安定した識別子。
+});
+ble.onDisconnected([](const EspBleConnection &connection) {
+  // 切断イベントにも接続時と同じidとlocal roleが含まれる。
+});
+ble.onConnectionFailed([](const EspBleConnectionFailure &failure) {
+  // 非同期接続失敗。
+});
 ```
 
-現在の`ble.update()`はstack callbackからqueueへcopyしたScan Resultをユーザーcallbackへ配送します。これはcallbackの寿命と実行contextを検証する暫定実装であり、利用者が常に`update()`を呼ぶ最終仕様はまだ確定していません。
+現在の`ble.update()`はstack callbackからqueueへcopyしたScan ResultとConnection eventをユーザーcallbackへ配送します。Arduino-ESP32 backendの待機型接続処理はEspBle内部taskで実行するため、`connect()`はloopやScan Result callbackを接続完了までblockしません。これはcallbackの寿命と実行contextを検証する暫定実装であり、利用者が常に`update()`を呼ぶ最終仕様はまだ確定していません。
+
+`EspBleConnection`はlibrary connection id、backend handle、peer address/address type、local role、MTUの値snapshotです。初期実装は最大4接続を内部管理しますが、この上限と設定方法はまだ公開仕様として確定していません。
 
 Legacy Advertising payloadが31 bytesへ収まらない場合、Arduino-ESP32 backendの黙示的なfield欠落をそのまま通さず、EspBleは`INVALID_ARGUMENT`を返します。
 
