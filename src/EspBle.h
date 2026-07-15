@@ -209,13 +209,53 @@ struct EspBleGattSendResult
   String detail;
 };
 
+struct EspBleHidKeyboardDeviceConfig
+{
+  const char *manufacturer = "EspBle";
+  uint16_t vendorId = 0xffff;
+  uint16_t productId = 0x0001;
+  uint16_t productVersion = 0x0001;
+  uint8_t countryCode = 0;
+  uint8_t reportId = 1;
+  uint8_t initialBatteryLevel = 100;
+};
+
+struct EspBleHidKeyboardInputReport
+{
+  static constexpr uint8_t LeftControl = 0x01;
+  static constexpr uint8_t LeftShift = 0x02;
+  static constexpr uint8_t LeftAlt = 0x04;
+  static constexpr uint8_t LeftGui = 0x08;
+  static constexpr uint8_t RightControl = 0x10;
+  static constexpr uint8_t RightShift = 0x20;
+  static constexpr uint8_t RightAlt = 0x40;
+  static constexpr uint8_t RightGui = 0x80;
+
+  uint8_t modifiers = 0;
+  uint8_t keys[6] = {};
+};
+
+struct EspBleHidKeyboardOutputReport
+{
+  EspBleConnectionId connectionId = 0;
+  uint8_t leds = 0;
+
+  bool numLock() const { return (leds & 0x01) != 0; }
+  bool capsLock() const { return (leds & 0x02) != 0; }
+  bool scrollLock() const { return (leds & 0x04) != 0; }
+  bool compose() const { return (leds & 0x08) != 0; }
+  bool kana() const { return (leds & 0x10) != 0; }
+};
+
 class EspBle;
 class EspBleAdvertising;
 class EspBleScanner;
 class EspBleGattServer;
+class EspBleHidKeyboardDevice;
 struct EspBleScannerImpl;
 struct EspBleImpl;
 struct EspBleGattServerImpl;
+struct EspBleHidKeyboardDeviceImpl;
 
 class EspBleAdvertising
 {
@@ -226,6 +266,7 @@ public:
   void setName(const char *name);
   bool addServiceUuid(const char *uuid);
   void setManufacturerData(const uint8_t *data, size_t length);
+  void setAppearance(uint16_t appearance);
   void setScanResponseEnabled(bool enabled);
   bool start(uint32_t durationSeconds = 0);
   bool stop();
@@ -241,6 +282,7 @@ private:
   String manufacturerData_;
   String serviceUuids_[MaxServiceUuids];
   size_t serviceUuidCount_ = 0;
+  uint16_t appearance_ = 0;
   bool scanResponseEnabled_ = true;
 };
 
@@ -331,6 +373,35 @@ private:
   SendCallback sendCallback_;
 };
 
+class EspBleHidKeyboardDevice
+{
+public:
+  using OutputReportCallback =
+    std::function<void(const EspBleHidKeyboardOutputReport &report)>;
+
+  bool configure(
+    const EspBleHidKeyboardDeviceConfig &config = EspBleHidKeyboardDeviceConfig());
+  bool sendInputReport(const EspBleHidKeyboardInputReport &report);
+  bool releaseAll();
+  bool setBatteryLevel(uint8_t level);
+  void onOutputReport(OutputReportCallback callback);
+  bool configured() const;
+
+private:
+  friend class EspBle;
+  friend struct EspBleHidKeyboardDeviceImpl;
+
+  explicit EspBleHidKeyboardDevice(EspBle *owner);
+  ~EspBleHidKeyboardDevice();
+  bool realize();
+  void resetBackend();
+  void dispatchPendingOutputReports();
+
+  EspBle *owner_;
+  EspBleHidKeyboardDeviceImpl *impl_ = nullptr;
+  OutputReportCallback outputReportCallback_;
+};
+
 class EspBle
 {
 public:
@@ -409,6 +480,7 @@ public:
   EspBleAdvertising &advertising();
   EspBleScanner &scanner();
   EspBleGattServer &gattServer();
+  EspBleHidKeyboardDevice &hidKeyboardDevice();
 
   EspBleError lastError() const;
   const char *lastErrorName() const;
@@ -419,9 +491,11 @@ private:
   friend class EspBleAdvertising;
   friend class EspBleScanner;
   friend class EspBleGattServer;
+  friend class EspBleHidKeyboardDevice;
   friend struct EspBleScannerImpl;
   friend struct EspBleImpl;
   friend struct EspBleGattServerImpl;
+  friend struct EspBleHidKeyboardDeviceImpl;
 
   void setError(EspBleError error, const char *detail = nullptr);
   bool preparePeripheral();
@@ -441,6 +515,7 @@ private:
   EspBleAdvertising advertising_;
   EspBleScanner scanner_;
   EspBleGattServer gattServer_;
+  EspBleHidKeyboardDevice hidKeyboardDevice_;
   EspBleImpl *impl_ = nullptr;
   ConnectionCallback connectedCallback_;
   ConnectionCallback disconnectedCallback_;

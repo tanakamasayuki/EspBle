@@ -67,6 +67,16 @@
 8. 表示passkeyは値イベントへcopyして`ble.update()` contextで配送する。同梱backend callbackにConnection handleがないため、複数同時PairingでのConnection識別は未確定とする。
 9. GATT Characteristicへauthenticated read/writeを追加し、`security_passkey` Peerテストで両側`authenticated=true`、認証必須Read/Write、Bond保存・削除を確認済み。
 
+## HID Keyboard Deviceスパイクで確認済み（公開API確定前）
+
+1. 最初のHID DeviceはReport Protocolの固定6KRO Keyboardとし、Boot Protocol、NKRO、Consumer Control、Mouse、複合HIDを含めない。
+2. `ble.hidKeyboardDevice()`からprofile handleを取得し、`begin()`前に構成する。Input APIはmodifierと最大6 keyを持つ値型とし、Report IDとreserved byteのwire処理をprofileへ隠す。
+3. HID Service、Device Information Service、Battery Serviceを同じGATT Serverへ登録し、HID UUIDとKeyboard appearanceをAdvertisingへ自動追加する。
+4. Report MapとReport ReferenceにはconfigurableなReport IDを持たせるが、GATT characteristic payload自体はReport IDを除いた8-byte Input / 1-byte Outputとする。
+5. Output ReportはConnection ID付きの値へcopyし、現在は`ble.update()` contextで配送する。
+6. Arduino-ESP32 3.3.10同梱`BLEService` wrapperは同一Service内のCharacteristicをUUIDで一意に扱うため、HOGPに必要なInput/Output 2個の`0x2A4D`を登録できない。内部だけ同梱NimBLEのGATT定義APIを使い、別attributeとして登録する。
+7. `hid_keyboard_device` Peerテストでは親側を同梱BLE API直接実装のHID Host、`peer_device/`側をEspBle HID Keyboard Deviceとし、Report Map、Report Reference、Battery Read、Input Notification、LED Output Write、Pairing/Bondingを確認済み。
+
 ## 優先順位候補
 
 1. HID Mouse / Consumer Control / composite HID

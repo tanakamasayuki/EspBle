@@ -11,9 +11,12 @@
 #include <BLEService.h>
 #include <BLESecurity.h>
 #include <BLEUtils.h>
+#include <host/ble_hs_mbuf.h>
 #include <host/ble_store.h>
+#include <os/os_mbuf.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <cstring>
 #include <mutex>
 #include <utility>
 
@@ -22,6 +25,7 @@ namespace
 constexpr size_t ScanQueueCapacity = 16;
 constexpr size_t ConnectionCapacity = 4;
 constexpr size_t ConnectionEventQueueCapacity = 8;
+constexpr uint16_t HidKeyboardAppearance = 0x03c1;
 #if defined(CONFIG_BT_NIMBLE_MAX_BONDS)
 constexpr size_t BondCapacity = CONFIG_BT_NIMBLE_MAX_BONDS;
 #else
@@ -909,6 +913,162 @@ struct EspBleGattServerImpl
   bool sendStatusReceived = false;
 };
 
+struct EspBleHidKeyboardDeviceImpl
+{
+  static constexpr size_t OutputQueueCapacity = 8;
+
+  explicit EspBleHidKeyboardDeviceImpl(EspBleHidKeyboardDevice *device)
+      : device(device)
+  {
+  }
+
+  static int accessCallback(
+    uint16_t connectionHandle,
+    uint16_t attributeHandle,
+    ble_gatt_access_ctxt *context,
+    void *argument)
+  {
+    return static_cast<EspBleHidKeyboardDeviceImpl *>(argument)->handleAccess(
+      connectionHandle, attributeHandle, context);
+  }
+
+  static int appendValue(os_mbuf *buffer, const void *value, size_t length)
+  {
+    return os_mbuf_append(buffer, value, static_cast<uint16_t>(length)) == 0
+      ? 0
+      : BLE_ATT_ERR_INSUFFICIENT_RES;
+  }
+
+  int handleAccess(
+    uint16_t connectionHandle,
+    uint16_t,
+    ble_gatt_access_ctxt *context)
+  {
+    if (context->op == BLE_GATT_ACCESS_OP_READ_CHR)
+    {
+      if (context->chr == &hidCharacteristics[0])
+      {
+        return appendValue(context->om, hidInformation, sizeof(hidInformation));
+      }
+      if (context->chr == &hidCharacteristics[1])
+      {
+        return appendValue(context->om, reportMap, sizeof(reportMap));
+      }
+      if (context->chr == &hidCharacteristics[3])
+      {
+        return appendValue(context->om, inputValue, sizeof(inputValue));
+      }
+      if (context->chr == &hidCharacteristics[4])
+      {
+        return appendValue(context->om, &outputValue, 1);
+      }
+      if (context->chr == &deviceInformationCharacteristics[0])
+      {
+        const char *manufacturer = config.manufacturer == nullptr ? "" : config.manufacturer;
+        return appendValue(context->om, manufacturer, strlen(manufacturer));
+      }
+      if (context->chr == &deviceInformationCharacteristics[1])
+      {
+        return appendValue(context->om, pnpId, sizeof(pnpId));
+      }
+      if (context->chr == &batteryCharacteristics[0])
+      {
+        return appendValue(context->om, &batteryLevel, 1);
+      }
+    }
+    else if (context->op == BLE_GATT_ACCESS_OP_WRITE_CHR)
+    {
+      if (context->chr == &hidCharacteristics[2])
+      {
+        return 0;
+      }
+      if (context->chr == &hidCharacteristics[4])
+      {
+        uint16_t length = 0;
+        uint8_t value = 0;
+        if (ble_hs_mbuf_to_flat(context->om, &value, 1, &length) != 0 || length != 1)
+        {
+          return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
+        }
+        outputValue = value;
+        queueOutputReport(connectionHandle, value);
+        return 0;
+      }
+    }
+    else if (context->op == BLE_GATT_ACCESS_OP_READ_DSC)
+    {
+      if (context->dsc == &inputDescriptors[0])
+      {
+        const uint8_t reference[] = {config.reportId, 0x01};
+        return appendValue(context->om, reference, sizeof(reference));
+      }
+      if (context->dsc == &outputDescriptors[0])
+      {
+        const uint8_t reference[] = {config.reportId, 0x02};
+        return appendValue(context->om, reference, sizeof(reference));
+      }
+    }
+    return BLE_ATT_ERR_UNLIKELY;
+  }
+
+  void queueOutputReport(uint16_t connectionHandle, uint8_t leds)
+  {
+    EspBleHidKeyboardOutputReport report;
+    report.leds = leds;
+    if (device->owner_->impl_ != nullptr)
+    {
+      std::lock_guard<std::mutex> connectionLock(device->owner_->impl_->mutex);
+      report.connectionId = device->owner_->impl_->findPeripheralConnectionId(connectionHandle);
+    }
+
+    std::lock_guard<std::mutex> lock(mutex);
+    if (outputCount == OutputQueueCapacity)
+    {
+      ++droppedOutputReports;
+      return;
+    }
+    const size_t tail = (outputHead + outputCount) % OutputQueueCapacity;
+    outputReports[tail] = report;
+    ++outputCount;
+  }
+
+  EspBleHidKeyboardDevice *device;
+  mutable std::mutex mutex;
+  EspBleHidKeyboardDeviceConfig config;
+  bool configured = false;
+  bool realized = false;
+  uint16_t inputValueHandle = 0;
+  uint16_t outputValueHandle = 0;
+  uint16_t batteryValueHandle = 0;
+  uint8_t inputValue[8] = {};
+  uint8_t outputValue = 0;
+  uint8_t batteryLevel = 100;
+  uint8_t hidInformation[4] = {0x11, 0x01, 0x00, 0x01};
+  uint8_t pnpId[7] = {};
+  uint8_t reportMap[65] = {};
+  ble_uuid16_t hidServiceUuid = BLE_UUID16_INIT(0x1812);
+  ble_uuid16_t deviceInformationServiceUuid = BLE_UUID16_INIT(0x180a);
+  ble_uuid16_t batteryServiceUuid = BLE_UUID16_INIT(0x180f);
+  ble_uuid16_t hidInformationUuid = BLE_UUID16_INIT(0x2a4a);
+  ble_uuid16_t reportMapUuid = BLE_UUID16_INIT(0x2a4b);
+  ble_uuid16_t hidControlPointUuid = BLE_UUID16_INIT(0x2a4c);
+  ble_uuid16_t reportUuid = BLE_UUID16_INIT(0x2a4d);
+  ble_uuid16_t reportReferenceUuid = BLE_UUID16_INIT(0x2908);
+  ble_uuid16_t manufacturerUuid = BLE_UUID16_INIT(0x2a29);
+  ble_uuid16_t pnpIdUuid = BLE_UUID16_INIT(0x2a50);
+  ble_uuid16_t batteryLevelUuid = BLE_UUID16_INIT(0x2a19);
+  ble_gatt_dsc_def inputDescriptors[2] = {};
+  ble_gatt_dsc_def outputDescriptors[2] = {};
+  ble_gatt_chr_def hidCharacteristics[6] = {};
+  ble_gatt_chr_def deviceInformationCharacteristics[3] = {};
+  ble_gatt_chr_def batteryCharacteristics[2] = {};
+  ble_gatt_svc_def services[4] = {};
+  EspBleHidKeyboardOutputReport outputReports[OutputQueueCapacity];
+  size_t outputHead = 0;
+  size_t outputCount = 0;
+  size_t droppedOutputReports = 0;
+};
+
 struct EspBleScannerImpl
 {
   class BackendCallbacks : public BLEAdvertisedDeviceCallbacks
@@ -1006,6 +1166,7 @@ void EspBleAdvertising::clear()
   name_ = "";
   manufacturerData_ = "";
   serviceUuidCount_ = 0;
+  appearance_ = 0;
   scanResponseEnabled_ = true;
 }
 
@@ -1020,6 +1181,14 @@ bool EspBleAdvertising::addServiceUuid(const char *uuid)
   {
     owner_->setError(EspBleError::InvalidArgument, "service UUID is empty");
     return false;
+  }
+  for (size_t index = 0; index < serviceUuidCount_; ++index)
+  {
+    if (uuidEquals(serviceUuids_[index], uuid))
+    {
+      owner_->clearError();
+      return true;
+    }
   }
   if (serviceUuidCount_ == MaxServiceUuids)
   {
@@ -1040,6 +1209,11 @@ void EspBleAdvertising::setManufacturerData(const uint8_t *data, size_t length)
     return;
   }
   manufacturerData_ = String(reinterpret_cast<const char *>(data), length);
+}
+
+void EspBleAdvertising::setAppearance(uint16_t appearance)
+{
+  appearance_ = appearance;
 }
 
 void EspBleAdvertising::setScanResponseEnabled(bool enabled)
@@ -1070,6 +1244,16 @@ bool EspBleAdvertising::start(uint32_t durationSeconds)
   {
     owner_->setError(EspBleError::InvalidArgument, "advertising flags do not fit in legacy payload");
     return false;
+  }
+  if (appearance_ != 0)
+  {
+    previousLength = advertisingData.getPayload().length();
+    advertisingData.setAppearance(appearance_);
+    if (advertisingData.getPayload().length() == previousLength)
+    {
+      owner_->setError(EspBleError::InvalidArgument, "appearance does not fit in legacy advertising payload");
+      return false;
+    }
   }
   for (size_t index = 0; index < serviceUuidCount_; ++index)
   {
@@ -1743,7 +1927,356 @@ void EspBleGattServer::dispatchSendResult(const EspBleGattSendResult &result)
   }
 }
 
-EspBle::EspBle() : advertising_(this), scanner_(this), gattServer_(this) {}
+EspBleHidKeyboardDevice::EspBleHidKeyboardDevice(EspBle *owner) : owner_(owner) {}
+
+EspBleHidKeyboardDevice::~EspBleHidKeyboardDevice()
+{
+  delete impl_;
+}
+
+bool EspBleHidKeyboardDevice::configure(const EspBleHidKeyboardDeviceConfig &config)
+{
+  if (owner_->initialized())
+  {
+    owner_->setError(EspBleError::InvalidState, "HID Keyboard Device must be configured before begin");
+    return false;
+  }
+  if (config.reportId == 0 || config.initialBatteryLevel > 100)
+  {
+    owner_->setError(
+      EspBleError::InvalidArgument,
+      "HID Keyboard report ID must be nonzero and battery level must be at most 100");
+    return false;
+  }
+  if (impl_ == nullptr)
+  {
+    impl_ = new EspBleHidKeyboardDeviceImpl(this);
+    if (impl_ == nullptr)
+    {
+      owner_->setError(EspBleError::ResourceExhausted, "failed to allocate HID Keyboard Device state");
+      return false;
+    }
+  }
+
+  const bool firstConfiguration = !impl_->configured;
+  impl_->config = config;
+  impl_->configured = true;
+  if (firstConfiguration && !owner_->advertising().addServiceUuid("1812"))
+  {
+    impl_->configured = false;
+    return false;
+  }
+  owner_->advertising().setAppearance(HidKeyboardAppearance);
+  owner_->clearError();
+  return true;
+}
+
+bool EspBleHidKeyboardDevice::realize()
+{
+  if (impl_ == nullptr || !impl_->configured || impl_->realized)
+  {
+    return true;
+  }
+  if (!owner_->preparePeripheral())
+  {
+    return false;
+  }
+
+  const uint8_t reportMap[] = {
+    0x05, 0x01,       // Usage Page (Generic Desktop)
+    0x09, 0x06,       // Usage (Keyboard)
+    0xa1, 0x01,       // Collection (Application)
+    0x85, 0x01,       // Report ID
+    0x05, 0x07,       // Usage Page (Keyboard)
+    0x19, 0xe0,       // Usage Minimum (Left Control)
+    0x29, 0xe7,       // Usage Maximum (Right GUI)
+    0x15, 0x00,       // Logical Minimum (0)
+    0x25, 0x01,       // Logical Maximum (1)
+    0x75, 0x01,       // Report Size (1)
+    0x95, 0x08,       // Report Count (8)
+    0x81, 0x02,       // Input (Data, Variable, Absolute)
+    0x95, 0x01,       // Report Count (1)
+    0x75, 0x08,       // Report Size (8)
+    0x81, 0x01,       // Input (Constant)
+    0x95, 0x06,       // Report Count (6)
+    0x75, 0x08,       // Report Size (8)
+    0x15, 0x00,       // Logical Minimum (0)
+    0x25, 0x65,       // Logical Maximum (101)
+    0x05, 0x07,       // Usage Page (Keyboard)
+    0x19, 0x00,       // Usage Minimum (0)
+    0x29, 0x65,       // Usage Maximum (101)
+    0x81, 0x00,       // Input (Data, Array)
+    0x95, 0x05,       // Report Count (5)
+    0x75, 0x01,       // Report Size (1)
+    0x05, 0x08,       // Usage Page (LEDs)
+    0x19, 0x01,       // Usage Minimum (Num Lock)
+    0x29, 0x05,       // Usage Maximum (Kana)
+    0x91, 0x02,       // Output (Data, Variable, Absolute)
+    0x95, 0x01,       // Report Count (1)
+    0x75, 0x03,       // Report Size (3)
+    0x91, 0x01,       // Output (Constant)
+    0xc0              // End Collection
+  };
+  memcpy(impl_->reportMap, reportMap, sizeof(reportMap));
+  impl_->reportMap[7] = impl_->config.reportId;
+  impl_->hidInformation[2] = impl_->config.countryCode;
+  impl_->batteryLevel = impl_->config.initialBatteryLevel;
+  impl_->pnpId[0] = 0x02; // USB Implementers Forum vendor ID source.
+  impl_->pnpId[1] = static_cast<uint8_t>(impl_->config.vendorId);
+  impl_->pnpId[2] = static_cast<uint8_t>(impl_->config.vendorId >> 8);
+  impl_->pnpId[3] = static_cast<uint8_t>(impl_->config.productId);
+  impl_->pnpId[4] = static_cast<uint8_t>(impl_->config.productId >> 8);
+  impl_->pnpId[5] = static_cast<uint8_t>(impl_->config.productVersion);
+  impl_->pnpId[6] = static_cast<uint8_t>(impl_->config.productVersion >> 8);
+
+  impl_->inputDescriptors[0].uuid = &impl_->reportReferenceUuid.u;
+  impl_->inputDescriptors[0].att_flags = BLE_ATT_F_READ;
+  impl_->inputDescriptors[0].access_cb = EspBleHidKeyboardDeviceImpl::accessCallback;
+  impl_->inputDescriptors[0].arg = impl_;
+  impl_->outputDescriptors[0].uuid = &impl_->reportReferenceUuid.u;
+  impl_->outputDescriptors[0].att_flags = BLE_ATT_F_READ;
+  impl_->outputDescriptors[0].access_cb = EspBleHidKeyboardDeviceImpl::accessCallback;
+  impl_->outputDescriptors[0].arg = impl_;
+
+  impl_->hidCharacteristics[0].uuid = &impl_->hidInformationUuid.u;
+  impl_->hidCharacteristics[0].access_cb = EspBleHidKeyboardDeviceImpl::accessCallback;
+  impl_->hidCharacteristics[0].arg = impl_;
+  impl_->hidCharacteristics[0].flags = BLE_GATT_CHR_F_READ;
+  impl_->hidCharacteristics[1].uuid = &impl_->reportMapUuid.u;
+  impl_->hidCharacteristics[1].access_cb = EspBleHidKeyboardDeviceImpl::accessCallback;
+  impl_->hidCharacteristics[1].arg = impl_;
+  impl_->hidCharacteristics[1].flags = BLE_GATT_CHR_F_READ;
+  impl_->hidCharacteristics[2].uuid = &impl_->hidControlPointUuid.u;
+  impl_->hidCharacteristics[2].access_cb = EspBleHidKeyboardDeviceImpl::accessCallback;
+  impl_->hidCharacteristics[2].arg = impl_;
+  impl_->hidCharacteristics[2].flags = BLE_GATT_CHR_F_WRITE_NO_RSP;
+  impl_->hidCharacteristics[3].uuid = &impl_->reportUuid.u;
+  impl_->hidCharacteristics[3].access_cb = EspBleHidKeyboardDeviceImpl::accessCallback;
+  impl_->hidCharacteristics[3].arg = impl_;
+  impl_->hidCharacteristics[3].descriptors = impl_->inputDescriptors;
+  impl_->hidCharacteristics[3].flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY;
+  impl_->hidCharacteristics[3].val_handle = &impl_->inputValueHandle;
+  impl_->hidCharacteristics[4].uuid = &impl_->reportUuid.u;
+  impl_->hidCharacteristics[4].access_cb = EspBleHidKeyboardDeviceImpl::accessCallback;
+  impl_->hidCharacteristics[4].arg = impl_;
+  impl_->hidCharacteristics[4].descriptors = impl_->outputDescriptors;
+  impl_->hidCharacteristics[4].flags =
+    BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_WRITE | BLE_GATT_CHR_F_WRITE_NO_RSP;
+  impl_->hidCharacteristics[4].val_handle = &impl_->outputValueHandle;
+
+  impl_->deviceInformationCharacteristics[0].uuid = &impl_->manufacturerUuid.u;
+  impl_->deviceInformationCharacteristics[0].access_cb =
+    EspBleHidKeyboardDeviceImpl::accessCallback;
+  impl_->deviceInformationCharacteristics[0].arg = impl_;
+  impl_->deviceInformationCharacteristics[0].flags = BLE_GATT_CHR_F_READ;
+  impl_->deviceInformationCharacteristics[1].uuid = &impl_->pnpIdUuid.u;
+  impl_->deviceInformationCharacteristics[1].access_cb =
+    EspBleHidKeyboardDeviceImpl::accessCallback;
+  impl_->deviceInformationCharacteristics[1].arg = impl_;
+  impl_->deviceInformationCharacteristics[1].flags = BLE_GATT_CHR_F_READ;
+
+  impl_->batteryCharacteristics[0].uuid = &impl_->batteryLevelUuid.u;
+  impl_->batteryCharacteristics[0].access_cb = EspBleHidKeyboardDeviceImpl::accessCallback;
+  impl_->batteryCharacteristics[0].arg = impl_;
+  impl_->batteryCharacteristics[0].flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY;
+  impl_->batteryCharacteristics[0].val_handle = &impl_->batteryValueHandle;
+
+  impl_->services[0].type = BLE_GATT_SVC_TYPE_PRIMARY;
+  impl_->services[0].uuid = &impl_->hidServiceUuid.u;
+  impl_->services[0].characteristics = impl_->hidCharacteristics;
+  impl_->services[1].type = BLE_GATT_SVC_TYPE_PRIMARY;
+  impl_->services[1].uuid = &impl_->deviceInformationServiceUuid.u;
+  impl_->services[1].characteristics = impl_->deviceInformationCharacteristics;
+  impl_->services[2].type = BLE_GATT_SVC_TYPE_PRIMARY;
+  impl_->services[2].uuid = &impl_->batteryServiceUuid.u;
+  impl_->services[2].characteristics = impl_->batteryCharacteristics;
+
+  int backendCode = ble_gatts_count_cfg(impl_->services);
+  if (backendCode == 0)
+  {
+    backendCode = ble_gatts_add_svcs(impl_->services);
+  }
+  if (backendCode != 0)
+  {
+    owner_->setError(
+      EspBleError::BackendFailure,
+      (String("failed to register HID services, backend code ") + backendCode).c_str());
+    return false;
+  }
+  owner_->impl_->server->start();
+  if (impl_->inputValueHandle == 0 || impl_->outputValueHandle == 0)
+  {
+    owner_->setError(EspBleError::BackendFailure, "HID report handles were not registered");
+    return false;
+  }
+  impl_->realized = true;
+  return true;
+}
+
+bool EspBleHidKeyboardDevice::sendInputReport(const EspBleHidKeyboardInputReport &report)
+{
+  if (!owner_->initialized() || impl_ == nullptr || !impl_->realized ||
+      impl_->inputValueHandle == 0)
+  {
+    owner_->setError(EspBleError::InvalidState, "HID Keyboard Device is not initialized");
+    return false;
+  }
+
+  uint16_t connectionHandles[ConnectionCapacity] = {};
+  size_t connectionCount = 0;
+  {
+    std::lock_guard<std::mutex> lock(owner_->impl_->mutex);
+    for (const EspBleImpl::ConnectionSlot &slot : owner_->impl_->connections)
+    {
+      if (slot.used && slot.connection.localRole == EspBleRole::Peripheral)
+      {
+        connectionHandles[connectionCount++] = slot.connection.handle;
+      }
+    }
+  }
+  if (connectionCount == 0)
+  {
+    owner_->setError(EspBleError::InvalidState, "no connected HID Host");
+    return false;
+  }
+
+  impl_->inputValue[0] = report.modifiers;
+  impl_->inputValue[1] = 0;
+  memcpy(impl_->inputValue + 2, report.keys, sizeof(report.keys));
+
+  bool sent = false;
+  int lastBackendCode = 0;
+  for (size_t index = 0; index < connectionCount; ++index)
+  {
+    os_mbuf *value = ble_hs_mbuf_from_flat(impl_->inputValue, sizeof(impl_->inputValue));
+    if (value == nullptr)
+    {
+      lastBackendCode = BLE_HS_ENOMEM;
+      continue;
+    }
+    const int backendCode = ble_gatts_notify_custom(
+      connectionHandles[index], impl_->inputValueHandle, value);
+    if (backendCode == 0)
+    {
+      sent = true;
+    }
+    else
+    {
+      lastBackendCode = backendCode;
+    }
+  }
+  if (!sent)
+  {
+    owner_->setError(
+      EspBleError::BackendFailure,
+      (String("failed to notify HID input report, backend code ") + lastBackendCode).c_str());
+    return false;
+  }
+  owner_->clearError();
+  return true;
+}
+
+bool EspBleHidKeyboardDevice::releaseAll()
+{
+  return sendInputReport(EspBleHidKeyboardInputReport());
+}
+
+bool EspBleHidKeyboardDevice::setBatteryLevel(uint8_t level)
+{
+  if (level > 100)
+  {
+    owner_->setError(EspBleError::InvalidArgument, "battery level must be between 0 and 100");
+    return false;
+  }
+  if (impl_ == nullptr || !impl_->configured)
+  {
+    owner_->setError(EspBleError::InvalidState, "HID Keyboard Device is not configured");
+    return false;
+  }
+  impl_->config.initialBatteryLevel = level;
+  impl_->batteryLevel = level;
+
+  if (owner_->initialized() && impl_->realized && impl_->batteryValueHandle != 0)
+  {
+    uint16_t connectionHandles[ConnectionCapacity] = {};
+    size_t connectionCount = 0;
+    {
+      std::lock_guard<std::mutex> lock(owner_->impl_->mutex);
+      for (const EspBleImpl::ConnectionSlot &slot : owner_->impl_->connections)
+      {
+        if (slot.used && slot.connection.localRole == EspBleRole::Peripheral)
+        {
+          connectionHandles[connectionCount++] = slot.connection.handle;
+        }
+      }
+    }
+    for (size_t index = 0; index < connectionCount; ++index)
+    {
+      os_mbuf *value = ble_hs_mbuf_from_flat(&impl_->batteryLevel, 1);
+      if (value != nullptr)
+      {
+        ble_gatts_notify_custom(connectionHandles[index], impl_->batteryValueHandle, value);
+      }
+    }
+  }
+  owner_->clearError();
+  return true;
+}
+
+void EspBleHidKeyboardDevice::onOutputReport(OutputReportCallback callback)
+{
+  outputReportCallback_ = std::move(callback);
+}
+
+bool EspBleHidKeyboardDevice::configured() const
+{
+  return impl_ != nullptr && impl_->configured;
+}
+
+void EspBleHidKeyboardDevice::resetBackend()
+{
+  if (impl_ == nullptr)
+  {
+    return;
+  }
+  impl_->realized = false;
+  impl_->inputValueHandle = 0;
+  impl_->outputValueHandle = 0;
+  impl_->batteryValueHandle = 0;
+  memset(impl_->inputValue, 0, sizeof(impl_->inputValue));
+  impl_->outputValue = 0;
+  std::lock_guard<std::mutex> lock(impl_->mutex);
+  impl_->outputHead = 0;
+  impl_->outputCount = 0;
+}
+
+void EspBleHidKeyboardDevice::dispatchPendingOutputReports()
+{
+  if (impl_ == nullptr || !outputReportCallback_)
+  {
+    return;
+  }
+  while (true)
+  {
+    EspBleHidKeyboardOutputReport report;
+    {
+      std::lock_guard<std::mutex> lock(impl_->mutex);
+      if (impl_->outputCount == 0)
+      {
+        break;
+      }
+      report = impl_->outputReports[impl_->outputHead];
+      impl_->outputHead = (impl_->outputHead + 1) % EspBleHidKeyboardDeviceImpl::OutputQueueCapacity;
+      --impl_->outputCount;
+    }
+    outputReportCallback_(report);
+  }
+}
+
+EspBle::EspBle()
+    : advertising_(this), scanner_(this), gattServer_(this), hidKeyboardDevice_(this)
+{
+}
 
 EspBle::~EspBle()
 {
@@ -1881,6 +2414,18 @@ bool EspBle::begin(const EspBleConfig &config)
     impl_ = nullptr;
     return false;
   }
+  if (!hidKeyboardDevice_.realize())
+  {
+    BLEDevice::setSecurityCallbacks(nullptr);
+    BLESecurity::setAuthenticationMode(false, false, false);
+    BLESecurity::setForceAuthentication(false);
+    hidKeyboardDevice_.resetBackend();
+    BLEDevice::deinit(false);
+    gattServer_.resetBackend();
+    delete impl_;
+    impl_ = nullptr;
+    return false;
+  }
 
   initialized_ = true;
   clearError();
@@ -1934,6 +2479,7 @@ void EspBle::end()
   BLEDevice::setSecurityCallbacks(nullptr);
   BLESecurity::setAuthenticationMode(false, false, false);
   BLESecurity::setForceAuthentication(false);
+  hidKeyboardDevice_.resetBackend();
   BLEDevice::deinit(false);
   initialized_ = false;
   gattServer_.resetBackend();
@@ -1946,6 +2492,7 @@ void EspBle::update()
 {
   scanner_.dispatchPendingResults();
   dispatchConnectionEvents();
+  hidKeyboardDevice_.dispatchPendingOutputReports();
 }
 
 bool EspBle::connect(const EspBleScanResult &scanResult, uint32_t timeoutMilliseconds)
@@ -2596,6 +3143,11 @@ EspBleScanner &EspBle::scanner()
 EspBleGattServer &EspBle::gattServer()
 {
   return gattServer_;
+}
+
+EspBleHidKeyboardDevice &EspBle::hidKeyboardDevice()
+{
+  return hidKeyboardDevice_;
 }
 
 EspBleError EspBle::lastError() const

@@ -6,7 +6,7 @@ ESP32 Arduino向けの汎用Bluetooth Low Energyライブラリです。**Arduin
 
 現在は仕様策定とテスト基盤整備の段階です。公開APIはまだ確定していません。
 
-Legacy Advertising、Scanning、Central/Peripheral接続、汎用GATT Server/Client、Notify/Indicate、接続時MTU交換、Just Worksと静的passkeyによるPairing/Bondingの最初のvertical sliceを実装し、ESP32-S3 2台のPeerテストで検証しています。現在のAPIと`ble.update()`によるevent配送は対話型Pairing、HID実装前の試行段階です。
+Legacy Advertising、Scanning、Central/Peripheral接続、汎用GATT Server/Client、Notify/Indicate、接続時MTU交換、Just Worksと静的passkeyによるPairing/Bonding、HID Keyboard Deviceの最初のvertical sliceを実装し、ESP32-S3 2台のPeerテストで検証しています。現在のAPIと`ble.update()`によるevent配送はHID Hostや対話型Pairingを追加する前の試行段階です。
 
 ## 初期ターゲット
 
@@ -28,6 +28,7 @@ Mouse、Consumer Control、複合HID、MIDI、NUS、センサー、Extended Adve
 - [要件](docs/REQUIREMENTS.ja.md)
 - [コア設計](docs/CORE_DESIGN.ja.md)
 - [API設計](docs/API_DESIGN.ja.md)
+- [HID Keyboard Device仕様](docs/HID_KEYBOARD_DEVICE_SPEC.ja.md)
 - [用語と命名規則](docs/TERMINOLOGY.ja.md)
 - [設計決定](docs/DECISIONS.ja.md)
 - [開発計画](docs/DEVELOPMENT_PLAN.ja.md)

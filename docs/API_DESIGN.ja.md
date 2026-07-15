@@ -1,6 +1,6 @@
 # API Design
 
-この文書は公開APIを実装する前の設計規則です。具体的なclass名とsignatureはPeer用の最小GATT vertical sliceで検証してから確定します。
+この文書は公開APIの設計規則と、実装中の試行APIを記録します。具体的なclass名とsignatureは各vertical sliceのPeer実機検証を通して確定します。
 
 用語とexampleの変数命名は[TERMINOLOGY.ja.md](TERMINOLOGY.ja.md)に従います。
 
@@ -210,6 +210,39 @@ MITM認証済みlinkを要求する場合は`authenticatedRead` / `authenticated
 Bond storeには`bondCount()`、`bond(index, result)`、`deleteBond()`、`deleteAllBonds()`でアクセスします。削除中の接続状態との不整合を避けるため、現在の試行APIではすべての接続を切断してから削除します。保存上限はArduino-ESP32の`CONFIG_BT_NIMBLE_MAX_BONDS`に従います。
 
 実行時のpasskey入力、Numeric Comparison、Pairing確認・拒否UI、Privacyは未実装です。これらはstack contextで即時回答が必要なbackend callbackと、現在の`ble.update()`配送をどう両立するかを先に設計します。Pairing失敗理由のbackend code表現と、Bond操作を同期Resultのままにするかも今後確定します。
+
+## HID Keyboard Device vertical sliceの試行API
+
+HID Keyboard Deviceは`EspBle`が所有するprofile handleとして取得し、`begin()`より前に構成します。単一roleで自明なexampleでは変数名を`keyboard`とします。
+
+```cpp
+auto &keyboard = ble.hidKeyboardDevice();
+EspBleHidKeyboardDeviceConfig keyboardConfig;
+keyboardConfig.manufacturer = "EspBle";
+keyboardConfig.initialBatteryLevel = 100;
+keyboard.configure(keyboardConfig);
+
+EspBleConfig config;
+config.deviceName = "EspBle Keyboard";
+config.security.enabled = true;
+config.security.bonding = true;
+ble.begin(config);
+ble.advertising().start();
+```
+
+入力はmodifier 1 byteと同時押し最大6 keyの値型で指定します。Report IDとreserved byteを利用者に組み立てさせません。`sendInputReport()`は接続中のHID Hostへ8-byte Report payloadをNotificationで送信し、`releaseAll()`は全フィールドが0のreportを送ります。
+
+```cpp
+EspBleHidKeyboardInputReport report;
+report.modifiers = EspBleHidKeyboardInputReport::LeftShift;
+report.keys[0] = 0x04; // Keyboard a and A
+keyboard.sendInputReport(report);
+keyboard.releaseAll();
+```
+
+LED Output Reportはstack callbackからcopyされ、`ble.update()` contextで配送されます。値には送信元Connection IDとNum Lock、Caps Lock、Scroll Lock、Compose、Kanaのbitが含まれます。Battery Levelは`setBatteryLevel(0..100)`で更新します。
+
+このsliceはReport Protocolの固定6KRO keyboardだけを扱います。Boot Protocol、HID Host、文字からkey usageへの変換、layout、auto-release、送信queueは未実装です。GATT構成とwire formatの詳細は[HID Keyboard Device仕様](HID_KEYBOARD_DEVICE_SPEC.ja.md)に記載します。
 
 ## 結果型
 
