@@ -22,6 +22,31 @@
 - Connectionは切断後に無効化を判定できるlibrary handleで表す。
 - backend native objectはadvanced APIからのみ参照可能にする。
 
+## GAP vertical sliceの試行API
+
+Advertising/Scanningの最初の実装では、次の利用形をPeer実機で検証しています。接続/GATTまで通してから公開APIとして確定します。
+
+```cpp
+EspBle ble;
+
+ble.begin();
+
+ble.advertising().setName("EspBle Peer");
+ble.advertising().addServiceUuid(serviceUuid);
+ble.advertising().start();
+
+ble.scanner().onResult([](const EspBleScanResult &scanResult) {
+  if (scanResult.advertisesService(serviceUuid)) {
+    // Scan Resultはcallback中だけのbackend参照ではなく、EspBleが所有する値。
+  }
+});
+ble.scanner().start();
+```
+
+現在の`ble.update()`はstack callbackからqueueへcopyしたScan Resultをユーザーcallbackへ配送します。これはcallbackの寿命と実行contextを検証する暫定実装であり、利用者が常に`update()`を呼ぶ最終仕様はまだ確定していません。
+
+Legacy Advertising payloadが31 bytesへ収まらない場合、Arduino-ESP32 backendの黙示的なfield欠落をそのまま通さず、EspBleは`INVALID_ARGUMENT`を返します。
+
 ## 結果型
 
 即時に受理/拒否が決まる操作は、次を持つ共通Resultで返します。

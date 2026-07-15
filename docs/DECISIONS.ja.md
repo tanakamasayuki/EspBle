@@ -28,6 +28,16 @@
 5. 初期の同時接続数は制限してよいが、接続単位APIを維持する。
 6. Pairing、Bonding、認証方式の実装は基本接続/GATTの後から追加する。ただしCharacteristicのsecurity permissionはGATT Server開始前に必要になり得るため、構成拡張点とConnectionのsecurity状態は初期API設計で塞がない。
 
+## GAPスパイクで確認済み（公開API確定前）
+
+1. root objectは`EspBle ble`とし、`begin()`でArduino-ESP32同梱NimBLEを初期化できる。
+2. `ble.advertising()`と`ble.scanner()`から役割を固定せずGAP操作へアクセスできる。
+3. Scan Resultはbackend callback引数を外へ露出せず、name、address、RSSI、Service UUID、Manufacturer Dataなどを持つ値へcopyする。
+4. stack callback内でユーザーcallbackを実行せずqueueへ積み、現在は`ble.update()`から配送する。Peer testでloop task contextから呼ばれることを確認済み。
+5. USB系と同様に操作は`bool`を返し、`lastErrorName()` / `lastErrorDetail()`で失敗理由を確認できる試行APIとする。
+6. Arduino-ESP32 BLE stackが外部で初期化済みの場合は所有権競合として拒否する。
+7. Legacy Advertisingの31-byte上限で要求fieldが欠落する場合は明示的なargument errorとする。
+
 ## 優先順位候補
 
 1. HID Mouse / Consumer Control / composite HID
