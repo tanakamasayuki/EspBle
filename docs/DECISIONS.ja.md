@@ -57,12 +57,15 @@
 
 ## Securityスパイクで確認済み（公開API確定前）
 
-1. Securityは`begin()`前の設定で有効化し、初期方式はNo Input / No OutputのJust Works + LE Secure Connectionsとする。Passkey、Numeric Comparison、MITMは別sliceで設計する。
+1. Securityは`begin()`前の設定で有効化し、No Input / No OutputのJust Works + LE Secure Connectionsから開始する。
 2. 接続時の自動Security要求と、Connection IDを指定する明示要求の両方を試行する。完了は同期戻り値ではなく値イベントとして`ble.update()` contextへ配送する。
 3. Connection snapshotはencrypted、authenticated、bonded、encryption key sizeを保持する。Just Worksの成功時はencryptedかつbondedだがauthenticatedではない。
 4. GATT Characteristic定義にencrypted read/writeを追加し、同梱NimBLEのATT permissionで強制する。
 5. Bond列挙・特定削除・全削除は同梱NimBLE storeを使用する。現在はactive Connectionがない場合だけ削除を許可する。
 6. `security_bond` Peerテストで初回Pairing、暗号化Read/Write、両側Bond保存、切断後のBond再接続、両側Bond削除を確認済み。
+7. 最初のMITM方式はDisplayOnlyとKeyboardOnlyの静的6桁passkeyとする。実行時入力とNumeric Comparisonは、stack callbackへの即時回答方法を設計してから追加する。
+8. 表示passkeyは値イベントへcopyして`ble.update()` contextで配送する。同梱backend callbackにConnection handleがないため、複数同時PairingでのConnection識別は未確定とする。
+9. GATT Characteristicへauthenticated read/writeを追加し、`security_passkey` Peerテストで両側`authenticated=true`、認証必須Read/Write、Bond保存・削除を確認済み。
 
 ## 優先順位候補
 
@@ -90,5 +93,5 @@
 - Arduino-ESP32の最小対応版と更新ポリシー
 - ESP32-S3以外の初期build matrix
 - HID Centralで初期対応するReport Mapの範囲
-- Passkey/Numeric Comparisonを初期Securityへ含めるか
+- 実行時Passkey入力とNumeric Comparisonの応答context
 - public object ownershipとevent queueの具体API

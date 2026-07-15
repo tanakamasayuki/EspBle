@@ -38,7 +38,8 @@
 - ✅ encrypted Characteristic
 - ✅ Bond一覧と削除
 - ✅ `security_bond` Peerテスト（Bond再接続を含む）
-- Passkey / Numeric Comparison / MITMの設計とPeerテスト
+- ✅ 静的Passkey / MITMと`security_passkey` Peerテスト
+- 実行時Passkey入力 / Numeric Comparisonの設計とPeerテスト
 
 ## 4. 初期Profile
 

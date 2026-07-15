@@ -52,6 +52,7 @@ struct EspBleImpl
     ServerSendResult,
     MtuChanged,
     SecurityChanged,
+    PasskeyDisplayed,
   };
 
   struct ConnectionSlot
@@ -73,6 +74,7 @@ struct EspBleImpl
     EspBleGattSendResult serverSendResult;
     EspBleMtuChanged mtuChanged;
     EspBleSecurityChanged securityChanged;
+    EspBlePasskeyDisplayed passkeyDisplayed;
   };
 
   class ClientCallbacks : public BLEClientCallbacks
@@ -162,6 +164,11 @@ struct EspBleImpl
       {
         owner_->updateSecurity(description->conn_handle, description->sec_state);
       }
+    }
+
+    void onPassKeyNotify(uint32_t passkey) override
+    {
+      owner_->queuePasskeyDisplayed(passkey);
     }
 
   private:
@@ -337,6 +344,38 @@ struct EspBleImpl
       pushEvent(event);
       return;
     }
+  }
+
+  void queuePasskeyDisplayed(uint32_t passkey)
+  {
+    std::lock_guard<std::mutex> lock(mutex);
+    const ConnectionSlot *selected = nullptr;
+    for (const ConnectionSlot &slot : connections)
+    {
+      if (!slot.used)
+      {
+        continue;
+      }
+      if (selected == nullptr)
+      {
+        selected = &slot;
+      }
+      if (!slot.connection.encrypted)
+      {
+        selected = &slot;
+        break;
+      }
+    }
+    if (selected == nullptr)
+    {
+      return;
+    }
+
+    Event event;
+    event.type = EventType::PasskeyDisplayed;
+    event.passkeyDisplayed.connection = selected->connection;
+    event.passkeyDisplayed.passkey = passkey;
+    pushEvent(event);
   }
 
   void pushFailure(const EspBleScanResult &target, const char *detail)
@@ -1296,12 +1335,13 @@ bool EspBleGattServer::addCharacteristic(
     owner_->setError(EspBleError::InvalidArgument, "GATT characteristic has no properties");
     return false;
   }
-  if ((config.encryptedRead && !config.readable) ||
-      (config.encryptedWrite && !config.writable && !config.writableWithoutResponse))
+  if (((config.encryptedRead || config.authenticatedRead) && !config.readable) ||
+      ((config.encryptedWrite || config.authenticatedWrite) &&
+       !config.writable && !config.writableWithoutResponse))
   {
     owner_->setError(
       EspBleError::InvalidArgument,
-      "encrypted GATT access requires the corresponding read or write property");
+      "secured GATT access requires the corresponding read or write property");
     return false;
   }
   if (impl_ == nullptr)
@@ -1636,6 +1676,8 @@ bool EspBleGattServer::realize()
       if (config.indicatable) properties |= BLECharacteristic::PROPERTY_INDICATE;
       if (config.encryptedRead) properties |= BLECharacteristic::PROPERTY_READ_ENC;
       if (config.encryptedWrite) properties |= BLECharacteristic::PROPERTY_WRITE_ENC;
+      if (config.authenticatedRead) properties |= BLECharacteristic::PROPERTY_READ_AUTHEN;
+      if (config.authenticatedWrite) properties |= BLECharacteristic::PROPERTY_WRITE_AUTHEN;
 
       characteristicDefinition.backend = serviceDefinition.backend->createCharacteristic(
         characteristicDefinition.uuid.c_str(), properties);
@@ -1726,6 +1768,41 @@ bool EspBle::begin(const EspBleConfig &config)
     setError(EspBleError::InvalidArgument, "preferred MTU must be between 23 and 517");
     return false;
   }
+  if (!config.security.enabled &&
+      (config.security.mitm || config.security.staticPasskeyEnabled ||
+       config.security.ioCapability != EspBleSecurityIoCapability::None))
+  {
+    setError(EspBleError::InvalidArgument, "enable BLE security before configuring MITM or a passkey");
+    return false;
+  }
+  if (config.security.ioCapability != EspBleSecurityIoCapability::None &&
+      config.security.ioCapability != EspBleSecurityIoCapability::DisplayOnly &&
+      config.security.ioCapability != EspBleSecurityIoCapability::KeyboardOnly)
+  {
+    setError(EspBleError::InvalidArgument, "unsupported BLE Security I/O capability");
+    return false;
+  }
+  if (config.security.staticPasskeyEnabled && config.security.staticPasskey > 999999)
+  {
+    setError(EspBleError::InvalidArgument, "static BLE passkey must be between 000000 and 999999");
+    return false;
+  }
+  if (config.security.mitm &&
+      (!config.security.staticPasskeyEnabled ||
+       config.security.ioCapability == EspBleSecurityIoCapability::None))
+  {
+    setError(
+      EspBleError::InvalidArgument,
+      "MITM currently requires a static passkey and DisplayOnly or KeyboardOnly capability");
+    return false;
+  }
+  if (!config.security.mitm &&
+      (config.security.staticPasskeyEnabled ||
+       config.security.ioCapability != EspBleSecurityIoCapability::None))
+  {
+    setError(EspBleError::InvalidArgument, "a static passkey and I/O capability require MITM");
+    return false;
+  }
 
   const char *deviceName = config.deviceName == nullptr ? "" : config.deviceName;
   if (!BLEDevice::init(deviceName))
@@ -1752,12 +1829,6 @@ bool EspBle::begin(const EspBleConfig &config)
   }
 
   impl_->securityEnabled = config.security.enabled;
-  BLESecurity::setAuthenticationMode(
-    config.security.enabled && config.security.bonding,
-    false,
-    config.security.enabled);
-  BLESecurity::setForceAuthentication(
-    config.security.enabled && config.security.pairOnConnect);
   if (config.security.enabled)
   {
     impl_->securityBackend = new BLESecurity();
@@ -1771,7 +1842,32 @@ bool EspBle::begin(const EspBleConfig &config)
       setError(EspBleError::ResourceExhausted, "failed to allocate security state");
       return false;
     }
+    uint8_t ioCapability = ESP_IO_CAP_NONE;
+    if (config.security.ioCapability == EspBleSecurityIoCapability::DisplayOnly)
+    {
+      ioCapability = ESP_IO_CAP_OUT;
+    }
+    else if (config.security.ioCapability == EspBleSecurityIoCapability::KeyboardOnly)
+    {
+      ioCapability = ESP_IO_CAP_IN;
+    }
+    BLESecurity::setCapability(ioCapability);
+    if (config.security.staticPasskeyEnabled)
+    {
+      BLESecurity::setPassKey(true, config.security.staticPasskey);
+    }
+    BLESecurity::setAuthenticationMode(
+      config.security.bonding,
+      config.security.mitm,
+      true);
+    BLESecurity::setForceAuthentication(config.security.pairOnConnect);
     BLEDevice::setSecurityCallbacks(&impl_->securityCallbacks);
+  }
+  else
+  {
+    BLESecurity::setAuthenticationMode(false, false, false);
+    BLESecurity::setForceAuthentication(false);
+    BLEDevice::setSecurityCallbacks(nullptr);
   }
 
   if (!gattServer_.realize())
@@ -2160,6 +2256,11 @@ void EspBle::onSecurityChanged(SecurityChangedCallback callback)
   securityChangedCallback_ = std::move(callback);
 }
 
+void EspBle::onPasskeyDisplayed(PasskeyDisplayedCallback callback)
+{
+  passkeyDisplayedCallback_ = std::move(callback);
+}
+
 bool EspBle::discoverCharacteristic(
   EspBleConnectionId connectionId,
   const char *serviceUuid,
@@ -2465,6 +2566,12 @@ void EspBle::dispatchConnectionEvents()
       if (securityChangedCallback_)
       {
         securityChangedCallback_(event.securityChanged);
+      }
+      break;
+    case EspBleImpl::EventType::PasskeyDisplayed:
+      if (passkeyDisplayedCallback_)
+      {
+        passkeyDisplayedCallback_(event.passkeyDisplayed);
       }
       break;
     }

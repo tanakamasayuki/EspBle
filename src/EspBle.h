@@ -21,11 +21,22 @@ enum class EspBleError : uint8_t
   NotFound,
 };
 
+enum class EspBleSecurityIoCapability : uint8_t
+{
+  None = 0,
+  DisplayOnly,
+  KeyboardOnly,
+};
+
 struct EspBleSecurityConfig
 {
   bool enabled = false;
   bool bonding = true;
   bool pairOnConnect = true;
+  bool mitm = false;
+  EspBleSecurityIoCapability ioCapability = EspBleSecurityIoCapability::None;
+  bool staticPasskeyEnabled = false;
+  uint32_t staticPasskey = 0;
 };
 
 struct EspBleConfig
@@ -108,6 +119,12 @@ struct EspBleSecurityChanged
   String detail;
 };
 
+struct EspBlePasskeyDisplayed
+{
+  EspBleConnection connection;
+  uint32_t passkey = 0;
+};
+
 struct EspBleBond
 {
   String peerAddress;
@@ -123,6 +140,8 @@ struct EspBleGattCharacteristicConfig
   bool indicatable = false;
   bool encryptedRead = false;
   bool encryptedWrite = false;
+  bool authenticatedRead = false;
+  bool authenticatedWrite = false;
 };
 
 enum class EspBleGattOperation : uint8_t
@@ -319,6 +338,7 @@ public:
   using ConnectionFailureCallback = std::function<void(const EspBleConnectionFailure &failure)>;
   using MtuChangedCallback = std::function<void(const EspBleMtuChanged &event)>;
   using SecurityChangedCallback = std::function<void(const EspBleSecurityChanged &event)>;
+  using PasskeyDisplayedCallback = std::function<void(const EspBlePasskeyDisplayed &event)>;
   using GattResultCallback = std::function<void(const EspBleGattResult &result)>;
 
   EspBle();
@@ -346,6 +366,7 @@ public:
   void onConnectionFailed(ConnectionFailureCallback callback);
   void onMtuChanged(MtuChangedCallback callback);
   void onSecurityChanged(SecurityChangedCallback callback);
+  void onPasskeyDisplayed(PasskeyDisplayedCallback callback);
 
   bool discoverCharacteristic(
     EspBleConnectionId connectionId,
@@ -426,6 +447,7 @@ private:
   ConnectionFailureCallback connectionFailedCallback_;
   MtuChangedCallback mtuChangedCallback_;
   SecurityChangedCallback securityChangedCallback_;
+  PasskeyDisplayedCallback passkeyDisplayedCallback_;
   GattResultCallback characteristicDiscoveredCallback_;
   GattResultCallback characteristicReadCallback_;
   GattResultCallback characteristicWrittenCallback_;
