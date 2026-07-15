@@ -124,6 +124,21 @@ void loop()
       ble.hidKeyboardHost().setKeyboardLayout(EspBleKeyboardLayout::JaJp);
       Serial.println("HOST_LAYOUT ja-JP");
     }
+    else if (command == 'g')
+    {
+      ble.hidKeyboardHost().setKeyboardLayout(EspBleKeyboardLayout::DeDe);
+      Serial.println("HOST_LAYOUT de-DE");
+    }
+    else if (command == 'f')
+    {
+      ble.hidKeyboardHost().setKeyboardLayout(EspBleKeyboardLayout::FrFr);
+      Serial.println("HOST_LAYOUT fr-FR");
+    }
+    else if (command == 'b')
+    {
+      ble.hidKeyboardHost().setKeyboardLayout(EspBleKeyboardLayout::EnGb);
+      Serial.println("HOST_LAYOUT en-GB");
+    }
     else if (command == 'd')
     {
       Serial.printf("HOST_DISCONNECT_STARTED success=%u\n",

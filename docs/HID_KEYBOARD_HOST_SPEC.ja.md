@@ -66,7 +66,9 @@ keyboard.onKeyboard([](const EspBleHidKeyboardEvent &event) {
 });
 ```
 
-layout識別子はEspUsbHostと揃え、`ZhTw`、`DaDk`、`DeDe`、`EnUs`、`FiFi`、`FrFr`、`HuHu`、`ItIt`、`JaJp`、`KoKr`、`NlNl`、`NbNo`、`PtBr`、`SvSe`、`ZhCn`、`EnGb`、`PtPt`、`EsEs`、`FrCh`を最初から定義します。現在ASCII tableを実装・Peer検証しているのはEN-USとJA-JPです。KoKr/ZhCn/ZhTwはEspUsbHostと同様にASCII範囲をEN-US tableで扱います。他の言語はraw eventを維持しつつ`ascii=0`とし、対応tableを順次追加します。
+layout識別子と変換tableはEspUsbHostと揃え、`ZhTw`、`DaDk`、`DeDe`、`EnUs`、`FiFi`、`FrFr`、`HuHu`、`ItIt`、`JaJp`、`KoKr`、`NlNl`、`NbNo`、`PtBr`、`SvSe`、`ZhCn`、`EnGb`、`PtPt`、`EsEs`、`FrCh`を実装します。KoKr/ZhCn/ZhTwはEspUsbHostと同様にASCII範囲をEN-US tableで扱います。
+
+`ascii`はEspUsbHost互換の1 byte変換結果です。ASCII外の文字を含むlayoutではtableの8-bit値を返しますが、UTF-8文字列への変換やIME処理は行いません。変換不能なusageは0を返し、正確な入力を必要とする用途では常にraw `usage`も参照します。
 
 layoutを指定しない利用者やESP32KeyBridgeはraw usageをそのまま使用できます。現在のlayout設定はHost profile全体に適用します。異なるlayoutの複数keyboardを同時接続する場合のConnection単位設定は複数接続APIと合わせて追加します。
 
@@ -105,7 +107,7 @@ DiscoveryとNotification値は内部でcopyし、`onDiscovered()`と`onKeyboardS
 - Input/Output Report ReferenceとReport ID 1
 - Battery Level 73%のRead
 - Shift+A pressとreleaseのusage bitmap/changed bitmap
-- EN-US/JA-JPのShift+2 ASCII変換とmodifier単独event
+- EN-US/JA-JP/en-GBのShift+2、de-DEのY/Z、fr-FRのAZERTY変換とmodifier単独event
 - LED `0x03`のOutput Write
 - callbackがloop contextであること
 - 切断と両側Bond削除

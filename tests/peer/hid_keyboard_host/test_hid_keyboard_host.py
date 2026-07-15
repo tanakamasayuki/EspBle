@@ -58,6 +58,39 @@ def test_hid_keyboard_host_discovery_state_and_leds(dut, peers):
     keyboard_device.write("r")
     keyboard_device.expect_exact("DEVICE_RELEASE_SENT success=1", timeout=10)
 
+    dut.write("g")
+    dut.expect_exact("HOST_LAYOUT de-DE", timeout=10)
+    keyboard_device.write("y")
+    keyboard_device.expect_exact("DEVICE_Y_POSITION_SENT success=1", timeout=10)
+    dut.expect_exact(
+        "HOST_KEY usage=28 ascii=122 pressed=1 released=0 modifiers=0 context=loop",
+        timeout=20,
+    )
+    keyboard_device.write("r")
+    keyboard_device.expect_exact("DEVICE_RELEASE_SENT success=1", timeout=10)
+
+    dut.write("f")
+    dut.expect_exact("HOST_LAYOUT fr-FR", timeout=10)
+    keyboard_device.write("a")
+    keyboard_device.expect_exact("DEVICE_A_POSITION_SENT success=1", timeout=10)
+    dut.expect_exact(
+        "HOST_KEY usage=4 ascii=113 pressed=1 released=0 modifiers=0 context=loop",
+        timeout=20,
+    )
+    keyboard_device.write("r")
+    keyboard_device.expect_exact("DEVICE_RELEASE_SENT success=1", timeout=10)
+
+    dut.write("b")
+    dut.expect_exact("HOST_LAYOUT en-GB", timeout=10)
+    keyboard_device.write("t")
+    keyboard_device.expect_exact("DEVICE_LAYOUT_KEY_SENT success=1", timeout=10)
+    dut.expect_exact(
+        "HOST_KEY usage=31 ascii=34 pressed=1 released=0 modifiers=2 context=loop",
+        timeout=20,
+    )
+    keyboard_device.write("r")
+    keyboard_device.expect_exact("DEVICE_RELEASE_SENT success=1", timeout=10)
+
     keyboard_device.write("k")
     keyboard_device.expect_exact("DEVICE_INPUT_SENT success=1", timeout=10)
     dut.expect_exact(

@@ -108,6 +108,20 @@ void loop()
       Serial.printf("DEVICE_MODIFIER_SENT success=%u\n",
         ble.hidKeyboardDevice().sendInputReport(report) ? 1 : 0);
     }
+    else if (command == 'y')
+    {
+      EspBleHidKeyboardInputReport report;
+      report.keys[0] = 0x1c; // Y on QWERTY, Z on QWERTZ.
+      Serial.printf("DEVICE_Y_POSITION_SENT success=%u\n",
+        ble.hidKeyboardDevice().sendInputReport(report) ? 1 : 0);
+    }
+    else if (command == 'a')
+    {
+      EspBleHidKeyboardInputReport report;
+      report.keys[0] = 0x04; // A on QWERTY, Q on AZERTY.
+      Serial.printf("DEVICE_A_POSITION_SENT success=%u\n",
+        ble.hidKeyboardDevice().sendInputReport(report) ? 1 : 0);
+    }
   }
 
   ble.update();
