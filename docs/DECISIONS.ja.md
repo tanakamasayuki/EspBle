@@ -77,6 +77,16 @@
 6. Arduino-ESP32 3.3.10同梱`BLEService` wrapperは同一Service内のCharacteristicをUUIDで一意に扱うため、HOGPに必要なInput/Output 2個の`0x2A4D`を登録できない。内部だけ同梱NimBLEのGATT定義APIを使い、別attributeとして登録する。
 7. `hid_keyboard_device` Peerテストでは親側を同梱BLE API直接実装のHID Host、`peer_device/`側をEspBle HID Keyboard Deviceとし、Report Map、Report Reference、Battery Read、Input Notification、LED Output Write、Pairing/Bondingを確認済み。
 
+## HID Keyboard Hostスパイクで確認済み（公開API確定前）
+
+1. Scan/ConnectはBLE共通APIに残し、接続後に`hidKeyboardHost().discover(connectionId)`でHID固有のDiscoveryと購読を開始する。
+2. Host入力境界は文字イベントではなく、Connection ID、Report ID、modifier、256-bit usage現在値/変化値を持つsnapshotとする。modifier usagesもbitmapへ含め、EspUsbHostとESP32KeyBridgeの入力境界へ揃える。
+3. 切断時はheld usageの全release snapshotをloop contextへ配送し、bridgeでstuck keyを残さない。
+4. 初期Report Map parserはmodifier + 6-key arrayの8-byte reportだけを受理する。NKROや未知の複合reportを長さだけで推測しない。
+5. 同一UUIDのReport characteristicをhandleで全列挙し、Report Reference descriptorでInput/OutputとReport IDを識別する。
+6. Keyboard LED OutputはConnection IDを指定して返送する。writeを同期`bool`のままにするか非同期Resultへ揃えるかはKeyBridge adapter実装後に確定する。
+7. `hid_keyboard_host` PeerテストでDiscovery、Battery Read、Input subscription、usage snapshot、LED Output、Pairing/Bondingを確認済み。Device wire形式は別テストで同梱BLE API直接実装により独立検証する。
+
 ## 優先順位候補
 
 1. HID Mouse / Consumer Control / composite HID
@@ -102,6 +112,6 @@
 
 - Arduino-ESP32の最小対応版と更新ポリシー
 - ESP32-S3以外の初期build matrix
-- HID Centralで初期対応するReport Mapの範囲
+- HID Keyboard Hostで追加対応するReport Mapの優先順位
 - 実行時Passkey入力とNumeric Comparisonの応答context
 - public object ownershipとevent queueの具体API

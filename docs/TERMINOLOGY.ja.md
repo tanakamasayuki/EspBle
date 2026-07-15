@@ -68,8 +68,8 @@ connection.localRole() == EspBleRole::Peripheral;
 Profileの型名にはprofile roleを含めます。
 
 ```cpp
-EspBleHidHost
-EspBleHidDevice
+EspBleHidKeyboardHost
+EspBleHidKeyboardDevice
 EspBleBatteryClient
 EspBleBatteryServer
 ```
@@ -84,8 +84,8 @@ EspBleBatteryServer
 
 ```cpp
 EspBle ble;
-EspBleHidDevice hidKeyboardDevice(ble);
-EspBleHidHost hidKeyboardHost(ble);
+auto &hidKeyboardDevice = ble.hidKeyboardDevice();
+auto &hidKeyboardHost = ble.hidKeyboardHost();
 
 auto &gattServer = ble.gattServer();
 auto remoteBatteryService = connection.findService(batteryServiceUuid);
@@ -94,7 +94,7 @@ auto remoteBatteryService = connection.findService(batteryServiceUuid);
 避けたい例:
 
 ```cpp
-EspBleHidDevice keyboard; // Hostと同時に登場する例では曖昧
+auto &keyboard = ble.hidKeyboardDevice(); // Hostと同時に登場する例では曖昧
 auto client = ...;        // BLE link roleかGATT roleか不明
 auto device = ...;        // local/peer、HID/BLEのどれか不明
 ```
@@ -102,7 +102,7 @@ auto device = ...;        // local/peer、HID/BLEのどれか不明
 ただし、HID Keyboard Deviceだけを説明する短いexampleなど、ファイル名、見出し、型から役割が自明な場合は簡潔な名前を許容します。
 
 ```cpp
-EspBleHidDevice keyboard(ble);
+auto &keyboard = ble.hidKeyboardDevice();
 ```
 
 短い名前を一律に禁止したり、すべてのexampleへ同じ変数名を強制したりしません。複数role、複数connection、bridgeを扱うexampleほど明示的な名前にします。

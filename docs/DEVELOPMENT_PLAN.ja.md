@@ -46,10 +46,11 @@
 - ✅ Battery Service Server（HID Keyboard Deviceへの組込み）
 - Battery Service Client / standalone Server
 - ✅ HID Keyboard Device（Peripheral / GATT Server）
-- HID Keyboard Central
+- ✅ HID Keyboard Host（Central / GATT Client、初期6KRO）
 - ✅ HID Output Report
 - ✅ `hid_keyboard_device` Peerテスト（Battery ReadとOutput Reportを含む）
-- `battery` standalone / HID Keyboard Host Peerテスト
+- ✅ `hid_keyboard_host` Peerテスト
+- `battery` standalone / NKRO・複合HID Host Peerテスト
 - ESP32KeyBridge adapterの接続点検証
 
 ## 5. 初期リリース判定

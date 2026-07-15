@@ -247,15 +247,57 @@ struct EspBleHidKeyboardOutputReport
   bool kana() const { return (leds & 0x10) != 0; }
 };
 
+struct EspBleHidKeyboardHostDiscovery
+{
+  EspBleConnectionId connectionId = 0;
+  uint8_t reportId = 0;
+  bool hasOutputReport = false;
+  bool hasBatteryLevel = false;
+  uint8_t batteryLevel = 0;
+  bool success = false;
+  EspBleError error = EspBleError::None;
+  String detail;
+};
+
+// Format-independent snapshot of the HID Keyboard/Keypad usage page.
+// Modifier usages 0xe0-0xe7 are included in keys as well as modifiers.
+struct EspBleHidKeyboardState
+{
+  static constexpr size_t BitmapSize = 32;
+
+  EspBleConnectionId connectionId = 0;
+  uint8_t reportId = 0;
+  uint8_t keys[BitmapSize] = {};
+  uint8_t changedKeys[BitmapSize] = {};
+  uint8_t modifiers = 0;
+
+  bool isDown(uint8_t usage) const
+  {
+    return (keys[usage >> 3] & static_cast<uint8_t>(1u << (usage & 7))) != 0;
+  }
+  bool wasPressed(uint8_t usage) const
+  {
+    return isDown(usage) &&
+      (changedKeys[usage >> 3] & static_cast<uint8_t>(1u << (usage & 7))) != 0;
+  }
+  bool wasReleased(uint8_t usage) const
+  {
+    return !isDown(usage) &&
+      (changedKeys[usage >> 3] & static_cast<uint8_t>(1u << (usage & 7))) != 0;
+  }
+};
+
 class EspBle;
 class EspBleAdvertising;
 class EspBleScanner;
 class EspBleGattServer;
 class EspBleHidKeyboardDevice;
+class EspBleHidKeyboardHost;
 struct EspBleScannerImpl;
 struct EspBleImpl;
 struct EspBleGattServerImpl;
 struct EspBleHidKeyboardDeviceImpl;
+struct EspBleHidKeyboardHostImpl;
 
 class EspBleAdvertising
 {
@@ -402,6 +444,41 @@ private:
   OutputReportCallback outputReportCallback_;
 };
 
+class EspBleHidKeyboardHost
+{
+public:
+  using DiscoveryCallback =
+    std::function<void(const EspBleHidKeyboardHostDiscovery &result)>;
+  using StateCallback = std::function<void(const EspBleHidKeyboardState &state)>;
+
+  bool discover(EspBleConnectionId connectionId);
+  bool setKeyboardLeds(
+    EspBleConnectionId connectionId,
+    bool numLock,
+    bool capsLock,
+    bool scrollLock,
+    bool compose = false,
+    bool kana = false);
+  void onDiscovered(DiscoveryCallback callback);
+  void onKeyboardState(StateCallback callback);
+  bool ready(EspBleConnectionId connectionId) const;
+
+private:
+  friend class EspBle;
+  friend struct EspBleHidKeyboardHostImpl;
+
+  explicit EspBleHidKeyboardHost(EspBle *owner);
+  ~EspBleHidKeyboardHost();
+  void resetBackend();
+  void handleDisconnected(EspBleConnectionId connectionId);
+  void dispatchPendingEvents();
+
+  EspBle *owner_;
+  EspBleHidKeyboardHostImpl *impl_ = nullptr;
+  DiscoveryCallback discoveryCallback_;
+  StateCallback stateCallback_;
+};
+
 class EspBle
 {
 public:
@@ -481,6 +558,7 @@ public:
   EspBleScanner &scanner();
   EspBleGattServer &gattServer();
   EspBleHidKeyboardDevice &hidKeyboardDevice();
+  EspBleHidKeyboardHost &hidKeyboardHost();
 
   EspBleError lastError() const;
   const char *lastErrorName() const;
@@ -492,10 +570,12 @@ private:
   friend class EspBleScanner;
   friend class EspBleGattServer;
   friend class EspBleHidKeyboardDevice;
+  friend class EspBleHidKeyboardHost;
   friend struct EspBleScannerImpl;
   friend struct EspBleImpl;
   friend struct EspBleGattServerImpl;
   friend struct EspBleHidKeyboardDeviceImpl;
+  friend struct EspBleHidKeyboardHostImpl;
 
   void setError(EspBleError error, const char *detail = nullptr);
   bool preparePeripheral();
@@ -516,6 +596,7 @@ private:
   EspBleScanner scanner_;
   EspBleGattServer gattServer_;
   EspBleHidKeyboardDevice hidKeyboardDevice_;
+  EspBleHidKeyboardHost hidKeyboardHost_;
   EspBleImpl *impl_ = nullptr;
   ConnectionCallback connectedCallback_;
   ConnectionCallback disconnectedCallback_;
