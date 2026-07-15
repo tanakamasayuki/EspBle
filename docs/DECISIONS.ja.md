@@ -21,11 +21,12 @@
 
 ## 仮置き
 
-1. 通常イベントはstack callbackからqueueへ移し、`update()` contextで配送する。
+1. 通常イベントはstack callbackからqueueへ移し、`update()` contextで配送する案から開始する。ただし公開APIとして確定せず、接続/GATTスパイクでlatency、queue、排他、Arduinoでの使い勝手を確認して、明示`update()`、内部task、または選択式のどれにするか決める。
 2. `begin()`前にGATT Server構成を登録し、開始後の動的Service追加は初期版で禁止する。
 3. Characteristic valueはbyte sequenceを基本とし、型変換をcodecへ分離する。
 4. Connectionはbackend handleの再利用を検出できるlibrary identityを持つ。
 5. 初期の同時接続数は制限してよいが、接続単位APIを維持する。
+6. Pairing、Bonding、認証方式の実装は基本接続/GATTの後から追加する。ただしCharacteristicのsecurity permissionはGATT Server開始前に必要になり得るため、構成拡張点とConnectionのsecurity状態は初期API設計で塞がない。
 
 ## 優先順位候補
 
