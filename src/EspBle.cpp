@@ -40,6 +40,9 @@ struct EspBleImpl
     Failed,
     GattResult,
     ServerWrite,
+    Notification,
+    ServerSubscription,
+    ServerSendResult,
   };
 
   struct ConnectionSlot
@@ -56,6 +59,9 @@ struct EspBleImpl
     EspBleConnectionFailure failure;
     EspBleGattResult gattResult;
     EspBleGattWrite serverWrite;
+    EspBleGattNotification notification;
+    EspBleGattSubscription serverSubscription;
+    EspBleGattSendResult serverSendResult;
   };
 
   class ClientCallbacks : public BLEClientCallbacks
@@ -258,6 +264,66 @@ struct EspBleImpl
     pushEvent(event);
   }
 
+  EspBleConnectionId findPeripheralConnectionId(uint16_t connectionHandle) const
+  {
+    for (const ConnectionSlot &slot : connections)
+    {
+      if (slot.used && slot.connection.handle == connectionHandle &&
+          slot.connection.localRole == EspBleRole::Peripheral)
+      {
+        return slot.connection.id;
+      }
+    }
+    return 0;
+  }
+
+  void queueNotification(
+    EspBleConnectionId connectionId,
+    const String &serviceUuid,
+    const String &characteristicUuid,
+    const uint8_t *data,
+    size_t length,
+    bool indication)
+  {
+    std::lock_guard<std::mutex> lock(mutex);
+    Event event;
+    event.type = EventType::Notification;
+    event.notification.connectionId = connectionId;
+    event.notification.serviceUuid = serviceUuid;
+    event.notification.characteristicUuid = characteristicUuid;
+    event.notification.value = length == 0
+      ? String()
+      : String(reinterpret_cast<const char *>(data), length);
+    event.notification.indication = indication;
+    pushEvent(event);
+  }
+
+  void queueServerSubscription(
+    uint16_t connectionHandle,
+    const String &serviceUuid,
+    const String &characteristicUuid,
+    uint16_t subscriptionValue)
+  {
+    std::lock_guard<std::mutex> lock(mutex);
+    Event event;
+    event.type = EventType::ServerSubscription;
+    event.serverSubscription.connectionId = findPeripheralConnectionId(connectionHandle);
+    event.serverSubscription.serviceUuid = serviceUuid;
+    event.serverSubscription.characteristicUuid = characteristicUuid;
+    event.serverSubscription.notifications = (subscriptionValue & 0x0001) != 0;
+    event.serverSubscription.indications = (subscriptionValue & 0x0002) != 0;
+    pushEvent(event);
+  }
+
+  void queueServerSendResult(const EspBleGattSendResult &result)
+  {
+    std::lock_guard<std::mutex> lock(mutex);
+    Event event;
+    event.type = EventType::ServerSendResult;
+    event.serverSendResult = result;
+    pushEvent(event);
+  }
+
   static void connectTaskEntry(void *argument)
   {
     EspBleImpl *impl = static_cast<EspBleImpl *>(argument);
@@ -364,7 +430,7 @@ struct EspBleImpl
               result.success = true;
             }
           }
-          else
+          else if (result.operation == EspBleGattOperation::Write)
           {
             const bool canWrite = response ? result.writable : result.writableWithoutResponse;
             if (!canWrite)
@@ -385,6 +451,58 @@ struct EspBleImpl
                 result.error = EspBleError::BackendFailure;
                 result.detail = "GATT write failed";
               }
+            }
+          }
+          else if (result.operation == EspBleGattOperation::Subscribe)
+          {
+            const bool notifications = response;
+            if ((notifications && !result.notifiable) || (!notifications && !result.indicatable))
+            {
+              result.error = EspBleError::InvalidState;
+              result.detail = notifications
+                ? "GATT characteristic does not support notifications"
+                : "GATT characteristic does not support indications";
+            }
+            else
+            {
+              const EspBleConnectionId connectionId = result.connectionId;
+              const String serviceUuid = result.serviceUuid;
+              const String characteristicUuid = result.characteristicUuid;
+              result.success = characteristic->subscribe(
+                notifications,
+                [impl, connectionId, serviceUuid, characteristicUuid](
+                  BLERemoteCharacteristic *,
+                  uint8_t *data,
+                  size_t length,
+                  bool isNotification) {
+                  impl->queueNotification(
+                    connectionId,
+                    serviceUuid,
+                    characteristicUuid,
+                    data,
+                    length,
+                    !isNotification);
+                },
+                true);
+              if (result.success)
+              {
+                result.subscribedToNotifications = notifications;
+                result.subscribedToIndications = !notifications;
+              }
+              else
+              {
+                result.error = EspBleError::BackendFailure;
+                result.detail = "GATT subscription failed";
+              }
+            }
+          }
+          else
+          {
+            result.success = characteristic->unsubscribe(true);
+            if (!result.success)
+            {
+              result.error = EspBleError::BackendFailure;
+              result.detail = "GATT unsubscribe failed";
             }
           }
         }
@@ -476,6 +594,59 @@ struct EspBleGattServerImpl
       }
     }
 
+    void onSubscribe(
+      BLECharacteristic *characteristic,
+      ble_gap_conn_desc *description,
+      uint16_t subscriptionValue) override
+    {
+      String serviceUuid;
+      String characteristicUuid;
+      {
+        std::lock_guard<std::mutex> lock(owner_->mutex);
+        for (CharacteristicDefinition &definition : owner_->characteristics)
+        {
+          if (definition.backend == characteristic)
+          {
+            serviceUuid = definition.serviceUuid;
+            characteristicUuid = definition.uuid;
+            break;
+          }
+        }
+      }
+      if (!characteristicUuid.isEmpty() && owner_->server->owner_->impl_ != nullptr)
+      {
+        owner_->server->owner_->impl_->queueServerSubscription(
+          description->conn_handle,
+          serviceUuid,
+          characteristicUuid,
+          subscriptionValue);
+      }
+    }
+
+    void onStatus(
+      BLECharacteristic *characteristic,
+      BLECharacteristicCallbacks::Status status,
+      uint32_t code) override
+    {
+      std::lock_guard<std::mutex> lock(owner_->mutex);
+      if (owner_->sending && owner_->sendBackend == characteristic)
+      {
+        // Arduino-ESP32 3.3.10's NimBLE path reports SUCCESS_INDICATE from
+        // BLE_GAP_EVENT_NOTIFY_TX, but its synchronous wrapper can emit a
+        // second timeout because the confirmation semaphore is not released.
+        // Preserve the actual controller confirmation already observed.
+        if (owner_->sendStatusReceived &&
+            owner_->sendStatus == BLECharacteristicCallbacks::Status::SUCCESS_INDICATE &&
+            status == BLECharacteristicCallbacks::Status::ERROR_INDICATE_TIMEOUT)
+        {
+          return;
+        }
+        owner_->sendStatus = status;
+        owner_->sendStatusCode = code;
+        owner_->sendStatusReceived = true;
+      }
+    }
+
   private:
     EspBleGattServerImpl *owner_;
   };
@@ -483,6 +654,78 @@ struct EspBleGattServerImpl
   explicit EspBleGattServerImpl(EspBleGattServer *server)
       : server(server), callbacks(this)
   {
+  }
+
+  static void sendTaskEntry(void *argument)
+  {
+    EspBleGattServerImpl *impl = static_cast<EspBleGattServerImpl *>(argument);
+    BLECharacteristic *backend = nullptr;
+    EspBleGattSendResult result;
+    {
+      std::lock_guard<std::mutex> lock(impl->mutex);
+      backend = impl->sendBackend;
+      result.serviceUuid = impl->sendServiceUuid;
+      result.characteristicUuid = impl->sendCharacteristicUuid;
+      result.value = impl->sendValue;
+      result.indication = impl->sendIndication;
+      impl->sendStatusReceived = false;
+    }
+
+    backend->setValue(
+      reinterpret_cast<const uint8_t *>(result.value.c_str()),
+      result.value.length());
+    backend->notify(!result.indication);
+
+    BLECharacteristicCallbacks::Status status = BLECharacteristicCallbacks::Status::ERROR_GATT;
+    uint32_t statusCode = 0;
+    bool statusReceived = false;
+    {
+      std::lock_guard<std::mutex> lock(impl->mutex);
+      status = impl->sendStatus;
+      statusCode = impl->sendStatusCode;
+      statusReceived = impl->sendStatusReceived;
+      impl->sending = false;
+      impl->sendTask = nullptr;
+    }
+
+    result.success = statusReceived &&
+      ((!result.indication && status == BLECharacteristicCallbacks::Status::SUCCESS_NOTIFY) ||
+       (result.indication && status == BLECharacteristicCallbacks::Status::SUCCESS_INDICATE));
+    if (!result.success)
+    {
+      result.error = EspBleError::BackendFailure;
+      switch (status)
+      {
+      case BLECharacteristicCallbacks::Status::ERROR_NO_CLIENT:
+        result.detail = "no connected GATT Client";
+        break;
+      case BLECharacteristicCallbacks::Status::ERROR_NO_SUBSCRIBER:
+        result.detail = "no subscribed GATT Client";
+        break;
+      case BLECharacteristicCallbacks::Status::ERROR_NOTIFY_DISABLED:
+        result.detail = "notifications are disabled";
+        break;
+      case BLECharacteristicCallbacks::Status::ERROR_INDICATE_DISABLED:
+        result.detail = "indications are disabled";
+        break;
+      case BLECharacteristicCallbacks::Status::ERROR_INDICATE_TIMEOUT:
+        result.detail = "indication confirmation timed out";
+        break;
+      case BLECharacteristicCallbacks::Status::ERROR_INDICATE_FAILURE:
+        result.detail = "indication confirmation failed";
+        break;
+      default:
+        result.detail = statusReceived
+          ? String("GATT send failed with backend code ") + statusCode
+          : String("GATT send completed without status");
+        break;
+      }
+    }
+    if (impl->server->owner_->impl_ != nullptr)
+    {
+      impl->server->owner_->impl_->queueServerSendResult(result);
+    }
+    vTaskDelete(nullptr);
   }
 
   EspBleGattServer *server;
@@ -493,6 +736,16 @@ struct EspBleGattServerImpl
   size_t characteristicCount = 0;
   BackendCallbacks callbacks;
   bool realized = false;
+  bool sending = false;
+  TaskHandle_t sendTask = nullptr;
+  BLECharacteristic *sendBackend = nullptr;
+  String sendServiceUuid;
+  String sendCharacteristicUuid;
+  String sendValue;
+  bool sendIndication = false;
+  BLECharacteristicCallbacks::Status sendStatus = BLECharacteristicCallbacks::Status::ERROR_GATT;
+  uint32_t sendStatusCode = 0;
+  bool sendStatusReceived = false;
 };
 
 struct EspBleScannerImpl
@@ -1036,9 +1289,148 @@ bool EspBleGattServer::value(
   return false;
 }
 
+bool EspBleGattServer::notify(
+  const char *serviceUuid,
+  const char *characteristicUuid,
+  const uint8_t *data,
+  size_t length)
+{
+  return send(serviceUuid, characteristicUuid, data, length, false);
+}
+
+bool EspBleGattServer::notify(
+  const char *serviceUuid,
+  const char *characteristicUuid,
+  const String &value)
+{
+  return notify(
+    serviceUuid,
+    characteristicUuid,
+    reinterpret_cast<const uint8_t *>(value.c_str()),
+    value.length());
+}
+
+bool EspBleGattServer::indicate(
+  const char *serviceUuid,
+  const char *characteristicUuid,
+  const uint8_t *data,
+  size_t length)
+{
+  return send(serviceUuid, characteristicUuid, data, length, true);
+}
+
+bool EspBleGattServer::indicate(
+  const char *serviceUuid,
+  const char *characteristicUuid,
+  const String &value)
+{
+  return indicate(
+    serviceUuid,
+    characteristicUuid,
+    reinterpret_cast<const uint8_t *>(value.c_str()),
+    value.length());
+}
+
+bool EspBleGattServer::send(
+  const char *serviceUuid,
+  const char *characteristicUuid,
+  const uint8_t *data,
+  size_t length,
+  bool indication)
+{
+  if (!owner_->initialized())
+  {
+    owner_->setError(EspBleError::InvalidState, "BLE stack is not initialized");
+    return false;
+  }
+  if (serviceUuid == nullptr || serviceUuid[0] == '\0' ||
+      characteristicUuid == nullptr || characteristicUuid[0] == '\0' ||
+      (data == nullptr && length != 0) || impl_ == nullptr)
+  {
+    owner_->setError(EspBleError::InvalidArgument, "invalid GATT send arguments");
+    return false;
+  }
+
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    if (impl_->sending)
+    {
+      owner_->setError(EspBleError::InvalidState, "a GATT Server send is already in progress");
+      return false;
+    }
+
+    EspBleGattServerImpl::CharacteristicDefinition *found = nullptr;
+    for (size_t index = 0; index < impl_->characteristicCount; ++index)
+    {
+      auto &definition = impl_->characteristics[index];
+      if (uuidEquals(definition.serviceUuid, serviceUuid) &&
+          uuidEquals(definition.uuid, characteristicUuid))
+      {
+        found = &definition;
+        break;
+      }
+    }
+    if (found == nullptr || found->backend == nullptr)
+    {
+      owner_->setError(EspBleError::NotFound, "GATT characteristic was not found");
+      return false;
+    }
+    if ((!indication && !found->config.notifiable) ||
+        (indication && !found->config.indicatable))
+    {
+      owner_->setError(
+        EspBleError::InvalidState,
+        indication ? "GATT characteristic is not indicatable" : "GATT characteristic is not notifiable");
+      return false;
+    }
+
+    found->value = length == 0
+      ? String()
+      : String(reinterpret_cast<const char *>(data), length);
+    impl_->sendBackend = found->backend;
+    impl_->sendServiceUuid = found->serviceUuid;
+    impl_->sendCharacteristicUuid = found->uuid;
+    impl_->sendValue = found->value;
+    impl_->sendIndication = indication;
+    impl_->sending = true;
+  }
+
+  TaskHandle_t task = nullptr;
+  const BaseType_t result = xTaskCreate(
+    EspBleGattServerImpl::sendTaskEntry,
+    "espble-gatt-send",
+    4096,
+    impl_,
+    1,
+    &task);
+  if (result != pdPASS)
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    impl_->sending = false;
+    owner_->setError(EspBleError::ResourceExhausted, "failed to create GATT Server send task");
+    return false;
+  }
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    impl_->sendTask = task;
+  }
+  owner_->clearError();
+  return true;
+}
+
 void EspBleGattServer::onWritten(WriteCallback callback)
 {
   writeCallback_ = std::move(callback);
+}
+
+void EspBleGattServer::onSubscriptionChanged(SubscriptionCallback callback)
+{
+  subscriptionCallback_ = std::move(callback);
+}
+
+void EspBleGattServer::onSent(SendCallback callback)
+{
+  sendCallback_ = std::move(callback);
 }
 
 bool EspBleGattServer::realize()
@@ -1133,6 +1525,22 @@ void EspBleGattServer::dispatchWrite(const EspBleGattWrite &write)
   }
 }
 
+void EspBleGattServer::dispatchSubscription(const EspBleGattSubscription &subscription)
+{
+  if (subscriptionCallback_)
+  {
+    subscriptionCallback_(subscription);
+  }
+}
+
+void EspBleGattServer::dispatchSendResult(const EspBleGattSendResult &result)
+{
+  if (sendCallback_)
+  {
+    sendCallback_(result);
+  }
+}
+
 EspBle::EspBle() : advertising_(this), scanner_(this), gattServer_(this) {}
 
 EspBle::~EspBle()
@@ -1209,6 +1617,20 @@ void EspBle::end()
       {
         std::lock_guard<std::mutex> lock(impl_->mutex);
         if (!impl_->connecting && !impl_->gattOperating)
+        {
+          break;
+        }
+      }
+      delay(1);
+    }
+  }
+  if (gattServer_.impl_ != nullptr)
+  {
+    while (true)
+    {
+      {
+        std::lock_guard<std::mutex> lock(gattServer_.impl_->mutex);
+        if (!gattServer_.impl_->sending)
         {
           break;
         }
@@ -1418,6 +1840,34 @@ bool EspBle::writeCharacteristic(
     response);
 }
 
+bool EspBle::subscribe(
+  EspBleConnectionId connectionId,
+  const char *serviceUuid,
+  const char *characteristicUuid,
+  bool notifications)
+{
+  return startGattOperation(
+    EspBleGattOperation::Subscribe,
+    connectionId,
+    serviceUuid,
+    characteristicUuid,
+    nullptr,
+    0,
+    notifications);
+}
+
+bool EspBle::unsubscribe(
+  EspBleConnectionId connectionId,
+  const char *serviceUuid,
+  const char *characteristicUuid)
+{
+  return startGattOperation(
+    EspBleGattOperation::Unsubscribe,
+    connectionId,
+    serviceUuid,
+    characteristicUuid);
+}
+
 bool EspBle::writeCharacteristic(
   EspBleConnectionId connectionId,
   const char *serviceUuid,
@@ -1447,6 +1897,22 @@ void EspBle::onCharacteristicRead(GattResultCallback callback)
 void EspBle::onCharacteristicWritten(GattResultCallback callback)
 {
   characteristicWrittenCallback_ = std::move(callback);
+}
+
+void EspBle::onSubscribed(GattResultCallback callback)
+{
+  subscribedCallback_ = std::move(callback);
+}
+
+void EspBle::onUnsubscribed(GattResultCallback callback)
+{
+  unsubscribedCallback_ = std::move(callback);
+}
+
+void EspBle::onNotification(
+  std::function<void(const EspBleGattNotification &notification)> callback)
+{
+  notificationCallback_ = std::move(callback);
 }
 
 bool EspBle::startGattOperation(
@@ -1605,6 +2071,12 @@ void EspBle::dispatchConnectionEvents()
       case EspBleGattOperation::Write:
         callback = &characteristicWrittenCallback_;
         break;
+      case EspBleGattOperation::Subscribe:
+        callback = &subscribedCallback_;
+        break;
+      case EspBleGattOperation::Unsubscribe:
+        callback = &unsubscribedCallback_;
+        break;
       }
       if (callback != nullptr && *callback)
       {
@@ -1614,6 +2086,18 @@ void EspBle::dispatchConnectionEvents()
     }
     case EspBleImpl::EventType::ServerWrite:
       gattServer_.dispatchWrite(event.serverWrite);
+      break;
+    case EspBleImpl::EventType::Notification:
+      if (notificationCallback_)
+      {
+        notificationCallback_(event.notification);
+      }
+      break;
+    case EspBleImpl::EventType::ServerSubscription:
+      gattServer_.dispatchSubscription(event.serverSubscription);
+      break;
+    case EspBleImpl::EventType::ServerSendResult:
+      gattServer_.dispatchSendResult(event.serverSendResult);
       break;
     }
   }

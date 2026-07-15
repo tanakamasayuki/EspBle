@@ -26,10 +26,10 @@
 - ✅ Read / Write with Response
 - Service/Characteristic一覧Discovery
 - Write Without ResponseのPeer検証
-- Notify / Indicate / subscription
+- ✅ Notify / Indicate / subscription / unsubscribe
 - MTU
 - ✅ `gatt_read_write` Peerテスト
-- `notify_indicate` Peerテスト
+- ✅ `notify_indicate` Peerテスト
 
 ## 3. Security
 

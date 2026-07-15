@@ -93,6 +93,8 @@ enum class EspBleGattOperation : uint8_t
   Discover = 0,
   Read,
   Write,
+  Subscribe,
+  Unsubscribe,
 };
 
 struct EspBleGattResult
@@ -110,6 +112,8 @@ struct EspBleGattResult
   bool writableWithoutResponse = false;
   bool notifiable = false;
   bool indicatable = false;
+  bool subscribedToNotifications = false;
+  bool subscribedToIndications = false;
 };
 
 struct EspBleGattWrite
@@ -118,6 +122,35 @@ struct EspBleGattWrite
   String serviceUuid;
   String characteristicUuid;
   String value;
+};
+
+struct EspBleGattNotification
+{
+  EspBleConnectionId connectionId = 0;
+  String serviceUuid;
+  String characteristicUuid;
+  String value;
+  bool indication = false;
+};
+
+struct EspBleGattSubscription
+{
+  EspBleConnectionId connectionId = 0;
+  String serviceUuid;
+  String characteristicUuid;
+  bool notifications = false;
+  bool indications = false;
+};
+
+struct EspBleGattSendResult
+{
+  String serviceUuid;
+  String characteristicUuid;
+  String value;
+  bool indication = false;
+  bool success = false;
+  EspBleError error = EspBleError::None;
+  String detail;
 };
 
 class EspBle;
@@ -185,6 +218,8 @@ public:
   static constexpr size_t MaxServices = 4;
   static constexpr size_t MaxCharacteristics = 16;
   using WriteCallback = std::function<void(const EspBleGattWrite &write)>;
+  using SubscriptionCallback = std::function<void(const EspBleGattSubscription &subscription)>;
+  using SendCallback = std::function<void(const EspBleGattSendResult &result)>;
 
   bool addService(const char *serviceUuid);
   bool addCharacteristic(
@@ -198,7 +233,21 @@ public:
     size_t length);
   bool setValue(const char *serviceUuid, const char *characteristicUuid, const String &value);
   bool value(const char *serviceUuid, const char *characteristicUuid, String &value) const;
+  bool notify(
+    const char *serviceUuid,
+    const char *characteristicUuid,
+    const uint8_t *data,
+    size_t length);
+  bool notify(const char *serviceUuid, const char *characteristicUuid, const String &value);
+  bool indicate(
+    const char *serviceUuid,
+    const char *characteristicUuid,
+    const uint8_t *data,
+    size_t length);
+  bool indicate(const char *serviceUuid, const char *characteristicUuid, const String &value);
   void onWritten(WriteCallback callback);
+  void onSubscriptionChanged(SubscriptionCallback callback);
+  void onSent(SendCallback callback);
 
 private:
   friend class EspBle;
@@ -210,10 +259,20 @@ private:
   bool realize();
   void resetBackend();
   void dispatchWrite(const EspBleGattWrite &write);
+  void dispatchSubscription(const EspBleGattSubscription &subscription);
+  void dispatchSendResult(const EspBleGattSendResult &result);
+  bool send(
+    const char *serviceUuid,
+    const char *characteristicUuid,
+    const uint8_t *data,
+    size_t length,
+    bool indication);
 
   EspBle *owner_;
   EspBleGattServerImpl *impl_ = nullptr;
   WriteCallback writeCallback_;
+  SubscriptionCallback subscriptionCallback_;
+  SendCallback sendCallback_;
 };
 
 class EspBle
@@ -263,9 +322,21 @@ public:
     const char *characteristicUuid,
     const String &value,
     bool response = true);
+  bool subscribe(
+    EspBleConnectionId connectionId,
+    const char *serviceUuid,
+    const char *characteristicUuid,
+    bool notifications = true);
+  bool unsubscribe(
+    EspBleConnectionId connectionId,
+    const char *serviceUuid,
+    const char *characteristicUuid);
   void onCharacteristicDiscovered(GattResultCallback callback);
   void onCharacteristicRead(GattResultCallback callback);
   void onCharacteristicWritten(GattResultCallback callback);
+  void onSubscribed(GattResultCallback callback);
+  void onUnsubscribed(GattResultCallback callback);
+  void onNotification(std::function<void(const EspBleGattNotification &notification)> callback);
 
   bool initialized() const;
   EspBleAdvertising &advertising();
@@ -310,6 +381,9 @@ private:
   GattResultCallback characteristicDiscoveredCallback_;
   GattResultCallback characteristicReadCallback_;
   GattResultCallback characteristicWrittenCallback_;
+  GattResultCallback subscribedCallback_;
+  GattResultCallback unsubscribedCallback_;
+  std::function<void(const EspBleGattNotification &notification)> notificationCallback_;
 };
 
 #endif // ESP_BLE_H
