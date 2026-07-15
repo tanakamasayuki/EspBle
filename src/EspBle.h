@@ -24,6 +24,7 @@ enum class EspBleError : uint8_t
 struct EspBleConfig
 {
   const char *deviceName = "EspBle";
+  uint16_t preferredMtu = 23;
 };
 
 struct EspBleScanConfig
@@ -70,6 +71,8 @@ struct EspBleConnection
   uint8_t peerAddressType = 0;
   EspBleRole localRole = EspBleRole::Central;
   uint16_t mtu = 23;
+
+  size_t maximumNotificationPayload() const;
 };
 
 struct EspBleConnectionFailure
@@ -77,6 +80,12 @@ struct EspBleConnectionFailure
   String peerAddress;
   EspBleError error = EspBleError::BackendFailure;
   String detail;
+};
+
+struct EspBleMtuChanged
+{
+  EspBleConnection connection;
+  uint16_t previousMtu = 23;
 };
 
 struct EspBleGattCharacteristicConfig
@@ -280,6 +289,7 @@ class EspBle
 public:
   using ConnectionCallback = std::function<void(const EspBleConnection &connection)>;
   using ConnectionFailureCallback = std::function<void(const EspBleConnectionFailure &failure)>;
+  using MtuChangedCallback = std::function<void(const EspBleMtuChanged &event)>;
   using GattResultCallback = std::function<void(const EspBleGattResult &result)>;
 
   EspBle();
@@ -300,6 +310,7 @@ public:
   void onConnected(ConnectionCallback callback);
   void onDisconnected(ConnectionCallback callback);
   void onConnectionFailed(ConnectionFailureCallback callback);
+  void onMtuChanged(MtuChangedCallback callback);
 
   bool discoverCharacteristic(
     EspBleConnectionId connectionId,
@@ -378,6 +389,7 @@ private:
   ConnectionCallback connectedCallback_;
   ConnectionCallback disconnectedCallback_;
   ConnectionFailureCallback connectionFailedCallback_;
+  MtuChangedCallback mtuChangedCallback_;
   GattResultCallback characteristicDiscoveredCallback_;
   GattResultCallback characteristicReadCallback_;
   GattResultCallback characteristicWrittenCallback_;

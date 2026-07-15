@@ -27,9 +27,10 @@
 - Service/Characteristic一覧Discovery
 - Write Without ResponseのPeer検証
 - ✅ Notify / Indicate / subscription / unsubscribe
-- MTU
+- ✅ MTU設定、Connection snapshot、payload上限検証
 - ✅ `gatt_read_write` Peerテスト
 - ✅ `notify_indicate` Peerテスト
+- ✅ `mtu` Peerテスト
 
 ## 3. Security
 

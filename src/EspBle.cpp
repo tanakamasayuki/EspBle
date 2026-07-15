@@ -43,6 +43,7 @@ struct EspBleImpl
     Notification,
     ServerSubscription,
     ServerSendResult,
+    MtuChanged,
   };
 
   struct ConnectionSlot
@@ -62,6 +63,7 @@ struct EspBleImpl
     EspBleGattNotification notification;
     EspBleGattSubscription serverSubscription;
     EspBleGattSendResult serverSendResult;
+    EspBleMtuChanged mtuChanged;
   };
 
   class ClientCallbacks : public BLEClientCallbacks
@@ -116,6 +118,14 @@ struct EspBleImpl
     void onDisconnect(BLEServer *, ble_gap_conn_desc *description) override
     {
       owner_->removeServerConnection(description->conn_handle);
+    }
+
+    void onMtuChanged(
+      BLEServer *,
+      ble_gap_conn_desc *description,
+      uint16_t mtu) override
+    {
+      owner_->updatePeripheralMtu(description->conn_handle, mtu);
     }
 
   private:
@@ -173,6 +183,14 @@ struct EspBleImpl
       event.type = EventType::Connected;
       event.connection = slot.connection;
       pushEvent(event);
+      if (localRole == EspBleRole::Central && mtu != 23)
+      {
+        Event mtuEvent;
+        mtuEvent.type = EventType::MtuChanged;
+        mtuEvent.mtuChanged.connection = slot.connection;
+        mtuEvent.mtuChanged.previousMtu = 23;
+        pushEvent(mtuEvent);
+      }
       return true;
     }
 
@@ -218,6 +236,29 @@ struct EspBleImpl
     event.connection = slot.connection;
     pushEvent(event);
     slot = ConnectionSlot();
+  }
+
+  void updatePeripheralMtu(uint16_t connectionHandle, uint16_t mtu)
+  {
+    std::lock_guard<std::mutex> lock(mutex);
+    for (ConnectionSlot &slot : connections)
+    {
+      if (slot.used && slot.connection.handle == connectionHandle &&
+          slot.connection.localRole == EspBleRole::Peripheral)
+      {
+        if (slot.connection.mtu == mtu)
+        {
+          return;
+        }
+        Event event;
+        event.type = EventType::MtuChanged;
+        event.mtuChanged.previousMtu = slot.connection.mtu;
+        slot.connection.mtu = mtu;
+        event.mtuChanged.connection = slot.connection;
+        pushEvent(event);
+        return;
+      }
+    }
   }
 
   void pushFailure(const EspBleScanResult &target, const char *detail)
@@ -833,6 +874,11 @@ bool EspBleScanResult::advertisesService(const char *uuid) const
   return false;
 }
 
+size_t EspBleConnection::maximumNotificationPayload() const
+{
+  return mtu > 3 ? mtu - 3 : 0;
+}
+
 EspBleAdvertising::EspBleAdvertising(EspBle *owner) : owner_(owner) {}
 
 void EspBleAdvertising::clear()
@@ -1351,6 +1397,29 @@ bool EspBleGattServer::send(
     return false;
   }
 
+  size_t maximumPayload = static_cast<size_t>(-1);
+  bool hasPeripheralConnection = false;
+  {
+    std::lock_guard<std::mutex> lock(owner_->impl_->mutex);
+    for (const EspBleImpl::ConnectionSlot &slot : owner_->impl_->connections)
+    {
+      if (slot.used && slot.connection.localRole == EspBleRole::Peripheral)
+      {
+        hasPeripheralConnection = true;
+        const size_t connectionMaximum = slot.connection.maximumNotificationPayload();
+        if (connectionMaximum < maximumPayload)
+        {
+          maximumPayload = connectionMaximum;
+        }
+      }
+    }
+  }
+  if (hasPeripheralConnection && length > maximumPayload)
+  {
+    owner_->setError(EspBleError::InvalidArgument, "GATT send value exceeds negotiated MTU payload");
+    return false;
+  }
+
   {
     std::lock_guard<std::mutex> lock(impl_->mutex);
     if (impl_->sending)
@@ -1561,11 +1630,22 @@ bool EspBle::begin(const EspBleConfig &config)
     setError(EspBleError::InvalidState, "Arduino BLE stack was initialized outside this EspBle instance");
     return false;
   }
+  if (config.preferredMtu < 23 || config.preferredMtu > 517)
+  {
+    setError(EspBleError::InvalidArgument, "preferred MTU must be between 23 and 517");
+    return false;
+  }
 
   const char *deviceName = config.deviceName == nullptr ? "" : config.deviceName;
   if (!BLEDevice::init(deviceName))
   {
     setError(EspBleError::BackendFailure, "BLEDevice::init failed");
+    return false;
+  }
+  if (BLEDevice::setMTU(config.preferredMtu) != ESP_OK)
+  {
+    BLEDevice::deinit(false);
+    setError(EspBleError::BackendFailure, "failed to set preferred MTU");
     return false;
   }
 
@@ -1802,6 +1882,11 @@ void EspBle::onDisconnected(ConnectionCallback callback)
 void EspBle::onConnectionFailed(ConnectionFailureCallback callback)
 {
   connectionFailedCallback_ = std::move(callback);
+}
+
+void EspBle::onMtuChanged(MtuChangedCallback callback)
+{
+  mtuChangedCallback_ = std::move(callback);
 }
 
 bool EspBle::discoverCharacteristic(
@@ -2098,6 +2183,12 @@ void EspBle::dispatchConnectionEvents()
       break;
     case EspBleImpl::EventType::ServerSendResult:
       gattServer_.dispatchSendResult(event.serverSendResult);
+      break;
+    case EspBleImpl::EventType::MtuChanged:
+      if (mtuChangedCallback_)
+      {
+        mtuChangedCallback_(event.mtuChanged);
+      }
       break;
     }
   }
