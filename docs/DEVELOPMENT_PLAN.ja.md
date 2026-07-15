@@ -55,7 +55,8 @@
 - ✅ `hid_keyboard_device` Peerテスト（Battery ReadとOutput Reportを含む）
 - ✅ `hid_keyboard_host` Peerテスト
 - `battery` standalone / NKRO・複合HID Host Peerテスト
-- ESP32KeyBridge adapterの接続点検証
+- ✅ ESP32KeyBridge input adapterの接続点検証（試作adapterとPeerテスト）
+- ESP32KeyBridge側への正式adapter追加（EspBle公開API確定後）
 
 ## 5. 初期リリース判定
 

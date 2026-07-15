@@ -1,0 +1,66 @@
+def _connect(dut, device, connection_id):
+    device.write("?")
+    device.expect_exact("DEVICE_ADVERTISING 1", timeout=10)
+    dut.write("s")
+    dut.expect_exact("BRIDGE_SCAN_STARTED success=1", timeout=10)
+    dut.expect_exact("BRIDGE_CONNECT_STARTED success=1", timeout=20)
+    dut.expect_exact(f"BRIDGE_CONNECTED id={connection_id}", timeout=20)
+    device.expect_exact(f"DEVICE_CONNECTED id={connection_id}", timeout=20)
+    dut.expect_exact("BRIDGE_SECURITY success=1 bonded=1", timeout=20)
+    device.expect_exact("DEVICE_SECURITY success=1 bonded=1", timeout=20)
+    dut.expect_exact("BRIDGE_DISCOVERY_STARTED success=1", timeout=10)
+    dut.expect_exact(f"BRIDGE_DISCOVERED success=1 id={connection_id}", timeout=20)
+
+
+def test_ble_keyboard_feeds_keybridge_and_reconnects(dut, peers):
+    device = peers["device"]
+
+    dut.write("x")
+    device.write("x")
+    dut.expect_exact("BRIDGE_BONDS_CLEARED success=1 count=0", timeout=10)
+    device.expect_exact("DEVICE_BONDS_CLEARED success=1 count=0", timeout=10)
+
+    _connect(dut, device, 1)
+    device.expect_exact("DEVICE_LEDS num=0 caps=0 scroll=0", timeout=20)
+
+    device.write("k")
+    device.expect_exact("DEVICE_SHIFT_A_SENT success=1", timeout=10)
+    dut.expect_exact("BRIDGE_OUT keyboard:0005 keyboard:00e1", timeout=20)
+    device.write("r")
+    device.expect_exact("DEVICE_RELEASE_SENT success=1", timeout=10)
+    dut.expect_exact("BRIDGE_OUT empty", timeout=20)
+
+    device.write("c")
+    device.expect_exact("DEVICE_CAPS_SENT success=1", timeout=10)
+    dut.expect_exact("BRIDGE_OUT keyboard:0039", timeout=20)
+    device.expect_exact("DEVICE_LEDS num=0 caps=1 scroll=0", timeout=20)
+    device.write("r")
+    device.expect_exact("DEVICE_RELEASE_SENT success=1", timeout=10)
+    dut.expect_exact("BRIDGE_OUT empty", timeout=20)
+
+    device.write("k")
+    device.expect_exact("DEVICE_SHIFT_A_SENT success=1", timeout=10)
+    dut.expect_exact("BRIDGE_OUT keyboard:0005 keyboard:00e1", timeout=20)
+    dut.write("d")
+    dut.expect_exact("BRIDGE_DISCONNECT_STARTED success=1", timeout=10)
+    dut.expect_exact("BRIDGE_DISCONNECTED id=1", timeout=20)
+    dut.expect_exact("BRIDGE_OUT empty", timeout=20)
+    device.expect_exact("DEVICE_DISCONNECTED id=1", timeout=20)
+
+    _connect(dut, device, 2)
+    device.expect_exact("DEVICE_LEDS num=0 caps=1 scroll=0", timeout=20)
+    device.write("k")
+    device.expect_exact("DEVICE_SHIFT_A_SENT success=1", timeout=10)
+    dut.expect_exact("BRIDGE_OUT keyboard:0005 keyboard:00e1", timeout=20)
+    device.write("r")
+    device.expect_exact("DEVICE_RELEASE_SENT success=1", timeout=10)
+    dut.expect_exact("BRIDGE_OUT empty", timeout=20)
+
+    dut.write("d")
+    dut.expect_exact("BRIDGE_DISCONNECT_STARTED success=1", timeout=10)
+    dut.expect_exact("BRIDGE_DISCONNECTED id=2", timeout=20)
+    device.expect_exact("DEVICE_DISCONNECTED id=2", timeout=20)
+    dut.write("x")
+    device.write("x")
+    dut.expect_exact("BRIDGE_BONDS_CLEARED success=1 count=0", timeout=10)
+    device.expect_exact("DEVICE_BONDS_CLEARED success=1 count=0", timeout=10)

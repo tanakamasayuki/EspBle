@@ -242,7 +242,7 @@ keyboard.releaseAll();
 
 LED Output Reportはstack callbackからcopyされ、`ble.update()` contextで配送されます。値には送信元Connection IDとNum Lock、Caps Lock、Scroll Lock、Compose、Kanaのbitが含まれます。Battery Levelは`setBatteryLevel(0..100)`で更新します。
 
-このsliceはReport Protocolの固定6KRO keyboardだけを扱います。Boot Protocol、HID Host、文字からkey usageへの変換、layout、auto-release、送信queueは未実装です。GATT構成とwire formatの詳細は[HID Keyboard Device仕様](HID_KEYBOARD_DEVICE_SPEC.ja.md)に記載します。
+このDevice sliceはReport Protocolの固定6KRO keyboardだけを扱います。Boot Protocol、文字からkey usageへの変換、layout、auto-release、送信queueはDevice helperの対象外です。HID Hostは次節の独立profileとして実装します。GATT構成とwire formatの詳細は[HID Keyboard Device仕様](HID_KEYBOARD_DEVICE_SPEC.ja.md)に記載します。
 
 ## HID Keyboard Host vertical sliceの試行API
 
