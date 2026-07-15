@@ -21,7 +21,7 @@
 
 ## 仮置き
 
-1. 通常イベントはstack callbackからqueueへ移し、`update()` contextで配送する案から開始する。ただし公開APIとして確定せず、接続/GATTスパイクでlatency、queue、排他、Arduinoでの使い勝手を確認して、明示`update()`、内部task、または選択式のどれにするか決める。
+1. 通常イベントはstack callbackからqueueへ移し、`update()` contextで配送する案から開始する。ただし公開APIとして確定せず、Notify/IndicateとHIDでlatency、queue、排他、Arduinoでの使い勝手を確認して、明示`update()`、内部task、または選択式のどれにするか決める。
 2. `begin()`前にGATT Server構成を登録し、開始後の動的Service追加は初期版で禁止する。
 3. Characteristic valueはbyte sequenceを基本とし、型変換をcodecへ分離する。
 4. Connectionはbackend handleの再利用を検出できるlibrary identityを持つ。
@@ -37,6 +37,16 @@
 5. USB系と同様に操作は`bool`を返し、`lastErrorName()` / `lastErrorDetail()`で失敗理由を確認できる試行APIとする。
 6. Arduino-ESP32 BLE stackが外部で初期化済みの場合は所有権競合として拒否する。
 7. Legacy Advertisingの31-byte上限で要求fieldが欠落する場合は明示的なargument errorとする。
+
+## Connection/GATTスパイクで確認済み（公開API確定前）
+
+1. Arduino-ESP32 backendの待機型Connect、Discovery、Read、Writeは内部taskで実行し、公開操作の受理時にはloopをblockしない。
+2. Connectionはbackend handleとは別のlibrary生成ID、peer address、local role、MTUを持つ値snapshotとし、接続と切断イベントで同じIDを通知できる。
+3. GATT ServerのService/Characteristicは`begin()`前に登録し、Security permissionを後から定義へ追加できる順序にする。
+4. GATT Server書込みイベントとCentral側のDiscovery/Read/Write結果は、現在は`ble.update()`からloop task contextで配送する。
+5. 最小Discoveryは既知Service/Characteristic UUIDを指定して存在とpropertyを確認する。全Service/Characteristic列挙は別途設計する。
+6. 初期実装はCentral側GATT operationを同時に1件へ制限し、callbackから次のoperationを連鎖できる。queue、operation id、cancelは未確定とする。
+7. GATT値はpointer+lengthを基本に扱える一方、公開値containerは`String`で試行する。Notify/Indicate、MTU、HID実装後に最終型を決める。
 
 ## 優先順位候補
 

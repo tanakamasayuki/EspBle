@@ -18,6 +18,7 @@ enum class EspBleError : uint8_t
   InvalidArgument,
   BackendFailure,
   ResourceExhausted,
+  NotFound,
 };
 
 struct EspBleConfig
@@ -78,11 +79,54 @@ struct EspBleConnectionFailure
   String detail;
 };
 
+struct EspBleGattCharacteristicConfig
+{
+  bool readable = false;
+  bool writable = false;
+  bool writableWithoutResponse = false;
+  bool notifiable = false;
+  bool indicatable = false;
+};
+
+enum class EspBleGattOperation : uint8_t
+{
+  Discover = 0,
+  Read,
+  Write,
+};
+
+struct EspBleGattResult
+{
+  EspBleGattOperation operation = EspBleGattOperation::Discover;
+  EspBleConnectionId connectionId = 0;
+  String serviceUuid;
+  String characteristicUuid;
+  bool success = false;
+  EspBleError error = EspBleError::None;
+  String detail;
+  String value;
+  bool readable = false;
+  bool writable = false;
+  bool writableWithoutResponse = false;
+  bool notifiable = false;
+  bool indicatable = false;
+};
+
+struct EspBleGattWrite
+{
+  EspBleConnectionId connectionId = 0;
+  String serviceUuid;
+  String characteristicUuid;
+  String value;
+};
+
 class EspBle;
 class EspBleAdvertising;
 class EspBleScanner;
+class EspBleGattServer;
 struct EspBleScannerImpl;
 struct EspBleImpl;
+struct EspBleGattServerImpl;
 
 class EspBleAdvertising
 {
@@ -135,11 +179,49 @@ private:
   EspBleScannerImpl *impl_ = nullptr;
 };
 
+class EspBleGattServer
+{
+public:
+  static constexpr size_t MaxServices = 4;
+  static constexpr size_t MaxCharacteristics = 16;
+  using WriteCallback = std::function<void(const EspBleGattWrite &write)>;
+
+  bool addService(const char *serviceUuid);
+  bool addCharacteristic(
+    const char *serviceUuid,
+    const char *characteristicUuid,
+    const EspBleGattCharacteristicConfig &config);
+  bool setValue(
+    const char *serviceUuid,
+    const char *characteristicUuid,
+    const uint8_t *data,
+    size_t length);
+  bool setValue(const char *serviceUuid, const char *characteristicUuid, const String &value);
+  bool value(const char *serviceUuid, const char *characteristicUuid, String &value) const;
+  void onWritten(WriteCallback callback);
+
+private:
+  friend class EspBle;
+  friend struct EspBleImpl;
+  friend struct EspBleGattServerImpl;
+
+  explicit EspBleGattServer(EspBle *owner);
+  ~EspBleGattServer();
+  bool realize();
+  void resetBackend();
+  void dispatchWrite(const EspBleGattWrite &write);
+
+  EspBle *owner_;
+  EspBleGattServerImpl *impl_ = nullptr;
+  WriteCallback writeCallback_;
+};
+
 class EspBle
 {
 public:
   using ConnectionCallback = std::function<void(const EspBleConnection &connection)>;
   using ConnectionFailureCallback = std::function<void(const EspBleConnectionFailure &failure)>;
+  using GattResultCallback = std::function<void(const EspBleGattResult &result)>;
 
   EspBle();
   ~EspBle();
@@ -160,9 +242,35 @@ public:
   void onDisconnected(ConnectionCallback callback);
   void onConnectionFailed(ConnectionFailureCallback callback);
 
+  bool discoverCharacteristic(
+    EspBleConnectionId connectionId,
+    const char *serviceUuid,
+    const char *characteristicUuid);
+  bool readCharacteristic(
+    EspBleConnectionId connectionId,
+    const char *serviceUuid,
+    const char *characteristicUuid);
+  bool writeCharacteristic(
+    EspBleConnectionId connectionId,
+    const char *serviceUuid,
+    const char *characteristicUuid,
+    const uint8_t *data,
+    size_t length,
+    bool response = true);
+  bool writeCharacteristic(
+    EspBleConnectionId connectionId,
+    const char *serviceUuid,
+    const char *characteristicUuid,
+    const String &value,
+    bool response = true);
+  void onCharacteristicDiscovered(GattResultCallback callback);
+  void onCharacteristicRead(GattResultCallback callback);
+  void onCharacteristicWritten(GattResultCallback callback);
+
   bool initialized() const;
   EspBleAdvertising &advertising();
   EspBleScanner &scanner();
+  EspBleGattServer &gattServer();
 
   EspBleError lastError() const;
   const char *lastErrorName() const;
@@ -172,22 +280,36 @@ public:
 private:
   friend class EspBleAdvertising;
   friend class EspBleScanner;
+  friend class EspBleGattServer;
   friend struct EspBleScannerImpl;
   friend struct EspBleImpl;
+  friend struct EspBleGattServerImpl;
 
   void setError(EspBleError error, const char *detail = nullptr);
   bool preparePeripheral();
   void dispatchConnectionEvents();
+  bool startGattOperation(
+    EspBleGattOperation operation,
+    EspBleConnectionId connectionId,
+    const char *serviceUuid,
+    const char *characteristicUuid,
+    const uint8_t *data = nullptr,
+    size_t length = 0,
+    bool response = true);
 
   bool initialized_ = false;
   EspBleError lastError_ = EspBleError::None;
   String lastErrorDetail_;
   EspBleAdvertising advertising_;
   EspBleScanner scanner_;
+  EspBleGattServer gattServer_;
   EspBleImpl *impl_ = nullptr;
   ConnectionCallback connectedCallback_;
   ConnectionCallback disconnectedCallback_;
   ConnectionFailureCallback connectionFailedCallback_;
+  GattResultCallback characteristicDiscoveredCallback_;
+  GattResultCallback characteristicReadCallback_;
+  GattResultCallback characteristicWrittenCallback_;
 };
 
 #endif // ESP_BLE_H

@@ -21,12 +21,15 @@
 
 ## 2. 汎用GATT
 
-- GATT Server Service/Characteristic
-- GATT Client Discovery
-- Read / Write / Write Without Response
+- ✅ GATT Server Service/Characteristic
+- ✅ 既知UUIDを指定するGATT Client Discovery
+- ✅ Read / Write with Response
+- Service/Characteristic一覧Discovery
+- Write Without ResponseのPeer検証
 - Notify / Indicate / subscription
 - MTU
-- `gatt_read_write` / `notify_indicate` Peerテスト
+- ✅ `gatt_read_write` Peerテスト
+- `notify_indicate` Peerテスト
 
 ## 3. Security
 
