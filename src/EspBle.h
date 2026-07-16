@@ -9,6 +9,7 @@
 #error "EspBle requires the NimBLE backend bundled with Arduino-ESP32"
 #endif
 
+#include "EspBleKeymap.h"
 #include "espble_version.h"
 
 enum class EspBleError : uint8_t
@@ -296,28 +297,7 @@ struct EspBleHidKeyboardState
   }
 };
 
-enum class EspBleKeyboardLayout : uint16_t
-{
-  ZhTw = 0x0404,
-  DaDk = 0x0406,
-  DeDe = 0x0407,
-  EnUs = 0x0409,
-  FiFi = 0x040b,
-  FrFr = 0x040c,
-  HuHu = 0x040e,
-  ItIt = 0x0410,
-  JaJp = 0x0411,
-  KoKr = 0x0412,
-  NlNl = 0x0413,
-  NbNo = 0x0414,
-  PtBr = 0x0416,
-  SvSe = 0x041d,
-  ZhCn = 0x0804,
-  EnGb = 0x0809,
-  PtPt = 0x0816,
-  EsEs = 0x0c0a,
-  FrCh = 0x100c,
-};
+// EspBleKeyboardLayout is defined in EspBleKeymap.h.
 
 struct EspBleHidKeyboardEvent
 {
