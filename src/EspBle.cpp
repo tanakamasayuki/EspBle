@@ -11,6 +11,7 @@
 #include <BLEService.h>
 #include <BLESecurity.h>
 #include <BLEUtils.h>
+#include <host/ble_gap.h>
 #include <host/ble_hs_mbuf.h>
 #include <host/ble_store.h>
 #include <os/os_mbuf.h>
@@ -19,6 +20,8 @@
 #include <cstring>
 #include <mutex>
 #include <utility>
+
+#include "EspBleHidReportMap.h"
 
 
 namespace
@@ -1009,9 +1012,107 @@ struct EspBleHidKeyboardDeviceImpl
 {
   static constexpr size_t OutputQueueCapacity = 8;
 
+  // CCCD subscription state per connection, tracked from GAP subscribe
+  // events. Reports are only notified to subscribed peers.
+  struct SubscriptionSlot
+  {
+    bool used = false;
+    uint16_t connectionHandle = 0xffff;
+    bool inputNotifications = false;
+    bool batteryNotifications = false;
+  };
+
   explicit EspBleHidKeyboardDeviceImpl(EspBleHidKeyboardDevice *device)
       : device(device)
   {
+  }
+
+  static int gapListenerEntry(ble_gap_event *event, void *argument)
+  {
+    EspBleHidKeyboardDeviceImpl *impl = static_cast<EspBleHidKeyboardDeviceImpl *>(argument);
+    if (event->type == BLE_GAP_EVENT_SUBSCRIBE)
+    {
+      impl->handleSubscribe(
+        event->subscribe.conn_handle,
+        event->subscribe.attr_handle,
+        event->subscribe.cur_notify != 0);
+    }
+    else if (event->type == BLE_GAP_EVENT_DISCONNECT)
+    {
+      impl->clearSubscriptions(event->disconnect.conn.conn_handle);
+    }
+    return 0;
+  }
+
+  void handleSubscribe(uint16_t connectionHandle, uint16_t attributeHandle, bool notifications)
+  {
+    if ((attributeHandle != inputValueHandle || inputValueHandle == 0) &&
+        (attributeHandle != batteryValueHandle || batteryValueHandle == 0))
+    {
+      return;
+    }
+    std::lock_guard<std::mutex> lock(mutex);
+    SubscriptionSlot *slot = nullptr;
+    for (SubscriptionSlot &candidate : subscriptions)
+    {
+      if (candidate.used && candidate.connectionHandle == connectionHandle)
+      {
+        slot = &candidate;
+        break;
+      }
+    }
+    if (slot == nullptr)
+    {
+      for (SubscriptionSlot &candidate : subscriptions)
+      {
+        if (!candidate.used)
+        {
+          candidate.used = true;
+          candidate.connectionHandle = connectionHandle;
+          candidate.inputNotifications = false;
+          candidate.batteryNotifications = false;
+          slot = &candidate;
+          break;
+        }
+      }
+    }
+    if (slot == nullptr)
+    {
+      return;
+    }
+    if (attributeHandle == inputValueHandle)
+    {
+      slot->inputNotifications = notifications;
+    }
+    else
+    {
+      slot->batteryNotifications = notifications;
+    }
+  }
+
+  void clearSubscriptions(uint16_t connectionHandle)
+  {
+    std::lock_guard<std::mutex> lock(mutex);
+    for (SubscriptionSlot &slot : subscriptions)
+    {
+      if (slot.used && slot.connectionHandle == connectionHandle)
+      {
+        slot = SubscriptionSlot();
+      }
+    }
+  }
+
+  bool subscribed(uint16_t connectionHandle, bool battery) const
+  {
+    std::lock_guard<std::mutex> lock(mutex);
+    for (const SubscriptionSlot &slot : subscriptions)
+    {
+      if (slot.used && slot.connectionHandle == connectionHandle)
+      {
+        return battery ? slot.batteryNotifications : slot.inputNotifications;
+      }
+    }
+    return false;
   }
 
   static int accessCallback(
@@ -1159,6 +1260,9 @@ struct EspBleHidKeyboardDeviceImpl
   size_t outputHead = 0;
   size_t outputCount = 0;
   size_t droppedOutputReports = 0;
+  SubscriptionSlot subscriptions[ConnectionCapacity];
+  ble_gap_event_listener gapListener = {};
+  bool gapListenerRegistered = false;
 };
 
 struct EspBleHidKeyboardHostImpl
@@ -1196,40 +1300,6 @@ struct EspBleHidKeyboardHostImpl
 
   explicit EspBleHidKeyboardHostImpl(EspBleHidKeyboardHost *host) : host(host) {}
 
-  static bool containsSequence(
-    const uint8_t *data,
-    size_t length,
-    const uint8_t *sequence,
-    size_t sequenceLength)
-  {
-    if (sequenceLength == 0 || sequenceLength > length)
-    {
-      return false;
-    }
-    for (size_t offset = 0; offset + sequenceLength <= length; ++offset)
-    {
-      if (memcmp(data + offset, sequence, sequenceLength) == 0)
-      {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  static bool supportsSixKeyKeyboard(const String &reportMap)
-  {
-    const uint8_t *data = reinterpret_cast<const uint8_t *>(reportMap.c_str());
-    const size_t length = reportMap.length();
-    const uint8_t keyboardApplication[] = {0x05, 0x01, 0x09, 0x06, 0xa1, 0x01};
-    const uint8_t modifiers[] = {0x19, 0xe0, 0x29, 0xe7};
-    const uint8_t sixKeys[] = {0x95, 0x06, 0x75, 0x08};
-    const uint8_t keyboardUsages[] = {0x05, 0x07, 0x19, 0x00};
-    return containsSequence(data, length, keyboardApplication, sizeof(keyboardApplication)) &&
-      containsSequence(data, length, modifiers, sizeof(modifiers)) &&
-      containsSequence(data, length, sixKeys, sizeof(sixKeys)) &&
-      containsSequence(data, length, keyboardUsages, sizeof(keyboardUsages));
-  }
-
   Connection *findConnection(EspBleConnectionId connectionId)
   {
     for (Connection &connection : connections)
@@ -1261,16 +1331,47 @@ struct EspBleHidKeyboardHostImpl
     return nullptr;
   }
 
-  void pushEvent(const Event &event)
+  bool pushEventLocked(const Event &event, bool critical)
   {
-    std::lock_guard<std::mutex> lock(mutex);
     if (eventCount == QueueCapacity)
     {
-      ++droppedEvents;
-      return;
+      bool evicted = false;
+      if (critical)
+      {
+        // Discovery results and the all-release event synthesized on
+        // disconnection must not be lost; evict the oldest key state event.
+        for (size_t offset = 0; offset < eventCount; ++offset)
+        {
+          if (events[(eventHead + offset) % QueueCapacity].type != EventType::State)
+          {
+            continue;
+          }
+          for (size_t next = offset; next + 1 < eventCount; ++next)
+          {
+            events[(eventHead + next) % QueueCapacity] =
+              std::move(events[(eventHead + next + 1) % QueueCapacity]);
+          }
+          --eventCount;
+          ++droppedEvents;
+          evicted = true;
+          break;
+        }
+      }
+      if (!evicted)
+      {
+        ++droppedEvents;
+        return false;
+      }
     }
     events[(eventHead + eventCount) % QueueCapacity] = event;
     ++eventCount;
+    return true;
+  }
+
+  void pushEvent(const Event &event)
+  {
+    std::lock_guard<std::mutex> lock(mutex);
+    pushEventLocked(event, event.type == EventType::Discovery);
   }
 
   void queueInputReport(
@@ -1282,6 +1383,16 @@ struct EspBleHidKeyboardHostImpl
     if (data == nullptr || length != 8)
     {
       return;
+    }
+    for (size_t index = 0; index < 6; ++index)
+    {
+      const uint8_t usage = data[index + 2];
+      if (usage >= 0x01 && usage <= 0x03)
+      {
+        // Phantom state (ErrorRollOver/POSTFail/ErrorUndefined): standard
+        // hosts ignore the report and keep the previous key state.
+        return;
+      }
     }
 
     Event event;
@@ -1330,13 +1441,7 @@ struct EspBleHidKeyboardHostImpl
       }
       memcpy(connection->keys, event.state.keys, sizeof(connection->keys));
       connection->modifiers = event.state.modifiers;
-      if (eventCount == QueueCapacity)
-      {
-        ++droppedEvents;
-        return;
-      }
-      events[(eventHead + eventCount) % QueueCapacity] = event;
-      ++eventCount;
+      pushEventLocked(event, false);
     }
   }
 
@@ -1383,7 +1488,10 @@ struct EspBleHidKeyboardHostImpl
         BLERemoteCharacteristic *reportMap =
           hidService->getCharacteristic(BLEUUID((uint16_t)0x2a4b));
         const String reportMapValue = reportMap == nullptr ? String() : reportMap->readValue();
-        if (reportMap == nullptr || !supportsSixKeyKeyboard(reportMapValue))
+        const EspBleHidKeyboardReportMapInfo mapInfo = espBleParseKeyboardReportMap(
+          reinterpret_cast<const uint8_t *>(reportMapValue.c_str()),
+          reportMapValue.length());
+        if (reportMap == nullptr || !mapInfo.keyboardFound)
         {
           result.error = EspBleError::InvalidState;
           result.detail = "HID Report Map is not a supported 6-key keyboard";
@@ -1411,21 +1519,40 @@ struct EspBleHidKeyboardHostImpl
             BLERemoteDescriptor *reference =
               characteristic->getDescriptor(BLEUUID((uint16_t)0x2908));
             const String value = reference == nullptr ? String() : reference->readValue();
-            if (value.length() != 2)
+            if (value.length() == 2)
             {
-              continue;
+              const uint8_t reportId = static_cast<uint8_t>(value[0]);
+              const uint8_t reportType = static_cast<uint8_t>(value[1]);
+              // Select the input report the Report Map identified as the
+              // keyboard, not merely the first notifiable one; combo devices
+              // expose Consumer Control and other reports here too.
+              if (reportType == 1 && characteristic->canNotify() && inputReport == nullptr &&
+                  (!mapInfo.hasReportId || reportId == mapInfo.reportId))
+              {
+                inputReport = characteristic;
+                result.reportId = reportId;
+              }
+              else if (reportType == 2 && outputReportCount < 8)
+              {
+                outputReports[outputReportCount] = characteristic;
+                outputReportIds[outputReportCount++] = reportId;
+              }
             }
-            const uint8_t reportId = static_cast<uint8_t>(value[0]);
-            const uint8_t reportType = static_cast<uint8_t>(value[1]);
-            if (reportType == 1 && characteristic->canNotify() && inputReport == nullptr)
+            else if (!mapInfo.hasReportId)
             {
-              inputReport = characteristic;
-              result.reportId = reportId;
-            }
-            else if (reportType == 2 && outputReportCount < 8)
-            {
-              outputReports[outputReportCount] = characteristic;
-              outputReportIds[outputReportCount++] = reportId;
+              // No Report Reference descriptor: acceptable when the Report
+              // Map declares no report IDs (single-report keyboards).
+              if (characteristic->canNotify() && inputReport == nullptr)
+              {
+                inputReport = characteristic;
+                result.reportId = 0;
+              }
+              else if ((characteristic->canWrite() || characteristic->canWriteNoResponse()) &&
+                       outputReportCount < 8)
+              {
+                outputReports[outputReportCount] = characteristic;
+                outputReportIds[outputReportCount++] = 0;
+              }
             }
           }
           if (inputReport == nullptr)
@@ -2488,39 +2615,52 @@ bool EspBleHidKeyboardDevice::realize()
   impl_->pnpId[5] = static_cast<uint8_t>(impl_->config.productVersion);
   impl_->pnpId[6] = static_cast<uint8_t>(impl_->config.productVersion >> 8);
 
+  // HOGP requires Security Mode 1 Level 2 (encryption) on the HID Service
+  // attributes; the insufficient-encryption error is what makes a Host OS
+  // start pairing. Only applied when security is enabled.
+  const bool requireEncryption = owner_->impl_->securityEnabled;
+  const ble_gatt_chr_flags encryptedRead =
+    requireEncryption ? BLE_GATT_CHR_F_READ_ENC : 0;
+  const ble_gatt_chr_flags encryptedWrite =
+    requireEncryption ? BLE_GATT_CHR_F_WRITE_ENC : 0;
+  const uint8_t descriptorFlags = static_cast<uint8_t>(
+    BLE_ATT_F_READ | (requireEncryption ? BLE_ATT_F_READ_ENC : 0));
+
   impl_->inputDescriptors[0].uuid = &impl_->reportReferenceUuid.u;
-  impl_->inputDescriptors[0].att_flags = BLE_ATT_F_READ;
+  impl_->inputDescriptors[0].att_flags = descriptorFlags;
   impl_->inputDescriptors[0].access_cb = EspBleHidKeyboardDeviceImpl::accessCallback;
   impl_->inputDescriptors[0].arg = impl_;
   impl_->outputDescriptors[0].uuid = &impl_->reportReferenceUuid.u;
-  impl_->outputDescriptors[0].att_flags = BLE_ATT_F_READ;
+  impl_->outputDescriptors[0].att_flags = descriptorFlags;
   impl_->outputDescriptors[0].access_cb = EspBleHidKeyboardDeviceImpl::accessCallback;
   impl_->outputDescriptors[0].arg = impl_;
 
   impl_->hidCharacteristics[0].uuid = &impl_->hidInformationUuid.u;
   impl_->hidCharacteristics[0].access_cb = EspBleHidKeyboardDeviceImpl::accessCallback;
   impl_->hidCharacteristics[0].arg = impl_;
-  impl_->hidCharacteristics[0].flags = BLE_GATT_CHR_F_READ;
+  impl_->hidCharacteristics[0].flags = BLE_GATT_CHR_F_READ | encryptedRead;
   impl_->hidCharacteristics[1].uuid = &impl_->reportMapUuid.u;
   impl_->hidCharacteristics[1].access_cb = EspBleHidKeyboardDeviceImpl::accessCallback;
   impl_->hidCharacteristics[1].arg = impl_;
-  impl_->hidCharacteristics[1].flags = BLE_GATT_CHR_F_READ;
+  impl_->hidCharacteristics[1].flags = BLE_GATT_CHR_F_READ | encryptedRead;
   impl_->hidCharacteristics[2].uuid = &impl_->hidControlPointUuid.u;
   impl_->hidCharacteristics[2].access_cb = EspBleHidKeyboardDeviceImpl::accessCallback;
   impl_->hidCharacteristics[2].arg = impl_;
-  impl_->hidCharacteristics[2].flags = BLE_GATT_CHR_F_WRITE_NO_RSP;
+  impl_->hidCharacteristics[2].flags = BLE_GATT_CHR_F_WRITE_NO_RSP | encryptedWrite;
   impl_->hidCharacteristics[3].uuid = &impl_->reportUuid.u;
   impl_->hidCharacteristics[3].access_cb = EspBleHidKeyboardDeviceImpl::accessCallback;
   impl_->hidCharacteristics[3].arg = impl_;
   impl_->hidCharacteristics[3].descriptors = impl_->inputDescriptors;
-  impl_->hidCharacteristics[3].flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY;
+  impl_->hidCharacteristics[3].flags =
+    BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY | encryptedRead;
   impl_->hidCharacteristics[3].val_handle = &impl_->inputValueHandle;
   impl_->hidCharacteristics[4].uuid = &impl_->reportUuid.u;
   impl_->hidCharacteristics[4].access_cb = EspBleHidKeyboardDeviceImpl::accessCallback;
   impl_->hidCharacteristics[4].arg = impl_;
   impl_->hidCharacteristics[4].descriptors = impl_->outputDescriptors;
   impl_->hidCharacteristics[4].flags =
-    BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_WRITE | BLE_GATT_CHR_F_WRITE_NO_RSP;
+    BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_WRITE | BLE_GATT_CHR_F_WRITE_NO_RSP |
+    encryptedRead | encryptedWrite;
   impl_->hidCharacteristics[4].val_handle = &impl_->outputValueHandle;
 
   impl_->deviceInformationCharacteristics[0].uuid = &impl_->manufacturerUuid.u;
@@ -2568,6 +2708,14 @@ bool EspBleHidKeyboardDevice::realize()
     owner_->setError(EspBleError::BackendFailure, "HID report handles were not registered");
     return false;
   }
+  if (!impl_->gapListenerRegistered &&
+      ble_gap_event_listener_register(
+        &impl_->gapListener,
+        EspBleHidKeyboardDeviceImpl::gapListenerEntry,
+        impl_) == 0)
+  {
+    impl_->gapListenerRegistered = true;
+  }
   impl_->realized = true;
   return true;
 }
@@ -2583,19 +2731,39 @@ bool EspBleHidKeyboardDevice::sendInputReport(const EspBleHidKeyboardInputReport
 
   uint16_t connectionHandles[ConnectionCapacity] = {};
   size_t connectionCount = 0;
+  bool anyPeripheral = false;
   {
     std::lock_guard<std::mutex> lock(owner_->impl_->mutex);
     for (const EspBleImpl::ConnectionSlot &slot : owner_->impl_->connections)
     {
       if (slot.used && slot.connection.localRole == EspBleRole::Peripheral)
       {
+        anyPeripheral = true;
+        // HOGP: never push HID data over an unencrypted link when security
+        // is enabled.
+        if (owner_->impl_->securityEnabled && !slot.connection.encrypted)
+        {
+          continue;
+        }
         connectionHandles[connectionCount++] = slot.connection.handle;
       }
     }
   }
+  // Only notify peers that subscribed to the Input Report CCCD.
+  size_t eligibleCount = 0;
+  for (size_t index = 0; index < connectionCount; ++index)
+  {
+    if (impl_->subscribed(connectionHandles[index], false))
+    {
+      connectionHandles[eligibleCount++] = connectionHandles[index];
+    }
+  }
+  connectionCount = eligibleCount;
   if (connectionCount == 0)
   {
-    owner_->setError(EspBleError::InvalidState, "no connected HID Host");
+    owner_->setError(
+      EspBleError::InvalidState,
+      anyPeripheral ? "no subscribed HID Host" : "no connected HID Host");
     return false;
   }
 
@@ -2671,6 +2839,11 @@ bool EspBleHidKeyboardDevice::setBatteryLevel(uint8_t level)
     }
     for (size_t index = 0; index < connectionCount; ++index)
     {
+      // Only notify peers that subscribed to the Battery Level CCCD.
+      if (!impl_->subscribed(connectionHandles[index], true))
+      {
+        continue;
+      }
       os_mbuf *value = ble_hs_mbuf_from_flat(&impl_->batteryLevel, 1);
       if (value != nullptr)
       {
@@ -2698,6 +2871,11 @@ void EspBleHidKeyboardDevice::resetBackend()
   {
     return;
   }
+  if (impl_->gapListenerRegistered)
+  {
+    ble_gap_event_listener_unregister(&impl_->gapListener);
+    impl_->gapListenerRegistered = false;
+  }
   impl_->realized = false;
   impl_->inputValueHandle = 0;
   impl_->outputValueHandle = 0;
@@ -2707,6 +2885,10 @@ void EspBleHidKeyboardDevice::resetBackend()
   std::lock_guard<std::mutex> lock(impl_->mutex);
   impl_->outputHead = 0;
   impl_->outputCount = 0;
+  for (EspBleHidKeyboardDeviceImpl::SubscriptionSlot &slot : impl_->subscriptions)
+  {
+    slot = EspBleHidKeyboardDeviceImpl::SubscriptionSlot();
+  }
 }
 
 void EspBleHidKeyboardDevice::dispatchPendingOutputReports()
@@ -2778,6 +2960,9 @@ bool EspBleHidKeyboardHost::discover(EspBleConnectionId connectionId)
       return false;
     }
     owner_->impl_->gattOperating = true;
+    // Lets disconnect() reject requests against this connection while the
+    // discovery worker is still using it.
+    owner_->impl_->gattConnectionId = connectionId;
   }
 
   {
@@ -2844,6 +3029,7 @@ bool EspBleHidKeyboardHost::setKeyboardLeds(
       return false;
     }
     owner_->impl_->gattOperating = true;
+    owner_->impl_->gattConnectionId = connectionId;
   }
 
   BLERemoteCharacteristic *outputReport = nullptr;
@@ -3053,16 +3239,8 @@ void EspBleHidKeyboardHost::handleDisconnected(EspBleConnectionId connectionId)
   *connection = EspBleHidKeyboardHostImpl::Connection();
   if (hasHeldKey)
   {
-    if (impl_->eventCount == EspBleHidKeyboardHostImpl::QueueCapacity)
-    {
-      ++impl_->droppedEvents;
-    }
-    else
-    {
-      impl_->events[(impl_->eventHead + impl_->eventCount) %
-        EspBleHidKeyboardHostImpl::QueueCapacity] = event;
-      ++impl_->eventCount;
-    }
+    // The all-release event must not be lost even when the queue is full.
+    impl_->pushEventLocked(event, true);
   }
 }
 
@@ -3216,6 +3394,23 @@ bool EspBle::begin(const EspBleConfig &config)
 {
   if (initialized_)
   {
+    const char *deviceName = config.deviceName == nullptr ? "" : config.deviceName;
+    const bool sameConfig = activeDeviceName_ == deviceName &&
+      activePreferredMtu_ == config.preferredMtu &&
+      activeSecurity_.enabled == config.security.enabled &&
+      activeSecurity_.bonding == config.security.bonding &&
+      activeSecurity_.pairOnConnect == config.security.pairOnConnect &&
+      activeSecurity_.mitm == config.security.mitm &&
+      activeSecurity_.ioCapability == config.security.ioCapability &&
+      activeSecurity_.staticPasskeyEnabled == config.security.staticPasskeyEnabled &&
+      activeSecurity_.staticPasskey == config.security.staticPasskey;
+    if (!sameConfig)
+    {
+      setError(
+        EspBleError::InvalidState,
+        "BLE stack is already initialized with a different configuration");
+      return false;
+    }
     clearError();
     return true;
   }
@@ -3355,6 +3550,9 @@ bool EspBle::begin(const EspBleConfig &config)
     return false;
   }
 
+  activeDeviceName_ = deviceName;
+  activePreferredMtu_ = config.preferredMtu;
+  activeSecurity_ = config.security;
   initialized_ = true;
   clearError();
   return true;

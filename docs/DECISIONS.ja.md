@@ -58,6 +58,7 @@
 16. Central `BLEClient`は切断時・接続失敗時にretireし、次の`update()`でloop task上のreapが解放する。同梱backendには`deleteClient()`がなく`BLEDevice::deinit(false)`が最後に生成した1個だけを解放するため、最新のclientはEspBle側では解放せず、後続のclient生成または`end()`まで保持する。`end()`は残りの全clientを解放してから`deinit(false)`を呼ぶ。
 17. 内部worker task（GATT operation、Server送信）は完了イベントをpushしてからbusy flagをクリアする。`end()`はbusy flagのクリアを待ってから共有状態を破棄するため、この順序でuse-after-freeを防ぐ。
 18. retired clientのreapは、client解放前に該当Connection IDのHID Host slot（remote characteristicポインタ）を無効化し、GATT operation実行中はreapを次の`update()`へ遅延する。
+19. 初期化済みインスタンスへの2回目の`begin()`は、同一configなら成功を返し、異なるconfigなら`InvalidState`で失敗する。黙って旧設定のまま成功を返さない。
 
 ## Securityスパイクで確認済み（公開API確定前）
 
@@ -80,6 +81,8 @@
 5. Output ReportはConnection ID付きの値へcopyし、現在は`ble.update()` contextで配送する。
 6. Arduino-ESP32 3.3.10同梱`BLEService` wrapperは同一Service内のCharacteristicをUUIDで一意に扱うため、HOGPに必要なInput/Output 2個の`0x2A4D`を登録できない。内部だけ同梱NimBLEのGATT定義APIを使い、別attributeとして登録する。
 7. `hid_keyboard_device` Peerテストでは親側を同梱BLE API直接実装のHID Host、`peer_device/`側をEspBle HID Keyboard Deviceとし、Report Map、Report Reference、Battery Read、Input Notification、LED Output Write、Pairing/Bondingを確認済み。
+8. securityを有効にした場合、HOGPのSecurity Mode 1 Level 2に従いHID Serviceの全attribute（Report Map、Report、Report Reference、HID Information、Control Point）へ暗号化必須のpermissionを付与する。加えてInput Reportは暗号化されていないlinkへは送信しない。Device Information / Battery Serviceは識別用途のため暗号化必須にしない（`hid_security` Peerテストで検証）。
+9. Input Report / Battery Levelの通知は、GAP subscribeイベントから追跡したCCCD購読状態を持つ接続にのみ送信する。購読者が1つもない場合、`sendInputReport()`は失敗を返し、`setBatteryLevel()`は値更新のみ行う（`hid_robustness` Peerテストで検証）。
 
 ## HID Keyboard Hostスパイクで確認済み（公開API確定前）
 
@@ -93,6 +96,10 @@
 8. `EspBleHidKeyboardState`の256-bit usage snapshotはESP32KeyBridgeの`InputAdapter::keys()`へ変換なしで写像できる。試作adapterでは`bridge.update()`からEspBleの`update()`も駆動でき、remap、modifier、切断releaseを確認した。
 9. KeyBridgeのLockStateは`setKeyboardLeds(connectionId, ...)`でBLE keyboardへ返送でき、再接続・再Discovery後にも現在値を再送できる。
 10. 正式adapterとsketch callbackの競合を避けるため、HID Keyboard Hostは既存の単一`on*()`に加えて、event種別ごとに最大4件の`add*Listener()`とIDによる`removeListener()`を提供する。配送開始時にcallbackをsnapshotし、callback内の登録変更は次eventから反映する。共通Event APIへの一般化は他profileで必要になった時点で判断する。
+11. Report Mapの6KRO keyboard判定はバイト列一致ではなく、HID report descriptorの最小parser（`EspBleHidReportMap.h`、host unit test付き）で行う。keyboard Application collection内の「8×1-bit modifier(0xE0-0xE7) variable入力+6個以上の8-bit array入力」を持つreportを探し、そのReport IDでInput/Output Report characteristicを選択する。Report IDなしのkeyboard（Report Reference不在）も受理する。
+12. ErrorRollOver等のphantom report（key slotにusage 0x01-0x03）は一般的なHost同様に無視し、直前のkey状態を維持する。
+13. HID Hostのeventキューが満杯のとき、Discovery結果と切断時の全releaseイベントは最古のkey stateイベントを追い出して保持する。drop数（追い出し含む）は`droppedEventCount()`で観測できる。
+14. HID Discovery実行中と`setKeyboardLeds()`実行中は対象Connection IDを共通GATT操作状態へ記録し、`disconnect()`が同一接続への要求を拒否できるようにする。
 11. 再接続時は新しいConnection IDに対してSecurity完了後に再度`discover()`が必要で、Discovery完了後にinputをconnectedとして扱う。自動再接続・自動Discoveryは今回のadapter境界には含めない。
 
 ## 優先順位候補

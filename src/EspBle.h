@@ -652,6 +652,9 @@ private:
     bool response = true);
 
   bool initialized_ = false;
+  String activeDeviceName_;
+  uint16_t activePreferredMtu_ = 0;
+  EspBleSecurityConfig activeSecurity_;
   EspBleError lastError_ = EspBleError::None;
   String lastErrorDetail_;
   EspBleAdvertising advertising_;

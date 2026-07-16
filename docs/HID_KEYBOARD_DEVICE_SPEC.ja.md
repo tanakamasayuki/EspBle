@@ -42,11 +42,13 @@ Input Reportは8 bytesです。
 
 Output Reportは1 byteです。bit 0から順にNum Lock、Caps Lock、Scroll Lock、Compose、Kanaを表し、上位3 bitは未使用です。
 
-`sendInputReport()`は接続中のPeripheral-role connection全体へ現在値を通知します。接続がない場合は失敗します。現時点では送信queueやConnection指定送信を提供しません。利用者はkey press後に必要なタイミングで`releaseAll()`を呼びます。
+`sendInputReport()`は、Input ReportのCCCDを購読しているPeripheral-role connectionへ現在値を通知します。購読状態はGATT subscribeイベントから接続ごとに追跡し、購読者がいない場合は失敗を返します。securityを有効にした構成では、暗号化が完了していないlinkへはInput Reportを送信しません。`setBatteryLevel()`も購読済みの接続にのみ通知します（値の更新自体は常に成功します）。現時点では送信queueやConnection指定送信を提供しません。利用者はkey press後に必要なタイミングで`releaseAll()`を呼びます。
 
 ## Security
 
-Profile構成だけではPairingを強制しません。利用者が`EspBleConfig::security`でJust Works、Bonding、passkeyなどを選択します。Keyboard exampleはSecurityとBondingを有効にします。Pairing方針とCharacteristic permissionをProfile側でどこまで既定化するかは相互運用試験後に再検討します。
+Profile構成だけではPairingを強制しません。利用者が`EspBleConfig::security`でJust Works、Bonding、passkeyなどを選択します。Keyboard exampleはSecurityとBondingを有効にします。
+
+securityを有効にすると、HOGPのSecurity Mode 1 Level 2に従い、HID Serviceの全attribute（HID Information、Report Map、Control Point、Input/Output ReportとそのReport Reference）へ暗号化必須のpermissionを付与します。未暗号化linkからのReadやWriteはinsufficient encryptionで拒否され、Host OS側のPairing誘発の契機になります。Device Information ServiceとBattery Serviceは接続前の識別に使われるため暗号化必須にしません。
 
 ## Callback context
 

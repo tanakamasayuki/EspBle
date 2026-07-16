@@ -39,9 +39,13 @@ Battery ServiceとOutput ReportがなくてもInputを利用できます。Disco
 | 1 | 1 | reserved |
 | 2 | 6 | Keyboard/Keypad usage array |
 
-Report MapがKeyboard Application、modifier usages `0xE0..0xE7`、8-bit × 6個のarrayを宣言することを確認します。Report ReferenceにReport IDがある場合も、Report characteristicのpayload自体にはReport IDが含まれないものとして扱います。
+Report Mapの判定は最小のHID report descriptor parser（`EspBleHidReportMap.h`）で行います。Keyboard Application collection内に「modifier usages `0xE0..0xE7`の8×1-bit variable入力」と「Keyboard usage pageの8-bit × 6個以上のarray入力」を宣言するInput Reportがあれば、項目の宣言順序やpadding、他のcollection（Consumer Control等の併載）に依存せず受理します。特定したReport IDに一致するInput/Output Report characteristicを購読・保持の対象とし、Report IDを宣言しないkeyboard（Report Reference descriptorなし）も受理します。Report ReferenceにReport IDがある場合も、Report characteristicのpayload自体にはReport IDが含まれないものとして扱います。
 
-NKRO bitmap、複合HID、複数Keyboard Input Report、Boot Protocol切替、Consumer Controlは未対応です。未知の形式はDiscovery失敗として明示し、8-byteという長さだけで推測しません。
+NKRO bitmap、複合HIDの同時利用、複数Keyboard Input Report、Boot Protocol切替、Consumer Controlの解釈は未対応です。keyboard Input Reportを特定できないReport MapはDiscovery失敗として明示し、8-byteという長さだけで推測しません。
+
+受信したInput Reportのkey slotにusage `0x01`〜`0x03`（ErrorRollOver等のphantom state）が含まれる場合は、一般的なHost実装と同様にreport全体を無視し、直前のkey状態を維持します。7キー以上の同時押しでも全releaseと誤解釈しません。
+
+内部eventキュー（容量8）が満杯のとき、Discovery結果と切断時の全releaseイベントは最古のkey stateイベントを追い出して保持します。落ちたkey stateイベントの数は`droppedEventCount()`で確認できます。
 
 ## Keyboard layoutと一般向けevent
 
