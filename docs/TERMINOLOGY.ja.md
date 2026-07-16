@@ -61,8 +61,8 @@ ble.gattServer().addService(serviceUuid);
 roleはConnectionの属性として表します。
 
 ```cpp
-connection.localRole() == EspBleRole::Central;
-connection.localRole() == EspBleRole::Peripheral;
+connection.localRole == EspBleRole::Central;
+connection.localRole == EspBleRole::Peripheral;
 ```
 
 Profileの型名にはprofile roleを含めます。
@@ -70,8 +70,8 @@ Profileの型名にはprofile roleを含めます。
 ```cpp
 EspBleHidKeyboardHost
 EspBleHidKeyboardDevice
-EspBleBatteryClient
-EspBleBatteryServer
+EspBleBatteryClient  // 未実装。standalone Battery Client採用時の命名案
+EspBleBatteryServer  // 未実装。standalone Battery Server採用時の命名案
 ```
 
 具体的な公開型名はAPIスパイクで確定しますが、roleを省略して意味が変わる型名は避けます。
@@ -88,7 +88,7 @@ auto &hidKeyboardDevice = ble.hidKeyboardDevice();
 auto &hidKeyboardHost = ble.hidKeyboardHost();
 
 auto &gattServer = ble.gattServer();
-auto remoteBatteryService = connection.findService(batteryServiceUuid);
+auto remoteBatteryService = connection.findService(batteryServiceUuid); // findService()は未実装の将来API案
 ```
 
 避けたい例:
