@@ -519,6 +519,7 @@ public:
   void setKeyboardLayout(EspBleKeyboardLayout layout);
   EspBleKeyboardLayout keyboardLayout() const;
   bool ready(EspBleConnectionId connectionId) const;
+  size_t droppedEventCount() const;
 
 private:
   friend class EspBle;
@@ -580,6 +581,7 @@ public:
 
   bool connect(const EspBleScanResult &scanResult, uint32_t timeoutMilliseconds = 10000);
   bool disconnect(EspBleConnectionId connectionId);
+  size_t droppedEventCount() const;
   size_t connectionCount() const;
   bool connection(EspBleConnectionId connectionId, EspBleConnection &connection) const;
   bool requestSecurity(EspBleConnectionId connectionId);
@@ -659,6 +661,7 @@ private:
   void setError(EspBleError error, const char *detail = nullptr);
   bool preparePeripheral();
   void dispatchConnectionEvents();
+  void reapRetiredClients();
   bool startGattOperation(
     EspBleGattOperation operation,
     EspBleConnectionId connectionId,

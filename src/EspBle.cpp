@@ -86,6 +86,17 @@ struct EspBleImpl
     BLEClient *client = nullptr;
   };
 
+  // Central clients waiting to be freed on the loop task. The backend has no
+  // deleteClient() API and BLEDevice::deinit() frees only the most recently
+  // created client, so EspBle owns the lifetime of every other client.
+  struct RetiredClient
+  {
+    BLEClient *client = nullptr;
+    EspBleConnectionId connectionId = 0;
+  };
+
+  static constexpr size_t RetiredClientCapacity = ConnectionCapacity * 2;
+
   struct Event
   {
     EventType type = EventType::Connected;
@@ -124,6 +135,8 @@ struct EspBleImpl
             client))
       {
         client->disconnect();
+        // Never added to a slot, so onDisconnect will not retire it.
+        owner_->retireClient(client, 0);
       }
     }
 
@@ -209,10 +222,39 @@ struct EspBleImpl
     delete securityBackend;
   }
 
+  static bool isEvictableEvent(EventType type)
+  {
+    return type == EventType::Notification;
+  }
+
   bool pushEvent(const Event &event)
   {
     if (eventCount == ConnectionEventQueueCapacity)
     {
+      if (!isEvictableEvent(event.type))
+      {
+        // Lifecycle and completion events must not be lost; evict the oldest
+        // notification instead of dropping the new event.
+        for (size_t offset = 0; offset < eventCount; ++offset)
+        {
+          if (!isEvictableEvent(
+                events[(eventHead + offset) % ConnectionEventQueueCapacity].type))
+          {
+            continue;
+          }
+          for (size_t next = offset; next + 1 < eventCount; ++next)
+          {
+            events[(eventHead + next) % ConnectionEventQueueCapacity] = std::move(
+              events[(eventHead + next + 1) % ConnectionEventQueueCapacity]);
+          }
+          --eventCount;
+          ++droppedEvents;
+          const size_t tail = (eventHead + eventCount) % ConnectionEventQueueCapacity;
+          events[tail] = event;
+          ++eventCount;
+          return true;
+        }
+      }
       ++droppedEvents;
       return false;
     }
@@ -283,6 +325,33 @@ struct EspBleImpl
     return false;
   }
 
+  void retireClientLocked(BLEClient *client, EspBleConnectionId connectionId)
+  {
+    if (client == nullptr)
+    {
+      return;
+    }
+    for (size_t index = 0; index < retiredClientCount; ++index)
+    {
+      if (retiredClients[index].client == client)
+      {
+        return;
+      }
+    }
+    if (retiredClientCount < RetiredClientCapacity)
+    {
+      retiredClients[retiredClientCount].client = client;
+      retiredClients[retiredClientCount].connectionId = connectionId;
+      ++retiredClientCount;
+    }
+  }
+
+  void retireClient(BLEClient *client, EspBleConnectionId connectionId)
+  {
+    std::lock_guard<std::mutex> lock(mutex);
+    retireClientLocked(client, connectionId);
+  }
+
   void removeClientConnection(BLEClient *client)
   {
     std::lock_guard<std::mutex> lock(mutex);
@@ -290,6 +359,7 @@ struct EspBleImpl
     {
       if (slot.used && slot.client == client)
       {
+        retireClientLocked(slot.client, slot.connection.id);
         removeConnection(slot);
         return;
       }
@@ -521,6 +591,12 @@ struct EspBleImpl
     bool connected = false;
     if (client != nullptr)
     {
+      {
+        // BLEDevice::deinit() frees the most recently created client, so it
+        // must never also be freed by EspBle.
+        std::lock_guard<std::mutex> lock(impl->mutex);
+        impl->newestClient = client;
+      }
       client->setClientCallbacks(&impl->clientCallbacks);
       connected = client->connect(
         BLEAddress(target.address, target.addressType),
@@ -530,6 +606,7 @@ struct EspBleImpl
     if (!connected)
     {
       impl->pushFailure(target, client == nullptr ? "failed to create BLE client" : "BLE connection failed");
+      impl->retireClient(client, 0);
     }
 
     {
@@ -691,18 +768,23 @@ struct EspBleImpl
       }
     }
 
+    // Push the result before clearing the busy flag: end() deletes this
+    // object as soon as gattOperating is observed false.
+    impl->pushGattResult(result);
     {
       std::lock_guard<std::mutex> lock(impl->mutex);
       impl->gattOperating = false;
       impl->gattTask = nullptr;
     }
-    impl->pushGattResult(result);
     vTaskDelete(nullptr);
   }
 
   EspBle *owner;
   mutable std::mutex mutex;
   ConnectionSlot connections[ConnectionCapacity];
+  RetiredClient retiredClients[RetiredClientCapacity];
+  size_t retiredClientCount = 0;
+  BLEClient *newestClient = nullptr;
   Event events[ConnectionEventQueueCapacity];
   size_t eventHead = 0;
   size_t eventCount = 0;
@@ -869,8 +951,6 @@ struct EspBleGattServerImpl
       status = impl->sendStatus;
       statusCode = impl->sendStatusCode;
       statusReceived = impl->sendStatusReceived;
-      impl->sending = false;
-      impl->sendTask = nullptr;
     }
 
     result.success = statusReceived &&
@@ -906,9 +986,16 @@ struct EspBleGattServerImpl
         break;
       }
     }
+    // Queue the result before clearing the busy flag: end() tears the stack
+    // down as soon as sending is observed false.
     if (impl->server->owner_->impl_ != nullptr)
     {
       impl->server->owner_->impl_->queueServerSendResult(result);
+    }
+    {
+      std::lock_guard<std::mutex> lock(impl->mutex);
+      impl->sending = false;
+      impl->sendTask = nullptr;
     }
     vTaskDelete(nullptr);
   }
@@ -3050,6 +3137,16 @@ EspBleKeyboardLayout EspBleHidKeyboardHost::keyboardLayout() const
   return keyboardLayout_;
 }
 
+size_t EspBleHidKeyboardHost::droppedEventCount() const
+{
+  if (impl_ == nullptr)
+  {
+    return 0;
+  }
+  std::lock_guard<std::mutex> lock(impl_->mutex);
+  return impl_->droppedEvents;
+}
+
 bool EspBleHidKeyboardHost::ready(EspBleConnectionId connectionId) const
 {
   if (impl_ == nullptr)
@@ -3447,6 +3544,37 @@ void EspBle::end()
   BLESecurity::setForceAuthentication(false);
   hidKeyboardDevice_.resetBackend();
   hidKeyboardHost_.resetBackend();
+  if (impl_ != nullptr)
+  {
+    // Free every Central client except the most recently created one, which
+    // BLEDevice::deinit() frees itself. Slots are cleared first so the
+    // onDisconnect callbacks triggered by ~BLEClient find nothing to retire.
+    BLEClient *clients[ConnectionCapacity + EspBleImpl::RetiredClientCapacity];
+    size_t clientCount = 0;
+    {
+      std::lock_guard<std::mutex> lock(impl_->mutex);
+      for (EspBleImpl::ConnectionSlot &slot : impl_->connections)
+      {
+        if (slot.used && slot.client != nullptr && slot.client != impl_->newestClient)
+        {
+          clients[clientCount++] = slot.client;
+        }
+        slot = EspBleImpl::ConnectionSlot();
+      }
+      for (size_t index = 0; index < impl_->retiredClientCount; ++index)
+      {
+        if (impl_->retiredClients[index].client != impl_->newestClient)
+        {
+          clients[clientCount++] = impl_->retiredClients[index].client;
+        }
+      }
+      impl_->retiredClientCount = 0;
+    }
+    for (size_t index = 0; index < clientCount; ++index)
+    {
+      delete clients[index];
+    }
+  }
   BLEDevice::deinit(false);
   initialized_ = false;
   gattServer_.resetBackend();
@@ -3459,8 +3587,52 @@ void EspBle::update()
 {
   scanner_.dispatchPendingResults();
   dispatchConnectionEvents();
+  reapRetiredClients();
   hidKeyboardDevice_.dispatchPendingOutputReports();
   hidKeyboardHost_.dispatchPendingEvents();
+}
+
+void EspBle::reapRetiredClients()
+{
+  if (impl_ == nullptr)
+  {
+    return;
+  }
+
+  EspBleImpl::RetiredClient retired[EspBleImpl::RetiredClientCapacity];
+  size_t count = 0;
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    if (impl_->gattOperating)
+    {
+      // A GATT worker task may still be traversing a retired client's remote
+      // service objects; try again on the next update().
+      return;
+    }
+    size_t kept = 0;
+    for (size_t index = 0; index < impl_->retiredClientCount; ++index)
+    {
+      if (impl_->retiredClients[index].client == impl_->newestClient)
+      {
+        // BLEDevice::deinit() frees the most recently created client; keep it
+        // retired until a newer client supersedes it or end() runs.
+        impl_->retiredClients[kept++] = impl_->retiredClients[index];
+      }
+      else
+      {
+        retired[count++] = impl_->retiredClients[index];
+      }
+    }
+    impl_->retiredClientCount = kept;
+  }
+
+  for (size_t index = 0; index < count; ++index)
+  {
+    // Clear any HID Host slot still pointing into the client's service tree
+    // before ~BLEClient frees it.
+    hidKeyboardHost_.handleDisconnected(retired[index].connectionId);
+    delete retired[index].client;
+  }
 }
 
 bool EspBle::connect(const EspBleScanResult &scanResult, uint32_t timeoutMilliseconds)
@@ -3562,6 +3734,16 @@ bool EspBle::disconnect(EspBleConnectionId connectionId)
 
   clearError();
   return true;
+}
+
+size_t EspBle::droppedEventCount() const
+{
+  if (impl_ == nullptr)
+  {
+    return 0;
+  }
+  std::lock_guard<std::mutex> lock(impl_->mutex);
+  return impl_->droppedEvents;
 }
 
 size_t EspBle::connectionCount() const

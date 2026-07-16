@@ -54,6 +54,10 @@
 12. 希望MTUは`begin()`前に23〜517で設定し、同梱NimBLE backendが接続時に交換したMTUをConnection snapshotへ反映する。接続後の再交換APIは現時点で設けない。
 13. MTU変更はConnection snapshotと変更前MTUを持つ値イベントとしてqueueへcopyし、`ble.update()` contextで配送できる。
 14. Notification/Indication payloadの上限は`mtu - 3`とし、backendによる黙示的な切詰めを避けるため超過を送信前に拒否する。複数接続ではactiveな全Peripheral Connectionの最小値を使う保守的な判定から開始する。
+15. connection eventのqueueが満杯のとき、lifecycle・完了イベント（Connected/Disconnected/Failed/GattResult/SecurityChanged等）は最古のNotificationを追い出して保持し、drop対象はNotificationに限定する。drop数（追い出し含む）は`EspBle::droppedEventCount()`で観測できる。
+16. Central `BLEClient`は切断時・接続失敗時にretireし、次の`update()`でloop task上のreapが解放する。同梱backendには`deleteClient()`がなく`BLEDevice::deinit(false)`が最後に生成した1個だけを解放するため、最新のclientはEspBle側では解放せず、後続のclient生成または`end()`まで保持する。`end()`は残りの全clientを解放してから`deinit(false)`を呼ぶ。
+17. 内部worker task（GATT operation、Server送信）は完了イベントをpushしてからbusy flagをクリアする。`end()`はbusy flagのクリアを待ってから共有状態を破棄するため、この順序でuse-after-freeを防ぐ。
+18. retired clientのreapは、client解放前に該当Connection IDのHID Host slot（remote characteristicポインタ）を無効化し、GATT operation実行中はreapを次の`update()`へ遅延する。
 
 ## Securityスパイクで確認済み（公開API確定前）
 
