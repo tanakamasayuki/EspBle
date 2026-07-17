@@ -17,3 +17,7 @@
 - Switch keyboard layout conversion to EspUsbHost-compatible Unicode 4-plane tables with AltGr layers and character-pair Caps Lock handling; add a `unicode` field to keyboard events and fix the nl-NL and pt-BR tables.
 - Make `setKeyboardLeds()` a non-blocking fire-and-forget write using Write Without Response.
 - Add host unit tests (keymap conversion, report-map parser) and peer test suites for lifecycle stress, HID robustness, HID security, boot keyboards, and raw advertising payloads.
+- Enforce the `connect()` timeout from `update()` with `ble_gap_conn_cancel()`: the bundled NimBLE `BLEClient::connect()` ignores its timeout argument and always waits its internal 30-second default.
+- Add peer tests for asynchronous connect-timeout failure, exclusive central GATT operations, and silent peer loss detected via supervision timeout.
+- Add a GitHub Actions workflow that compiles every example with the esp32s3 profile.
+- Add bilingual (English/Japanese) READMEs for every example plus an examples index, expand the top-level and test READMEs with cross-links, and add `keywords.txt` for Arduino IDE syntax highlighting.

@@ -1,27 +1,53 @@
 # EspBle
 
-[English](README.md)
+> English: [README.md](README.md)
 
 ESP32 Arduino向けの汎用Bluetooth Low Energyライブラリです。**Arduino-ESP32に同梱されたNimBLE backendを使用し、Bluetooth Classicには対応しません。** Central / Peripheral、GATT Client / Server、Security、標準プロファイルと独自GATTサービスを共通基盤上で扱います。外部のNimBLE-Arduinoは必須依存にしません。
 
-現在は仕様策定とテスト基盤整備の段階です。公開APIはまだ確定していません。
+公開APIはまだ確定していません。初回リリース前の試行段階で、APIは変更される可能性があります。
 
-Legacy Advertising、Scanning、Central/Peripheral接続、汎用GATT Server/Client、Notify/Indicate、接続時MTU交換、Just Worksと静的passkeyによるPairing/Bonding、HID Keyboard Device/Hostの最初のvertical sliceを実装し、ESP32-S3 2台のPeerテストで検証しています。現在のAPIと`ble.update()`によるevent配送は複合HID、NKROや対話型Pairingを追加する前の試行段階です。
+## 機能
 
-## 初期ターゲット
+- Legacy AdvertisingとScanning、値型のScan Result
+- 安定したlibrary connection IDを持つCentral / Peripheral接続
+- 汎用GATT Server / Client: 既知UUID Discovery、Read、Write、Notify / Indicate、購読
+- MTU交換、Connection snapshot、payload上限検証
+- Security: Just Worksと静的passkey Pairing（LE Secure Connections）、Bonding、暗号化/認証Characteristic permission
+- HID Keyboard Device: HID / Device Information / Battery Serviceを合成した固定6KRO Report Protocol keyboard
+- HID Keyboard Host: Report Map解析、Input購読、256-bit usage snapshot、EspUsbHost互換19 layout（Unicode変換）のキーイベント、LED出力
+- ユーザーcallbackはすべてloop task上の`ble.update()`から配送されます（BLE stack taskからは呼ばれません）
 
-- Legacy AdvertisingとScanning
-- Central / Peripheral接続と接続管理
-- 汎用GATT Server / Client
-- Read / Write / Notify / Indicate
-- 基本的なSecurityとBonding
-- 独自GATT Service
-- HID Keyboard Host / Device
-- Battery Service
-- エラーとログ
-- ESP32-S3 2台による自動Peerテスト
+上記はすべてESP32-S3 2台の自動Peerテストとhost上のunit testで検証しています。詳細は[テスト計画](tests/TEST_PLAN.ja.md)を参照してください。
 
-Mouse、Consumer Control、複合HID、MIDI、NUS、センサー、Extended Advertisingなどは、初期基盤を検証した後に優先順位を付けて個別に追加します。
+## はじめかた
+
+各exampleには検証済みArduino-ESP32バージョンを固定した`sketch.yaml`が同梱されています:
+
+```sh
+arduino-cli compile --profile esp32s3 examples/Gap/Scan
+```
+
+全examplesの一覧と組み合わせは[examplesの目次](examples/README.ja.md)を参照してください。最小のスキャナは次のとおりです:
+
+```cpp
+#include <EspBle.h>
+
+EspBle ble;
+
+void setup() {
+  Serial.begin(115200);
+  ble.begin();
+  ble.scanner().onResult([](const EspBleScanResult &result) {
+    Serial.printf("%s RSSI=%d\n", result.address.c_str(), result.rssi);
+  });
+  ble.scanner().start();
+}
+
+void loop() {
+  ble.update();  // すべてのcallbackはここから配送されます
+  delay(1);
+}
+```
 
 ## 文書
 
@@ -35,6 +61,11 @@ Mouse、Consumer Control、複合HID、MIDI、NUS、センサー、Extended Adve
 - [設計決定](docs/DECISIONS.ja.md)
 - [開発計画](docs/DEVELOPMENT_PLAN.ja.md)
 - [テスト計画](tests/TEST_PLAN.ja.md)
+
+## 関連ライブラリ
+
+- [EspUsbHost](https://github.com/tanakamasayuki/EspUsbHost) — USB Hostライブラリ。EspBleはkeyboard layout tableとHID usageの扱いを共有しています
+- [EspUsbDevice](https://github.com/tanakamasayuki/EspUsbDevice) — 組み合わせテストに使用するUSB Deviceライブラリ
 
 ## ライセンス
 

@@ -796,6 +796,8 @@ struct EspBleImpl
   TaskHandle_t connectTask = nullptr;
   EspBleScanResult connectTarget;
   uint32_t connectTimeoutMilliseconds = 10000;
+  uint32_t connectStartMilliseconds = 0;
+  bool connectCancelRequested = false;
   ClientCallbacks clientCallbacks;
   ServerCallbacks serverCallbacks;
   SecurityCallbacks securityCallbacks;
@@ -3772,11 +3774,38 @@ void EspBle::end()
 
 void EspBle::update()
 {
+  cancelExpiredConnectAttempt();
   scanner_.dispatchPendingResults();
   dispatchConnectionEvents();
   reapRetiredClients();
   hidKeyboardDevice_.dispatchPendingOutputReports();
   hidKeyboardHost_.dispatchPendingEvents();
+}
+
+void EspBle::cancelExpiredConnectAttempt()
+{
+  if (impl_ == nullptr)
+  {
+    return;
+  }
+
+  bool cancel = false;
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    // The backend ignores the timeout argument of the NimBLE
+    // BLEClient::connect() overload and always waits its internal 30 second
+    // default, so the requested timeout is enforced here instead.
+    if (impl_->connecting && !impl_->connectCancelRequested &&
+      (millis() - impl_->connectStartMilliseconds) >= impl_->connectTimeoutMilliseconds)
+    {
+      impl_->connectCancelRequested = true;
+      cancel = true;
+    }
+  }
+  if (cancel)
+  {
+    ble_gap_conn_cancel();
+  }
 }
 
 void EspBle::reapRetiredClients()
@@ -3849,6 +3878,8 @@ bool EspBle::connect(const EspBleScanResult &scanResult, uint32_t timeoutMillise
     }
     impl_->connectTarget = scanResult;
     impl_->connectTimeoutMilliseconds = timeoutMilliseconds;
+    impl_->connectStartMilliseconds = millis();
+    impl_->connectCancelRequested = false;
     impl_->connecting = true;
   }
 

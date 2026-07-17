@@ -1,16 +1,15 @@
 # Tests
 
-[English](README.md)
+> English: [README.md](README.md)
 
-`pytest-embedded`とArduino CLI backendを利用するEspBleのテストです。
+`pytest-embedded`とArduino CLI backendを利用するEspBleのテストです。方針とカバレッジは[テスト計画](TEST_PLAN.ja.md)を参照してください。
 
 ```text
-unit/              host上で実行する純粋C++/データ変換テスト
-examples_compile/  examplesのbuild-only test
-single/            ESP32-S3 1台のruntime test
-peer/              ESP32-S3 2台のBLE接続自動テスト
-manual/            OSや市販BLE機器を使う手動相互運用テスト
+unit/   host上で実行する純粋C++/データ変換テスト（実機不要）
+peer/   ESP32-S3 2台のBLE接続自動テスト
 ```
+
+examplesのbuild回帰はGitHub Actions（`.github/workflows/compile-examples.yml`）が全exampleをesp32s3 profileでコンパイルして検出します。OSや市販BLE機器との相互運用はmanualテストとして初回リリース前に実施します。
 
 ## セットアップ
 
@@ -31,7 +30,8 @@ TEST_SERIAL_PORT_PEER_DEVICE_S3_PEER_DEVICE=/dev/ttyUSB1
 ## 実行
 
 ```sh
-uv run --env-file .env pytest
+uv run --env-file .env pytest          # unit + peer全部
+uv run --env-file .env pytest unit/
 uv run --env-file .env pytest peer/
 uv run --env-file .env pytest peer/stack_smoke/
 ```

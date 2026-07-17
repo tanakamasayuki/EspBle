@@ -6,6 +6,7 @@ QUERY_PATTERN = re.compile(
     rb"connections=(\d+) ready=(\d+) dropped=(\d+) scan=(\d+)"
 )
 END_CONNECT_PATTERN = re.compile(rb"HOST_END_CONNECT connect=(\d+) ms=(\d+) begin=(\d+)")
+CONNECT_FAILED_PATTERN = re.compile(rb"HOST_CONNECT_FAILED ms=(\d+) error=(\d+)")
 HEAP_PATTERN = re.compile(rb"HOST_HEAP free=(\d+)")
 END_CYCLE_PATTERN = re.compile(rb"HOST_END_CYCLE read=(\d+) begin=(\d+) heap=(\d+)")
 CONNECTED_PATTERN = re.compile(rb"HOST_CONNECTED id=(\d+)")
@@ -162,6 +163,50 @@ def test_end_flushes_scanner_queue(dut, peers):
     dut.expect_exact("HOST_COUNTERS_RESET", timeout=10)
 
 
+def test_connect_timeout_reports_async_failure(dut, peers):
+    """A connect attempt to an unreachable address must complete as an
+    asynchronous ConnectionFailed event close to the requested timeout,
+    and the stack must accept a normal connect afterwards."""
+    device = peers["device"]
+    _reset(dut, device)
+
+    dut.write("T")
+    dut.expect_exact("HOST_CONNECT_TIMEOUT_STARTED success=1", timeout=10)
+    match = dut.expect(CONNECT_FAILED_PATTERN, timeout=30)
+    duration = int(match.group(1))
+    assert 1500 <= duration <= 9000, (
+        f"connect to an unreachable peer failed after {duration} ms "
+        "(requested timeout: 3000 ms)"
+    )
+
+    # The stack must be usable for a real connection right after the failure.
+    dut.write("c")
+    dut.expect_exact("HOST_COUNTERS_RESET", timeout=10)
+    _connect(dut, device)
+    dut.write("d")
+    dut.expect_exact("HOST_DISCONNECT_STARTED success=1", timeout=10)
+    dut.expect(DISCONNECTED_PATTERN, timeout=20)
+    device.expect_exact("DEVICE_READVERTISING 1", timeout=20)
+
+
+def test_concurrent_gatt_operation_is_rejected(dut, peers):
+    """Central GATT operations are exclusive: a second operation issued while
+    one is in flight must be rejected synchronously and the first must still
+    complete."""
+    device = peers["device"]
+    _reset(dut, device)
+
+    _connect(dut, device)
+    dut.write("g")
+    dut.expect_exact("HOST_GATT_BUSY first=1 second=0", timeout=10)
+    dut.expect_exact("HOST_READ_RESULT success=1", timeout=20)
+
+    dut.write("d")
+    dut.expect_exact("HOST_DISCONNECT_STARTED success=1", timeout=10)
+    dut.expect(DISCONNECTED_PATTERN, timeout=20)
+    device.expect_exact("DEVICE_READVERTISING 1", timeout=20)
+
+
 def test_end_during_gatt_operation_stress(dut, peers):
     """end() while a GATT worker task is completing must not use freed
     state. Exercises the completion window repeatedly."""
@@ -179,3 +224,28 @@ def test_end_during_gatt_operation_stress(dut, peers):
     # The host must still be responsive after the stress cycles.
     dut.write("q")
     dut.expect(QUERY_PATTERN, timeout=10)
+
+
+def test_peer_loss_is_detected_via_supervision_timeout(dut, peers):
+    """When the peer vanishes silently (radio killed without a Link Layer
+    terminate), the central must deliver a Disconnected event via the
+    supervision timeout and release the connection slot.
+
+    This must stay the LAST test in this module: the peer's BLE stack is
+    unusable afterwards until the next module reflashes the board."""
+    device = peers["device"]
+    _reset(dut, device)
+
+    _connect(dut, device)
+
+    device.write("X")
+    device.expect_exact("DEVICE_RADIO_KILLED", timeout=10)
+
+    # NimBLE's default supervision timeout is a few seconds; allow margin.
+    dut.expect(DISCONNECTED_PATTERN, timeout=30)
+
+    dut.write("q")
+    match = dut.expect(QUERY_PATTERN, timeout=10)
+    assert int(match.group(2)) == 1, "Disconnected event must be delivered"
+    assert int(match.group(4)) == 0, "backend connection slot must be released"
+    assert int(match.group(5)) == 0, "HID Host must not report the lost peer as ready"

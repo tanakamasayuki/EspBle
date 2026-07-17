@@ -7,9 +7,13 @@ unsigned connectedCount = 0;
 unsigned disconnectedCount = 0;
 unsigned notificationCount = 0;
 unsigned scanResultCount = 0;
+unsigned connectFailedCount = 0;
+unsigned readResultCount = 0;
 bool autoConnect = true;
 bool paused = false;
 uint32_t resumeAtMs = 0;
+bool timingConnect = false;
+uint32_t connectStartMs = 0;
 
 static EspBleConfig makeConfig()
 {
@@ -46,6 +50,21 @@ void setup()
     connectionId = 0;
     Serial.printf("HOST_DISCONNECTED id=%u\n", static_cast<unsigned>(connection.id));
   });
+  ble.onConnectionFailed([](const EspBleConnectionFailure &failure) {
+    ++connectFailedCount;
+    if (timingConnect)
+    {
+      timingConnect = false;
+      Serial.printf(
+        "HOST_CONNECT_FAILED ms=%u error=%u\n",
+        static_cast<unsigned>(millis() - connectStartMs),
+        static_cast<unsigned>(failure.error));
+    }
+  });
+  ble.onCharacteristicRead([](const EspBleGattResult &result) {
+    ++readResultCount;
+    Serial.printf("HOST_READ_RESULT success=%u\n", result.success ? 1 : 0);
+  });
   ble.onSubscribed([](const EspBleGattResult &result) {
     Serial.printf(
       "HOST_SUBSCRIBED success=%u detail=%s\n",
@@ -77,6 +96,9 @@ void loop()
       disconnectedCount = 0;
       notificationCount = 0;
       scanResultCount = 0;
+      connectFailedCount = 0;
+      readResultCount = 0;
+      timingConnect = false;
       autoConnect = true;
       Serial.println("HOST_COUNTERS_RESET");
     }
@@ -127,6 +149,33 @@ void loop()
     else if (command == 'h')
     {
       Serial.printf("HOST_HEAP free=%u\n", static_cast<unsigned>(ESP.getFreeHeap()));
+    }
+    else if (command == 'T')
+    {
+      // A connect attempt to an unreachable peer must complete as an
+      // asynchronous failure close to the requested timeout, not hang.
+      autoConnect = false;
+      EspBleScanResult bogus;
+      bogus.address = "11:22:33:44:55:66";
+      bogus.addressType = 0;
+      bogus.connectable = true;
+      timingConnect = true;
+      connectStartMs = millis();
+      const bool started = ble.connect(bogus, 3000);
+      if (!started)
+      {
+        timingConnect = false;
+      }
+      Serial.printf("HOST_CONNECT_TIMEOUT_STARTED success=%u\n", started ? 1 : 0);
+    }
+    else if (command == 'g')
+    {
+      // Central GATT operations are exclusive: a second operation while one
+      // is in flight must be rejected cleanly and the first must complete.
+      readResultCount = 0;
+      const bool first = ble.readCharacteristic(connectionId, "180a", "2a29");
+      const bool second = ble.readCharacteristic(connectionId, "180a", "2a29");
+      Serial.printf("HOST_GATT_BUSY first=%u second=%u\n", first ? 1 : 0, second ? 1 : 0);
     }
     else if (command == 'Z')
     {

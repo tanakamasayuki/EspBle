@@ -648,6 +648,7 @@ private:
   bool preparePeripheral();
   void dispatchConnectionEvents();
   void reapRetiredClients();
+  void cancelExpiredConnectAttempt();
   bool startGattOperation(
     EspBleGattOperation operation,
     EspBleConnectionId connectionId,

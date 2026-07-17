@@ -116,14 +116,14 @@ host上のunit test（`tests/unit/`）としてkeymap変換とHID Report Map par
    - object / handle ownershipと複数接続時の送信対象は複数接続実装時に決める。
 
 3. **障害・再接続・耐久試験を追加する**
-   - peer loss、接続timeout、Notification中の切断。
-   - 再接続と再購読の反復。
-   - queue overflow、異常payload、GATT operation競合。
+   - ✅ peer loss（supervision timeout）、接続timeoutの非同期失敗、Notification中の切断（`lifecycle_stress`）。
+   - ✅ 再接続と再購読の反復（`lifecycle_stress`のheap検証付き反復）。
+   - ✅ queue overflow、異常payload、GATT operation競合（`lifecycle_stress` / `hid_robustness` / `hid_boot_keyboard`）。
    - 長時間実行時のheap、task、Bond/NVS状態。
    - Peer suite全体の連続実行とflaky要因の除去。
 
 4. **初回リリース用のテストと文書を完成させる**
-   - 全exampleのcompile matrixを自動化する（現状は手動でesp32s3 profileの全example compile PASSを確認）。
+   - ✅ 全exampleのcompile matrixを自動化する（`.github/workflows/compile-examples.yml`、esp32s3 profile、push/PRで実行）。
    - ✅ host上のunit testを追加する（keymap変換とReport Map parserを`tests/unit/`で実装済み。Advertising parser等の追加は任意）。
    - 市販BLE KeyboardとAndroid / Linuxなどでmanual interoperabilityを確認する。
    - README、API説明、CHANGELOG、Release Checklistを更新する。
@@ -153,10 +153,10 @@ host上のunit test（`tests/unit/`）としてkeymap変換とHID Report Map par
 
 ## 直近の推奨順序
 
-1. KeyBridge adapter試作を基準に`update()`、Discovery、LED writeの仕様を決める。
-2. 決まったAPIでKeyboardHost / KeyboardDevice exampleを整理する。
-3. peer lossと再接続反復テストを追加する。
-4. examples compile matrixとhost unit testを整備する。
+1. ✅ KeyBridge adapter試作を基準に`update()`、Discovery、LED writeの仕様を決める。
+2. ✅ 決まったAPIでKeyboardHost / KeyboardDevice exampleを整理する。
+3. ✅ peer lossと再接続反復テストを追加する。
+4. ✅ examples compile matrixとhost unit testを整備する。
 5. manual interoperabilityを実施し、初回リリース判定へ進む。
 
 ## 初回リリース判定の目安

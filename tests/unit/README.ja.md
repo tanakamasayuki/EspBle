@@ -1,5 +1,7 @@
 # Unit Tests
 
+> English: [README.md](README.md)
+
 host上で実行する純粋C++/データ変換のテストです。実機とシリアルポートは不要で、g++でビルドして実行します。
 
 ```sh

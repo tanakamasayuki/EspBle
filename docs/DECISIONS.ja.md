@@ -68,6 +68,7 @@
 21. Peripheral向けイベント（Server書込み・購読変更・HID Output Report）でConnection IDを解決できない場合（ID 0）は、無効IDのまま配送せずdropしてカウントする。
 22. GATT worker task（operation/discovery）は開始時に`isConnected()`を1回確認する以外の接続状態同期を行わない。操作途中の切断はbackendエラーとして完了イベントへ伝播する。同梱backendではremote service treeは切断で解放されず（解放は`~BLEClient`のみ）、client解放はGATT operation実行中はreapを遅延し`end()`はbusy flag解除を待つため、worker taskが解放済みobjectへ触れる経路はない。
 23. Central側MTUは接続時のsnapshotのみ保持する。同梱backendのclient側にはMTU変更callbackがなく、接続後の変化は追跡できない。MTU交換がconnect timeout+1秒までに完了しない場合、snapshotが既定値23になる可能性がある。制限としてSTATUSへ記載する。
+24. 同梱backendのNimBLE `BLEClient::connect()`はtimeout引数を無視して内部既定の30秒を待つため、`connect(scanResult, timeoutMilliseconds)`のtimeoutは`update()`が経過時間を監視し`ble_gap_conn_cancel()`で強制する。失敗は要求timeout付近でConnectionFailedイベントとして配送される（`lifecycle_stress`で検証）。`update()`を呼ばない場合はbackendの30秒が上限になる。
 
 ## Securityスパイクで確認済み（公開API確定前）
 

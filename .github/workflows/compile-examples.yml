@@ -1,0 +1,48 @@
+name: Compile Examples
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "examples/**"
+      - "library.properties"
+      - ".github/workflows/compile-examples.yml"
+  pull_request:
+    paths:
+      - "src/**"
+      - "examples/**"
+      - "library.properties"
+      - ".github/workflows/compile-examples.yml"
+  workflow_dispatch:
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup arduino-cli
+        uses: arduino/setup-arduino-cli@v2
+
+      - name: Cache Arduino platform
+        uses: actions/cache@v4
+        with:
+          path: ~/.arduino15
+          key: arduino-esp32-${{ hashFiles('examples/CompileSmoke/sketch.yaml') }}
+
+      - name: Compile all examples (esp32s3 profile)
+        run: |
+          set -euo pipefail
+          status=0
+          for sketch in $(find examples -name sketch.yaml -printf '%h\n' | sort); do
+            echo "::group::${sketch}"
+            if ! arduino-cli compile --profile esp32s3 "${sketch}"; then
+              echo "::error::compile failed: ${sketch}"
+              status=1
+            fi
+            echo "::endgroup::"
+          done
+          exit "${status}"
