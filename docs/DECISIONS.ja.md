@@ -37,6 +37,7 @@
 5. USB系と同様に操作は`bool`を返し、`lastErrorName()` / `lastErrorDetail()`で失敗理由を確認できる試行APIとする。
 6. Arduino-ESP32 BLE stackが外部で初期化済みの場合は所有権競合として拒否する。
 7. Legacy Advertisingの31-byte上限で要求fieldが欠落する場合は明示的なargument errorとする。
+8. Advertisingのservice UUIDはサイズ（16/32/128-bit）ごとに1つの「Complete List」AD構造へまとめ、同一AD typeをpayload内に複数出現させない（CSS Part A 1.1）。`advertise_payload` Peerテストでraw payloadを検証する。
 
 ## Connection/GATTスパイクで確認済み（公開API確定前）
 
@@ -59,6 +60,8 @@
 17. 内部worker task（GATT operation、Server送信）は完了イベントをpushしてからbusy flagをクリアする。`end()`はbusy flagのクリアを待ってから共有状態を破棄するため、この順序でuse-after-freeを防ぐ。
 18. retired clientのreapは、client解放前に該当Connection IDのHID Host slot（remote characteristicポインタ）を無効化し、GATT operation実行中はreapを次の`update()`へ遅延する。
 19. 初期化済みインスタンスへの2回目の`begin()`は、同一configなら成功を返し、異なるconfigなら`InvalidState`で失敗する。黙って旧設定のまま成功を返さない。
+20. `end()`は実行中のconnect試行を`ble_gap_conn_cancel()`で中断し（connect timeoutまでblockしない）、Scannerの未配送resultをflushして次のsessionへ持ち越さない。
+21. Peripheral向けイベント（Server書込み・購読変更・HID Output Report）でConnection IDを解決できない場合（ID 0）は、無効IDのまま配送せずdropしてカウントする。
 
 ## Securityスパイクで確認済み（公開API確定前）
 
@@ -100,7 +103,8 @@
 12. ErrorRollOver等のphantom report（key slotにusage 0x01-0x03）は一般的なHost同様に無視し、直前のkey状態を維持する。
 13. HID Hostのeventキューが満杯のとき、Discovery結果と切断時の全releaseイベントは最古のkey stateイベントを追い出して保持する。drop数（追い出し含む）は`droppedEventCount()`で観測できる。
 14. HID Discovery実行中と`setKeyboardLeds()`実行中は対象Connection IDを共通GATT操作状態へ記録し、`disconnect()`が同一接続への要求を拒否できるようにする。
-15. keymap変換はEspUsbHostのUnicode 4-plane表現に揃える。tableは`uint16_t KEYCODE_TO_UNICODE_XX[N][4]`（無shift/Shift/AltGr/AltGr+Shift、Unicodeコードポイント）でEspUsbHostの`src/keymap/*.h`と同一内容を共有し、主関数`espBleUsageToUnicode()`がAltGr層選択と文字ペア判定CapsLockを行う。`espBleUsageToAscii()`はLatin-1 wrapper（非Latin-1は0）として維持し、`EspBleHidKeyboardEvent`は`unicode`と`ascii`の両方を持つ。en-US系（EnUs/KoKr/ZhCn/ZhTw）のみ内蔵変換パス（table等価）を使う。
+15. 長さが8以外のInput Reportは解釈せず、`invalidInputReportCount()`で観測できるようカウントする（「Discovery成功なのにキーが来ない」の診断手段）。
+16. keymap変換はEspUsbHostのUnicode 4-plane表現に揃える。tableは`uint16_t KEYCODE_TO_UNICODE_XX[N][4]`（無shift/Shift/AltGr/AltGr+Shift、Unicodeコードポイント）でEspUsbHostの`src/keymap/*.h`と同一内容を共有し、主関数`espBleUsageToUnicode()`がAltGr層選択と文字ペア判定CapsLockを行う。`espBleUsageToAscii()`はLatin-1 wrapper（非Latin-1は0）として維持し、`EspBleHidKeyboardEvent`は`unicode`と`ascii`の両方を持つ。en-US系（EnUs/KoKr/ZhCn/ZhTw）のみ内蔵変換パス（table等価）を使う。
 11. 再接続時は新しいConnection IDに対してSecurity完了後に再度`discover()`が必要で、Discovery完了後にinputをconnectedとして扱う。自動再接続・自動Discoveryは今回のadapter境界には含めない。
 
 ## 優先順位候補

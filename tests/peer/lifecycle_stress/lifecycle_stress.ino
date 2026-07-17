@@ -6,6 +6,8 @@ EspBleConnectionId lastConnectionId = 0;
 unsigned connectedCount = 0;
 unsigned disconnectedCount = 0;
 unsigned notificationCount = 0;
+unsigned scanResultCount = 0;
+bool autoConnect = true;
 bool paused = false;
 uint32_t resumeAtMs = 0;
 
@@ -54,7 +56,8 @@ void setup()
     ++notificationCount;
   });
   ble.scanner().onResult([](const EspBleScanResult &result) {
-    if (result.connectable && result.advertisesService("1812"))
+    ++scanResultCount;
+    if (autoConnect && result.connectable && result.advertisesService("1812"))
     {
       ble.scanner().stop();
       Serial.printf("HOST_CONNECT_STARTED success=%u\n", ble.connect(result) ? 1 : 0);
@@ -73,6 +76,8 @@ void loop()
       connectedCount = 0;
       disconnectedCount = 0;
       notificationCount = 0;
+      scanResultCount = 0;
+      autoConnect = true;
       Serial.println("HOST_COUNTERS_RESET");
     }
     else if (command == 's')
@@ -100,13 +105,14 @@ void loop()
     else if (command == 'q')
     {
       Serial.printf(
-        "HOST_QUERY connected=%u disconnected=%u notifications=%u connections=%u ready=%u dropped=%u\n",
+        "HOST_QUERY connected=%u disconnected=%u notifications=%u connections=%u ready=%u dropped=%u scan=%u\n",
         connectedCount,
         disconnectedCount,
         notificationCount,
         static_cast<unsigned>(ble.connectionCount()),
         ble.hidKeyboardHost().ready(lastConnectionId) ? 1 : 0,
-        static_cast<unsigned>(ble.droppedEventCount()));
+        static_cast<unsigned>(ble.droppedEventCount()),
+        scanResultCount);
     }
     else if (command == 'l')
     {
@@ -121,6 +127,41 @@ void loop()
     else if (command == 'h')
     {
       Serial.printf("HOST_HEAP free=%u\n", static_cast<unsigned>(ESP.getFreeHeap()));
+    }
+    else if (command == 'Z')
+    {
+      // end() while a connect attempt to an unreachable peer is in flight
+      // must cancel it instead of blocking until the connect timeout.
+      EspBleScanResult bogus;
+      bogus.address = "11:22:33:44:55:66";
+      bogus.addressType = 0;
+      bogus.connectable = true;
+      const bool started = ble.connect(bogus);
+      const uint32_t startMs = millis();
+      ble.end();
+      const uint32_t durationMs = millis() - startMs;
+      const bool restarted = ble.begin(makeConfig());
+      connectionId = 0;
+      lastConnectionId = 0;
+      Serial.printf(
+        "HOST_END_CONNECT connect=%u ms=%u begin=%u\n",
+        started ? 1 : 0,
+        static_cast<unsigned>(durationMs),
+        restarted ? 1 : 0);
+    }
+    else if (command == 'Y')
+    {
+      // Results queued by a scan that was never dispatched must not leak
+      // into the next begin() session.
+      autoConnect = false;
+      ble.scanner().start();
+      delay(1500);
+      ble.end();
+      scanResultCount = 0;
+      const bool restarted = ble.begin(makeConfig());
+      connectionId = 0;
+      lastConnectionId = 0;
+      Serial.printf("HOST_SCAN_FLUSH begin=%u\n", restarted ? 1 : 0);
     }
     else if (command == 'z')
     {

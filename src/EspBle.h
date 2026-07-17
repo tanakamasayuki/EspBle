@@ -378,6 +378,7 @@ private:
   explicit EspBleScanner(EspBle *owner);
   ~EspBleScanner();
   void dispatchPendingResults();
+  void flushPendingResults();
 
   EspBle *owner_;
   ResultCallback resultCallback_;
@@ -504,6 +505,7 @@ public:
   EspBleKeyboardLayout keyboardLayout() const;
   bool ready(EspBleConnectionId connectionId) const;
   size_t droppedEventCount() const;
+  size_t invalidInputReportCount() const;
 
 private:
   friend class EspBle;

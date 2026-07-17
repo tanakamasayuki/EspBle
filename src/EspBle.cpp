@@ -501,6 +501,13 @@ struct EspBleImpl
         break;
       }
     }
+    if (event.serverWrite.connectionId == 0)
+    {
+      // 0 is not a valid connection ID; drop instead of delivering an event
+      // that cannot be attributed to a connection.
+      ++droppedEvents;
+      return;
+    }
     pushEvent(event);
   }
 
@@ -548,6 +555,11 @@ struct EspBleImpl
     Event event;
     event.type = EventType::ServerSubscription;
     event.serverSubscription.connectionId = findPeripheralConnectionId(connectionHandle);
+    if (event.serverSubscription.connectionId == 0)
+    {
+      ++droppedEvents;
+      return;
+    }
     event.serverSubscription.serviceUuid = serviceUuid;
     event.serverSubscription.characteristicUuid = characteristicUuid;
     event.serverSubscription.notifications = (subscriptionValue & 0x0001) != 0;
@@ -1139,6 +1151,9 @@ struct EspBleHidKeyboardDeviceImpl
   {
     if (context->op == BLE_GATT_ACCESS_OP_READ_CHR)
     {
+      // Values written by the loop task are read here on the NimBLE host
+      // task; hold the mutex to avoid torn reads.
+      std::lock_guard<std::mutex> lock(mutex);
       if (context->chr == &hidCharacteristics[0])
       {
         return appendValue(context->om, hidInformation, sizeof(hidInformation));
@@ -1183,7 +1198,10 @@ struct EspBleHidKeyboardDeviceImpl
         {
           return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
         }
-        outputValue = value;
+        {
+          std::lock_guard<std::mutex> lock(mutex);
+          outputValue = value;
+        }
         queueOutputReport(connectionHandle, value);
         return 0;
       }
@@ -1212,6 +1230,13 @@ struct EspBleHidKeyboardDeviceImpl
     {
       std::lock_guard<std::mutex> connectionLock(device->owner_->impl_->mutex);
       report.connectionId = device->owner_->impl_->findPeripheralConnectionId(connectionHandle);
+    }
+    if (report.connectionId == 0)
+    {
+      // 0 is not a valid connection ID; the connection is already gone.
+      std::lock_guard<std::mutex> lock(mutex);
+      ++droppedOutputReports;
+      return;
     }
 
     std::lock_guard<std::mutex> lock(mutex);
@@ -1382,6 +1407,10 @@ struct EspBleHidKeyboardHostImpl
   {
     if (data == nullptr || length != 8)
     {
+      // Count instead of vanishing: an unexpected report length otherwise
+      // shows up as "discovery succeeded but no keys arrive".
+      std::lock_guard<std::mutex> lock(mutex);
+      ++invalidInputReports;
       return;
     }
     for (size_t index = 0; index < 6; ++index)
@@ -1650,6 +1679,7 @@ struct EspBleHidKeyboardHostImpl
   size_t eventHead = 0;
   size_t eventCount = 0;
   size_t droppedEvents = 0;
+  size_t invalidInputReports = 0;
   bool discovering = false;
   EspBleConnectionId discoveryConnectionId = 0;
   TaskHandle_t discoveryTask = nullptr;
@@ -1841,11 +1871,54 @@ bool EspBleAdvertising::start(uint32_t durationSeconds)
       return false;
     }
   }
-  for (size_t index = 0; index < serviceUuidCount_; ++index)
+  if (serviceUuidCount_ > 0)
   {
+    // CSS Part A 1.1: a data type must not occur more than once in a payload,
+    // so all UUIDs of one size share a single "Complete List" AD structure.
+    String uuids16;
+    String uuids32;
+    String uuids128;
+    for (size_t index = 0; index < serviceUuidCount_; ++index)
+    {
+      BLEUUID uuid(serviceUuids_[index].c_str());
+      switch (uuid.bitSize())
+      {
+      case 16:
+        uuids16 += String(
+          reinterpret_cast<const char *>(&uuid.getNative()->u16.value), 2);
+        break;
+      case 32:
+        uuids32 += String(
+          reinterpret_cast<const char *>(&uuid.getNative()->u32.value), 4);
+        break;
+      default:
+        uuids128 += String(
+          reinterpret_cast<const char *>(uuid.getNative()->u128.value), 16);
+        break;
+      }
+    }
     previousLength = advertisingData.getPayload().length();
-    advertisingData.setCompleteServices(BLEUUID(serviceUuids_[index].c_str()));
-    if (advertisingData.getPayload().length() == previousLength)
+    size_t expectedLength = previousLength;
+    const struct
+    {
+      const String *uuids;
+      char type;
+    } lists[] = {
+      {&uuids16, 0x03},  // Complete List of 16-bit Service UUIDs
+      {&uuids32, 0x05},  // Complete List of 32-bit Service UUIDs
+      {&uuids128, 0x07}, // Complete List of 128-bit Service UUIDs
+    };
+    for (const auto &list : lists)
+    {
+      if (list.uuids->isEmpty())
+      {
+        continue;
+      }
+      const char header[2] = {static_cast<char>(list.uuids->length() + 1), list.type};
+      advertisingData.addData(String(header, 2) + *list.uuids);
+      expectedLength += 2 + list.uuids->length();
+    }
+    if (advertisingData.getPayload().length() != expectedLength)
     {
       owner_->setError(EspBleError::InvalidArgument, "service UUIDs do not fit in legacy advertising payload");
       return false;
@@ -2008,6 +2081,20 @@ size_t EspBleScanner::droppedResultCount() const
   }
   std::lock_guard<std::mutex> lock(impl_->mutex);
   return impl_->dropped;
+}
+
+void EspBleScanner::flushPendingResults()
+{
+  if (impl_ == nullptr)
+  {
+    return;
+  }
+  // Results queued but never dispatched must not leak into the next
+  // begin() session.
+  std::lock_guard<std::mutex> lock(impl_->mutex);
+  impl_->head = 0;
+  impl_->count = 0;
+  impl_->dropped = 0;
 }
 
 void EspBleScanner::dispatchPendingResults()
@@ -2380,7 +2467,10 @@ bool EspBleGattServer::send(
   }
   {
     std::lock_guard<std::mutex> lock(impl_->mutex);
-    impl_->sendTask = task;
+    if (impl_->sending)
+    {
+      impl_->sendTask = task;
+    }
   }
   owner_->clearError();
   return true;
@@ -2767,15 +2857,20 @@ bool EspBleHidKeyboardDevice::sendInputReport(const EspBleHidKeyboardInputReport
     return false;
   }
 
-  impl_->inputValue[0] = report.modifiers;
-  impl_->inputValue[1] = 0;
-  memcpy(impl_->inputValue + 2, report.keys, sizeof(report.keys));
+  uint8_t inputValue[8];
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    impl_->inputValue[0] = report.modifiers;
+    impl_->inputValue[1] = 0;
+    memcpy(impl_->inputValue + 2, report.keys, sizeof(report.keys));
+    memcpy(inputValue, impl_->inputValue, sizeof(inputValue));
+  }
 
   bool sent = false;
   int lastBackendCode = 0;
   for (size_t index = 0; index < connectionCount; ++index)
   {
-    os_mbuf *value = ble_hs_mbuf_from_flat(impl_->inputValue, sizeof(impl_->inputValue));
+    os_mbuf *value = ble_hs_mbuf_from_flat(inputValue, sizeof(inputValue));
     if (value == nullptr)
     {
       lastBackendCode = BLE_HS_ENOMEM;
@@ -2820,8 +2915,11 @@ bool EspBleHidKeyboardDevice::setBatteryLevel(uint8_t level)
     owner_->setError(EspBleError::InvalidState, "HID Keyboard Device is not configured");
     return false;
   }
-  impl_->config.initialBatteryLevel = level;
-  impl_->batteryLevel = level;
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    impl_->config.initialBatteryLevel = level;
+    impl_->batteryLevel = level;
+  }
 
   if (owner_->initialized() && impl_->realized && impl_->batteryValueHandle != 0)
   {
@@ -2844,7 +2942,7 @@ bool EspBleHidKeyboardDevice::setBatteryLevel(uint8_t level)
       {
         continue;
       }
-      os_mbuf *value = ble_hs_mbuf_from_flat(&impl_->batteryLevel, 1);
+      os_mbuf *value = ble_hs_mbuf_from_flat(&level, 1);
       if (value != nullptr)
       {
         ble_gatts_notify_custom(connectionHandles[index], impl_->batteryValueHandle, value);
@@ -3001,7 +3099,10 @@ bool EspBleHidKeyboardHost::discover(EspBleConnectionId connectionId)
   }
   {
     std::lock_guard<std::mutex> lock(impl_->mutex);
-    impl_->discoveryTask = task;
+    if (impl_->discovering)
+    {
+      impl_->discoveryTask = task;
+    }
   }
   owner_->clearError();
   return true;
@@ -3196,6 +3297,16 @@ size_t EspBleHidKeyboardHost::droppedEventCount() const
   }
   std::lock_guard<std::mutex> lock(impl_->mutex);
   return impl_->droppedEvents;
+}
+
+size_t EspBleHidKeyboardHost::invalidInputReportCount() const
+{
+  if (impl_ == nullptr)
+  {
+    return 0;
+  }
+  std::lock_guard<std::mutex> lock(impl_->mutex);
+  return impl_->invalidInputReports;
 }
 
 bool EspBleHidKeyboardHost::ready(EspBleConnectionId connectionId) const
@@ -3581,12 +3692,20 @@ void EspBle::end()
   {
     while (true)
     {
+      bool cancelConnect = false;
       {
         std::lock_guard<std::mutex> lock(impl_->mutex);
         if (!impl_->connecting && !impl_->gattOperating)
         {
           break;
         }
+        cancelConnect = impl_->connecting;
+      }
+      if (cancelConnect)
+      {
+        // Abort an in-flight connect attempt instead of blocking here until
+        // its timeout (up to tens of seconds). Repeated calls are harmless.
+        ble_gap_conn_cancel();
       }
       delay(1);
     }
@@ -3610,6 +3729,7 @@ void EspBle::end()
   BLESecurity::setForceAuthentication(false);
   hidKeyboardDevice_.resetBackend();
   hidKeyboardHost_.resetBackend();
+  scanner_.flushPendingResults();
   if (impl_ != nullptr)
   {
     // Free every Central client except the most recently created one, which
@@ -3748,7 +3868,10 @@ bool EspBle::connect(const EspBleScanResult &scanResult, uint32_t timeoutMillise
   }
   {
     std::lock_guard<std::mutex> lock(impl_->mutex);
-    impl_->connectTask = task;
+    if (impl_->connecting)
+    {
+      impl_->connectTask = task;
+    }
   }
 
   clearError();
@@ -4207,7 +4330,10 @@ bool EspBle::startGattOperation(
   }
   {
     std::lock_guard<std::mutex> lock(impl_->mutex);
-    impl_->gattTask = task;
+    if (impl_->gattOperating)
+    {
+      impl_->gattTask = task;
+    }
   }
   clearError();
   return true;

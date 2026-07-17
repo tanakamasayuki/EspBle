@@ -1,9 +1,11 @@
 import re
+import time
 
 QUERY_PATTERN = re.compile(
     rb"HOST_QUERY connected=(\d+) disconnected=(\d+) notifications=(\d+) "
-    rb"connections=(\d+) ready=(\d+) dropped=(\d+)"
+    rb"connections=(\d+) ready=(\d+) dropped=(\d+) scan=(\d+)"
 )
+END_CONNECT_PATTERN = re.compile(rb"HOST_END_CONNECT connect=(\d+) ms=(\d+) begin=(\d+)")
 HEAP_PATTERN = re.compile(rb"HOST_HEAP free=(\d+)")
 END_CYCLE_PATTERN = re.compile(rb"HOST_END_CYCLE read=(\d+) begin=(\d+) heap=(\d+)")
 CONNECTED_PATTERN = re.compile(rb"HOST_CONNECTED id=(\d+)")
@@ -123,6 +125,41 @@ def test_reconnect_cycles_do_not_leak_heap(dut, peers):
         f"heap shrank by {loss} bytes over {len(settled) - 1} cycles "
         f"(~{per_cycle:.0f} bytes/cycle, heap samples: {heaps})"
     )
+
+
+def test_end_cancels_pending_connect(dut, peers):
+    """end() while a connect attempt to an unreachable peer is in flight must
+    cancel it instead of blocking until the connect timeout (10s+)."""
+    device = peers["device"]
+    _reset(dut, device)
+
+    dut.write("Z")
+    match = dut.expect(END_CONNECT_PATTERN, timeout=40)
+    assert match.group(1) == b"1", "connect() must be accepted"
+    assert match.group(3) == b"1", "begin() must succeed after end()"
+    duration = int(match.group(2))
+    assert duration < 3000, (
+        f"end() blocked for {duration} ms waiting for the connect timeout"
+    )
+
+
+def test_end_flushes_scanner_queue(dut, peers):
+    """Scan results queued but never dispatched must not leak into the next
+    begin() session."""
+    device = peers["device"]
+    _reset(dut, device)
+
+    dut.write("Y")
+    dut.expect_exact("HOST_SCAN_FLUSH begin=1", timeout=30)
+    time.sleep(1.0)
+    dut.write("q")
+    match = dut.expect(QUERY_PATTERN, timeout=10)
+    assert int(match.group(7)) == 0, (
+        f"{int(match.group(7))} stale scan result(s) from the previous "
+        "session were delivered after begin()"
+    )
+    dut.write("c")
+    dut.expect_exact("HOST_COUNTERS_RESET", timeout=10)
 
 
 def test_end_during_gatt_operation_stress(dut, peers):
