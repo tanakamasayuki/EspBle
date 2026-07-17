@@ -10,3 +10,10 @@
 - Add the HID Keyboard Device profile: fixed 6KRO report protocol keyboard with HID/Device Information/Battery services, LED output reports, and battery level updates.
 - Add the HID Keyboard Host profile: HID discovery, input report subscription, 256-bit usage snapshots, `onKeyboard()` press/release events, 19 EspUsbHost-compatible keyboard layouts, LED output writes, and battery reads.
 - Add fixed-capacity event listeners (`add*Listener()` / `removeListener()`) to the HID Keyboard Host for ESP32KeyBridge adapter coexistence.
+- Harden the connection lifecycle: lifecycle events evict droppable events instead of being lost, retired `BLEClient` objects are reaped without leaks or double frees, `end()` cancels in-flight connects and flushes stale scan results, and a second `begin()` with a different config fails instead of silently keeping the old one. Drop counters are exposed via `droppedEventCount()`.
+- Replace byte-exact report-map matching with a minimal HID report descriptor parser: order-independent 6KRO keyboard detection, report-ID based input/output selection, and boot keyboards without report IDs. Rollover (phantom) reports are ignored and invalid-length input reports are counted via `invalidInputReportCount()`.
+- Enforce HOGP security on the HID Keyboard Device: encrypted permissions on HID service attributes when security is enabled, and input reports are only notified to subscribed (and encrypted, when required) connections.
+- Merge advertised service UUIDs into one Complete List AD structure per UUID size (CSS Part A 1.1).
+- Switch keyboard layout conversion to EspUsbHost-compatible Unicode 4-plane tables with AltGr layers and character-pair Caps Lock handling; add a `unicode` field to keyboard events and fix the nl-NL and pt-BR tables.
+- Make `setKeyboardLeds()` a non-blocking fire-and-forget write using Write Without Response.
+- Add host unit tests (keymap conversion, report-map parser) and peer test suites for lifecycle stress, HID robustness, HID security, boot keyboards, and raw advertising payloads.

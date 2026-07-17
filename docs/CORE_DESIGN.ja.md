@@ -24,7 +24,7 @@ Application / ESP32KeyBridge adapter
 4. Advertising/Scanning/Connection操作を開始する。
 5. `end()`で操作を止め、接続を閉じ、スタック資源を解放する。
 
-Arduino-ESP32同梱BLE APIが安全な動的Service追加や再初期化を保証しない場合、初期版は`begin()`後のGATT Server構成変更を禁止します。再構成は`end()`後に行います。実スタックの制約が確認できるまで「安全な再初期化」を無条件には保証しません。
+`begin()`後のGATT Server構成変更は禁止し、再構成は`end()`後に行います。これは同梱backendの確認済み制約に基づく不変条件です: `createServer()`は`ble_gatts_reset()`を呼ぶためそれ以前の登録は消え、serviceの実登録は`BLEServer::start()`（Advertising開始が自動で呼ぶ）時の1回だけで、start後に追加したserviceは二度と登録されません（`CONFIG_BT_NIMBLE_DYNAMIC_SERVICE`無効ビルド）。将来動的Service追加を検討する場合もこの制約が前提になります。
 
 ## 状態モデル
 
@@ -64,12 +64,12 @@ Connectionは次を持ちます。
 
 ## 非同期処理と実行文脈
 
-BLE処理は非同期を基本とします。スタックcallback内では状態更新とイベントqueue投入だけを行い、通常の利用者callbackは`update()`を呼んだコンテキストから配送する方針を初期案とします。
+BLE処理は非同期を基本とします。スタックcallback内では状態更新とイベントqueue投入だけを行い、利用者callbackは`update()`を呼んだコンテキストから配送します（確定仕様。内部task配送・選択式は採用しません）。`update()`を呼ばない限り、connect/discover等の完了通知も配送されません。
 
 - `update()`は単一コンテキストから呼ぶ。
 - stack taskと`update()`間はライブラリが同期する。
 - callback内から同期wait APIを呼ぶことは禁止する。
-- queue overflowは破棄数とエラーイベントで観測可能にする。
+- queue overflowは破棄数カウンタ（`droppedEventCount()`等）で観測可能にし、lifecycle・完了イベントを優先保持する。専用のoverflowイベントは設けない。queue容量はcompile-time定数で、実行時設定APIは設けない。
 - latencyが重要なraw callbackを追加する場合は、stack contextであることをAPI名と文書で明示する。
 
 タイムアウト付き同期helperは非同期操作の上に構築し、無期限にblockしません。

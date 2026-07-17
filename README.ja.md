@@ -36,8 +36,6 @@ Mouse、Consumer Control、複合HID、MIDI、NUS、センサー、Extended Adve
 - [開発計画](docs/DEVELOPMENT_PLAN.ja.md)
 - [テスト計画](tests/TEST_PLAN.ja.md)
 
-`memo.ja.md`は初期検討の原文です。内容を正式文書へ移行し、移行確認が完了した時点で削除します。
-
 ## ライセンス
 
 MIT License

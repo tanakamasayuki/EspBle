@@ -2,10 +2,10 @@
 
 ## 0. 仕様と基盤
 
-- 要件、コア設計、API規則、決定台帳を作成する。
-- Arduino library最小構成とrelease toolkitを導入する。
-- pytest-embedded基盤と既存環境互換のESP32-S3 Peer profileを作成する。
-- `memo.ja.md`の内容を正式文書へ移行して削除する。
+- ✅ 要件、コア設計、API規則、決定台帳を作成する。
+- ✅ Arduino library最小構成とrelease toolkitを導入する。
+- ✅ pytest-embedded基盤と既存環境互換のESP32-S3 Peer profileを作成する。
+- ✅ `memo.ja.md`の内容を正式文書へ移行して削除する（2026-07-18完了）。
 
 ## 1. GAP vertical slice
 

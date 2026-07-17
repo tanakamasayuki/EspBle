@@ -18,6 +18,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <cstring>
+#include <map>
 #include <mutex>
 #include <utility>
 
@@ -3156,7 +3157,7 @@ bool EspBleHidKeyboardHost::setKeyboardLeds(
     (scrollLock ? 0x04 : 0) |
     (compose ? 0x08 : 0) |
     (kana ? 0x10 : 0);
-  const bool response = outputReport->canWrite();
+  const bool response = !outputReport->canWriteNoResponse();
   const bool success = outputReport->writeValue(
     &leds, 1, response);
   {

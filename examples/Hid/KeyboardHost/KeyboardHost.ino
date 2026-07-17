@@ -48,7 +48,13 @@ void setup()
 
   ble.onConnected([](const EspBleConnection &connection) {
     keyboardConnectionId = connection.id;
-    ble.hidKeyboardHost().discover(connection.id);
+  });
+  // securityを有効にしているため、HID Discoveryは暗号化完了後に開始する。
+  ble.onSecurityChanged([](const EspBleSecurityChanged &event) {
+    if (event.success)
+    {
+      ble.hidKeyboardHost().discover(event.connection.id);
+    }
   });
   ble.onDisconnected([](const EspBleConnection &) {
     keyboardConnectionId = 0;

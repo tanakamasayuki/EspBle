@@ -114,6 +114,24 @@ void loop()
         ble.hidKeyboardHost().setKeyboardLeds(
           keyboardConnectionId, true, true, false) ? 1 : 0);
     }
+    else if (command == 'L')
+    {
+      unsigned success = 0;
+      const uint32_t startMs = millis();
+      for (int i = 0; i < 10; ++i)
+      {
+        if (ble.hidKeyboardHost().setKeyboardLeds(
+              keyboardConnectionId, true, true, false))
+        {
+          ++success;
+        }
+        delay(5);
+      }
+      Serial.printf(
+        "HOST_LEDS_TIMED success=%u ms=%u\n",
+        success,
+        static_cast<unsigned>(millis() - startMs));
+    }
     else if (command == 'e')
     {
       ble.hidKeyboardHost().setKeyboardLayout(EspBleKeyboardLayout::EnUs);

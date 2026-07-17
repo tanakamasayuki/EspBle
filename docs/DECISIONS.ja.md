@@ -13,20 +13,24 @@
 9. Peerでは両方のsketchを転送・実行でき、両方のSerialを観測・操作できる。初期構成は親側sketchをCentral、`peer_device/`側sketchをPeripheralに固定し、役割を交換しない。EspBle PeripheralはPeer側の結果を主にassertして検証する。
 10. Peerの一方は可能な範囲でArduino-ESP32同梱BLE低レベルAPIを直接使い、EspBle同士だけの自己整合テストにしない。
 11. 初期プロファイルはHID KeyboardとBattery Serviceに絞る。
-12. `memo.ja.md`は正式文書への移行確認後に削除する。
+12. `memo.ja.md`は正式文書への移行確認後に削除する（2026-07-18に移行確認のうえ削除済み。Beacon/Connectionlessは優先順位候補へ、Semantic Versioningポリシーと非機能要件はREQUIREMENTSへ、初期リリース範囲は確定#11で上書き）。
 13. 初期自動Peer環境は常設ESP32-S3 2台とする。3台必要な複数接続またはBLE-to-BLE bridge testは、manual用ESP32-S3を追加Peerとして利用し、Peerディレクトリを増やして拡張する。
 14. 対象可否はBLE内蔵SoCかどうかではなく、Arduino-ESP32がNimBLEを提供する構成かで判断する。ESP32-P4 + ESP32-C6などのHosted BLEも対象候補に含め、専用build/実機試験後に対応済みとする。
 15. 公開APIと文書はBluetooth LEの標準用語を基本とし、Central/Peripheral、GATT Client/Server、HID Host/Deviceを同一視しない。stack ownerは役割中立の`EspBle`とする。
 16. examplesの変数名は役割の明確さを優先する。複数roleが登場する場合は`hidKeyboardHost` / `hidKeyboardDevice`のように明示し、単一roleで自明なexampleでは`keyboard`などの短い名前を個別判断で許容する。
+17. イベント配送は明示`ble.update()`（呼び出したloop task context）を最終仕様とする。内部task配送や選択式は採用しない。`update()`を呼ばない限りconnect/discover等の完了通知も配送されない。queue満杯はdropカウンタとlifecycleイベント優先保持で観測・保護する。
+18. GATT Server構成は`begin()`前に全登録し、開始後の動的Service追加は禁止する。同梱backendは`createServer()`が`ble_gatts_reset()`を呼び、`BLEServer::start()`（Advertising開始が自動で呼ぶ）後に追加したserviceは二度と登録されない（`CONFIG_BT_NIMBLE_DYNAMIC_SERVICE`無効ビルド）ため、この順序は偶然ではなく維持すべき不変条件である。
+19. 操作APIの役割分担: 受理時の同期エラーは`bool`戻り値+`lastErrorName()`/`lastErrorDetail()`、完了・失敗は各イベントのerror/detailフィールドで通知する。operation IDはCentral GATT同時1件制限が続く間は導入しない。`lastError*`は単一状態のため、操作呼び出しは単一のloop task contextから行うことを前提とする。
+20. 公開の値containerはpointer+lengthを基本とし、`String`を便宜overloadとして提供する。同梱backendの`String`構築は長さ明示でbinary-safe（NUL切り詰めなし）であることを確認済み。将来の値型container（`EspBleBytes`等）への移行余地は未確定事項として残す。
+21. event queueの容量はcompile-time定数とする。Arduinoのlibrary buildでは利用者が`-D`で上書きする実用的な手段がないため、容量設定APIは設けない。overflowは専用イベントではなく、dropカウンタ（`droppedEventCount()`等）とlifecycleイベントの優先保持で扱う。
+22. 公開APIはSemantic Versioningに従う。1.0.0より前の0.x系は試行段階で互換性を保証しない。
 
 ## 仮置き
 
-1. 通常イベントはstack callbackからqueueへ移し、`update()` contextで配送する案から開始する。ただし公開APIとして確定せず、Notify/IndicateとHIDでlatency、queue、排他、Arduinoでの使い勝手を確認して、明示`update()`、内部task、または選択式のどれにするか決める。
-2. `begin()`前にGATT Server構成を登録し、開始後の動的Service追加は初期版で禁止する。
-3. Characteristic valueはbyte sequenceを基本とし、型変換をcodecへ分離する。
-4. Connectionはbackend handleの再利用を検出できるlibrary identityを持つ。
-5. 初期の同時接続数は制限してよいが、接続単位APIを維持する。
-6. Pairing、Bonding、認証方式の実装は基本接続/GATTの後から追加する。ただしCharacteristicのsecurity permissionはGATT Server開始前に必要になり得るため、構成拡張点とConnectionのsecurity状態は初期API設計で塞がない。
+1. Characteristic valueはbyte sequenceを基本とし、型変換をcodecへ分離する。
+2. Connectionはbackend handleの再利用を検出できるlibrary identityを持つ。
+3. 初期の同時接続数は制限してよいが、接続単位APIを維持する。
+4. Pairing、Bonding、認証方式の実装は基本接続/GATTの後から追加する。ただしCharacteristicのsecurity permissionはGATT Server開始前に必要になり得るため、構成拡張点とConnectionのsecurity状態は初期API設計で塞がない。
 
 ## GAPスパイクで確認済み（公開API確定前）
 
@@ -62,6 +66,8 @@
 19. 初期化済みインスタンスへの2回目の`begin()`は、同一configなら成功を返し、異なるconfigなら`InvalidState`で失敗する。黙って旧設定のまま成功を返さない。
 20. `end()`は実行中のconnect試行を`ble_gap_conn_cancel()`で中断し（connect timeoutまでblockしない）、Scannerの未配送resultをflushして次のsessionへ持ち越さない。
 21. Peripheral向けイベント（Server書込み・購読変更・HID Output Report）でConnection IDを解決できない場合（ID 0）は、無効IDのまま配送せずdropしてカウントする。
+22. GATT worker task（operation/discovery）は開始時に`isConnected()`を1回確認する以外の接続状態同期を行わない。操作途中の切断はbackendエラーとして完了イベントへ伝播する。同梱backendではremote service treeは切断で解放されず（解放は`~BLEClient`のみ）、client解放はGATT operation実行中はreapを遅延し`end()`はbusy flag解除を待つため、worker taskが解放済みobjectへ触れる経路はない。
+23. Central側MTUは接続時のsnapshotのみ保持する。同梱backendのclient側にはMTU変更callbackがなく、接続後の変化は追跡できない。MTU交換がconnect timeout+1秒までに完了しない場合、snapshotが既定値23になる可能性がある。制限としてSTATUSへ記載する。
 
 ## Securityスパイクで確認済み（公開API確定前）
 
@@ -72,8 +78,9 @@
 5. Bond列挙・特定削除・全削除は同梱NimBLE storeを使用する。現在はactive Connectionがない場合だけ削除を許可する。
 6. `security_bond` Peerテストで初回Pairing、暗号化Read/Write、両側Bond保存、切断後のBond再接続、両側Bond削除を確認済み。
 7. 最初のMITM方式はDisplayOnlyとKeyboardOnlyの静的6桁passkeyとする。実行時入力とNumeric Comparisonは、stack callbackへの即時回答方法を設計してから追加する。
-8. 表示passkeyは値イベントへcopyして`ble.update()` contextで配送する。同梱backend callbackにConnection handleがないため、複数同時PairingでのConnection識別は未確定とする。
+8. 表示passkeyは値イベントへcopyして`ble.update()` contextで配送する。同梱backend callbackにConnection handleがないため、イベントのConnectionは「最初の未暗号化Connection」の推定とする。初期リリースはこの推定を仕様とし、複数同時Pairingでは誤ったConnectionを報告しうることをSTATUSの制限へ記載する。
 9. GATT Characteristicへauthenticated read/writeを追加し、`security_passkey` Peerテストで両側`authenticated=true`、認証必須Read/Write、Bond保存・削除を確認済み。
+10. Bond列挙の`bond(index)`はmutableなbond store上のsnapshot indexアクセスで、削除・追加により呼び出し間で並びが変わりうる。特定削除は`deleteBond(const EspBleBond &)`がaddressで対象を特定するため、列挙直後に取得した値を使う。
 
 ## HID Keyboard Deviceスパイクで確認済み（公開API確定前）
 
@@ -94,7 +101,7 @@
 3. 切断時はheld usageの全release snapshotをloop contextへ配送し、bridgeでstuck keyを残さない。
 4. 初期Report Map parserはmodifier + 6-key arrayの8-byte reportだけを受理する。NKROや未知の複合reportを長さだけで推測しない。
 5. 同一UUIDのReport characteristicをhandleで全列挙し、Report Reference descriptorでInput/OutputとReport IDを識別する。
-6. Keyboard LED OutputはConnection IDを指定して返送する。writeを同期`bool`のままにするか非同期Resultへ揃えるかはKeyBridge adapter実装後に確定する。
+6. Keyboard LED Output（`setKeyboardLeds()`）は同期`bool`を返すprofile helperとして確定する。書込みはWrite Without Responseを優先してATT応答を待たず、呼び出しtaskをblockしない（WWR非対応characteristicのみwith response）。戻り値は受理を表し、配達確認は行わない。HID Discovery等のGATT操作実行中は排他により失敗する。汎用GATT側の非同期Resultへは統一しない。
 7. `hid_keyboard_host` PeerテストでDiscovery、Battery Read、Input subscription、usage snapshot、LED Output、Pairing/Bondingを確認済み。Device wire形式は別テストで同梱BLE API直接実装により独立検証する。
 8. `EspBleHidKeyboardState`の256-bit usage snapshotはESP32KeyBridgeの`InputAdapter::keys()`へ変換なしで写像できる。試作adapterでは`bridge.update()`からEspBleの`update()`も駆動でき、remap、modifier、切断releaseを確認した。
 9. KeyBridgeのLockStateは`setKeyboardLeds(connectionId, ...)`でBLE keyboardへ返送でき、再接続・再Discovery後にも現在値を再送できる。
@@ -105,7 +112,8 @@
 14. HID Discovery実行中と`setKeyboardLeds()`実行中は対象Connection IDを共通GATT操作状態へ記録し、`disconnect()`が同一接続への要求を拒否できるようにする。
 15. 長さが8以外のInput Reportは解釈せず、`invalidInputReportCount()`で観測できるようカウントする（「Discovery成功なのにキーが来ない」の診断手段）。
 16. keymap変換はEspUsbHostのUnicode 4-plane表現に揃える。tableは`uint16_t KEYCODE_TO_UNICODE_XX[N][4]`（無shift/Shift/AltGr/AltGr+Shift、Unicodeコードポイント）でEspUsbHostの`src/keymap/*.h`と同一内容を共有し、主関数`espBleUsageToUnicode()`がAltGr層選択と文字ペア判定CapsLockを行う。`espBleUsageToAscii()`はLatin-1 wrapper（非Latin-1は0）として維持し、`EspBleHidKeyboardEvent`は`unicode`と`ascii`の両方を持つ。en-US系（EnUs/KoKr/ZhCn/ZhTw）のみ内蔵変換パス（table等価）を使う。
-11. 再接続時は新しいConnection IDに対してSecurity完了後に再度`discover()`が必要で、Discovery完了後にinputをconnectedとして扱う。自動再接続・自動Discoveryは今回のadapter境界には含めない。
+17. 再接続時は新しいConnection IDに対してSecurity完了後に再度`discover()`が必要で、Discovery完了後にinputをconnectedとして扱う。自動再接続・自動Discoveryは今回のadapter境界には含めない。HID Discoveryの自動化optionは初期リリースに含めず、明示`discover()`を維持する。security有効構成では`onSecurityChanged`成功後に呼ぶことを規範とし、HOST_SPECとexampleを揃える。
+18. `onKeyboard()`は同一report内の変化をpress（usage昇順）→release（usage昇順）の順で配送する仕様とする。一般的なOS Hostのchord処理（release先行）とは順序が異なるが、bridge用途の主境界はusage snapshot（`EspBleHidKeyboardState`）であり影響しない。順序に依存する用途はraw usage境界を使う。
 
 ## 優先順位候補
 
@@ -115,6 +123,7 @@
 4. reconnect / resubscribe / discovery cache / multiple connections
 5. Sensor profile
 6. Extended/Periodic Advertising、PHY、Privacy
+7. Beacon / Connectionless（任意Advertisingデータ送受信、iBeacon、Eddystone）
 
 候補は採用決定ではありません。ユースケース、実機、Peerテスト方法が揃った機能だけを正式スコープへ移します。
 
@@ -134,4 +143,5 @@
 - ESP32-S3以外の初期build matrix
 - HID Keyboard Hostで追加対応するReport Mapの優先順位
 - 実行時Passkey入力とNumeric Comparisonの応答context
-- public object ownershipとevent queueの具体API
+- public object handleの表現（値型、index+generation、参照class）
+- Protocol Mode / Boot Keyboard不在のHost互換性と、暗号化必須keyboardへのDiscovery retry経路（市販機器とのmanual interoperabilityで確認）
