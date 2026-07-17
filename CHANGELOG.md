@@ -21,3 +21,7 @@
 - Add peer tests for asynchronous connect-timeout failure, exclusive central GATT operations, and silent peer loss detected via supervision timeout.
 - Add a GitHub Actions workflow that compiles every example with the esp32s3 profile.
 - Add bilingual (English/Japanese) READMEs for every example plus an examples index, expand the top-level and test READMEs with cross-links, and add `keywords.txt` for Arduino IDE syntax highlighting.
+- Add a BLE primer (Classic vs BLE, no SPP, GAP/GATT/HID/security concepts) to the examples index.
+- Add diagnostic examples: `Info/ScanDump` (full advertisement dump) and `Info/ConnectionInspector` (interactive connection/security/bond/counter inspector).
+- Add examples for acknowledged delivery (`Gatt/IndicateServer` / `Gatt/IndicateClient`) and the passkey-input side of MITM pairing (`Security/StaticPasskeyClient`).
+- Add `tools/version_matrix.py` to build the examples across arduino-esp32 core versions and boards, generating `docs/COMPATIBILITY.<version>.md` / `docs/BOARDS.<version>.md`.

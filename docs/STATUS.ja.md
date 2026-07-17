@@ -107,7 +107,7 @@ host上のunit test（`tests/unit/`）としてkeymap変換とHID Report Map par
    - ✅ `ble.update()`必須を最終仕様として確定（DECISIONS 確定 #17）。
    - ✅ HID Discoveryは明示`discover()`維持、security有効時はSecurity完了後に呼ぶ規範で統一（DECISIONS HID Host #17）。
    - ✅ `setKeyboardLeds()`はWrite Without Response優先の同期`bool` helperとして確定（DECISIONS HID Host #6）。
-   - EspBle API確定後、正式なBLE input adapterをESP32KeyBridge側へ移す。
+   - 正式なBLE input adapterは初回リリースの要件から外し、リリース後にそのリリース版へ対応するadapterをESP32KeyBridge側で作成してもらう（2026-07-18裁定）。
 
 2. **共通APIの未確定事項を整理する**
    - ✅ Result型の役割分担とoperation ID見送りを確定（DECISIONS 確定 #19）。
@@ -125,8 +125,9 @@ host上のunit test（`tests/unit/`）としてkeymap変換とHID Report Map par
 4. **初回リリース用のテストと文書を完成させる**
    - ✅ 全exampleのcompile matrixを自動化する（`.github/workflows/compile-examples.yml`、esp32s3 profile、push/PRで実行）。
    - ✅ host上のunit testを追加する（keymap変換とReport Map parserを`tests/unit/`で実装済み。Advertising parser等の追加は任意）。
-   - 市販BLE KeyboardとAndroid / Linuxなどでmanual interoperabilityを確認する。
+   - 市販BLE KeyboardとAndroid / Linuxなどでmanual interoperabilityをある程度確認する（必須の合格基準にはしない。2026-07-18裁定、ユーザーが実施）。
    - README、API説明、CHANGELOG、Release Checklistを更新する。
+   - examplesを充実させ、触りながら公開APIの確定判断を行う（診断系`Info/`を追加済み。追加候補があれば継続）。
 
 ### P1: 初期基盤を補完する作業
 
