@@ -19,6 +19,17 @@ The public API is not stable yet: this is the trial stage ahead of the first rel
 
 Everything above is verified with an automated two-board ESP32-S3 peer test suite plus host-side unit tests; see [tests/TEST_PLAN.ja.md](tests/TEST_PLAN.ja.md).
 
+## Compatibility
+
+EspBle requires the **NimBLE backend bundled with Arduino-ESP32**. Cores built with the Bluedroid default (such as the plain `esp32` board) are rejected at compile time with a clear `#error`.
+
+Development and the peer tests run on arduino-esp32 3.3.10. The supported core-version range and per-board build coverage are measured by CI, not maintained by hand:
+
+- **Core Compatibility Matrix** workflow → `docs/COMPATIBILITY.<version>.md` (representative examples across arduino-esp32 releases on ESP32-S3)
+- **Board Build Coverage** workflow → `docs/BOARDS.<version>.md` (every example across ESP32-S3 / ESP32 / C3 / C6 / H2 / P4 at one core version)
+
+Both are manual (`workflow_dispatch`) because a full sweep rewrites and rebuilds every sketch. Consult the generated matrix for the authoritative minimum core version.
+
 ## Getting started
 
 Each example ships a `sketch.yaml` pinned to the verified Arduino-ESP32 version:

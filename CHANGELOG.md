@@ -24,4 +24,4 @@
 - Add a BLE primer (Classic vs BLE, no SPP, GAP/GATT/HID/security concepts) to the examples index.
 - Add diagnostic examples: `Info/ScanDump` (full advertisement dump) and `Info/ConnectionInspector` (interactive connection/security/bond/counter inspector).
 - Add examples for acknowledged delivery (`Gatt/IndicateServer` / `Gatt/IndicateClient`) and the passkey-input side of MITM pairing (`Security/StaticPasskeyClient`).
-- Add `tools/version_matrix.py` to build the examples across arduino-esp32 core versions and boards, generating `docs/COMPATIBILITY.<version>.md` / `docs/BOARDS.<version>.md`.
+- Add `tools/version_matrix.py` and the manual `core-matrix.yml` / `board-matrix.yml` workflows that build the examples across arduino-esp32 core versions and boards in CI, generating `docs/COMPATIBILITY.<version>.md` / `docs/BOARDS.<version>.md`. Running these locally is discouraged because a sweep rewrites every sketch.yaml.

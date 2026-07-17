@@ -12,6 +12,10 @@ no profile in the sketch.yaml are synthesized by cloning the `esp32s3` profile
 with the target's FQBN, so board coverage does not require editing every example.
 All sketch.yaml files are restored to their original content when the run ends.
 
+This is primarily driven by CI (`.github/workflows/*-matrix.yml`), because a full
+core sweep rewrites and rebuilds every sketch and would dirty a local checkout and
+exhaust local disk. Run it locally only for a quick single-core/single-board check.
+
 Examples:
   # core-version sweep on esp32s3 with the default representative examples
   python tools/version_matrix.py --core-versions auto --targets esp32s3
@@ -20,8 +24,14 @@ Examples:
   python tools/version_matrix.py --core-versions 3.3.10 \
       --targets esp32s3,esp32,esp32c3,esp32c6,esp32h2,esp32p4 --examples all
 
+  # CI decomposition: one core per job writes a JSON payload, then merge them
+  python tools/version_matrix.py --core-versions 3.3.10 --json-only --json out/3.3.10.json
+  python tools/version_matrix.py --render-from out --output docs/COMPATIBILITY.0.1.0.md
+
   # dry run: show what would build, no compiles
   python tools/version_matrix.py --core-versions 3.3.10 --list
+
+All sketch.yaml files are restored to their committed content when the run ends.
 """
 
 import argparse
@@ -229,6 +239,69 @@ def render_markdown(lib_version, title, core_versions, targets, examples, result
     return "\n".join(lines) + "\n"
 
 
+def build_payload(lib_version, title, core_versions, targets, examples, results) -> dict:
+    return {
+        "lib_version": lib_version,
+        "title": title,
+        "core_versions": core_versions,
+        "targets": targets,
+        "examples": [{"category": cat, "example": path} for cat, path in examples],
+        "results": [
+            {"category": cat, "example": path, "target": t, "core": c, "state": st, "note": nt}
+            for (cat, path, t, c), (st, nt) in results.items()
+        ],
+    }
+
+
+def merge_payloads(payloads: list[dict]):
+    """Combine per-core/per-target JSON payloads into one renderable matrix.
+
+    Each CI job writes one payload (a single core version, possibly several
+    targets/examples); merging stitches the columns/rows back together.
+    """
+    lib_version = payloads[0].get("lib_version", "unknown")
+    title = payloads[0].get("title", "arduino-esp32 compatibility")
+    targets, examples, seen_examples = [], [], set()
+    core_versions, results = set(), {}
+    for p in payloads:
+        for t in p.get("targets", []):
+            if t not in targets:
+                targets.append(t)
+        # Preserve the example order declared in each payload.
+        for entry in p.get("examples", []):
+            key = (entry["category"], entry["example"])
+            if key not in seen_examples:
+                seen_examples.add(key)
+                examples.append(key)
+        for row in p.get("results", []):
+            cat, path, t, c = row["category"], row["example"], row["target"], row["core"]
+            core_versions.add(c)
+            if (cat, path) not in seen_examples:
+                seen_examples.add((cat, path))
+                examples.append((cat, path))
+            results[(cat, path, t, c)] = (row["state"], row.get("note", ""))
+    core_versions = sorted(core_versions, key=_ver_tuple)
+    for cat, path in examples:
+        for t in targets:
+            for c in core_versions:
+                results.setdefault((cat, path, t, c), (ABSENT, ""))
+    return lib_version, title, core_versions, targets, examples, results
+
+
+def render_from_dir(input_dir: pathlib.Path, output_opt: str) -> int:
+    payloads = [json.loads(p.read_text()) for p in sorted(input_dir.glob("*.json"))]
+    if not payloads:
+        print(f"No *.json payloads found in {input_dir}", file=sys.stderr)
+        return 2
+    lib_version, title, core_versions, targets, examples, results = merge_payloads(payloads)
+    md = render_markdown(lib_version, title, core_versions, targets, examples, results)
+    output = pathlib.Path(output_opt) if output_opt else REPO_ROOT / "docs" / f"COMPATIBILITY.{lib_version}.md"
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(md)
+    print(f"Merged {len(payloads)} payload(s) -> {output} (cores: {', '.join(core_versions)})")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--core-versions", default="auto",
@@ -240,9 +313,18 @@ def main() -> int:
     parser.add_argument("--title", default="arduino-esp32 core compatibility",
                         help="report title suffix")
     parser.add_argument("--output", default="", help="Markdown output path (default: docs/COMPATIBILITY.<libver>.md)")
-    parser.add_argument("--json", dest="json_out", default="", help="JSON output path")
+    parser.add_argument("--json", dest="json_out", default="", help="JSON output path (per-job result payload)")
+    parser.add_argument("--json-only", action="store_true",
+                        help="write only the JSON payload, skip Markdown (for decomposed CI jobs)")
+    parser.add_argument("--render-from", default="",
+                        help="skip building: merge every *.json in this directory into one Markdown matrix")
+    parser.add_argument("--print-cores", action="store_true",
+                        help="print the resolved core-version list as a JSON array and exit (for CI matrix setup)")
     parser.add_argument("--list", action="store_true", help="print the build plan and exit (no compiles)")
     args = parser.parse_args()
+
+    if args.render_from:
+        return render_from_dir(pathlib.Path(args.render_from), args.output)
 
     targets = [t.strip() for t in args.targets.split(",") if t.strip()]
     if args.examples == "all":
@@ -259,6 +341,10 @@ def main() -> int:
     if not core_versions:
         print("No core versions to build.", file=sys.stderr)
         return 2
+
+    if args.print_cores:
+        print(json.dumps(core_versions))
+        return 0
 
     lib_version = _read_lib_version(REPO_ROOT)
     examples_root = REPO_ROOT / "examples"
@@ -324,26 +410,21 @@ def main() -> int:
     total = time.monotonic() - run_start
     print(f"\nBuilt {n_builds} target(s) in {total:.0f}s ({total / 60:.1f} min)")
 
-    md = render_markdown(lib_version, args.title, core_versions, targets, examples, results)
-    out_path = pathlib.Path(args.output) if args.output else REPO_ROOT / "docs" / f"COMPATIBILITY.{lib_version}.md"
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(md)
-    print(f"Wrote {out_path}")
+    if not args.json_only:
+        md = render_markdown(lib_version, args.title, core_versions, targets, examples, results)
+        out_path = pathlib.Path(args.output) if args.output else REPO_ROOT / "docs" / f"COMPATIBILITY.{lib_version}.md"
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(md)
+        print(f"Wrote {out_path}")
 
     if args.json_out:
-        payload = {
-            "lib_version": lib_version,
-            "core_versions": core_versions,
-            "targets": targets,
-            "results": [
-                {"category": cat, "example": path, "target": t, "core": c, "state": st, "note": nt}
-                for (cat, path, t, c), (st, nt) in results.items()
-            ],
-        }
+        payload = build_payload(lib_version, args.title, core_versions, targets, examples, results)
         jp = pathlib.Path(args.json_out)
         jp.parent.mkdir(parents=True, exist_ok=True)
         jp.write_text(json.dumps(payload, indent=2, ensure_ascii=False))
         print(f"Wrote {jp}")
+    elif args.json_only:
+        print("WARNING: --json-only given without --json; no output written", file=sys.stderr)
     return 0
 
 

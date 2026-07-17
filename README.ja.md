@@ -19,6 +19,17 @@ ESP32 Arduino向けの汎用Bluetooth Low Energyライブラリです。**Arduin
 
 上記はすべてESP32-S3 2台の自動Peerテストとhost上のunit testで検証しています。詳細は[テスト計画](tests/TEST_PLAN.ja.md)を参照してください。
 
+## 対応環境
+
+EspBleは**Arduino-ESP32同梱のNimBLE backend**を必要とします。Bluedroidが既定のcore（無印`esp32`ボードなど）はコンパイル時に`#error`で明示的に拒否します。
+
+開発とPeerテストはarduino-esp32 3.3.10で行っています。対応するcoreバージョンの範囲とボードごとのビルドカバレッジは手動管理ではなくCIで計測します:
+
+- **Core Compatibility Matrix** ワークフロー → `docs/COMPATIBILITY.<version>.md`（ESP32-S3で代表exampleをarduino-esp32の各リリースに対してビルド）
+- **Board Build Coverage** ワークフロー → `docs/BOARDS.<version>.md`（1つのcoreバージョンで全exampleをESP32-S3 / ESP32 / C3 / C6 / H2 / P4に対してビルド）
+
+どちらもフルsweepが全sketchを書き換えて再ビルドするため、手動実行（`workflow_dispatch`）です。確定した最小coreバージョンは生成されたマトリクスを参照してください。
+
 ## はじめかた
 
 各exampleには検証済みArduino-ESP32バージョンを固定した`sketch.yaml`が同梱されています:

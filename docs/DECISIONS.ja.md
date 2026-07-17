@@ -140,8 +140,8 @@
 
 ## 要確認
 
-- Arduino-ESP32の最小対応版と更新ポリシー
-- ESP32-S3以外の初期build matrix
+- Arduino-ESP32の最小対応版と更新ポリシー（`core-matrix.yml`ワークフローが生成する`docs/COMPATIBILITY.<version>.md`で計測し、確定する。ローカルではsketchを書き換えて環境を汚すため実行せず、CIで回す）
+- ESP32-S3以外の初期build matrix（`board-matrix.yml`ワークフローが生成する`docs/BOARDS.<version>.md`で計測。NimBLE不在のBluedroid既定core（無印esp32等）はコンパイル時`#error`で拒否する設計）
 - HID Keyboard Hostで追加対応するReport Mapの優先順位
 - 実行時Passkey入力とNumeric Comparisonの応答context
 - public object handleの表現（値型、index+generation、参照class）

@@ -1,0 +1,66 @@
+name: Board Build Coverage
+
+# Build every example for every BLE-capable target board against a single
+# arduino-esp32 core version, and commit the result to docs/BOARDS.<libver>.md.
+#
+# One core version means one core install, so this fits in a single job (unlike
+# the core-version sweep, which decomposes one core per job for disk reasons).
+#
+# Manual only: matrix builds rewrite each sketch.yaml while running, so they are
+# not run on push. The tool restores every sketch.yaml before it exits.
+
+on:
+  workflow_dispatch:
+    inputs:
+      core_version:
+        description: "arduino-esp32 core version to build against"
+        default: "3.3.10"
+        required: true
+      targets:
+        description: "Comma-separated target boards"
+        default: "esp32s3,esp32,esp32c3,esp32c6,esp32h2,esp32p4"
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: board-matrix-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - uses: arduino/setup-arduino-cli@v2
+      - name: Resolve library version
+        id: libver
+        run: echo "version=$(grep -oP '^version=\K.+' library.properties)" >> "$GITHUB_OUTPUT"
+      - name: Build all examples across boards
+        # The tool records PASS/FAIL/NA per cell and exits 0 even when builds fail,
+        # so a red cell does not fail the job.
+        run: |
+          python tools/version_matrix.py \
+            --core-versions "${{ inputs.core_version }}" \
+            --targets "${{ inputs.targets }}" \
+            --examples all \
+            --title "board build coverage (core ${{ inputs.core_version }})" \
+            --output "docs/BOARDS.${{ steps.libver.outputs.version }}.md"
+      - name: Commit board matrix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/BOARDS.*.md
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "docs: update board build coverage (core ${{ inputs.core_version }})"
+            git pull --rebase origin "$GITHUB_REF_NAME"
+            git push origin "HEAD:$GITHUB_REF_NAME"
+          fi

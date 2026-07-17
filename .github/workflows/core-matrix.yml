@@ -1,0 +1,116 @@
+name: Core Compatibility Matrix
+
+# Build the representative examples on esp32s3 across many arduino-esp32 core
+# versions and commit docs/COMPATIBILITY.<libver>.md.
+#
+# Decomposition (GitHub-hosted runners have little free disk, so one core per job):
+#   setup      -> resolve the core-version list into a matrix
+#   build      -> one job per core version; arduino-cli installs just that core,
+#                 builds the representative examples, uploads a per-core JSON
+#   aggregate  -> merge all per-core JSONs into one Markdown matrix and commit it
+#
+# Caching is intentionally omitted: one esp32 core install is several GB, and the
+# whole release range dwarfs the Actions cache budget, so each job downloads its
+# own core. Runs are manual, so the parallel downloads are acceptable.
+
+on:
+  workflow_dispatch:
+    inputs:
+      core_versions:
+        description: "Comma-separated core versions, or 'auto' for all releases >= 3.2.0"
+        default: "auto"
+        required: true
+      targets:
+        description: "Comma-separated target boards (one core install per job, so keep this small)"
+        default: "esp32s3"
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: core-matrix-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      cores: ${{ steps.list.outputs.cores }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - id: list
+        run: |
+          cores=$(python tools/version_matrix.py --core-versions "${{ inputs.core_versions }}" --print-cores)
+          echo "cores=$cores" >> "$GITHUB_OUTPUT"
+          echo "Cores to build: $cores"
+
+  build:
+    needs: setup
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        core: ${{ fromJSON(needs.setup.outputs.cores) }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - uses: arduino/setup-arduino-cli@v2
+      - name: Build core ${{ matrix.core }}
+        # arduino-cli auto-installs the pinned core on first `compile --profile`.
+        # The tool records PASS/FAIL/NA per cell and exits 0 even when builds fail.
+        run: |
+          mkdir -p out
+          python tools/version_matrix.py \
+            --core-versions "${{ matrix.core }}" \
+            --targets "${{ inputs.targets }}" \
+            --title "arduino-esp32 core compatibility" \
+            --json-only \
+            --json "out/${{ matrix.core }}.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: compat-${{ matrix.core }}
+          path: out/*.json
+          if-no-files-found: error
+
+  aggregate:
+    needs: build
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: compat-*
+          merge-multiple: true
+      - name: Resolve library version
+        id: libver
+        run: echo "version=$(grep -oP '^version=\K.+' library.properties)" >> "$GITHUB_OUTPUT"
+      - name: Render compatibility matrix
+        run: |
+          python tools/version_matrix.py \
+            --render-from artifacts \
+            --output "docs/COMPATIBILITY.${{ steps.libver.outputs.version }}.md"
+      - name: Commit matrix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/COMPATIBILITY.*.md
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "docs: update core compatibility matrix"
+            git pull --rebase origin "$GITHUB_REF_NAME"
+            git push origin "HEAD:$GITHUB_REF_NAME"
+          fi
