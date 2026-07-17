@@ -304,6 +304,10 @@ struct EspBleHidKeyboardEvent
   EspBleConnectionId connectionId = 0;
   uint8_t reportId = 0;
   uint8_t usage = 0;
+  // Unicode code point produced by the selected layout (0 when the usage
+  // produces no character). `ascii` is its ISO-8859-1 subset: the low byte
+  // when the code point fits in 8 bits, otherwise 0.
+  uint16_t unicode = 0;
   uint8_t ascii = 0;
   uint8_t modifiers = 0;
   bool pressed = false;

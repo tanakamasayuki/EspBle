@@ -72,16 +72,16 @@ keyboard.onKeyboard([](const EspBleHidKeyboardEvent &event) {
 
 layout識別子と変換tableはEspUsbHostと揃え、`ZhTw`、`DaDk`、`DeDe`、`EnUs`、`FiFi`、`FrFr`、`HuHu`、`ItIt`、`JaJp`、`KoKr`、`NlNl`、`NbNo`、`PtBr`、`SvSe`、`ZhCn`、`EnGb`、`PtPt`、`EsEs`、`FrCh`を実装します。KoKr/ZhCn/ZhTwはEspUsbHostと同様にASCII範囲をEN-US tableで扱います。
 
-`ascii`はEspUsbHost互換の1 byte変換結果です。ASCII外の文字を含むlayoutではtableの8-bit値を返しますが、UTF-8文字列への変換やIME処理は行いません。変換不能なusageは0を返し、正確な入力を必要とする用途では常にraw `usage`も参照します。
+`unicode`は選択したlayoutが生成する文字のUnicodeコードポイント（生成なしは0）、`ascii`はそのISO-8859-1部分集合（256未満のときの下位byte、それ以外は0）です。UTF-8文字列への変換やIME処理は行いません。変換不能なusageは両方0を返し、正確な入力を必要とする用途では常にraw `usage`も参照します。
 
-EspUsbHost互換の変換仕様として、次の挙動を採用します。
+EspUsbHost互換の変換仕様として、次の挙動を採用します（EspUsbHostのUnicode 4-plane再設計に追随）。
 
-- ASCII外の8-bit値はISO-8859-1（Latin-1）です。UTF-8端末へ直接`Serial.write()`すると文字化けするため、必要なら利用者側で変換します。
-- 変換tableは無shift列とShift列のみを持ち、AltGr（Right Alt）は解釈しません。AltGrを必要とする文字（例: de-DEの`@`）は生成されず、AltGr押下中もshift列/無shift列の文字をそのまま返します。
+- 変換tableはusageごとに無shift、Shift、AltGr、AltGr+Shiftの4列のUnicodeコードポイントを持ちます。AltGr（Right Alt）押下時はAltGr列を選択し、layoutがその位置に文字を持たない場合は無shift/Shift列へfallbackします（例: de-DEのAltGr+Q=`@`、AltGr+E=`€`(U+20AC、`ascii`は0)）。
+- CapsLockは「Shift列が無shift列のUnicode大文字と一致する文字key」だけにShift反転として適用します。アクセント文字（ü→Ü、å→Å）やAZERTYの`m`にも正しく効き、数字・記号keyやde-DEの`ß`（Shiftは`?`）には効きません。
 - dead key（アクセント合成キー）は0を返します。
-- CapsLockはusage `0x04`〜`0x1D`（QWERTYの文字key位置）に位置ベースで適用します。AZERTY等でこの範囲外に配置された文字keyには適用されず、範囲内の非文字keyにはshift反転として作用します。
+- `ascii`のエンコーディングはISO-8859-1（Latin-1）です。UTF-8端末へ直接`Serial.write()`すると文字化けするため、必要なら利用者側で変換します。
 
-これらはEspUsbHostの変換結果と1 byte単位で一致させるための互換仕様です。AltGr対応や文字単位のCapsLock適用はtable形式の変更を伴うため、EspUsbHost側と同時に行う将来課題とします。
+これらはEspUsbHostの変換結果とコードポイント単位で一致させるための互換仕様です。tableはEspUsbHost / EspUsbDevice / EspBleの3プロジェクトで同一内容を共有します。
 
 layoutを指定しない利用者やESP32KeyBridgeはraw usageをそのまま使用できます。現在のlayout設定はHost profile全体に適用します。異なるlayoutの複数keyboardを同時接続する場合のConnection単位設定は複数接続APIと合わせて追加します。
 

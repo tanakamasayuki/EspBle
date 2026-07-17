@@ -3358,12 +3358,15 @@ void EspBleHidKeyboardHost::dispatchPendingEvents()
             keyboardEvent.scrollLock = event.state.scrollLock;
             keyboardEvent.compose = event.state.compose;
             keyboardEvent.kana = event.state.kana;
-            keyboardEvent.ascii = espBleUsageToAscii(
+            keyboardEvent.unicode = espBleUsageToUnicode(
               usage,
               pressed ? event.state.modifiers : previousModifiers,
               keyboardLayout_,
               event.state.capsLock,
               event.state.numLock);
+            keyboardEvent.ascii = keyboardEvent.unicode <= 0xff
+              ? static_cast<uint8_t>(keyboardEvent.unicode)
+              : 0;
             for (KeyboardCallback &callback : keyboardCallbacks)
             {
               if (callback)

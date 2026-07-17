@@ -1,17 +1,22 @@
 #ifndef ESP_BLE_KEYMAP_H
 #define ESP_BLE_KEYMAP_H
 
-// HID keyboard usage to 8-bit character conversion.
+// HID keyboard usage to character conversion.
 //
 // This header is Arduino-independent so the conversion logic and layout
 // tables can be verified by host-side unit tests (tests/unit/keymap).
 //
 // Behavior notes (EspUsbHost-compatible):
-// - Only the unshifted and Shift columns exist. AltGr (Right Alt) is not
-//   interpreted; characters that require AltGr on a layout are not produced.
-// - CapsLock is applied positionally to usages 0x04-0x1d (the QWERTY letter
-//   block), not per-character.
-// - Non-ASCII characters use ISO-8859-1 (Latin-1). Dead keys map to 0.
+// - Tables carry four columns per usage (unshifted, Shift, AltGr,
+//   AltGr+Shift) holding Unicode code points; Latin-1 is the first 256 code
+//   points, so legacy 8-bit values pass through unchanged.
+// - AltGr (Right Alt) selects the AltGr columns when the layout produces a
+//   character there; otherwise it falls back to unshifted/Shift.
+// - CapsLock toggles Shift only on real cased-letter keys: those whose Shift
+//   value is the Unicode uppercase of the unshifted value.
+// - espBleUsageToAscii() is the ISO-8859-1 convenience wrapper: it returns
+//   the low byte when the character fits in 8 bits, otherwise 0.
+// - Dead keys map to 0.
 
 #include <stddef.h>
 #include <stdint.h>
@@ -81,7 +86,7 @@ inline uint8_t espBleKeypadUsageToAscii(uint8_t usage, bool numLock)
   return 0;
 }
 
-inline uint8_t espBleUsageToAscii(
+inline uint16_t espBleUsageToUnicode(
   uint8_t usage,
   uint8_t modifiers,
   EspBleKeyboardLayout layout,
@@ -90,40 +95,39 @@ inline uint8_t espBleUsageToAscii(
 {
   constexpr uint8_t LeftShiftMask = 0x02;
   constexpr uint8_t RightShiftMask = 0x20;
+  constexpr uint8_t RightAltMask = 0x40; // AltGr
 
   if ((usage >= 0x54 && usage <= 0x63) || usage == 0x67)
   {
     return espBleKeypadUsageToAscii(usage, numLock);
   }
   const bool shifted = (modifiers & (LeftShiftMask | RightShiftMask)) != 0;
-  const bool effectiveShift =
-    usage >= 0x04 && usage <= 0x1d ? shifted != capsLock : shifted;
-  const uint8_t (*table)[2] = nullptr;
+  const uint16_t (*table)[4] = nullptr;
   size_t tableSize = 128;
   bool useEnUsTable = false;
   switch (layout)
   {
-  case EspBleKeyboardLayout::DaDk: table = KEYCODE_TO_ASCII_DA_DK; break;
-  case EspBleKeyboardLayout::DeDe: table = KEYCODE_TO_ASCII_DE_DE; break;
-  case EspBleKeyboardLayout::EnGb: table = KEYCODE_TO_ASCII_EN_GB; break;
-  case EspBleKeyboardLayout::EsEs: table = KEYCODE_TO_ASCII_ES_ES; break;
-  case EspBleKeyboardLayout::FiFi: table = KEYCODE_TO_ASCII_FI_FI; break;
-  case EspBleKeyboardLayout::FrCh: table = KEYCODE_TO_ASCII_FR_CH; break;
-  case EspBleKeyboardLayout::FrFr: table = KEYCODE_TO_ASCII_FR_FR; break;
-  case EspBleKeyboardLayout::HuHu: table = KEYCODE_TO_ASCII_HU_HU; break;
-  case EspBleKeyboardLayout::ItIt: table = KEYCODE_TO_ASCII_IT_IT; break;
+  case EspBleKeyboardLayout::DaDk: table = KEYCODE_TO_UNICODE_DA_DK; break;
+  case EspBleKeyboardLayout::DeDe: table = KEYCODE_TO_UNICODE_DE_DE; break;
+  case EspBleKeyboardLayout::EnGb: table = KEYCODE_TO_UNICODE_EN_GB; break;
+  case EspBleKeyboardLayout::EsEs: table = KEYCODE_TO_UNICODE_ES_ES; break;
+  case EspBleKeyboardLayout::FiFi: table = KEYCODE_TO_UNICODE_FI_FI; break;
+  case EspBleKeyboardLayout::FrCh: table = KEYCODE_TO_UNICODE_FR_CH; break;
+  case EspBleKeyboardLayout::FrFr: table = KEYCODE_TO_UNICODE_FR_FR; break;
+  case EspBleKeyboardLayout::HuHu: table = KEYCODE_TO_UNICODE_HU_HU; break;
+  case EspBleKeyboardLayout::ItIt: table = KEYCODE_TO_UNICODE_IT_IT; break;
   case EspBleKeyboardLayout::JaJp:
-    table = KEYCODE_TO_ASCII_JA_JP;
+    table = KEYCODE_TO_UNICODE_JA_JP;
     tableSize = 0x90;
     break;
-  case EspBleKeyboardLayout::NbNo: table = KEYCODE_TO_ASCII_NB_NO; break;
-  case EspBleKeyboardLayout::NlNl: table = KEYCODE_TO_ASCII_NL_NL; break;
+  case EspBleKeyboardLayout::NbNo: table = KEYCODE_TO_UNICODE_NB_NO; break;
+  case EspBleKeyboardLayout::NlNl: table = KEYCODE_TO_UNICODE_NL_NL; break;
   case EspBleKeyboardLayout::PtBr:
-    table = KEYCODE_TO_ASCII_PT_BR;
+    table = KEYCODE_TO_UNICODE_PT_BR;
     tableSize = 0x90;
     break;
-  case EspBleKeyboardLayout::PtPt: table = KEYCODE_TO_ASCII_PT_PT; break;
-  case EspBleKeyboardLayout::SvSe: table = KEYCODE_TO_ASCII_SV_SE; break;
+  case EspBleKeyboardLayout::PtPt: table = KEYCODE_TO_UNICODE_PT_PT; break;
+  case EspBleKeyboardLayout::SvSe: table = KEYCODE_TO_UNICODE_SV_SE; break;
   case EspBleKeyboardLayout::EnUs:
   case EspBleKeyboardLayout::KoKr:
   case EspBleKeyboardLayout::ZhCn:
@@ -132,15 +136,60 @@ inline uint8_t espBleUsageToAscii(
     break;
   default: return 0;
   }
+
   if (table != nullptr)
   {
-    return usage < tableSize ? table[usage][effectiveShift ? 1 : 0] : 0;
+    if (usage >= tableSize)
+    {
+      return 0;
+    }
+    // CapsLock toggles Shift only on real cased-letter keys: those whose
+    // Shift value is the Unicode uppercase of the unshifted value. This
+    // covers accented letters and letters outside the US a-z usage range
+    // (AZERTY m), and leaves symbols and German eszett unaffected.
+    bool effectiveShift = shifted;
+    if (capsLock)
+    {
+      const uint16_t base = table[usage][0];
+      uint16_t upper = base;
+      if (base >= 'a' && base <= 'z')
+      {
+        upper = base - 0x20;
+      }
+      else if (base >= 0xe0 && base <= 0xfe && base != 0xf7)
+      {
+        upper = base - 0x20; // Latin-1 lowercase -> uppercase
+      }
+      if (upper != base && upper == table[usage][1])
+      {
+        effectiveShift = !effectiveShift;
+      }
+    }
+    // AltGr selects the AltGr columns when the layout produces a character
+    // there; otherwise it falls back to unshifted/Shift.
+    if ((modifiers & RightAltMask) != 0)
+    {
+      if (shifted && table[usage][3] != 0)
+      {
+        return table[usage][3];
+      }
+      if (table[usage][2] != 0)
+      {
+        return table[usage][2];
+      }
+    }
+    return table[usage][effectiveShift ? 1 : 0];
   }
   if (!useEnUsTable)
   {
     return 0;
   }
 
+  // Built-in en-US path (also used for KoKr/ZhCn/ZhTw). The layout has no
+  // AltGr characters, and its cased letters are exactly usages 0x04-0x1d, so
+  // positional CapsLock is equivalent to the letter-pair rule above.
+  const bool effectiveShift =
+    usage >= 0x04 && usage <= 0x1d ? shifted != capsLock : shifted;
   if (usage >= 0x04 && usage <= 0x1d)
   {
     const uint8_t letter = static_cast<uint8_t>('a' + usage - 0x04);
@@ -178,6 +227,21 @@ inline uint8_t espBleUsageToAscii(
   case 0x38: return effectiveShift ? '?' : '/';
   default: return 0;
   }
+}
+
+// ISO-8859-1 / ASCII convenience wrapper: returns the low byte when the
+// produced character is representable in a single 8-bit code unit,
+// otherwise 0. Kept for the byte-oriented `ascii` field.
+inline uint8_t espBleUsageToAscii(
+  uint8_t usage,
+  uint8_t modifiers,
+  EspBleKeyboardLayout layout,
+  bool capsLock,
+  bool numLock)
+{
+  const uint16_t codePoint =
+    espBleUsageToUnicode(usage, modifiers, layout, capsLock, numLock);
+  return codePoint <= 0xff ? static_cast<uint8_t>(codePoint) : 0;
 }
 
 #endif // ESP_BLE_KEYMAP_H
