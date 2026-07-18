@@ -93,7 +93,7 @@ keyboard固有の`setKeyboardLeds()` / `setKeyboardLayout()` / `keyboardLayout()
 
 ## Phase 4: Host API（EspUsbHost流）
 
-- [ ] `ble.hidHost()`（`hidKeyboardHost()`から改名）に`onKeyboard`/`onKeyboardState`/`onMouse`/`onConsumerControl`/`onSystemControl`/`onGamepad`を集約。既存のlistener API（`add*Listener`/`removeListener`）も種別ごとに提供。
+- [ ] `ble.hidHost()`（`hidKeyboardHost()`から改名）に`onKeyboard`/`onKeyboardState`/`onMouse`/`onConsumerControl`/`onSystemControl`/`onGamepad`を集約。既存のlistener API（`add*Listener`/`removeListener`）も種別ごとに提供。**実装はEspUsbHostが先行実装した方式に倣う**（下記付録参照）: listener callbackを`std::shared_ptr`で保持し、配送時はshared ownershipをsnapshotする（`std::function`のコピーを避け、mutable callback状態を保持し、イベントごとの動的コピーもしない）。IDはHostインスタンス内でイベント種別をまたいで一意。registryはmutexで保護するがcallback実行中はロックしない。単一`on*`→listener登録順で配送し、callback内の追加・解除は次イベントから反映する。現行EspBleは配送のたびに`std::function`を配列コピーしている（`EspBle.cpp`の`dispatchPendingEvents`）ため、この点を改善する。
 - [ ] イベント型: `EspBleHidKeyboardEvent`（ascii/unicode/modifiers、既存踏襲）、`EspBleHidMouseEvent`（x/y/wheel/buttons/moved/buttonsChanged）、`EspBleHidConsumerControlEvent`（usage/pressed/released）、`EspBleHidSystemControlEvent`、`EspBleHidGamepadEvent`。いずれも`connectionId`＋`reportId`を持つ共通baseを継承。
 - [ ] `setKeyboardLeds`/`setKeyboardLayout`/`keyboardLayout`/`ready`は維持。
 - [ ] Peerテスト（赤→緑）: composite peer deviceに対しHostが各種別を受信できることを検証。
@@ -148,5 +148,12 @@ keyboard固有の`setKeyboardLeds()` / `setKeyboardLayout()` / `keyboardLayout()
 - **gamepadのfield分解**（`EspUsbHostHIDFieldValue`: usagePage/usage/logicalMin/Max/bitOffset/bitSize）: gamepadは形式が多様なので、EspBleのHost gamepadイベントもfield分解方式に倣う（Phase 4のgamepadイベント設計へ反映）。
 - **共通イベントbase**（device identity＋raw report bytes）: EspBleのHostイベントにも共通baseを設ける（Phase 0で反映済み）。
 - **custom / vendor HID経路**: 任意Report Descriptorの送受信入口（EspUsbDeviceHidCustom / EspUsbHost onHIDInput相当）をEspBleにも設けるか将来検討（初期は見送り可）。
+- **listener registryの実装方式（EspUsbHostで実装済み、逆輸入）**: EspUsbHostがlistener提案を消化し、6種のパース済みHID入力へ固定長listener registryを実装（実機peer test 56件PASS）。その際、EspBleの現行実装より洗練された方式を採用したので、EspBleはHID再設計のPhase 4でこれに揃える。具体的には:
+  1. 配送時に`std::function`をコピーせず**shared ownershipをsnapshot**し、解除との競合を防ぎつつmutable callback状態を保持、イベントごとの動的コピーも回避する。
+  2. IDはインスタンス内でイベント種別をまたいで一意。
+  3. registryはmutexで保護するがcallback実行中はロックしない。
+  4. 単一`on*` callback → listener登録順で配送する。
+  5. callback内の追加・解除は次イベントから反映する。
+  （現行EspBleは`dispatchPendingEvents`で配送のたびに`std::function`を固定長配列へコピーしており、上記1の点で劣る。）
 
 いずれのフィードバックも、各プロジェクトの事情があるため一方的に変更せず、依頼文でのすり合わせを前提とする。
