@@ -157,6 +157,10 @@ host上のunit test（`tests/unit/`）としてkeymap変換とHID Report Map par
 
 これらは採用決定ではありません。利用例、実装量、Peerテスト方法を確認し、1機能ずつ正式スコープへ移します。
 
+### 保留中のドキュメント作業メモ
+
+- **スキャン→接続→通信の入門ガイド（ドラフト）**: [GUIDE_SCAN_TO_COMM.draft.ja.md](GUIDE_SCAN_TO_COMM.draft.ja.md) に作成済み。BLE未経験者向けに主要APIの順番とUUID（フル/短縮形・絞り込みの理由と注意点）を丁寧に解説する教材。最終的な置き場所は examples/README.ja.md + README.md。**公開への昇格は0.2.0のUUID型（ラップ改善C）とscanフィルタhelper（同D）の確定後**（絞り込みコード断片がその2つのAPIに依存するため）。概念説明はAPI変更の影響を受けないので流用可能。
+
 ## 直近の推奨順序
 
 1. ✅ KeyBridge adapter試作を基準に`update()`、Discovery、LED writeの仕様を決める。
