@@ -26,7 +26,7 @@ HID HostとしてBLE keyboardへ接続します: HID Serviceをscanし、Pairing
 
 ## 主なAPI
 
-- `ble.hidKeyboardHost().discover(connectionId)` — 明示的なHID Discovery。再接続のたびに新しいConnection IDで呼び直します
+- `ble.hidHost().discover(connectionId)` — 明示的なHID Discovery。再接続のたびに新しいConnection IDで呼び直します
 - `keyboard.onDiscovered(callback)` — `success`、`reportId`、Battery情報、`detail`を持つ`EspBleHidKeyboardHostDiscovery`
 - `keyboard.onKeyboardState(callback)` — layout非依存の256-bit usage snapshot（`isDown()`、`wasPressed()`、`wasReleased()`）
 - `keyboard.setKeyboardLayout(layout)` / `keyboard.onKeyboard(callback)` — usage単位のpress/releaseイベント。`unicode`と`ascii`（ISO-8859-1）の変換値つき

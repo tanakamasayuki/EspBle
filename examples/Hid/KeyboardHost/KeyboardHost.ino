@@ -13,7 +13,7 @@ void setup()
 {
   Serial.begin(115200);
 
-  auto &keyboard = ble.hidKeyboardHost();
+  auto &keyboard = ble.hidHost();
   // en: Discovery-complete (now available) notification, including report ID and battery.
   // ja: Discovery完了（利用可能になった）通知。Report IDやBattery情報を含む。
   keyboard.onDiscovered([](const EspBleHidKeyboardHostDiscovery &result) {
@@ -49,6 +49,22 @@ void setup()
       Serial.printf("Key pressed: usage=0x%02x ascii=0x%02x\n", event.usage, event.ascii);
     }
   });
+  // en: The same Host object dispatches every supported composite-HID report.
+  // ja: 同じHost objectが複合HIDの全対応Reportを配送する。
+  keyboard.onMouse([](const EspBleHidMouseEvent &event) {
+    Serial.printf("Mouse: x=%d y=%d wheel=%d buttons=0x%02x\n",
+      event.x, event.y, event.wheel, event.buttons);
+  });
+  keyboard.onConsumerControl([](const EspBleHidConsumerControlEvent &event) {
+    Serial.printf("Consumer: usage=0x%04x pressed=%u\n", event.usage, event.pressed ? 1 : 0);
+  });
+  keyboard.onSystemControl([](const EspBleHidSystemControlEvent &event) {
+    Serial.printf("System: usage=0x%02x pressed=%u\n", event.usage, event.pressed ? 1 : 0);
+  });
+  keyboard.onGamepad([](const EspBleHidGamepadEvent &event) {
+    Serial.printf("Gamepad: fields=%u changed=%u\n",
+      static_cast<unsigned>(event.fieldCount), event.changed ? 1 : 0);
+  });
 
   EspBleConfig config;
   config.deviceName = "EspBle Keyboard Host";
@@ -72,7 +88,7 @@ void setup()
   ble.onSecurityChanged([](const EspBleSecurityChanged &event) {
     if (event.success)
     {
-      ble.hidKeyboardHost().discover(event.connection.id);
+      ble.hidHost().discover(event.connection.id);
     }
   });
   ble.onDisconnected([](const EspBleConnection &) {
@@ -101,13 +117,13 @@ void loop()
     {
       // en: turn on the Caps Lock LED (fire-and-forget Write Without Response)
       // ja: Caps Lock LED点灯（Write Without Responseのfire-and-forget）
-      ble.hidKeyboardHost().setKeyboardLeds(
+      ble.hidHost().setKeyboardLeds(
         keyboardConnectionId, false, true, false);
     }
     else if (command == '0')
     {
       // en: turn off all LEDs / ja: 全LED消灯
-      ble.hidKeyboardHost().setKeyboardLeds(
+      ble.hidHost().setKeyboardLeds(
         keyboardConnectionId, false, false, false);
     }
   }

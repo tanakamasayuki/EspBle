@@ -16,8 +16,8 @@ ESP32 Arduino向けの汎用Bluetooth Low Energyライブラリです。**Arduin
 - 汎用GATT Server / Client: 既知UUID Discovery、Read、Write、Notify / Indicate、購読
 - MTU交換、Connection snapshot、payload上限検証
 - Security: Just Worksと静的passkey Pairing（LE Secure Connections）、Bonding、暗号化/認証Characteristic permission
-- HID Keyboard Device: HID / Device Information / Battery Serviceを合成した固定6KRO Report Protocol keyboard
-- HID Keyboard Host: Report Map解析、Input購読、256-bit usage snapshot、EspUsbHost互換19 layout（Unicode変換）のキーイベント、LED出力
+- 複合HID Device: keyboard、mouse、consumer/system control、gamepadを1つのHID / Device Information / Battery Service群へ合成
+- HID Host: 全対応Reportを横断Discoveryして種別別eventへ配送。keyboardは256-bit usage snapshot、19 layout、LED出力に対応
 - ユーザーcallbackはすべてloop task上の`ble.update()`から配送されます（BLE stack taskからは呼ばれません）
 
 上記はすべてESP32-S3 2台の自動Peerテストとhost上のunit testで検証しています。詳細は[テスト計画](tests/TEST_PLAN.ja.md)を参照してください。
@@ -71,8 +71,8 @@ void loop() {
 - [要件](docs/REQUIREMENTS.ja.md)
 - [コア設計](docs/CORE_DESIGN.ja.md)
 - [API設計](docs/API_DESIGN.ja.md)
-- [HID Keyboard Device仕様](docs/HID_KEYBOARD_DEVICE_SPEC.ja.md)
-- [HID Keyboard Host仕様](docs/HID_KEYBOARD_HOST_SPEC.ja.md)
+- [HID Device仕様](docs/HID_DEVICE_SPEC.ja.md)
+- [HID Host仕様](docs/HID_HOST_SPEC.ja.md)
 - [用語と命名規則](docs/TERMINOLOGY.ja.md)
 - [設計決定](docs/DECISIONS.ja.md)
 - [機能対応マトリクス](docs/FEATURE_MATRIX.ja.md)

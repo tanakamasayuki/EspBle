@@ -87,18 +87,18 @@
 ## HID Keyboard Deviceスパイクで確認済み（公開API確定前）
 
 1. 最初のHID DeviceはReport Protocolの固定6KRO Keyboardとし、Boot Protocol、NKRO、Consumer Control、Mouse、複合HIDを含めない。
-2. `ble.hidKeyboardDevice()`からprofile handleを取得し、`begin()`前に構成する。Input APIはmodifierと最大6 keyを持つ値型とし、Report IDとreserved byteのwire処理をprofileへ隠す。
+2. `ble.hidKeyboard()`からprofile handleを取得し、`begin()`前に構成する。Input APIはmodifierと最大6 keyを持つ値型とし、Report IDとreserved byteのwire処理をprofileへ隠す。
 3. HID Service、Device Information Service、Battery Serviceを同じGATT Serverへ登録し、HID UUIDとKeyboard appearanceをAdvertisingへ自動追加する。
 4. Report MapとReport ReferenceにはconfigurableなReport IDを持たせるが、GATT characteristic payload自体はReport IDを除いた8-byte Input / 1-byte Outputとする。
 5. Output ReportはConnection ID付きの値へcopyし、現在は`ble.update()` contextで配送する。
 6. Arduino-ESP32 3.3.10同梱`BLEService` wrapperは同一Service内のCharacteristicをUUIDで一意に扱うため、HOGPに必要なInput/Output 2個の`0x2A4D`を登録できない。内部だけ同梱NimBLEのGATT定義APIを使い、別attributeとして登録する。
 7. `hid_keyboard_device` Peerテストでは親側を同梱BLE API直接実装のHID Host、`peer_device/`側をEspBle HID Keyboard Deviceとし、Report Map、Report Reference、Battery Read、Input Notification、LED Output Write、Pairing/Bondingを確認済み。
 8. securityを有効にした場合、HOGPのSecurity Mode 1 Level 2に従いHID Serviceの全attribute（Report Map、Report、Report Reference、HID Information、Control Point）へ暗号化必須のpermissionを付与する。加えてInput Reportは暗号化されていないlinkへは送信しない。Device Information / Battery Serviceは識別用途のため暗号化必須にしない（`hid_security` Peerテストで検証）。
-9. Input Report / Battery Levelの通知は、GAP subscribeイベントから追跡したCCCD購読状態を持つ接続にのみ送信する。購読者が1つもない場合、`sendInputReport()`は失敗を返し、`setBatteryLevel()`は値更新のみ行う（`hid_robustness` Peerテストで検証）。
+9. Input Report / Battery Levelの通知は、GAP subscribeイベントから追跡したCCCD購読状態を持つ接続にのみ送信する。購読者が1つもない場合、`sendReport()`は失敗を返し、`setBatteryLevel()`は値更新のみ行う（`hid_robustness` Peerテストで検証）。
 
 ## HID Keyboard Hostスパイクで確認済み（公開API確定前）
 
-1. Scan/ConnectはBLE共通APIに残し、接続後に`hidKeyboardHost().discover(connectionId)`でHID固有のDiscoveryと購読を開始する。
+1. Scan/ConnectはBLE共通APIに残し、接続後に`hidHost().discover(connectionId)`でHID固有のDiscoveryと購読を開始する。
 2. Host入力境界は文字イベントではなく、Connection ID、Report ID、modifier、256-bit usage現在値/変化値を持つsnapshotとする。modifier usagesもbitmapへ含め、EspUsbHostとESP32KeyBridgeの入力境界へ揃える。
 3. 切断時はheld usageの全release snapshotをloop contextへ配送し、bridgeでstuck keyを残さない。
 4. 初期Report Map parserはmodifier + 6-key arrayの8-byte reportだけを受理する。NKROや未知の複合reportを長さだけで推測しない。
@@ -117,6 +117,15 @@
 17. 再接続時は新しいConnection IDに対してSecurity完了後に再度`discover()`が必要で、Discovery完了後にinputをconnectedとして扱う。自動再接続・自動Discoveryは今回のadapter境界には含めない。HID Discoveryの自動化optionは初期リリースに含めず、明示`discover()`を維持する。security有効構成では`onSecurityChanged`成功後に呼ぶことを規範とし、HOST_SPECとexampleを揃える。
 18. `onKeyboard()`は同一report内の変化をpress（usage昇順）→release（usage昇順）の順で配送する仕様とする。一般的なOS Hostのchord処理（release先行）とは順序が異なるが、bridge用途の主境界はusage snapshot（`EspBleHidKeyboardState`）であり影響しない。順序に依存する用途はraw usage境界を使う。
 19. HID Host listener registryは、EspUsbHostが先行実装した方式（実機peer test 56件PASS）に倣ってHID再設計（[HID_REDESIGN_PLAN.ja.md](HID_REDESIGN_PLAN.ja.md) Phase 4）で実装する。(1) 配送時に`std::function`をコピーせずshared ownershipをsnapshotし、解除との競合を防ぎつつmutable callback状態を保持、イベントごとの動的コピーも回避する。(2) IDはHostインスタンス内でイベント種別をまたいで一意。(3) registryはmutexで保護するがcallback実行中はロックしない。(4) 単一`on*`→listener登録順で配送。(5) callback内の追加・解除は次イベントから反映。現行の`dispatchPendingEvents`は配送のたびに`std::function`を固定長配列へコピーしており、この点を置き換える（#10のsnapshot方針を具体化・改善したもの）。
+
+## 複合HID再設計で確定（2026-07-19）
+
+1. Device入口は`hidKeyboard()` / `hidMouse()` / `hidConsumerControl()` / `hidSystemControl()` / `hidGamepad()`とし、構成したprofileを1つのHID Serviceへ合成する。
+2. Report IDはEspUsbDevice/EspUsbHostと同じ固定値（keyboard=1、mouse=2、gamepad=3、consumer=4、system=5）とし、利用者configから除く。
+3. Host入口は`hidHost()`へ集約し、Report Mapで識別した全対応Input Reportを購読して種別別callbackへ配送する。
+4. Host eventは`connectionId`、`reportId`、raw bytesを持つ`EspBleHidReport`を共通baseとする。gamepadは`EspBleHidFieldValue`も配送する。
+5. Device共通マネージャがHID/DIS/Battery登録、Report Map合成、Report characteristic、Report ID別CCCD、暗号化permission、notify routingを一元管理する。
+6. Host listenerはshared ownershipをmutex下でsnapshotし、mutexを解放してから単一callback→listener登録順に実行する。旧keyboard専用型・入口は残さない。
 
 ## 優先順位候補
 

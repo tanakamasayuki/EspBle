@@ -8,8 +8,8 @@ void setup()
   Serial.begin(115200);
   delay(500);
 
-  auto &keyboard = ble.hidKeyboardDevice();
-  EspBleHidKeyboardDeviceConfig keyboardConfig;
+  auto &keyboard = ble.hidKeyboard();
+  EspBleHidKeyboardConfig keyboardConfig;
   keyboardConfig.manufacturer = "EspBle Robustness Peer";
   keyboardConfig.vendorId = 0x303a;
   keyboardConfig.productId = 0x4004;
@@ -56,7 +56,7 @@ void loop()
       report.modifiers = EspBleHidKeyboardInputReport::LeftShift;
       report.keys[0] = 0x04;
       Serial.printf("DEVICE_INPUT_SENT success=%u error=%s\n",
-        ble.hidKeyboardDevice().sendInputReport(report) ? 1 : 0,
+        ble.hidKeyboard().sendReport(report) ? 1 : 0,
         ble.lastErrorName());
     }
     else if (command == 'o')
@@ -69,7 +69,7 @@ void loop()
         report.keys[index] = 0x01;
       }
       Serial.printf("DEVICE_ROLLOVER_SENT success=%u\n",
-        ble.hidKeyboardDevice().sendInputReport(report) ? 1 : 0);
+        ble.hidKeyboard().sendReport(report) ? 1 : 0);
     }
     else if (command == 'f')
     {
@@ -85,7 +85,7 @@ void loop()
         {
           report.keys[1] = 0x05;
         }
-        if (ble.hidKeyboardDevice().sendInputReport(report))
+        if (ble.hidKeyboard().sendReport(report))
         {
           ++sent;
         }
@@ -96,7 +96,7 @@ void loop()
     else if (command == 'r')
     {
       Serial.printf("DEVICE_RELEASE_SENT success=%u\n",
-        ble.hidKeyboardDevice().releaseAll() ? 1 : 0);
+        ble.hidKeyboard().releaseAll() ? 1 : 0);
     }
     else if (command == 'd')
     {

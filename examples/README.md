@@ -34,8 +34,8 @@ GATT (Generic Attribute Profile) is the data model used after connecting. Data i
 
 HID over GATT (HOGP) carries the same HID model as USB keyboards/mice over BLE. EspBle provides both sides:
 
-- **HID Keyboard Device**: the ESP32 becomes a BLE keyboard that PCs and phones see as a normal keyboard.
-- **HID Keyboard Host**: the ESP32 hosts a commercial BLE keyboard and delivers input both as raw usages (physical keys) and as layout-converted characters (Unicode/ASCII, 19 layouts).
+- **HID Device**: keyboard, mouse, consumer/system control, and gamepad profiles can be composed in one HID Service.
+- **HID Host**: one `hidHost()` receives all supported report types; keyboard input is also layout-converted to Unicode/ASCII (19 layouts).
 
 ### Security — pairing, bonding, encryption
 
@@ -75,6 +75,9 @@ arduino-cli compile --profile esp32s3 examples/<path>
 | [Security/StaticPasskeyClient](Security/StaticPasskeyClient/) | Central | Passkey input side: `requestSecurity()` and authenticated reads |
 | [Hid/KeyboardDevice](Hid/KeyboardDevice/) | HID Device | BLE keyboard typing via Serial commands, LED report reception |
 | [Hid/KeyboardHost](Hid/KeyboardHost/) | HID Host | Connect to a BLE keyboard, print keys, write LEDs |
+| [Hid/Mouse](Hid/Mouse/) | HID Device | Five-button relative mouse |
+| [Hid/ConsumerControl](Hid/ConsumerControl/) | HID Device | Volume and play/pause media keys |
+| [Hid/CompositeKeyboardMouse](Hid/CompositeKeyboardMouse/) | HID Device | One composite HID Service with keyboard and mouse reports |
 | [Info/ScanDump](Info/ScanDump/) | Diagnostics | Dump every advertisement field (UUIDs, manufacturer data, …) |
 | [Info/ConnectionInspector](Info/ConnectionInspector/) | Diagnostics | Interactively connect and dump MTU, security state, bonds, counters |
 

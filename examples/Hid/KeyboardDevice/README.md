@@ -26,9 +26,9 @@ Turns the board into a BLE HID keyboard (HID over GATT, report protocol, fixed 6
 
 ## Key APIs
 
-- `ble.hidKeyboardDevice().configure(config)` — must be called before `begin()`; `EspBleHidKeyboardDeviceConfig` covers manufacturer, PnP ID, country code, report ID, and initial battery level
+- `ble.hidKeyboard().configure(config)` — must be called before `begin()`; `EspBleHidKeyboardConfig` covers manufacturer, PnP ID, country code, report ID, and initial battery level
 - `EspBleHidKeyboardInputReport` — `modifiers` bitmask (e.g. `LeftShift`) and up to 6 HID usages in `keys[]`
-- `keyboard.sendInputReport(report)` / `keyboard.releaseAll()`
+- `keyboard.sendReport(report)` / `keyboard.releaseAll()`
 - `keyboard.onOutputReport(callback)` — LED state from the host (`numLock()`, `capsLock()`, `scrollLock()`)
 - `keyboard.setBatteryLevel(0..100)` — update the Battery Service level
 

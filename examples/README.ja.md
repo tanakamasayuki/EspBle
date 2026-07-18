@@ -34,8 +34,8 @@ GATT（Generic Attribute Profile）は接続後のデータ構造です。デー
 
 HID over GATT（HOGP）は、USBキーボード・マウスと同じHIDの仕組みをBLEに載せた標準プロファイルです。EspBleは次の両方を提供します。
 
-- **HID Keyboard Device**: ESP32をBLEキーボードにする。PC/スマホからは普通のキーボードに見える。
-- **HID Keyboard Host**: ESP32が市販BLEキーボードの親機になる。キー入力をraw usage（物理キー番号）と、レイアウト変換した文字（Unicode/ASCII、19レイアウト対応）の両方で受け取れる。
+- **HID Device**: keyboard、mouse、consumer/system control、gamepadを1つのHID Serviceへ複合できます。
+- **HID Host**: 1つの`hidHost()`で全対応Reportを受信し、keyboardはUnicode/ASCIIへの19レイアウト変換にも対応します。
 
 ### Security — Pairing・Bonding・暗号化
 
@@ -75,6 +75,9 @@ arduino-cli compile --profile esp32s3 examples/<path>
 | [Security/StaticPasskeyClient](Security/StaticPasskeyClient/) | Central | passkey入力側。`requestSecurity()`と認証必須Read |
 | [Hid/KeyboardDevice](Hid/KeyboardDevice/) | HID Device | SerialコマンドでキーをタイプするBLE keyboard。LED report受信 |
 | [Hid/KeyboardHost](Hid/KeyboardHost/) | HID Host | BLE keyboardへ接続してキー表示、LED書込み |
+| [Hid/Mouse](Hid/Mouse/) | HID Device | 5ボタン相対mouse |
+| [Hid/ConsumerControl](Hid/ConsumerControl/) | HID Device | 音量・再生/一時停止media key |
+| [Hid/CompositeKeyboardMouse](Hid/CompositeKeyboardMouse/) | HID Device | keyboardとmouseを1つのHID Serviceへ複合 |
 | [Info/ScanDump](Info/ScanDump/) | 診断 | advertisementの全フィールド（UUID・Manufacturer Data等）をダンプ |
 | [Info/ConnectionInspector](Info/ConnectionInspector/) | 診断 | 対話式に接続してMTU・security状態・Bond・カウンタをダンプ |
 

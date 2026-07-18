@@ -90,6 +90,17 @@ const uint8_t mouseMap[] = {
   0x75, 0x08, 0x95, 0x02, 0x81, 0x06,
   0xc0, 0xc0,
 };
+
+const uint8_t otherTypesMap[] = {
+  // Mouse ID 2.
+  0x05,0x01, 0x09,0x02, 0xa1,0x01, 0x85,0x02, 0x75,0x08, 0x95,0x04, 0x81,0x02, 0xc0,
+  // Gamepad ID 3.
+  0x05,0x01, 0x09,0x05, 0xa1,0x01, 0x85,0x03, 0x75,0x08, 0x95,0x0b, 0x81,0x02, 0xc0,
+  // Consumer Control ID 4.
+  0x05,0x0c, 0x09,0x01, 0xa1,0x01, 0x85,0x04, 0x75,0x10, 0x95,0x01, 0x81,0x00, 0xc0,
+  // System Control ID 5.
+  0x05,0x01, 0x09,0x80, 0xa1,0x01, 0x85,0x05, 0x75,0x08, 0x95,0x01, 0x81,0x00, 0xc0,
+};
 } // namespace
 
 int main()
@@ -130,6 +141,27 @@ int main()
   {
     const EspBleHidKeyboardReportMapInfo info = espBleParseKeyboardReportMap(nullptr, 0);
     check("empty map not a keyboard", !info.keyboardFound);
+  }
+  {
+    const EspBleHidReportMapInfo info =
+      espBleParseHidReportMap(consumerComboMap, sizeof(consumerComboMap));
+    check("generic combo has two reports", info.count == 2);
+    check("generic combo keyboard", info.kindForReportId(1) == EspBleHidReportKind::Keyboard);
+    check("generic combo consumer", info.kindForReportId(2) == EspBleHidReportKind::ConsumerControl);
+  }
+  {
+    const EspBleHidReportMapInfo info = espBleParseHidReportMap(mouseMap, sizeof(mouseMap));
+    check("generic mouse found", info.count == 1 &&
+      info.entries[0].kind == EspBleHidReportKind::Mouse && !info.entries[0].hasReportId);
+  }
+  {
+    const EspBleHidReportMapInfo info =
+      espBleParseHidReportMap(otherTypesMap, sizeof(otherTypesMap));
+    check("generic other types count", info.count == 4);
+    check("generic mouse id", info.kindForReportId(2) == EspBleHidReportKind::Mouse);
+    check("generic gamepad id", info.kindForReportId(3) == EspBleHidReportKind::Gamepad);
+    check("generic consumer id", info.kindForReportId(4) == EspBleHidReportKind::ConsumerControl);
+    check("generic system id", info.kindForReportId(5) == EspBleHidReportKind::SystemControl);
   }
   {
     // Truncated mid-item: must not read out of bounds or crash.

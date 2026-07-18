@@ -26,9 +26,9 @@
 
 ## 主なAPI
 
-- `ble.hidKeyboardDevice().configure(config)` — `begin()`前に呼ぶ必要があります。`EspBleHidKeyboardDeviceConfig`でmanufacturer、PnP ID、country code、Report ID、初期Battery Levelを設定できます
+- `ble.hidKeyboard().configure(config)` — `begin()`前に呼ぶ必要があります。`EspBleHidKeyboardConfig`でmanufacturer、PnP ID、country code、Report ID、初期Battery Levelを設定できます
 - `EspBleHidKeyboardInputReport` — `modifiers` bitmask（例: `LeftShift`）と最大6個のHID usageを持つ`keys[]`
-- `keyboard.sendInputReport(report)` / `keyboard.releaseAll()`
+- `keyboard.sendReport(report)` / `keyboard.releaseAll()`
 - `keyboard.onOutputReport(callback)` — HostからのLED状態（`numLock()`、`capsLock()`、`scrollLock()`）
 - `keyboard.setBatteryLevel(0..100)` — Battery Serviceのlevel更新
 

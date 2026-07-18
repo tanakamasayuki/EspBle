@@ -26,6 +26,28 @@ def test_hid_keyboard_host_discovery_state_and_leds(dut, peers):
         timeout=20,
     )
 
+    keyboard_device.write("o")
+    keyboard_device.expect_exact("DEVICE_MOUSE_SENT success=1", timeout=10)
+    dut.expect_exact(
+        "HOST_MOUSE x=-9 y=6 wheel=-1 buttons=2 moved=1 changed=1 context=loop",
+        timeout=20,
+    )
+
+    keyboard_device.write("c")
+    keyboard_device.expect_exact("DEVICE_CONSUMER_SENT success=1", timeout=10)
+    dut.expect_exact("HOST_CONSUMER usage=205 pressed=1 released=0 context=loop", timeout=20)
+    keyboard_device.write("u")
+    keyboard_device.expect_exact("DEVICE_CONSUMER_RELEASED success=1", timeout=10)
+    dut.expect_exact("HOST_CONSUMER usage=0 pressed=0 released=1 context=loop", timeout=20)
+
+    keyboard_device.write("s")
+    keyboard_device.expect_exact("DEVICE_SYSTEM_SENT success=1", timeout=10)
+    dut.expect_exact("HOST_SYSTEM usage=3 pressed=1 released=0 context=loop", timeout=20)
+
+    keyboard_device.write("p")
+    keyboard_device.expect_exact("DEVICE_GAMEPAD_SENT success=1", timeout=10)
+    dut.expect_exact("HOST_GAMEPAD fields=8 changed=1 x=10 context=loop", timeout=20)
+
     dut.write("e")
     dut.expect_exact("HOST_LAYOUT en-US", timeout=10)
     keyboard_device.write("t")

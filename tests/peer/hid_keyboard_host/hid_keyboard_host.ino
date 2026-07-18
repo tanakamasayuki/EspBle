@@ -17,7 +17,7 @@ void setup()
   delay(500);
   loopTask = xTaskGetCurrentTaskHandle();
 
-  auto &keyboard = ble.hidKeyboardHost();
+  auto &keyboard = ble.hidHost();
   keyboard.onDiscovered([](const EspBleHidKeyboardHostDiscovery &result) {
     Serial.printf(
       "HOST_DISCOVERED success=%u report=%u country_present=%u country=%u output=%u battery_present=%u battery=%u context=%s detail=%s\n",
@@ -51,6 +51,24 @@ void setup()
       event.modifiers,
       callbackContext());
   });
+  keyboard.onMouse([](const EspBleHidMouseEvent &event) {
+    Serial.printf("HOST_MOUSE x=%d y=%d wheel=%d buttons=%u moved=%u changed=%u context=%s\n",
+      event.x, event.y, event.wheel, event.buttons, event.moved ? 1 : 0,
+      event.buttonsChanged ? 1 : 0, callbackContext());
+  });
+  keyboard.onConsumerControl([](const EspBleHidConsumerControlEvent &event) {
+    Serial.printf("HOST_CONSUMER usage=%u pressed=%u released=%u context=%s\n",
+      event.usage, event.pressed ? 1 : 0, event.released ? 1 : 0, callbackContext());
+  });
+  keyboard.onSystemControl([](const EspBleHidSystemControlEvent &event) {
+    Serial.printf("HOST_SYSTEM usage=%u pressed=%u released=%u context=%s\n",
+      event.usage, event.pressed ? 1 : 0, event.released ? 1 : 0, callbackContext());
+  });
+  keyboard.onGamepad([](const EspBleHidGamepadEvent &event) {
+    Serial.printf("HOST_GAMEPAD fields=%u changed=%u x=%ld context=%s\n",
+      static_cast<unsigned>(event.fieldCount), event.changed ? 1 : 0,
+      event.fieldCount > 0 ? static_cast<long>(event.fields[0].value) : 0L, callbackContext());
+  });
 
   EspBleConfig config;
   config.deviceName = "EspBle HID Host Test";
@@ -75,7 +93,7 @@ void setup()
     {
       Serial.printf(
         "HOST_DISCOVERY_STARTED success=%u\n",
-        ble.hidKeyboardHost().discover(event.connection.id) ? 1 : 0);
+        ble.hidHost().discover(event.connection.id) ? 1 : 0);
     }
   });
   ble.onDisconnected([](const EspBleConnection &connection) {
@@ -111,7 +129,7 @@ void loop()
     {
       Serial.printf(
         "HOST_LEDS_WRITTEN success=%u\n",
-        ble.hidKeyboardHost().setKeyboardLeds(
+        ble.hidHost().setKeyboardLeds(
           keyboardConnectionId, true, true, false) ? 1 : 0);
     }
     else if (command == 'L')
@@ -120,7 +138,7 @@ void loop()
       const uint32_t startMs = millis();
       for (int i = 0; i < 10; ++i)
       {
-        if (ble.hidKeyboardHost().setKeyboardLeds(
+        if (ble.hidHost().setKeyboardLeds(
               keyboardConnectionId, true, true, false))
         {
           ++success;
@@ -134,27 +152,27 @@ void loop()
     }
     else if (command == 'e')
     {
-      ble.hidKeyboardHost().setKeyboardLayout(EspBleKeyboardLayout::EnUs);
+      ble.hidHost().setKeyboardLayout(EspBleKeyboardLayout::EnUs);
       Serial.println("HOST_LAYOUT en-US");
     }
     else if (command == 'j')
     {
-      ble.hidKeyboardHost().setKeyboardLayout(EspBleKeyboardLayout::JaJp);
+      ble.hidHost().setKeyboardLayout(EspBleKeyboardLayout::JaJp);
       Serial.println("HOST_LAYOUT ja-JP");
     }
     else if (command == 'g')
     {
-      ble.hidKeyboardHost().setKeyboardLayout(EspBleKeyboardLayout::DeDe);
+      ble.hidHost().setKeyboardLayout(EspBleKeyboardLayout::DeDe);
       Serial.println("HOST_LAYOUT de-DE");
     }
     else if (command == 'f')
     {
-      ble.hidKeyboardHost().setKeyboardLayout(EspBleKeyboardLayout::FrFr);
+      ble.hidHost().setKeyboardLayout(EspBleKeyboardLayout::FrFr);
       Serial.println("HOST_LAYOUT fr-FR");
     }
     else if (command == 'b')
     {
-      ble.hidKeyboardHost().setKeyboardLayout(EspBleKeyboardLayout::EnGb);
+      ble.hidHost().setKeyboardLayout(EspBleKeyboardLayout::EnGb);
       Serial.println("HOST_LAYOUT en-GB");
     }
     else if (command == 'd')

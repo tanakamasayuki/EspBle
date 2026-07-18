@@ -10,8 +10,8 @@ void setup()
   Serial.begin(115200);
   delay(500);
 
-  auto &keyboard = ble.hidKeyboardDevice();
-  EspBleHidKeyboardDeviceConfig keyboardConfig;
+  auto &keyboard = ble.hidKeyboard();
+  EspBleHidKeyboardConfig keyboardConfig;
   keyboardConfig.manufacturer = "EspBle Lifecycle Peer";
   keyboardConfig.vendorId = 0x303a;
   keyboardConfig.productId = 0x4003;
@@ -61,7 +61,7 @@ void loop()
       unsigned sent = 0;
       for (uint8_t index = 0; index < 10; ++index)
       {
-        if (ble.hidKeyboardDevice().setBatteryLevel(40 + index))
+        if (ble.hidKeyboard().setBatteryLevel(40 + index))
         {
           ++sent;
         }

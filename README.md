@@ -16,8 +16,8 @@ The public API is not stable yet: this is the trial stage ahead of the first rel
 - Generic GATT server/client: known-UUID discovery, read, write, notify/indicate, subscriptions
 - MTU exchange, connection snapshots, payload-limit validation
 - Security: Just Works and static-passkey pairing (LE Secure Connections), bonding, encrypted/authenticated characteristic permissions
-- HID Keyboard Device: fixed 6KRO report-protocol keyboard with HID / Device Information / Battery services
-- HID Keyboard Host: report-map parsing, input subscription, 256-bit usage snapshots, key events with 19 EspUsbHost-compatible keyboard layouts (Unicode conversion), LED output
+- Composite HID Device: keyboard, mouse, consumer/system control, and gamepad profiles in one HID / Device Information / Battery service set
+- HID Host: cross-report discovery and events for all supported types; keyboard includes 256-bit usage snapshots, 19 layouts, and LED output
 - All user callbacks are delivered from `ble.update()` on the loop task — never from the BLE stack task
 
 Everything above is verified with an automated two-board ESP32-S3 peer test suite plus host-side unit tests; see [tests/TEST_PLAN.ja.md](tests/TEST_PLAN.ja.md).
@@ -73,8 +73,8 @@ The design documents are currently written in Japanese.
 - [Requirements](docs/REQUIREMENTS.ja.md)
 - [Core design](docs/CORE_DESIGN.ja.md)
 - [API design](docs/API_DESIGN.ja.md)
-- [HID Keyboard Device specification](docs/HID_KEYBOARD_DEVICE_SPEC.ja.md)
-- [HID Keyboard Host specification](docs/HID_KEYBOARD_HOST_SPEC.ja.md)
+- [HID Device specification](docs/HID_DEVICE_SPEC.ja.md)
+- [HID Host specification](docs/HID_HOST_SPEC.ja.md)
 - [Terminology and naming rules](docs/TERMINOLOGY.ja.md)
 - [Design decision ledger](docs/DECISIONS.ja.md)
 - [Feature support matrix](docs/FEATURE_MATRIX.ja.md)

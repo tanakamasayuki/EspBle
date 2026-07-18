@@ -24,7 +24,7 @@ The design documents are written in Japanese. This guide lists them and shows th
 | Public API design principles | [API_DESIGN.ja.md](API_DESIGN.ja.md) |
 | Terminology and naming rules | [TERMINOLOGY.ja.md](TERMINOLOGY.ja.md) |
 | Settled decisions and their rationale | [DECISIONS.ja.md](DECISIONS.ja.md) |
-| HID Keyboard spec (Device / Host) | [HID_KEYBOARD_DEVICE_SPEC.ja.md](HID_KEYBOARD_DEVICE_SPEC.ja.md) / [HID_KEYBOARD_HOST_SPEC.ja.md](HID_KEYBOARD_HOST_SPEC.ja.md) |
+| HID Keyboard spec (Device / Host) | [HID_DEVICE_SPEC.ja.md](HID_DEVICE_SPEC.ja.md) / [HID_HOST_SPEC.ja.md](HID_HOST_SPEC.ja.md) |
 | The in-progress HID redesign plan | [HID_REDESIGN_PLAN.ja.md](HID_REDESIGN_PLAN.ja.md) |
 | Overall development phases | [DEVELOPMENT_PLAN.ja.md](DEVELOPMENT_PLAN.ja.md) |
 | Test strategy and coverage | [../tests/TEST_PLAN.ja.md](../tests/TEST_PLAN.ja.md) |

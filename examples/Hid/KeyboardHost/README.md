@@ -26,7 +26,7 @@ Connects to a BLE keyboard as a HID host: scans for the HID service, pairs, disc
 
 ## Key APIs
 
-- `ble.hidKeyboardHost().discover(connectionId)` — explicit HID discovery; call it again with the new connection ID after every reconnect
+- `ble.hidHost().discover(connectionId)` — explicit HID discovery; call it again with the new connection ID after every reconnect
 - `keyboard.onDiscovered(callback)` — `EspBleHidKeyboardHostDiscovery` with `success`, `reportId`, battery info, and `detail`
 - `keyboard.onKeyboardState(callback)` — layout-independent 256-bit usage snapshot (`isDown()`, `wasPressed()`, `wasReleased()`)
 - `keyboard.setKeyboardLayout(layout)` / `keyboard.onKeyboard(callback)` — per-usage press/release events with `unicode` and `ascii` (ISO-8859-1) conversion

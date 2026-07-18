@@ -11,7 +11,7 @@ void setup()
   Serial.begin(115200);
   delay(500);
 
-  ble.hidKeyboardHost().onDiscovered([](const EspBleHidKeyboardHostDiscovery &result) {
+  ble.hidHost().onDiscovered([](const EspBleHidKeyboardHostDiscovery &result) {
     Serial.printf(
       "HOST_DISCOVERED success=%u report=%u output=%u battery=%u detail=%s\n",
       result.success ? 1 : 0,
@@ -20,7 +20,7 @@ void setup()
       result.hasBatteryLevel ? 1 : 0,
       result.detail.c_str());
   });
-  ble.hidKeyboardHost().onKeyboardState([](const EspBleHidKeyboardState &state) {
+  ble.hidHost().onKeyboardState([](const EspBleHidKeyboardState &state) {
     ++stateEventCount;
     if (state.wasReleased(0x04))
     {
@@ -76,7 +76,7 @@ void loop()
     {
       Serial.printf(
         "HOST_DISCOVERY_STARTED success=%u\n",
-        ble.hidKeyboardHost().discover(connectionId) ? 1 : 0);
+        ble.hidHost().discover(connectionId) ? 1 : 0);
     }
     else if (command == 'q')
     {
@@ -85,8 +85,8 @@ void loop()
         stateEventCount,
         aReleaseCount,
         static_cast<unsigned>(ble.connectionCount()),
-        ble.hidKeyboardHost().ready(lastConnectionId) ? 1 : 0,
-        static_cast<unsigned>(ble.hidKeyboardHost().invalidInputReportCount()));
+        ble.hidHost().ready(lastConnectionId) ? 1 : 0,
+        static_cast<unsigned>(ble.hidHost().invalidInputReportCount()));
     }
     else if (command == 'd')
     {

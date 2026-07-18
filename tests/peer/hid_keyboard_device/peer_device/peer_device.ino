@@ -17,8 +17,8 @@ void setup()
   delay(500);
   loopTask = xTaskGetCurrentTaskHandle();
 
-  auto &keyboard = ble.hidKeyboardDevice();
-  EspBleHidKeyboardDeviceConfig keyboardConfig;
+  auto &keyboard = ble.hidKeyboard();
+  EspBleHidKeyboardConfig keyboardConfig;
   keyboardConfig.manufacturer = "EspBle Test";
   keyboardConfig.vendorId = 0x303a;
   keyboardConfig.productId = 0x4001;
@@ -27,6 +27,11 @@ void setup()
   if (!keyboard.configure(keyboardConfig))
   {
     Serial.printf("HID_CONFIG_FAILED %s %s\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
+    return;
+  }
+  if (!ble.hidMouse().configure())
+  {
+    Serial.printf("MOUSE_CONFIG_FAILED %s %s\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
     return;
   }
   keyboard.onOutputReport([](const EspBleHidKeyboardOutputReport &report) {
@@ -93,12 +98,17 @@ void loop()
       report.modifiers = EspBleHidKeyboardInputReport::LeftShift;
       report.keys[0] = 0x04;
       Serial.println(
-        ble.hidKeyboardDevice().sendInputReport(report) ? "INPUT_SENT" : "INPUT_SEND_FAILED");
+        ble.hidKeyboard().sendReport(report) ? "INPUT_SENT" : "INPUT_SEND_FAILED");
     }
     else if (command == 'r')
     {
       Serial.println(
-        ble.hidKeyboardDevice().releaseAll() ? "RELEASE_SENT" : "RELEASE_SEND_FAILED");
+        ble.hidKeyboard().releaseAll() ? "RELEASE_SENT" : "RELEASE_SEND_FAILED");
+    }
+    else if (command == 'm')
+    {
+      Serial.println(ble.hidMouse().move(12, -7, 1, ESP_BLE_HID_MOUSE_LEFT)
+        ? "MOUSE_SENT" : "MOUSE_SEND_FAILED");
     }
   }
 

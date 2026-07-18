@@ -219,16 +219,16 @@ Bond storeには`bondCount()`、`bond(index, result)`、`deleteBond(const EspBle
 
 実行時のpasskey入力、Numeric Comparison、Pairing確認・拒否UI、Privacyは未実装です。これらはstack contextで即時回答が必要なbackend callbackと、現在の`ble.update()`配送をどう両立するかを先に設計します。Pairing失敗理由のbackend code表現と、Bond操作を同期Resultのままにするかも今後確定します。
 
-## HID Keyboard Device vertical sliceの試行API
+## 複合HID Device API
 
 HID Keyboard Deviceは`EspBle`が所有するprofile handleとして取得し、`begin()`より前に構成します。単一roleで自明なexampleでは変数名を`keyboard`とします。
 
 ```cpp
-auto &keyboard = ble.hidKeyboardDevice();
-EspBleHidKeyboardDeviceConfig keyboardConfig;
+auto &keyboard = ble.hidKeyboard();
+EspBleHidKeyboardConfig keyboardConfig;
 keyboardConfig.manufacturer = "EspBle";
 keyboardConfig.initialBatteryLevel = 100;
-// PnP ID（vendorId / productId / productVersion）、countryCode、reportIdも設定できる。
+// PnP ID（vendorId / productId / productVersion）、countryCodeも設定できる。
 keyboard.configure(keyboardConfig);
 
 EspBleConfig config;
@@ -239,26 +239,26 @@ ble.begin(config);
 ble.advertising().start();
 ```
 
-入力はmodifier 1 byteと同時押し最大6 keyの値型で指定します。Report IDとreserved byteを利用者に組み立てさせません。`sendInputReport()`は接続中のHID Hostへ8-byte Report payloadをNotificationで送信し、`releaseAll()`は全フィールドが0のreportを送ります。
+入力はmodifier 1 byteと同時押し最大6 keyの値型で指定します。Report IDとreserved byteを利用者に組み立てさせません。`sendReport()`は接続中のHID Hostへ8-byte Report payloadをNotificationで送信し、`releaseAll()`は全フィールドが0のreportを送ります。
 
 ```cpp
 EspBleHidKeyboardInputReport report;
 report.modifiers = EspBleHidKeyboardInputReport::LeftShift;
 report.keys[0] = 0x04; // Keyboard a and A
-keyboard.sendInputReport(report);
+keyboard.sendReport(report);
 keyboard.releaseAll();
 ```
 
 LED Output Reportはstack callbackからcopyされ、`ble.update()` contextで配送されます。値には送信元Connection IDとNum Lock、Caps Lock、Scroll Lock、Compose、Kanaのbitが含まれます。Battery Levelは`setBatteryLevel(0..100)`で更新します。`configured()`で構成済みかを確認できます。
 
-このDevice sliceはReport Protocolの固定6KRO keyboardだけを扱います。Boot Protocol、文字からkey usageへの変換、layout、auto-release、送信queueはDevice helperの対象外です。HID Hostは次節の独立profileとして実装します。GATT構成とwire formatの詳細は[HID Keyboard Device仕様](HID_KEYBOARD_DEVICE_SPEC.ja.md)に記載します。
+`hidMouse()`、`hidConsumerControl()`、`hidSystemControl()`、`hidGamepad()`も同じく`begin()`前に`configure()`します。構成したprofileだけが固定Report ID（keyboard=1、mouse=2、gamepad=3、consumer=4、system=5）で1つのHID Serviceへ合成されます。keyboardは`write()` / `pressKey()` / `setLayout()`、mouseは`move()` / `click()`、consumer/systemは`press()` / `release()` / `click()`、gamepadは`send()`を追加で持ちます。詳細は[HID Device仕様](HID_DEVICE_SPEC.ja.md)に記載します。
 
-## HID Keyboard Host vertical sliceの試行API
+## HID Host API
 
 BLE固有のScanとConnectはroot objectで行い、接続後のHID Discoveryとreport処理をprofileへ渡します。これにより接続先の選択を隠さず、接続後はEspUsbHostに近いusage stateとLED APIを利用できます。
 
 ```cpp
-auto &keyboard = ble.hidKeyboardHost();
+auto &keyboard = ble.hidHost();
 
 // security有効構成ではonSecurityChanged成功後にdiscover()を呼ぶ
 // （HOST_SPEC「接続フロー」参照）。security無効構成の最小形:
@@ -290,7 +290,7 @@ keyboard.setKeyboardLeds(connectionId,
   /*numLock=*/false, /*capsLock=*/true, /*scrollLock=*/false);
 ```
 
-現在の`discover()`は内部taskでReport Map read、Report Reference列挙、Input subscription、Battery readを行います。parserはHID report descriptorを解釈してkeyboard Input Reportを特定し、未知のNKROや複合reportを誤ってboot形式として扱いません。`setKeyboardLeds()`はWrite Without Response優先のfire-and-forget helper、Discoveryは明示`discover()`、再接続時は新しいConnection IDでの再Discoveryが確定仕様です（DECISIONS HID Host #6/#17）。現在のlayoutは`keyboardLayout()`、Discovery完了済みかは`ready(connectionId)`で確認できます。詳細は[HID Keyboard Host仕様](HID_KEYBOARD_HOST_SPEC.ja.md)に記載します。
+`discover()`は内部taskでReport Map read、Report Reference列挙、対応する全Input Reportの購読、Battery readを行います。`onMouse()`、`onConsumerControl()`、`onSystemControl()`、`onGamepad()`はkeyboard callbackと同じHost objectへ集約します。`setKeyboardLeds()`はWrite Without Response優先、Discoveryは明示`discover()`、再接続時は新しいConnection IDでの再Discoveryが仕様です。詳細は[HID Host仕様](HID_HOST_SPEC.ja.md)に記載します。
 
 ## 結果型
 

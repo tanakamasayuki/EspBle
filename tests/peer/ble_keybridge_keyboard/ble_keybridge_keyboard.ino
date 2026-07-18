@@ -78,7 +78,7 @@ void setup()
     Serial.printf("BRIDGE_INIT_FAILED %s\n", ble.lastErrorName());
     return;
   }
-  ble.hidKeyboardHost().onKeyboardState([](const EspBleHidKeyboardState &state) {
+  ble.hidHost().onKeyboardState([](const EspBleHidKeyboardState &state) {
     if (state.wasPressed(0x04))
     {
       Serial.printf("SKETCH_STATE a_pressed=1 id=%u\n",
@@ -136,7 +136,7 @@ void loop()
       size_t added = 0;
       for (EspBleListenerId &listenerId : listenerIds)
       {
-        listenerId = ble.hidKeyboardHost().addKeyboardListener(
+        listenerId = ble.hidHost().addKeyboardListener(
           [](const EspBleHidKeyboardEvent &) {});
         added += listenerId != EspBleInvalidListenerId ? 1 : 0;
       }
@@ -146,7 +146,7 @@ void loop()
       size_t removed = 0;
       for (size_t i = 0; i < 4; ++i)
       {
-        removed += ble.hidKeyboardHost().removeListener(listenerIds[i]) ? 1 : 0;
+        removed += ble.hidHost().removeListener(listenerIds[i]) ? 1 : 0;
       }
       Serial.printf("BRIDGE_LISTENERS added=%u overflow=%u removed=%u\n",
         static_cast<unsigned>(added),

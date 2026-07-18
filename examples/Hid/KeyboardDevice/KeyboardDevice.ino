@@ -17,8 +17,8 @@ void setup()
   //     and keyboard appearance are added to advertising.
   // ja: begin() 前にHID Keyboard Device profileを構成する。HID + Device Information +
   //     Battery Serviceが自動合成され、HID UUIDとkeyboard appearanceがadvertisingへ追加される。
-  auto &keyboard = ble.hidKeyboardDevice();
-  EspBleHidKeyboardDeviceConfig keyboardConfig;
+  auto &keyboard = ble.hidKeyboard();
+  EspBleHidKeyboardConfig keyboardConfig;
   keyboardConfig.manufacturer = "EspBle";
   keyboard.configure(keyboardConfig);
   // en: Notified when the host writes LED state (Num/Caps/Scroll Lock, etc.).
@@ -59,7 +59,7 @@ void loop()
   if (Serial.available() > 0)
   {
     const char command = Serial.read();
-    auto &keyboard = ble.hidKeyboardDevice();
+    auto &keyboard = ble.hidKeyboard();
     if (command == 'a')
     {
       // en: Input report is modifier (1 byte) + up to 6 usages. Report ID and the
@@ -68,7 +68,7 @@ void loop()
       EspBleHidKeyboardInputReport report;
       report.modifiers = EspBleHidKeyboardInputReport::LeftShift;
       report.keys[0] = 0x04; // en: HID usage: Keyboard a and A / ja: HID usage: Keyboard a and A
-      keyboard.sendInputReport(report);
+      keyboard.sendReport(report);
     }
     else if (command == 'r')
     {

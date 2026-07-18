@@ -11,7 +11,7 @@ void setup()
   Serial.begin(115200);
   delay(500);
 
-  ble.hidKeyboardHost().onDiscovered([](const EspBleHidKeyboardHostDiscovery &result) {
+  ble.hidHost().onDiscovered([](const EspBleHidKeyboardHostDiscovery &result) {
     Serial.printf(
       "HOST_DISCOVERED success=%u detail=%s\n",
       result.success ? 1 : 0,
@@ -73,7 +73,7 @@ void loop()
     {
       Serial.printf(
         "HOST_DISCOVERY_STARTED success=%u\n",
-        ble.hidKeyboardHost().discover(connectionId) ? 1 : 0);
+        ble.hidHost().discover(connectionId) ? 1 : 0);
     }
     else if (command == 'v')
     {

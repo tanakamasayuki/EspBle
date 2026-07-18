@@ -21,18 +21,18 @@ public:
   {
     if (discoveryListenerId_ != EspBleInvalidListenerId)
     {
-      ble_.hidKeyboardHost().removeListener(discoveryListenerId_);
+      ble_.hidHost().removeListener(discoveryListenerId_);
     }
     if (stateListenerId_ != EspBleInvalidListenerId)
     {
-      ble_.hidKeyboardHost().removeListener(stateListenerId_);
+      ble_.hidHost().removeListener(stateListenerId_);
     }
   }
 
   bool discover(EspBleConnectionId connectionId)
   {
     subscribe();
-    return ble_.hidKeyboardHost().discover(connectionId);
+    return ble_.hidHost().discover(connectionId);
   }
 
   void onDiscovered(DiscoveryCallback callback)
@@ -47,7 +47,7 @@ public:
 
     for (size_t i = keyboardCount_; i > 0; --i)
     {
-      if (!ble_.hidKeyboardHost().ready(keyboards_[i - 1].connectionId))
+      if (!ble_.hidHost().ready(keyboards_[i - 1].connectionId))
       {
         keyboards_[i - 1] = keyboards_[keyboardCount_ - 1];
         --keyboardCount_;
@@ -81,7 +81,7 @@ public:
   {
     for (size_t i = 0; i < keyboardCount_; ++i)
     {
-      ble_.hidKeyboardHost().setKeyboardLeds(
+      ble_.hidHost().setKeyboardLeds(
         keyboards_[i].connectionId,
         state.numLock,
         state.capsLock,
@@ -105,7 +105,7 @@ private:
       return;
     }
     subscribed_ = true;
-    discoveryListenerId_ = ble_.hidKeyboardHost().addDiscoveredListener(
+    discoveryListenerId_ = ble_.hidHost().addDiscoveredListener(
       [this](const EspBleHidKeyboardHostDiscovery &result) {
         if (result.success)
         {
@@ -121,7 +121,7 @@ private:
           discoveryCallback_(result);
         }
       });
-    stateListenerId_ = ble_.hidKeyboardHost().addKeyboardStateListener(
+    stateListenerId_ = ble_.hidHost().addKeyboardStateListener(
       [this](const EspBleHidKeyboardState &state) {
         Keyboard *keyboard = find(state.connectionId);
         if (keyboard != nullptr)

@@ -69,45 +69,45 @@ keyboard固有の`setKeyboardLeds()` / `setKeyboardLayout()` / `keyboardLayout()
 
 現状は`EspBleHidKeyboardDeviceImpl`がHID/DIS/Battery Serviceを自前登録し`server->start()`まで呼んでいる（[EspBle.cpp:2653-2814](../src/EspBle.cpp#L2653)）。これを種別横断のマネージャへ集約する。
 
-- [ ] HID Device共通マネージャ（内部）を新設し、HID Service（0x1812）・DIS・Battery Serviceの登録と`server->start()`を**一元化**する（各種別profileは自分のReport定義だけを提供）。
-- [ ] 有効化された種別のReport Descriptorを結合して**composite Report Mapを生成**（各種別に固定Report IDを付与）。
-- [ ] Report IDごとのInput Report characteristic（0x2A4D＋Report Reference）を動的に構築し、notifyを種別＋connectionでルーティング。
-- [ ] CCCD購読gate・暗号化permission（HOGP Security Mode 1 Level 2）・切断時の全releaseを**種別横断**で適用（既存keyboard実装のロジックを一般化）。
-- [ ] Peerテスト（赤→緑）: composite（keyboard+mouse）のReport Map／複数Report Reference／各Report notifyを検証。
+- [x] HID Device共通マネージャ（内部）を新設し、HID Service（0x1812）・DIS・Battery Serviceの登録と`server->start()`を**一元化**する（各種別profileは自分のReport定義だけを提供）。
+- [x] 有効化された種別のReport Descriptorを結合して**composite Report Mapを生成**（各種別に固定Report IDを付与）。
+- [x] Report IDごとのInput Report characteristic（0x2A4D＋Report Reference）を動的に構築し、notifyを種別＋connectionでルーティング。
+- [x] CCCD購読gate・暗号化permission（HOGP Security Mode 1 Level 2）・切断時の全releaseを**種別横断**で適用（既存keyboard実装のロジックを一般化）。
+- [x] Peerテスト（赤→緑）: composite（keyboard+mouse）のReport Map／複数Report Reference／各Report notifyを検証。
 
 ## Phase 2: Device API（EspUsbDevice流）
 
-- [ ] `EspBleHidKeyboard`: 生usage経路（`sendReport`/`pressUsage`/`releaseAll`）＋layout-aware経路（`write`/`pressKey`/`tapKey`/`setLayout`/`layout`）＋`onOutputReport`（LED、decoded bool）。ascii→usage逆変換はkeymap共有（下記Phase 2末）。
-- [ ] `EspBleHidMouse`: `move(x,y,wheel,buttons)`/`click`/`press`/`release`/`wheel`/`releaseAll`/`sendReport`。ボタンbit定数。
-- [ ] `EspBleHidConsumerControl`: `press(uint16 usage)`/`release`/`click`/`sendUsage`。メディアキーusage定数。
-- [ ] `EspBleHidSystemControl`: `press(uint8 usage)`/`release`/`click`。電源系usage定数。
-- [ ] `EspBleHidGamepad`: `send(...)`/`sendReport(EspBleHidGamepadReport)`/`releaseAll`。hat/button定数。
-- [ ] Device側keymap: ascii→usage逆変換（EspUsbDevice同様、`EspBleKeymap.h`のtableを逆引き）。keyboardの`write()`/`pressKey()`用。
+- [x] `EspBleHidKeyboard`: 生usage経路（`sendReport`/`pressUsage`/`releaseAll`）＋layout-aware経路（`write`/`pressKey`/`tapKey`/`setLayout`/`layout`）＋`onOutputReport`（LED、decoded bool）。ascii→usage逆変換はkeymap共有（下記Phase 2末）。
+- [x] `EspBleHidMouse`: `move(x,y,wheel,buttons)`/`click`/`press`/`release`/`wheel`/`releaseAll`/`sendReport`。ボタンbit定数。
+- [x] `EspBleHidConsumerControl`: `press(uint16 usage)`/`release`/`click`/`sendUsage`。メディアキーusage定数。
+- [x] `EspBleHidSystemControl`: `press(uint8 usage)`/`release`/`click`。電源系usage定数。
+- [x] `EspBleHidGamepad`: `send(...)`/`sendReport(EspBleHidGamepadReport)`/`releaseAll`。hat/button定数。
+- [x] Device側keymap: ascii→usage逆変換（EspUsbDevice同様、`EspBleKeymap.h`のtableを逆引き）。keyboardの`write()`/`pressKey()`用。
 
 ## Phase 3: Host backend一般化
 
-- [ ] `EspBleHidReportMap.h`のparserを、keyboard専用判定から**複数種別の識別**へ拡張（mouse=Generic Desktop/Mouse、consumer=Consumer Page、system=Generic Desktop/System Control、gamepad=Generic Desktop/Gamepad|Joystick）。各種別のReport IDと入力フォーマットを返す。
-- [ ] `discover()`で検出した全対応Reportを購読し、Report IDごとに種別を紐付け。
-- [ ] 受信Input ReportをReport ID→種別で振り分け、種別別イベントへparse（mouseの相対値、consumer/systemのusage、gamepadのfield分解）。
-- [ ] unitテスト（赤→緑）: 各種別のReport Map descriptorとInput Report parseを`tests/unit/report_map`へ追加。
+- [x] `EspBleHidReportMap.h`のparserを、keyboard専用判定から**複数種別の識別**へ拡張（mouse=Generic Desktop/Mouse、consumer=Consumer Page、system=Generic Desktop/System Control、gamepad=Generic Desktop/Gamepad|Joystick）。各種別のReport IDと入力フォーマットを返す。
+- [x] `discover()`で検出した全対応Reportを購読し、Report IDごとに種別を紐付け。
+- [x] 受信Input ReportをReport ID→種別で振り分け、種別別イベントへparse（mouseの相対値、consumer/systemのusage、gamepadのfield分解）。
+- [x] unitテスト（赤→緑）: 各種別のReport Map descriptorとInput Report parseを`tests/unit/report_map`へ追加。
 
 ## Phase 4: Host API（EspUsbHost流）
 
-- [ ] `ble.hidHost()`（`hidKeyboardHost()`から改名）に`onKeyboard`/`onKeyboardState`/`onMouse`/`onConsumerControl`/`onSystemControl`/`onGamepad`を集約。既存のlistener API（`add*Listener`/`removeListener`）も種別ごとに提供。**実装はEspUsbHostが先行実装した方式に倣う**（下記付録参照）: listener callbackを`std::shared_ptr`で保持し、配送時はshared ownershipをsnapshotする（`std::function`のコピーを避け、mutable callback状態を保持し、イベントごとの動的コピーもしない）。IDはHostインスタンス内でイベント種別をまたいで一意。registryはmutexで保護するがcallback実行中はロックしない。単一`on*`→listener登録順で配送し、callback内の追加・解除は次イベントから反映する。現行EspBleは配送のたびに`std::function`を配列コピーしている（`EspBle.cpp`の`dispatchPendingEvents`）ため、この点を改善する。
-- [ ] イベント型: `EspBleHidKeyboardEvent`（ascii/unicode/modifiers、既存踏襲）、`EspBleHidMouseEvent`（x/y/wheel/buttons/moved/buttonsChanged）、`EspBleHidConsumerControlEvent`（usage/pressed/released）、`EspBleHidSystemControlEvent`、`EspBleHidGamepadEvent`。いずれも`connectionId`＋`reportId`を持つ共通baseを継承。
-- [ ] `setKeyboardLeds`/`setKeyboardLayout`/`keyboardLayout`/`ready`は維持。
-- [ ] Peerテスト（赤→緑）: composite peer deviceに対しHostが各種別を受信できることを検証。
+- [x] `ble.hidHost()`（`hidKeyboardHost()`から改名）に`onKeyboard`/`onKeyboardState`/`onMouse`/`onConsumerControl`/`onSystemControl`/`onGamepad`を集約。既存のlistener API（`add*Listener`/`removeListener`）も種別ごとに提供。**実装はEspUsbHostが先行実装した方式に倣う**（下記付録参照）: listener callbackを`std::shared_ptr`で保持し、配送時はshared ownershipをsnapshotする（`std::function`のコピーを避け、mutable callback状態を保持し、イベントごとの動的コピーもしない）。IDはHostインスタンス内でイベント種別をまたいで一意。registryはmutexで保護するがcallback実行中はロックしない。単一`on*`→listener登録順で配送し、callback内の追加・解除は次イベントから反映する。現行EspBleは配送のたびに`std::function`を配列コピーしている（`EspBle.cpp`の`dispatchPendingEvents`）ため、この点を改善する。
+- [x] イベント型: `EspBleHidKeyboardEvent`（ascii/unicode/modifiers、既存踏襲）、`EspBleHidMouseEvent`（x/y/wheel/buttons/moved/buttonsChanged）、`EspBleHidConsumerControlEvent`（usage/pressed/released）、`EspBleHidSystemControlEvent`、`EspBleHidGamepadEvent`。いずれも`connectionId`＋`reportId`を持つ共通baseを継承。
+- [x] `setKeyboardLeds`/`setKeyboardLayout`/`keyboardLayout`/`ready`は維持。
+- [x] Peerテスト（赤→緑）: composite peer deviceに対しHostが各種別を受信できることを検証。
 
 ## Phase 5: 既存テスト・回帰の追従
 
-- [ ] `hid_keyboard_device`/`hid_keyboard_host`/`hid_robustness`/`hid_boot_keyboard`/`ble_keybridge_keyboard`をAPI変更へ追従改修。
-- [ ] KeyBridge input adapter試作（`EspBleHidKeyboardState`利用）を`hidHost()`改名へ追従。
-- [ ] 全Peer＋unit回帰。
+- [x] `hid_keyboard_device`/`hid_keyboard_host`/`hid_robustness`/`hid_boot_keyboard`/`ble_keybridge_keyboard`をAPI変更へ追従改修。
+- [x] KeyBridge input adapter試作（`EspBleHidKeyboardState`利用）を`hidHost()`改名へ追従。
+- [x] 全Peer＋unit回帰。
 
 ## Phase 6: example・ドキュメント
 
-- [ ] example追加: `Hid/Mouse`（Device）、`Hid/ConsumerControl`（メディアキー）、`Hid/CompositeKeyboardMouse`（複合）、Host側の受信example。既存`Hid/KeyboardDevice`/`KeyboardHost`をAPI変更へ追従。各日英READMEペア。
-- [ ] docs再編: `HID_KEYBOARD_DEVICE_SPEC`/`HID_KEYBOARD_HOST_SPEC`を種別横断の`HID_DEVICE_SPEC`/`HID_HOST_SPEC`へ再構成。`API_DESIGN`のHID節を書き換え。`DECISIONS`へ複合HID・命名・Report ID割当を記録。`FEATURE_MATRIX`のmouse/consumer/system/gamepadを✅へ、複合HIDを✅へ更新。`STATUS`/`CHANGELOG`/`keywords.txt`/`README`更新。
+- [x] example追加: `Hid/Mouse`（Device）、`Hid/ConsumerControl`（メディアキー）、`Hid/CompositeKeyboardMouse`（複合）、Host側の受信example。既存`Hid/KeyboardDevice`/`KeyboardHost`をAPI変更へ追従。各日英READMEペア。
+- [x] docs再編: `HID_KEYBOARD_DEVICE_SPEC`/`HID_KEYBOARD_HOST_SPEC`を種別横断の`HID_DEVICE_SPEC`/`HID_HOST_SPEC`へ再構成。`API_DESIGN`のHID節を書き換え。`DECISIONS`へ複合HID・命名・Report ID割当を記録。`FEATURE_MATRIX`のmouse/consumer/system/gamepadを✅へ、複合HIDを✅へ更新。`STATUS`/`CHANGELOG`/`keywords.txt`/`README`更新。
 
 ## 進め方の原則
 

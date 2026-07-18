@@ -233,4 +233,112 @@ inline EspBleHidKeyboardReportMapInfo espBleParseKeyboardReportMap(
   return info;
 }
 
+enum class EspBleHidReportKind : uint8_t
+{
+  Unknown = 0,
+  Keyboard,
+  Mouse,
+  Gamepad,
+  ConsumerControl,
+  SystemControl,
+};
+
+struct EspBleHidReportMapEntry
+{
+  EspBleHidReportKind kind = EspBleHidReportKind::Unknown;
+  bool hasReportId = false;
+  uint8_t reportId = 0;
+};
+
+struct EspBleHidReportMapInfo
+{
+  static constexpr size_t MaxEntries = 8;
+  EspBleHidReportMapEntry entries[MaxEntries];
+  size_t count = 0;
+
+  EspBleHidReportKind kindForReportId(uint8_t reportId) const
+  {
+    for (size_t index = 0; index < count; ++index)
+    {
+      if (entries[index].reportId == reportId) return entries[index].kind;
+    }
+    return EspBleHidReportKind::Unknown;
+  }
+};
+
+inline EspBleHidReportMapInfo espBleParseHidReportMap(const uint8_t *data, size_t length)
+{
+  EspBleHidReportMapInfo info;
+  if (data == nullptr) return info;
+  uint16_t usagePage = 0;
+  uint16_t usage = 0;
+  bool haveUsage = false;
+  uint8_t reportId = 0;
+  bool hasReportId = false;
+  EspBleHidReportKind collectionKinds[8] = {};
+  size_t depth = 0;
+  for (size_t offset = 0; offset < length;)
+  {
+    const uint8_t prefix = data[offset++];
+    if (prefix == 0xfe)
+    {
+      if (offset + 2 > length) break;
+      const size_t itemLength = data[offset];
+      if (offset + 2 + itemLength > length) break;
+      offset += 2 + itemLength;
+      continue;
+    }
+    static const uint8_t sizes[4] = {0, 1, 2, 4};
+    const size_t itemLength = sizes[prefix & 3];
+    if (offset + itemLength > length) break;
+    uint32_t value = 0;
+    for (size_t index = 0; index < itemLength; ++index)
+      value |= static_cast<uint32_t>(data[offset + index]) << (index * 8);
+    offset += itemLength;
+    const uint8_t type = (prefix >> 2) & 3;
+    const uint8_t tag = (prefix >> 4) & 15;
+    if (type == 1 && tag == 0) usagePage = static_cast<uint16_t>(value);
+    else if (type == 1 && tag == 8) { reportId = static_cast<uint8_t>(value); hasReportId = true; }
+    else if (type == 2 && tag == 0 && !haveUsage)
+    {
+      usage = static_cast<uint16_t>(value);
+      haveUsage = true;
+    }
+    else if (type == 0 && tag == 10)
+    {
+      EspBleHidReportKind kind = depth == 0 ? EspBleHidReportKind::Unknown : collectionKinds[depth - 1];
+      if (value == 1)
+      {
+        if (usagePage == 0x0c && usage == 0x01) kind = EspBleHidReportKind::ConsumerControl;
+        else if (usagePage == 0x01 && usage == 0x06) kind = EspBleHidReportKind::Keyboard;
+        else if (usagePage == 0x01 && usage == 0x02) kind = EspBleHidReportKind::Mouse;
+        else if (usagePage == 0x01 && (usage == 0x04 || usage == 0x05)) kind = EspBleHidReportKind::Gamepad;
+        else if (usagePage == 0x01 && usage == 0x80) kind = EspBleHidReportKind::SystemControl;
+      }
+      if (depth < 8) collectionKinds[depth++] = kind;
+      haveUsage = false;
+    }
+    else if (type == 0 && tag == 12)
+    {
+      if (depth > 0) --depth;
+      haveUsage = false;
+    }
+    else if (type == 0 && tag == 8)
+    {
+      const EspBleHidReportKind kind = depth == 0 ? EspBleHidReportKind::Unknown : collectionKinds[depth - 1];
+      if (kind != EspBleHidReportKind::Unknown)
+      {
+        bool exists = false;
+        for (size_t index = 0; index < info.count; ++index)
+          exists = exists || (info.entries[index].kind == kind && info.entries[index].reportId == reportId);
+        if (!exists && info.count < EspBleHidReportMapInfo::MaxEntries)
+          info.entries[info.count++] = {kind, hasReportId, reportId};
+      }
+      haveUsage = false;
+    }
+    else if (type == 0) haveUsage = false;
+  }
+  return info;
+}
+
 #endif // ESP_BLE_HID_REPORT_MAP_H

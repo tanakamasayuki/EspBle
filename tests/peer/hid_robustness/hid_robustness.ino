@@ -22,13 +22,13 @@ void setup()
   Serial.begin(115200);
   delay(500);
 
-  ble.hidKeyboardHost().onDiscovered([](const EspBleHidKeyboardHostDiscovery &result) {
+  ble.hidHost().onDiscovered([](const EspBleHidKeyboardHostDiscovery &result) {
     Serial.printf(
       "HOST_DISCOVERED success=%u detail=%s\n",
       result.success ? 1 : 0,
       result.detail.c_str());
   });
-  ble.hidKeyboardHost().onKeyboardState([](const EspBleHidKeyboardState &state) {
+  ble.hidHost().onKeyboardState([](const EspBleHidKeyboardState &state) {
     ++stateEventCount;
     if (state.wasReleased(0x04))
     {
@@ -86,13 +86,13 @@ void loop()
     {
       Serial.printf(
         "HOST_DISCOVERY_STARTED success=%u\n",
-        ble.hidKeyboardHost().discover(connectionId) ? 1 : 0);
+        ble.hidHost().discover(connectionId) ? 1 : 0);
     }
     else if (command == 'D')
     {
       // Disconnecting the same connection while its HID discovery is running
       // must be rejected.
-      const bool discovering = ble.hidKeyboardHost().discover(connectionId);
+      const bool discovering = ble.hidHost().discover(connectionId);
       const bool disconnected = ble.disconnect(connectionId);
       Serial.printf(
         "HOST_DISCOVER_DISCONNECT discover=%u disconnect=%u error=%s\n",
@@ -125,8 +125,8 @@ void loop()
         stateEventCount,
         aReleaseCount,
         static_cast<unsigned>(ble.connectionCount()),
-        ble.hidKeyboardHost().ready(lastConnectionId) ? 1 : 0,
-        static_cast<unsigned>(ble.hidKeyboardHost().droppedEventCount()));
+        ble.hidHost().ready(lastConnectionId) ? 1 : 0,
+        static_cast<unsigned>(ble.hidHost().droppedEventCount()));
     }
     else if (command == 'd')
     {

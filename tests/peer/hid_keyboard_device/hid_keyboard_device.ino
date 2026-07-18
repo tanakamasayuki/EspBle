@@ -19,6 +19,7 @@ BLEAdvertisedDevice *target = nullptr;
 BLEClient *client = nullptr;
 BLERemoteCharacteristic *inputReport = nullptr;
 BLERemoteCharacteristic *outputReport = nullptr;
+BLERemoteCharacteristic *mouseInputReport = nullptr;
 volatile bool securityComplete = false;
 
 class ScanCallbacks : public BLEAdvertisedDeviceCallbacks
@@ -70,6 +71,15 @@ static void inputNotification(
     length > 2 ? data[2] : 0);
 }
 
+static void mouseNotification(BLERemoteCharacteristic *, uint8_t *data, size_t length, bool)
+{
+  Serial.printf("MOUSE_REPORT length=%u buttons=%u x=%d y=%d wheel=%d\n",
+    static_cast<unsigned>(length), length > 0 ? data[0] : 0,
+    length > 1 ? static_cast<int8_t>(data[1]) : 0,
+    length > 2 ? static_cast<int8_t>(data[2]) : 0,
+    length > 3 ? static_cast<int8_t>(data[3]) : 0);
+}
+
 static bool connectAndDiscover()
 {
   target = nullptr;
@@ -110,17 +120,22 @@ static bool connectAndDiscover()
   BLERemoteCharacteristic *reportMap = hidService->getCharacteristic(REPORT_MAP_UUID);
   const String mapValue = reportMap == nullptr ? String() : reportMap->readValue();
   bool keyboardMap = false;
+  bool mouseMap = false;
   for (size_t index = 0; index + 1 < mapValue.length(); ++index)
   {
     if (static_cast<uint8_t>(mapValue[index]) == 0x09 &&
         static_cast<uint8_t>(mapValue[index + 1]) == 0x06)
     {
       keyboardMap = true;
-      break;
+    }
+    if (static_cast<uint8_t>(mapValue[index]) == 0x09 &&
+        static_cast<uint8_t>(mapValue[index + 1]) == 0x02)
+    {
+      mouseMap = true;
     }
   }
-  Serial.printf("REPORT_MAP valid=%u length=%u\n",
-    keyboardMap ? 1 : 0, static_cast<unsigned>(mapValue.length()));
+  Serial.printf("REPORT_MAP keyboard=%u mouse=%u length=%u\n",
+    keyboardMap ? 1 : 0, mouseMap ? 1 : 0, static_cast<unsigned>(mapValue.length()));
 
   std::map<uint16_t, BLERemoteCharacteristic *> *characteristics =
     hidService->getCharacteristicsByHandle();
@@ -133,17 +148,21 @@ static bool connectAndDiscover()
     }
     BLERemoteDescriptor *reference = characteristic->getDescriptor(REPORT_REFERENCE_UUID);
     const String value = reference == nullptr ? String() : reference->readValue();
-    if (value.length() != 2 || static_cast<uint8_t>(value[0]) != 1)
+    if (value.length() != 2)
     {
       continue;
     }
-    if (static_cast<uint8_t>(value[1]) == 1)
+    if (static_cast<uint8_t>(value[0]) == 1 && static_cast<uint8_t>(value[1]) == 1)
     {
       inputReport = characteristic;
     }
-    else if (static_cast<uint8_t>(value[1]) == 2)
+    else if (static_cast<uint8_t>(value[0]) == 1 && static_cast<uint8_t>(value[1]) == 2)
     {
       outputReport = characteristic;
+    }
+    else if (static_cast<uint8_t>(value[0]) == 2 && static_cast<uint8_t>(value[1]) == 1)
+    {
+      mouseInputReport = characteristic;
     }
   }
 
@@ -153,17 +172,19 @@ static bool connectAndDiscover()
     : batteryService->getCharacteristic(BATTERY_LEVEL_UUID);
   const uint8_t batteryLevel = battery == nullptr ? 0 : battery->readUInt8();
   Serial.printf(
-    "HID_REPORTS input=%u output=%u battery=%u\n",
+    "HID_REPORTS keyboard=%u mouse=%u output=%u battery=%u\n",
     inputReport != nullptr ? 1 : 0,
+    mouseInputReport != nullptr ? 1 : 0,
     outputReport != nullptr ? 1 : 0,
     batteryLevel);
-  if (inputReport == nullptr || outputReport == nullptr || batteryLevel != 87)
+  if (inputReport == nullptr || mouseInputReport == nullptr || outputReport == nullptr || batteryLevel != 87)
   {
     return false;
   }
   const bool subscribed = inputReport->subscribe(true, inputNotification, true);
-  Serial.printf("INPUT_SUBSCRIBED success=%u\n", subscribed ? 1 : 0);
-  return subscribed;
+  const bool mouseSubscribed = mouseInputReport->subscribe(true, mouseNotification, true);
+  Serial.printf("INPUT_SUBSCRIBED keyboard=%u mouse=%u\n", subscribed ? 1 : 0, mouseSubscribed ? 1 : 0);
+  return subscribed && mouseSubscribed;
 }
 
 void setup()
