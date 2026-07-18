@@ -24,7 +24,7 @@
 20. 公開の値containerはpointer+lengthを基本とし、`String`を便宜overloadとして提供する。同梱backendの`String`構築は長さ明示でbinary-safe（NUL切り詰めなし）であることを確認済み。将来の値型container（`EspBleBytes`等）への移行余地は未確定事項として残す。
 21. event queueの容量はcompile-time定数とする。Arduinoのlibrary buildでは利用者が`-D`で上書きする実用的な手段がないため、容量設定APIは設けない。overflowは専用イベントではなく、dropカウンタ（`droppedEventCount()`等）とlifecycleイベントの優先保持で扱う。
 22. 公開APIはSemantic Versioningに従う。1.0.0より前の0.x系は試行段階で互換性を保証しない。
-23. Bluedroidが既定のSoC（無印ESP32など、Arduino-ESP32がNimBLEを同梱しない構成）は本ライブラリの対象外とする。EspBleのAPI仕様が安定した後、別ライブラリ（`EspBleBluedroid`等）としてBluedroid backendで対応する可能性を残す。その場合もソース互換は努力目標にとどめ完全互換は保証しない（Bluedroid/NimBLEの内部差でbonding・MTU・securityの細部挙動は必ずずれるため）。公開APIはなるべく似た使い方に揃える方針とする。backend非依存の高レベルロジック（keymap変換`EspBleKeymap.h`、Report Map parser`EspBleHidReportMap.h`、イベント値型、KeyBridge境界など）は両ライブラリで共有する候補とする。
+23. Bluedroidが既定のSoC（無印ESP32など、Arduino-ESP32がNimBLEを同梱しない構成）は本ライブラリの対象外とする。EspBleのAPI仕様が安定した後、別ライブラリ（`EspBleBluedroid`等）としてBluedroid backendで対応する可能性を残す。その場合もソース互換は努力目標にとどめ完全互換は保証しない（Bluedroid/NimBLEの内部差でbonding・MTU・securityの細部挙動は必ずずれるため）。公開APIはなるべく似た使い方に揃える方針とする。backend非依存の高レベルロジック（keymap変換`EspBleKeymap.h`、Report Map parser`EspBleHidReportMap.h`、イベント値型、KeyBridge境界など）は両ライブラリで共有する候補とする。なお`EspBleBluedroid`は未着手のため、利用者向けドキュメント（README）では紹介せず、無印ESP32でBLEが必要な場合の代替として実在のNimBLE-Arduinoを案内する（EspBleがNimBLE-Arduinoへ依存する意味ではない。確定#2と整合）。
 
 ## 仮置き
 

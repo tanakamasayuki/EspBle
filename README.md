@@ -5,7 +5,7 @@
 EspBle is a general-purpose Bluetooth Low Energy library for ESP32 Arduino. **It uses the NimBLE backend bundled with Arduino-ESP32 and does not support Bluetooth Classic.** It provides central and peripheral roles, generic GATT client and server operations, security, and composable profiles on one shared foundation. External NimBLE-Arduino is not a required dependency.
 
 > [!IMPORTANT]
-> **The classic ESP32 is not supported.** EspBle requires the NimBLE backend, which the plain `esp32` build does not ship (it defaults to Bluedroid), so it fails to compile there by design. Supported targets are the NimBLE SoCs: **ESP32-S3 / ESP32-C3 / ESP32-C6 / ESP32-H2**. The classic ESP32 may be covered later by a separate `EspBleBluedroid` library — see [Compatibility](#compatibility).
+> **The classic ESP32 is not supported.** EspBle requires the NimBLE backend, which the plain `esp32` build does not ship (it defaults to Bluedroid), so it fails to compile there by design. Supported targets are the NimBLE SoCs: **ESP32-S3 / ESP32-C3 / ESP32-C6 / ESP32-H2**. If you need BLE on the classic ESP32, use [NimBLE-Arduino](https://github.com/h2zero/NimBLE-Arduino) instead — see [Compatibility](#compatibility).
 
 The public API is not stable yet: this is the trial stage ahead of the first release, and APIs may still change.
 
@@ -24,7 +24,7 @@ Everything above is verified with an automated two-board ESP32-S3 peer test suit
 
 ## Compatibility
 
-EspBle requires the **NimBLE backend bundled with Arduino-ESP32**. Cores built with the Bluedroid default (such as the plain `esp32` board) are rejected at compile time with a clear `#error`. The classic ESP32 is therefore **out of scope** for this library; once the EspBle API stabilizes, a separate library (e.g. `EspBleBluedroid`) may cover it with a deliberately similar — but not fully compatible — API.
+EspBle requires the **NimBLE backend bundled with Arduino-ESP32**. Cores built with the Bluedroid default (such as the plain `esp32` board) are rejected at compile time with a clear `#error`. The classic ESP32 is therefore **out of scope** for this library. If you need BLE on the classic ESP32, use [NimBLE-Arduino](https://github.com/h2zero/NimBLE-Arduino): it bundles its own NimBLE host stack and runs on the classic ESP32, with a different API from EspBle.
 
 Development and the peer tests run on arduino-esp32 3.3.10. The supported core-version range and per-board build coverage are measured by CI, not maintained by hand:
 
