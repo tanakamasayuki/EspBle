@@ -1,5 +1,15 @@
+// en: Client - connect to the Gatt/Server example and run the central GATT client flow:
+//     known-UUID discovery -> read -> write with response. Each step is a request API;
+//     completion arrives as an event from update(). The next operation is chained from
+//     the previous one's completion callback (central GATT operations are one-at-a-time).
+// ja: Client - Gatt/Server example へ接続し、CentralのGATT Clientフローを一通り実行する:
+//     既知UUIDのDiscovery → Read → Write with Response。各ステップは要求APIで受理され、
+//     完了は update() 経由のイベントとして届く。次の操作は前の操作の完了callbackから連鎖する
+//     （Central GATT操作は同時1件のため）。
 #include <EspBle.h>
 
+// en: Same UUIDs as the Gatt/Server example.
+// ja: Gatt/Server example と同じUUID。
 static constexpr const char *SERVICE_UUID = "10da4dd0-8eaa-4c69-9003-676174747277";
 static constexpr const char *CHARACTERISTIC_UUID = "10da4dd1-8eaa-4c69-9003-676174747277";
 
@@ -18,12 +28,16 @@ void setup()
     return;
   }
 
+  // en: Once connected, discover the known-UUID characteristic.
+  // ja: 接続できたら既知UUIDのCharacteristicをDiscoveryする。
   ble.onConnected([](const EspBleConnection &connection) {
     if (!ble.discoverCharacteristic(connection.id, SERVICE_UUID, CHARACTERISTIC_UUID))
     {
       Serial.printf("Discovery request failed: %s\n", ble.lastErrorDetail().c_str());
     }
   });
+  // en: Discovery done -> request a read.
+  // ja: Discovery完了 → Readを要求。
   ble.onCharacteristicDiscovered([](const EspBleGattResult &result) {
     if (!result.success)
     {
@@ -32,6 +46,8 @@ void setup()
     }
     ble.readCharacteristic(result.connectionId, SERVICE_UUID, CHARACTERISTIC_UUID);
   });
+  // en: Read done -> print the value and request a write (5th arg true = write with response).
+  // ja: Read完了 → 値を表示し、Writeを要求（第5引数true = Write with Response）。
   ble.onCharacteristicRead([](const EspBleGattResult &result) {
     if (!result.success)
     {
@@ -46,9 +62,14 @@ void setup()
       String("hello from Central"),
       true);
   });
+  // en: Write done.
+  // ja: Write完了。
   ble.onCharacteristicWritten([](const EspBleGattResult &result) {
     Serial.println(result.success ? "Write complete" : "Write failed");
   });
+
+  // en: Connect once the target service UUID is found.
+  // ja: 対象Service UUIDを見つけたら接続する。
   ble.scanner().onResult([](const EspBleScanResult &scanResult) {
     if (connectionRequested || !scanResult.advertisesService(SERVICE_UUID))
     {
@@ -68,6 +89,8 @@ void setup()
 
 void loop()
 {
+  // en: Discovery/read/write completion events are delivered from this update().
+  // ja: Discovery/Read/Write の各完了イベントはこの update() から配送される。
   ble.update();
   delay(1);
 }

@@ -1,19 +1,23 @@
+// en: ConnectionInspector - interactive diagnostic tool: lists nearby connectable
+//     devices, connects to the one you pick, and dumps the connection snapshot (MTU,
+//     roles, security state). Also prints the bond store and diagnostic counters.
+//     Security is disabled here, so peripherals that require encryption reject reads but
+//     still accept the connection and show their link info.
+// ja: ConnectionInspector - 対話式の診断ツール。周囲のconnectableな機器を一覧し、選んだ
+//     相手へ接続してConnection snapshot（MTU・role・security状態）をダンプする。Bond store
+//     と診断カウンタも表示する。security無効なので、暗号化必須のPeripheralでも接続自体は成立し
+//     link情報を確認できる（Readは拒否される）。
 #include <EspBle.h>
-
-// Interactive diagnostic tool: lists nearby connectable devices, connects to
-// the one you pick, and dumps the connection snapshot (MTU, roles, security
-// state). Also prints the bond store and the library's diagnostic counters.
-//
-// Security is disabled here, so peripherals that require encryption will
-// reject reads but still accept the connection and show their link info.
 
 static constexpr size_t MaxFound = 10;
 
 EspBle ble;
-EspBleScanResult found[MaxFound];
+EspBleScanResult found[MaxFound]; // en: listed devices / ja: 一覧した機器
 size_t foundCount = 0;
 EspBleConnectionId currentId = 0;
 
+// en: Has this address already been listed?
+// ja: このaddressは既に一覧済みか。
 static bool alreadyListed(const EspBleScanResult &scanResult)
 {
   for (size_t i = 0; i < foundCount; ++i)
@@ -26,6 +30,8 @@ static bool alreadyListed(const EspBleScanResult &scanResult)
   return false;
 }
 
+// en: Dump the full connection snapshot.
+// ja: Connection snapshotをすべてダンプする。
 static void printConnection(const EspBleConnection &connection)
 {
   Serial.printf(
@@ -45,6 +51,8 @@ static void printConnection(const EspBleConnection &connection)
     connection.encryptionKeySize);
 }
 
+// en: Dump the bond store (snapshot index access).
+// ja: Bond storeをダンプする（snapshot indexアクセス）。
 static void printBonds()
 {
   const size_t count = ble.bondCount();
@@ -59,6 +67,8 @@ static void printBonds()
   }
 }
 
+// en: Print library diagnostic counters.
+// ja: ライブラリの診断カウンタを表示する。
 static void printCounters()
 {
   Serial.printf(
@@ -68,12 +78,14 @@ static void printCounters()
     static_cast<unsigned>(ble.scanner().droppedResultCount()));
 }
 
+// en: Clear the list and restart scanning.
+// ja: 一覧をクリアして再scanする。
 static void startScan()
 {
   foundCount = 0;
   EspBleScanConfig scanConfig;
   scanConfig.active = true;
-  Serial.printf("SCAN restart success=%u — send the list number to connect\n",
+  Serial.printf("SCAN restart success=%u - send the list number to connect\n",
     ble.scanner().start(scanConfig) ? 1 : 0);
 }
 
@@ -89,6 +101,8 @@ void setup()
     return;
   }
 
+  // en: On connect, remember the id and dump the snapshot.
+  // ja: 接続したらidを覚えてsnapshotをダンプする。
   ble.onConnected([](const EspBleConnection &connection) {
     currentId = connection.id;
     printConnection(connection);
@@ -100,6 +114,8 @@ void setup()
   ble.onConnectionFailed([](const EspBleConnectionFailure &failure) {
     Serial.printf("CONNECT_FAILED peer=%s detail=%s\n", failure.peerAddress.c_str(), failure.detail.c_str());
   });
+  // en: List up to MaxFound unique connectable devices as [index] address rssi name.
+  // ja: connectableな機器を最大MaxFound件、[index] address rssi name 形式で一覧する。
   ble.scanner().onResult([](const EspBleScanResult &scanResult) {
     if (!scanResult.connectable || foundCount >= MaxFound || alreadyListed(scanResult))
     {
@@ -127,6 +143,8 @@ void loop()
     const char command = Serial.read();
     if (command >= '0' && command <= '9')
     {
+      // en: connect to the listed device with that index
+      // ja: その番号の一覧機器へ接続する
       const size_t index = static_cast<size_t>(command - '0');
       if (index < foundCount)
       {
@@ -140,7 +158,7 @@ void loop()
     }
     else if (command == 's')
     {
-      startScan();
+      startScan(); // en: rescan / ja: 再scan
     }
     else if (command == 'd')
     {

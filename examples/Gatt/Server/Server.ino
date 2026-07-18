@@ -1,5 +1,13 @@
+// en: Server - expose a custom GATT service with one readable/writable characteristic.
+//     All GATT server configuration must happen before begin() (the backend cannot add
+//     services after the server starts). Operate it from Gatt/Client or a generic GATT app.
+// ja: Server - Read/Write可能なCharacteristicを1つ持つ独自GATT Serviceを公開する。
+//     GATT Server構成はすべて begin() 前に登録する（backendはserver開始後の
+//     Service追加ができないため）。Gatt/Client example や汎用GATTアプリから操作できる。
 #include <EspBle.h>
 
+// en: Custom 128-bit UUIDs (service / characteristic).
+// ja: 独自の128-bit UUID（Service / Characteristic）。
 static constexpr const char *SERVICE_UUID = "10da4dd0-8eaa-4c69-9003-676174747277";
 static constexpr const char *CHARACTERISTIC_UUID = "10da4dd1-8eaa-4c69-9003-676174747277";
 
@@ -11,9 +19,11 @@ void setup()
 
   auto &gattServer = ble.gattServer();
   EspBleGattCharacteristicConfig valueConfig;
-  valueConfig.readable = true;
-  valueConfig.writable = true;
+  valueConfig.readable = true;  // en: allow read / ja: Read許可
+  valueConfig.writable = true;  // en: allow write / ja: Write許可
 
+  // en: Register service -> characteristic -> initial value, all before begin().
+  // ja: begin() 前に Service → Characteristic → 初期値 の順で登録する。
   if (!gattServer.addService(SERVICE_UUID) ||
       !gattServer.addCharacteristic(SERVICE_UUID, CHARACTERISTIC_UUID, valueConfig) ||
       !gattServer.setValue(SERVICE_UUID, CHARACTERISTIC_UUID, String("ready")))
@@ -22,6 +32,8 @@ void setup()
     return;
   }
 
+  // en: Write event from a client (a value type with connectionId, UUID, value).
+  // ja: Clientからの書込みイベント（connectionId・UUID・値を持つ値型）。
   gattServer.onWritten([](const EspBleGattWrite &write) {
     Serial.printf(
       "Connection %u wrote: %s\n",
@@ -31,12 +43,14 @@ void setup()
 
   EspBleConfig config;
   config.deviceName = "EspBle GATT Server";
-  if (!ble.begin(config))
+  if (!ble.begin(config)) // en: GATT database is finalized and started here / ja: ここでGATT databaseが確定・開始する
   {
     Serial.printf("BLE initialization failed: %s\n", ble.lastErrorDetail().c_str());
     return;
   }
 
+  // en: Advertise the service UUID so clients can find it.
+  // ja: ClientがみつけられるようにService UUIDをadvertiseする。
   auto &advertising = ble.advertising();
   advertising.setName("EspBle GATT Server");
   advertising.addServiceUuid(SERVICE_UUID);
@@ -48,6 +62,8 @@ void setup()
 
 void loop()
 {
+  // en: The onWritten callback is delivered from this update().
+  // ja: onWritten コールバックはこの update() から配送される。
   ble.update();
   delay(1);
 }

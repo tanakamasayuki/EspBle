@@ -1,14 +1,17 @@
+// en: StaticPasskeyClient - central-side counterpart of StaticPasskeyServer: the keyboard
+//     side (KeyboardOnly) that "types" the passkey. This trial API passes a preconfigured
+//     passkey to the stack instead of waiting for runtime input. After MITM-authenticated
+//     pairing it reads the protected characteristic.
+// ja: StaticPasskeyClient - StaticPasskeyServerのCentral側。passkeyを「入力する」側
+//     （KeyboardOnly）。現在の試行APIは実行時入力を待つ代わりに事前設定passkeyをスタックへ渡す。
+//     MITM認証Pairing完了後、保護されたCharacteristicをReadする。
 #include <EspBle.h>
-
-// Central-side counterpart of StaticPasskeyServer: the keyboard side
-// (KeyboardOnly) that "types" the passkey. This trial API passes a
-// preconfigured passkey to the stack instead of waiting for runtime input.
-// After MITM-authenticated pairing it reads the protected characteristic.
 
 static constexpr const char *SERVICE_UUID = "9f78d810-802e-43e7-9003-706173736b79";
 static constexpr const char *CHARACTERISTIC_UUID = "9f78d811-802e-43e7-9003-706173736b79";
 
-// Must match the passkey displayed by StaticPasskeyServer.
+// en: Must match the passkey displayed by StaticPasskeyServer.
+// ja: StaticPasskeyServerが表示するpasskeyと一致させること。
 static constexpr uint32_t STATIC_PASSKEY = 438209;
 
 EspBle ble;
@@ -23,6 +26,7 @@ void setup()
   config.security.enabled = true;
   config.security.bonding = true;
   config.security.mitm = true;
+  // en: this side "types" the passkey / ja: passkeyを「入力する」側
   config.security.ioCapability = EspBleSecurityIoCapability::KeyboardOnly;
   config.security.staticPasskeyEnabled = true;
   config.security.staticPasskey = STATIC_PASSKEY;
@@ -33,7 +37,8 @@ void setup()
   }
 
   ble.onConnected([](const EspBleConnection &connection) {
-    // Start pairing explicitly; completion arrives via onSecurityChanged().
+    // en: Start pairing explicitly; completion arrives via onSecurityChanged().
+    // ja: 明示的にPairingを開始する。完了は onSecurityChanged() で届く。
     if (!ble.requestSecurity(connection.id))
     {
       Serial.printf("Security request failed: %s\n", ble.lastErrorDetail().c_str());
@@ -48,8 +53,9 @@ void setup()
       event.connection.bonded ? 1 : 0);
     if (event.success)
     {
-      // The characteristic requires an authenticated link, so this only
-      // succeeds after MITM pairing completed.
+      // en: The characteristic requires an authenticated link, so this only
+      //     succeeds after MITM pairing completed.
+      // ja: CharacteristicはMITM認証済みlinkを要求するため、MITM Pairing完了後にのみ成功する。
       ble.discoverCharacteristic(event.connection.id, SERVICE_UUID, CHARACTERISTIC_UUID);
     }
   });
@@ -90,6 +96,8 @@ void setup()
 
 void loop()
 {
+  // en: On 'c', delete all bonds (allowed only while disconnected).
+  // ja: 'c' で全Bondを削除（切断中のみ許可）。
   if (Serial.available() > 0 && Serial.read() == 'c')
   {
     Serial.printf(

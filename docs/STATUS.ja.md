@@ -104,6 +104,10 @@ host上のunit test（`tests/unit/`）としてkeymap変換とHID Report Map par
 
 ### P0: 初回リリースまでに優先する作業
 
+> **初回リリース(0.1.0)のスコープ決定（2026-07-18）**: HIDは現状のkeyboard専用APIのままでは出さず、**複合HID対応＋EspUsbDevice/Host流のAPI再設計**（[HID_REDESIGN_PLAN.ja.md](HID_REDESIGN_PLAN.ja.md)）を初回リリースに含める。破壊的変更を伴うが0.x（互換性保証なし）のうちに実施する。HID以外のラップ改善（[FEATURE_MATRIX.ja.md](FEATURE_MATRIX.ja.md)のA/B/C）は0.2.0以降。
+
+0. **HID複合対応・API再設計を完了する**（初回リリースの主目玉、[HID_REDESIGN_PLAN.ja.md](HID_REDESIGN_PLAN.ja.md) Phase 1-6）。
+
 1. **ESP32KeyBridge利用形から公開APIを固める**
    - ✅ `ble.update()`必須を最終仕様として確定（DECISIONS 確定 #17）。
    - ✅ HID Discoveryは明示`discover()`維持、security有効時はSecurity完了後に呼ぶ規範で統一（DECISIONS HID Host #17）。

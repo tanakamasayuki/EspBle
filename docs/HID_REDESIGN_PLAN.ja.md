@@ -9,6 +9,8 @@
 
 初回リリース前の0.x（互換性保証なし、[DECISIONS](DECISIONS.ja.md)確定#22）につき、**破壊的変更を許容**します。
 
+**この再設計は初回リリース(0.1.0)のスコープに含めることを決定済み（2026-07-18）。** 現状のkeyboard専用APIのままでは初回リリースを出さず、本計画の完了を初回リリースの要件とします。HID以外のラップ改善（[FEATURE_MATRIX.ja.md](FEATURE_MATRIX.ja.md)のA/B/C）は0.2.0以降です。
+
 ## 寄せる相手のAPI形（調査済み）
 
 - **EspUsbDevice**: コア`EspUsbDevice`＋HID種別ごとの別オブジェクト（`EspUsbDeviceHidKeyboard/Mouse/ConsumerControl/SystemControl/Gamepad/Custom`）。各オブジェクトがdeviceへ自己登録し、1回の`begin()`で固定Report ID（keyboard=1,mouse=2,gamepad=3,consumer=4,system=5,vendor=6）のcomposite HIDに合成。keyboardは生usage経路（`sendReport`/`pressUsage`）とlayout-aware経路（`write`/`pressKey`/`setLayout`）の二本立て。mouseは`move/click/press/release/wheel`、consumer/systemは`press/release/click`。keyboardのLEDは`onOutputReport`。
