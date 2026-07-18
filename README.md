@@ -65,6 +65,8 @@ void loop() {
 
 ## Documents
 
+**New here? Start with the [documentation guide](docs/README.md)** — it shows the reading order and each document's role. The quickest path to "where does this project stand" is [docs/STATUS.ja.md](docs/STATUS.ja.md) then [docs/DECISIONS.ja.md](docs/DECISIONS.ja.md).
+
 The design documents are currently written in Japanese.
 
 - [Development status and TODO](docs/STATUS.ja.md)

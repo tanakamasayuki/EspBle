@@ -65,6 +65,8 @@ void loop() {
 
 ## 文書
 
+**はじめての方は[ドキュメント案内](docs/README.ja.md)から** — 読む順序と各文書の役割をまとめています。「今どこまで進んでいるか」を最短で把握するには [docs/STATUS.ja.md](docs/STATUS.ja.md) → [docs/DECISIONS.ja.md](docs/DECISIONS.ja.md) の順です。
+
 - [開発状況とTODO](docs/STATUS.ja.md)
 - [要件](docs/REQUIREMENTS.ja.md)
 - [コア設計](docs/CORE_DESIGN.ja.md)
