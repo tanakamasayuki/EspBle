@@ -179,6 +179,7 @@ host上のunit test（`tests/unit/`）としてkeymap変換とHID Report Map par
 - [HID Keyboard Device仕様](HID_KEYBOARD_DEVICE_SPEC.ja.md)
 - [HID Keyboard Host仕様](HID_KEYBOARD_HOST_SPEC.ja.md)
 - [設計決定](DECISIONS.ja.md)
+- [機能対応マトリクス](FEATURE_MATRIX.ja.md)
 - [開発計画](DEVELOPMENT_PLAN.ja.md)
 - [テスト計画](../tests/TEST_PLAN.ja.md)
 

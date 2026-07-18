@@ -73,6 +73,7 @@ void loop() {
 - [HID Keyboard Host仕様](docs/HID_KEYBOARD_HOST_SPEC.ja.md)
 - [用語と命名規則](docs/TERMINOLOGY.ja.md)
 - [設計決定](docs/DECISIONS.ja.md)
+- [機能対応マトリクス](docs/FEATURE_MATRIX.ja.md)
 - [開発計画](docs/DEVELOPMENT_PLAN.ja.md)
 - [テスト計画](tests/TEST_PLAN.ja.md)
 

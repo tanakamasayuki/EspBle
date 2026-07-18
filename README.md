@@ -75,6 +75,7 @@ The design documents are currently written in Japanese.
 - [HID Keyboard Host specification](docs/HID_KEYBOARD_HOST_SPEC.ja.md)
 - [Terminology and naming rules](docs/TERMINOLOGY.ja.md)
 - [Design decision ledger](docs/DECISIONS.ja.md)
+- [Feature support matrix](docs/FEATURE_MATRIX.ja.md)
 - [Development plan](docs/DEVELOPMENT_PLAN.ja.md)
 - [Test plan](tests/TEST_PLAN.ja.md)
 
