@@ -4,6 +4,9 @@
 
 ESP32 Arduino向けの汎用Bluetooth Low Energyライブラリです。**Arduino-ESP32に同梱されたNimBLE backendを使用し、Bluetooth Classicには対応しません。** Central / Peripheral、GATT Client / Server、Security、標準プロファイルと独自GATTサービスを共通基盤上で扱います。外部のNimBLE-Arduinoは必須依存にしません。
 
+> [!IMPORTANT]
+> **無印ESP32（classic）では動作しません。** EspBleはNimBLE backendを必要としますが、無印`esp32`ビルドはNimBLEを同梱せず（Bluedroidが既定）、設計上コンパイルできません。対応ターゲットはNimBLEを同梱するSoC（**ESP32-S3 / ESP32-C3 / ESP32-C6 / ESP32-H2**）です。無印ESP32は将来、別ライブラリ `EspBleBluedroid` 等で対応する可能性があります（[対応環境](#対応環境)を参照）。
+
 公開APIはまだ確定していません。初回リリース前の試行段階で、APIは変更される可能性があります。
 
 ## 機能

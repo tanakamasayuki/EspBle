@@ -4,6 +4,9 @@
 
 EspBle is a general-purpose Bluetooth Low Energy library for ESP32 Arduino. **It uses the NimBLE backend bundled with Arduino-ESP32 and does not support Bluetooth Classic.** It provides central and peripheral roles, generic GATT client and server operations, security, and composable profiles on one shared foundation. External NimBLE-Arduino is not a required dependency.
 
+> [!IMPORTANT]
+> **The classic ESP32 is not supported.** EspBle requires the NimBLE backend, which the plain `esp32` build does not ship (it defaults to Bluedroid), so it fails to compile there by design. Supported targets are the NimBLE SoCs: **ESP32-S3 / ESP32-C3 / ESP32-C6 / ESP32-H2**. The classic ESP32 may be covered later by a separate `EspBleBluedroid` library — see [Compatibility](#compatibility).
+
 The public API is not stable yet: this is the trial stage ahead of the first release, and APIs may still change.
 
 ## Features
