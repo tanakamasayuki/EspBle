@@ -97,6 +97,7 @@ host上のunit test（`tests/unit/`）としてkeymap変換とHID Report Map par
 - Central側のMTUは接続時のsnapshotのみで、接続後の変化は追跡できません（同梱backendにMTU変更callbackがないため）。MTU交換が接続timeoutまでに完了しない場合、snapshotが23になる可能性があります（DECISIONS Connection/GATT #23）。
 - callback event queueは満杯時にNotification / key stateのみをdropし（lifecycle・完了イベントは優先保持）、drop数を`droppedEventCount()`等で観測できます。queue容量はcompile-time定数で、実行時設定APIとoverflowイベントは設けません（DECISIONS 確定 #21）。
 - 自動実機検証はESP32-S3中心です。ESP32-P4 + C6 Hosted BLEなどは対応候補ですが未検証です。
+- Bluedroidが既定のSoC（無印ESP32など、NimBLEを同梱しない構成）は対象外です。将来、別ライブラリ（`EspBleBluedroid`等）で「似た使い方・完全互換ではない」対応を検討します（DECISIONS 確定 #23）。
 - 市販BLE KeyboardやAndroid / Linux / Windows / macOSとのmanual interoperabilityは未完了です。
 
 ## 次の作業

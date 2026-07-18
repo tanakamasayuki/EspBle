@@ -21,7 +21,7 @@ ESP32 Arduino向けの汎用Bluetooth Low Energyライブラリです。**Arduin
 
 ## 対応環境
 
-EspBleは**Arduino-ESP32同梱のNimBLE backend**を必要とします。Bluedroidが既定のcore（無印`esp32`ボードなど）はコンパイル時に`#error`で明示的に拒否します。
+EspBleは**Arduino-ESP32同梱のNimBLE backend**を必要とします。Bluedroidが既定のcore（無印`esp32`ボードなど）はコンパイル時に`#error`で明示的に拒否します。したがって無印ESP32は本ライブラリの**対象外**です。EspBleのAPIが安定した後、別ライブラリ（`EspBleBluedroid`等）が、意図的に似せた（ただし完全互換ではない）APIで対応する可能性があります。
 
 開発とPeerテストはarduino-esp32 3.3.10で行っています。対応するcoreバージョンの範囲とボードごとのビルドカバレッジは手動管理ではなくCIで計測します:
 

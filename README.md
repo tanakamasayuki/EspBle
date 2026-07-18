@@ -21,7 +21,7 @@ Everything above is verified with an automated two-board ESP32-S3 peer test suit
 
 ## Compatibility
 
-EspBle requires the **NimBLE backend bundled with Arduino-ESP32**. Cores built with the Bluedroid default (such as the plain `esp32` board) are rejected at compile time with a clear `#error`.
+EspBle requires the **NimBLE backend bundled with Arduino-ESP32**. Cores built with the Bluedroid default (such as the plain `esp32` board) are rejected at compile time with a clear `#error`. The classic ESP32 is therefore **out of scope** for this library; once the EspBle API stabilizes, a separate library (e.g. `EspBleBluedroid`) may cover it with a deliberately similar — but not fully compatible — API.
 
 Development and the peer tests run on arduino-esp32 3.3.10. The supported core-version range and per-board build coverage are measured by CI, not maintained by hand:
 
