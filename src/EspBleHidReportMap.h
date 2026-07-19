@@ -250,6 +250,12 @@ struct EspBleHidReportMapEntry
   bool hasReportId = false;
   uint8_t reportId = 0;
   uint16_t inputBitLength = 0;
+  bool keyboardBitmap = false;
+  bool keyboardHasModifiers = false;
+  uint16_t keyboardModifierBitOffset = 0;
+  uint16_t keyboardBitmapBitOffset = 0;
+  uint16_t keyboardBitmapBitCount = 0;
+  uint16_t keyboardBitmapUsageMinimum = 0;
 
   size_t inputByteLength() const { return (inputBitLength + 7) / 8; }
 };
@@ -417,7 +423,7 @@ inline EspBleHidReportMapInfo espBleParseHidReportMap(const uint8_t *data, size_
       if (kind != EspBleHidReportKind::Unknown)
       {
         EspBleHidReportMapEntry *entry = findEntry(kind);
-        if (entry != nullptr && reportSize <= 32 && reportCount <= 64)
+        if (entry != nullptr && reportSize <= 32 && reportCount <= 2048)
         {
           const uint16_t itemOffset = entry->inputBitLength;
           const uint32_t itemBits = reportSize * reportCount;
@@ -426,6 +432,25 @@ inline EspBleHidReportMapInfo espBleParseHidReportMap(const uint8_t *data, size_
               ? 0xffffu : entry->inputBitLength + itemBits);
           const bool constant = (value & 0x01) != 0;
           const bool variable = (value & 0x02) != 0;
+          if (kind == EspBleHidReportKind::Keyboard && !constant && variable &&
+              reportSize == 1 && haveUsageRange && localUsagePage(usageMinimum) == 0x07)
+          {
+            const uint16_t minimum = localUsageId(usageMinimum);
+            const uint16_t maximum = localUsageId(usageMaximum);
+            if (minimum == 0xe0 && maximum >= 0xe7 && reportCount >= 8)
+            {
+              entry->keyboardHasModifiers = true;
+              entry->keyboardModifierBitOffset = itemOffset;
+            }
+            else if (reportCount >= 16 && minimum <= 0x04)
+            {
+              entry->keyboardBitmap = true;
+              entry->keyboardBitmapBitOffset = itemOffset;
+              entry->keyboardBitmapBitCount = static_cast<uint16_t>(
+                reportCount > 256 ? 256 : reportCount);
+              entry->keyboardBitmapUsageMinimum = minimum;
+            }
+          }
           if (!constant && variable)
           {
             for (uint32_t index = 0; index < reportCount &&

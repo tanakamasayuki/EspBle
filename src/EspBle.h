@@ -686,8 +686,11 @@ public:
 
   bool configure(
     const EspBleHidKeyboardConfig &config = EspBleHidKeyboardConfig());
+  void enableNkro(bool enable = true);
+  bool nkroEnabled() const;
   bool sendReport(const EspBleHidKeyboardReport &report);
   bool pressUsage(uint8_t usage, uint8_t modifiers = 0, uint32_t holdMs = 10);
+  bool releaseUsage(uint8_t usage);
   bool tapUsage(uint8_t usage, uint8_t modifiers = 0, uint32_t holdMs = 10);
   bool pressKey(char key, uint32_t holdMs = 10);
   bool tapKey(char key, uint32_t holdMs = 10);
@@ -720,6 +723,9 @@ private:
   EspBleHidDeviceManagerImpl *impl_ = nullptr;
   OutputReportCallback outputReportCallback_;
   EspBleKeyboardLayout layout_ = EspBleKeyboardLayout::EnUs;
+  bool nkroEnabled_ = false;
+  uint8_t nkroModifiers_ = 0;
+  uint8_t nkroBitmap_[28] = {};
 };
 
 class EspBleHidMouse

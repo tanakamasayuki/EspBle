@@ -60,6 +60,16 @@ const uint8_t bootKeyboardMap[] = {
   0xc0,
 };
 
+const uint8_t nkroKeyboardMap[] = {
+  0x05,0x01, 0x09,0x06, 0xa1,0x01, 0x85,0x01,
+  0x05,0x07, 0x19,0xe0, 0x29,0xe7, 0x15,0x00, 0x25,0x01,
+  0x75,0x01, 0x95,0x08, 0x81,0x02,
+  0x05,0x08, 0x19,0x01, 0x29,0x05, 0x95,0x05, 0x75,0x01,
+  0x91,0x02, 0x95,0x01, 0x75,0x03, 0x91,0x01,
+  0x05,0x07, 0x19,0x00, 0x29,0xdf, 0x15,0x00, 0x25,0x01,
+  0x75,0x01, 0x95,0xe0, 0x81,0x02, 0xc0,
+};
+
 // Keyboard (report ID 1) plus Consumer Control (report ID 2), consumer
 // collection declared FIRST so naive "first report" selection is wrong.
 const uint8_t consumerComboMap[] = {
@@ -177,6 +187,19 @@ int main()
     }
     check("generic mouse x parse", xFound);
     check("generic mouse y parse", yFound);
+  }
+  {
+    const EspBleHidReportMapInfo info =
+      espBleParseHidReportMap(nkroKeyboardMap, sizeof(nkroKeyboardMap));
+    check("generic nkro report count", info.count == 1);
+    const EspBleHidReportMapEntry &entry = info.entries[0];
+    check("generic nkro keyboard", entry.kind == EspBleHidReportKind::Keyboard);
+    check("generic nkro input length", entry.inputByteLength() == 29);
+    check("generic nkro bitmap", entry.keyboardBitmap);
+    check("generic nkro modifiers", entry.keyboardHasModifiers &&
+      entry.keyboardModifierBitOffset == 0);
+    check("generic nkro bitmap range", entry.keyboardBitmapBitOffset == 8 &&
+      entry.keyboardBitmapBitCount == 224 && entry.keyboardBitmapUsageMinimum == 0);
   }
   {
     const EspBleHidReportMapInfo info =

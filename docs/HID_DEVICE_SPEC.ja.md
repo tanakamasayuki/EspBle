@@ -12,7 +12,7 @@ ble.begin(config);
 
 | 入口 | 固定ID | payload | 主なAPI |
 |---|---:|---|---|
-| `hidKeyboard()` | 1 | modifier + reserved + 6 usage（8 bytes） | `sendReport`、`pressUsage`、`tapUsage`、`pressKey`、`tapKey`、`write`、`releaseAll`、`setLayout` |
+| `hidKeyboard()` | 1 | 6KRO 8 bytes / NKRO 29 bytes | `enableNkro`、`sendReport`、`pressUsage`、`releaseUsage`、`tapUsage`、`pressKey`、`tapKey`、`write`、`releaseAll`、`setLayout` |
 | `hidMouse()` | 2 | buttons、X、Y、wheel（4 bytes） | `move`、`wheel`、`press`、`release`、`click`、`releaseAll`。`EspBleHidMouseConfig::buttons`で1〜5 buttons |
 | `hidGamepad()` | 3 | 6 axis、hat、32 buttons（11 bytes） | `send`、`sendReport`、`releaseAll` |
 | `hidConsumerControl()` | 4 | 16-bit usage | `press`、`release`、`click`、`sendUsage` |
@@ -26,6 +26,7 @@ ble.begin(config);
 - HID Service `0x1812`、Device Information `0x180A`、Battery `0x180F`は内部共通マネージャが一度だけ登録します。
 - 構成済みprofileのReport Descriptorだけを固定ID付きでReport Map `0x2A4B`へ連結します。
 - profileごとにInput Report `0x2A4D`とReport Reference `{id, 1}`を作ります。keyboardはLED Output Report `{1, 2}`、VendorはOutput `{6, 2}`とFeature `{6, 3}`も持ちます。
+- keyboardは既定で8-byte 6KROです。`configure()`より前に`enableNkro()`を呼ぶと、EspUsbDeviceと同じmodifier 1 byte + usage `0x00`〜`0xDF`の28-byte bitmapへ切り替わります。29-byte通知のため双方のMTUを32以上（exampleでは64）にします。
 - Report payloadのNotificationにはReport IDを含めません。
 - CCCD購読状態は接続・Report IDごとに追跡し、購読済みpeerだけへ通知します。
 - security有効時はHID attributeへHOGP Security Mode 1 Level 2（暗号化必須）を適用し、未暗号化linkへHID入力を送りません。
@@ -35,4 +36,4 @@ Output / Feature Report callbackはstack taskではなく`ble.update()`から配
 
 ## 検証
 
-`tests/peer/hid_keyboard_device`はArduino-ESP32 BLE APIを直接使うCentralから、keyboard+mouse複合Report Map、複数Report Reference、個別CCCD、8-byte keyboard通知、4-byte mouse通知、LED Output、Battery、暗号化を実機検証します。`tests/peer/hid_keyboard_host`では全6 profileを同時構成し、Vendor Input / Output / Featureを含むEspBle Hostとの相互運用を検証します。
+`tests/peer/hid_keyboard_device`はArduino-ESP32 BLE APIを直接使うCentralから6KROを検証します。`tests/peer/hid_keyboard_nkro`はEspBle Host / Device間で8キー同時押し、高usage、個別release、LED Outputを実機検証します。`tests/peer/hid_keyboard_host`では全6 profileを同時構成し、Vendor Input / Output / Featureを含む相互運用を検証します。

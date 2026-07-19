@@ -55,6 +55,7 @@
 - ✅ Environmental Sensing standalone Server / Client exampleと数値scale Peerテスト
 - ✅ HID Keyboard Device（Peripheral / GATT Server）
 - ✅ HID Keyboard Host（Central / GATT Client、初期6KRO）
+- ✅ NKRO Keyboard Device / Host（29-byte bitmap、Peer / unitテスト）
 - ✅ HID Keyboard Hostの`onKeyboard()` press/release convenience event
 - ✅ HID Mouse / Consumer Control / System Control / Gamepad Device
 - ✅ Vendor HID Device / Host（Input / Output / Feature、固定Report ID 6）

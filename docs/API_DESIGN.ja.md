@@ -262,7 +262,7 @@ ble.begin(config);
 ble.advertising().start();
 ```
 
-入力はmodifier 1 byteと同時押し最大6 keyの値型で指定します。Report IDとreserved byteを利用者に組み立てさせません。`sendReport()`は接続中のHID Hostへ8-byte Report payloadをNotificationで送信し、`releaseAll()`は全フィールドが0のreportを送ります。
+既定の入力はmodifier 1 byteと同時押し最大6 keyの値型で指定します。`configure()`前にEspUsbDeviceと同じ`enableNkro()`を呼ぶと29-byte bitmap Reportへ切り替わり、`pressUsage()`でキーを蓄積し`releaseUsage()`で個別解除できます。Report IDを利用者に組み立てさせず、`releaseAll()`は全フィールドが0のreportを送ります。
 
 ```cpp
 EspBleHidKeyboardInputReport report;

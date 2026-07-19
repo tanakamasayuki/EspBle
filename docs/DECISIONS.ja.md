@@ -127,6 +127,7 @@
 5. Device共通マネージャがHID/DIS/Battery登録、Report Map合成、Report characteristic、Report ID別CCCD、暗号化permission、notify routingを一元管理する。
 6. Host listenerはshared ownershipをmutex下でsnapshotし、mutexを解放してから単一callback→listener登録順に実行する。旧keyboard専用型・入口は残さない。
 7. Vendor HIDは1〜64-byteの同一サイズをInput / Output / Featureで共有し、Deviceは`sendInput()`とOutput / Feature callback、Hostは`onVendorInput()`とOutput / Feature送信を提供する。
+8. NKROはEspUsbDeviceと同じmodifier 1 byte + 224-bit usage bitmapを採用し、`enableNkro()`は`configure()`前に選択する。Hostは6KRO / NKROを同じ256-bit usage snapshotへ正規化する。29-byte notificationのためMTU 32以上を利用者configで指定する。
 
 ## 優先順位候補
 

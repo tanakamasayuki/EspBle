@@ -1654,6 +1654,7 @@ struct EspBleHidDeviceManagerImpl
   uint8_t profileMask = 0;
   uint8_t mouseButtonCount = 5;
   uint8_t vendorReportSize = 63;
+  bool keyboardNkro = false;
   bool realized = false;
   uint16_t inputValueHandles[ProfileCount] = {};
   uint16_t outputValueHandle = 0;
@@ -1715,6 +1716,12 @@ struct EspBleHidKeyboardHostImpl
   struct ReportFormat
   {
     uint16_t inputBitLength = 0;
+    bool keyboardBitmap = false;
+    bool keyboardHasModifiers = false;
+    uint16_t keyboardModifierBitOffset = 0;
+    uint16_t keyboardBitmapBitOffset = 0;
+    uint16_t keyboardBitmapBitCount = 0;
+    uint16_t keyboardBitmapUsageMinimum = 0;
     EspBleHidReportField fields[MaxFieldsPerReport];
     size_t fieldCount = 0;
   };
@@ -1861,7 +1868,27 @@ struct EspBleHidKeyboardHostImpl
     const uint8_t *data,
     size_t length)
   {
-    if (data == nullptr || length != 8)
+    ReportFormat format;
+    bool formatFound = false;
+    {
+      std::lock_guard<std::mutex> lock(mutex);
+      Connection *connection = findConnection(connectionId);
+      if (connection != nullptr)
+      {
+        for (size_t index = 0; index < connection->inputReportCount; ++index)
+        {
+          if (connection->inputKinds[index] == EspBleHidReportKind::Keyboard &&
+              connection->inputReportIds[index] == reportId)
+          {
+            format = connection->inputFormats[index];
+            formatFound = true;
+            break;
+          }
+        }
+      }
+    }
+    if (data == nullptr || !formatFound || format.inputBitLength == 0 ||
+        length != (format.inputBitLength + 7) / 8)
     {
       // Count instead of vanishing: an unexpected report length otherwise
       // shows up as "discovery succeeded but no keys arrive".
@@ -1869,14 +1896,18 @@ struct EspBleHidKeyboardHostImpl
       ++invalidInputReports;
       return;
     }
-    for (size_t index = 0; index < 6; ++index)
+    if (!format.keyboardBitmap)
     {
-      const uint8_t usage = data[index + 2];
-      if (usage >= 0x01 && usage <= 0x03)
+      if (length != 8)
       {
-        // Phantom state (ErrorRollOver/POSTFail/ErrorUndefined): standard
-        // hosts ignore the report and keep the previous key state.
+        std::lock_guard<std::mutex> lock(mutex);
+        ++invalidInputReports;
         return;
+      }
+      for (size_t index = 0; index < 6; ++index)
+      {
+        const uint8_t usage = data[index + 2];
+        if (usage >= 0x01 && usage <= 0x03) return;
       }
     }
 
@@ -1884,23 +1915,42 @@ struct EspBleHidKeyboardHostImpl
     event.type = EventType::State;
     event.state.connectionId = connectionId;
     event.state.reportId = reportId;
-    event.state.modifiers = data[0];
-    for (size_t index = 0; index < 6; ++index)
+    if (format.keyboardBitmap)
     {
-      const uint8_t usage = data[index + 2];
-      if (usage >= 0x04)
+      if (format.keyboardHasModifiers)
       {
-        event.state.keys[usage >> 3] |= static_cast<uint8_t>(1u << (usage & 7));
+        for (uint8_t bit = 0; bit < 8; ++bit)
+        {
+          const size_t sourceBit = format.keyboardModifierBitOffset + bit;
+          if ((data[sourceBit >> 3] & static_cast<uint8_t>(1u << (sourceBit & 7))) != 0)
+            event.state.modifiers |= static_cast<uint8_t>(1u << bit);
+        }
+      }
+      for (uint16_t bit = 0; bit < format.keyboardBitmapBitCount; ++bit)
+      {
+        const uint16_t usage = format.keyboardBitmapUsageMinimum + bit;
+        const size_t sourceBit = format.keyboardBitmapBitOffset + bit;
+        if (usage < 256 &&
+            (data[sourceBit >> 3] & static_cast<uint8_t>(1u << (sourceBit & 7))) != 0)
+          event.state.keys[usage >> 3] |= static_cast<uint8_t>(1u << (usage & 7));
+      }
+    }
+    else
+    {
+      event.state.modifiers = data[0];
+      for (size_t index = 0; index < 6; ++index)
+      {
+        const uint8_t usage = data[index + 2];
+        if (usage >= 0x04)
+          event.state.keys[usage >> 3] |= static_cast<uint8_t>(1u << (usage & 7));
       }
     }
     for (uint8_t bit = 0; bit < 8; ++bit)
-    {
       if ((event.state.modifiers & static_cast<uint8_t>(1u << bit)) != 0)
       {
         const uint8_t usage = static_cast<uint8_t>(0xe0 + bit);
         event.state.keys[usage >> 3] |= static_cast<uint8_t>(1u << (usage & 7));
       }
-    }
 
     {
       std::lock_guard<std::mutex> lock(mutex);
@@ -2057,9 +2107,6 @@ struct EspBleHidKeyboardHostImpl
         BLERemoteCharacteristic *reportMap =
           hidService->getCharacteristic(BLEUUID((uint16_t)0x2a4b));
         const String reportMapValue = reportMap == nullptr ? String() : reportMap->readValue();
-        const EspBleHidKeyboardReportMapInfo keyboardInfo = espBleParseKeyboardReportMap(
-          reinterpret_cast<const uint8_t *>(reportMapValue.c_str()),
-          reportMapValue.length());
         const EspBleHidReportMapInfo mapInfo = espBleParseHidReportMap(
           reinterpret_cast<const uint8_t *>(reportMapValue.c_str()), reportMapValue.length());
         if (reportMap == nullptr || mapInfo.count == 0)
@@ -2080,6 +2127,7 @@ struct EspBleHidKeyboardHostImpl
           }
           std::map<uint16_t, BLERemoteCharacteristic *> *characteristics =
             hidService->getCharacteristicsByHandle();
+          bool keyboardInputFound = false;
           for (const auto &entry : *characteristics)
           {
             BLERemoteCharacteristic *characteristic = entry.second;
@@ -2101,7 +2149,11 @@ struct EspBleHidKeyboardHostImpl
                 inputReports[inputReportCount] = characteristic;
                 inputKinds[inputReportCount] = kind;
                 inputReportIds[inputReportCount++] = reportId;
-                if (kind == EspBleHidReportKind::Keyboard) result.reportId = reportId;
+                if (kind == EspBleHidReportKind::Keyboard)
+                {
+                  result.reportId = reportId;
+                  keyboardInputFound = true;
+                }
               }
               else if (reportType == 2 && outputReportCount < 8)
               {
@@ -2125,6 +2177,7 @@ struct EspBleHidKeyboardHostImpl
                 inputReportIds[0] = 0;
                 inputReportCount = 1;
                 result.reportId = 0;
+                keyboardInputFound = mapInfo.entries[0].kind == EspBleHidReportKind::Keyboard;
               }
               else if ((characteristic->canWrite() || characteristic->canWriteNoResponse()) &&
                        outputReportCount < 8)
@@ -2146,7 +2199,7 @@ struct EspBleHidKeyboardHostImpl
             BLERemoteCharacteristic *vendorFeatureReport = nullptr;
             for (size_t index = 0; index < outputReportCount; ++index)
             {
-              if (keyboardInfo.keyboardFound && outputReportIds[index] == result.reportId)
+              if (keyboardInputFound && outputReportIds[index] == result.reportId)
               {
                 outputReport = outputReports[index];
               }
@@ -2195,7 +2248,16 @@ struct EspBleHidKeyboardHostImpl
                   {
                     if (mapInfo.entries[entryIndex].kind == inputKinds[index] &&
                         mapInfo.entries[entryIndex].reportId == inputReportIds[index])
-                      format.inputBitLength = mapInfo.entries[entryIndex].inputBitLength;
+                    {
+                      const EspBleHidReportMapEntry &entry = mapInfo.entries[entryIndex];
+                      format.inputBitLength = entry.inputBitLength;
+                      format.keyboardBitmap = entry.keyboardBitmap;
+                      format.keyboardHasModifiers = entry.keyboardHasModifiers;
+                      format.keyboardModifierBitOffset = entry.keyboardModifierBitOffset;
+                      format.keyboardBitmapBitOffset = entry.keyboardBitmapBitOffset;
+                      format.keyboardBitmapBitCount = entry.keyboardBitmapBitCount;
+                      format.keyboardBitmapUsageMinimum = entry.keyboardBitmapUsageMinimum;
+                    }
                   }
                   for (size_t fieldIndex = 0; fieldIndex < mapInfo.fieldCount &&
                        format.fieldCount < MaxFieldsPerReport; ++fieldIndex)
@@ -3411,7 +3473,27 @@ bool EspBleHidKeyboard::configure(const EspBleHidKeyboardConfig &config)
 {
   if (!configureProfile(ESP_BLE_HID_REPORT_ID_KEYBOARD, config)) return false;
   layout_ = config.layout;
+  impl_->keyboardNkro = nkroEnabled_;
+  impl_->inputLengths[ESP_BLE_HID_REPORT_ID_KEYBOARD - 1] = nkroEnabled_ ? 29 : 8;
   return true;
+}
+
+void EspBleHidKeyboard::enableNkro(bool enable)
+{
+  if (owner_->initialized() || (impl_ != nullptr && impl_->configured))
+  {
+    owner_->setError(EspBleError::InvalidState, "NKRO mode must be selected before configure");
+    return;
+  }
+  nkroEnabled_ = enable;
+  nkroModifiers_ = 0;
+  memset(nkroBitmap_, 0, sizeof(nkroBitmap_));
+  owner_->clearError();
+}
+
+bool EspBleHidKeyboard::nkroEnabled() const
+{
+  return nkroEnabled_;
 }
 
 bool EspBleHidKeyboard::configureProfile(
@@ -3505,6 +3587,15 @@ bool EspBleHidKeyboard::realize()
     0x91, 0x01,       // Output (Constant)
     0xc0              // End Collection
   };
+  static const uint8_t nkroKeyboardMap[] = {
+    0x05,0x01, 0x09,0x06, 0xa1,0x01, 0x85,0x01,
+    0x05,0x07, 0x19,0xe0, 0x29,0xe7, 0x15,0x00, 0x25,0x01,
+    0x75,0x01, 0x95,0x08, 0x81,0x02,
+    0x05,0x08, 0x19,0x01, 0x29,0x05, 0x95,0x05, 0x75,0x01,
+    0x91,0x02, 0x95,0x01, 0x75,0x03, 0x91,0x01,
+    0x05,0x07, 0x19,0x00, 0x29,0xdf, 0x15,0x00, 0x25,0x01,
+    0x75,0x01, 0x95,0xe0, 0x81,0x02, 0xc0
+  };
   static const uint8_t mouseMap[] = {
     0x05,0x01, 0x09,0x02, 0xa1,0x01, 0x85,0x02, 0x09,0x01, 0xa1,0x00,
     0x05,0x09, 0x19,0x01, 0x29,0x05, 0x15,0x00, 0x25,0x01, 0x95,0x05,
@@ -3534,7 +3625,10 @@ bool EspBleHidKeyboard::realize()
   vendorMap[25] = impl_->vendorReportSize;
   vendorMap[31] = impl_->vendorReportSize;
   struct MapPart { const uint8_t *data; size_t length; };
-  const MapPart maps[] = {{keyboardMap,sizeof(keyboardMap)}, {mouseMap,sizeof(mouseMap)},
+  const MapPart keyboardPart = impl_->keyboardNkro
+    ? MapPart{nkroKeyboardMap, sizeof(nkroKeyboardMap)}
+    : MapPart{keyboardMap, sizeof(keyboardMap)};
+  const MapPart maps[] = {keyboardPart, {mouseMap,sizeof(mouseMap)},
     {gamepadMap,sizeof(gamepadMap)}, {consumerMap,sizeof(consumerMap)},
     {systemMap,sizeof(systemMap)}, {vendorMap,sizeof(vendorMap)}};
   impl_->reportMapLength = 0;
@@ -3715,6 +3809,17 @@ bool EspBleHidKeyboard::realize()
 
 bool EspBleHidKeyboard::sendReport(const EspBleHidKeyboardReport &report)
 {
+  if (nkroEnabled_)
+  {
+    nkroModifiers_ = report.modifiers;
+    memset(nkroBitmap_, 0, sizeof(nkroBitmap_));
+    for (uint8_t usage : report.keys)
+      if (usage != 0 && usage <= 0xdf)
+        nkroBitmap_[usage >> 3] |= static_cast<uint8_t>(1u << (usage & 7));
+    uint8_t value[29] = {nkroModifiers_};
+    memcpy(value + 1, nkroBitmap_, sizeof(nkroBitmap_));
+    return sendRawReport(ESP_BLE_HID_REPORT_ID_KEYBOARD, value, sizeof(value));
+  }
   uint8_t value[8] = {report.modifiers, 0};
   memcpy(value + 2, report.keys, sizeof(report.keys));
   return sendRawReport(ESP_BLE_HID_REPORT_ID_KEYBOARD, value, sizeof(value));
@@ -3822,10 +3927,43 @@ bool EspBleHidKeyboard::sendRawReport(
 
 bool EspBleHidKeyboard::pressUsage(uint8_t usage, uint8_t modifiers, uint32_t)
 {
+  if (nkroEnabled_)
+  {
+    if (usage >= 0xe0 && usage <= 0xe7)
+      nkroModifiers_ |= static_cast<uint8_t>(1u << (usage - 0xe0));
+    else if (usage <= 0xdf)
+      nkroBitmap_[usage >> 3] |= static_cast<uint8_t>(1u << (usage & 7));
+    else
+    {
+      owner_->setError(EspBleError::InvalidArgument, "NKRO keyboard usage must be at most 0xe7");
+      return false;
+    }
+    nkroModifiers_ |= modifiers;
+    uint8_t value[29] = {nkroModifiers_};
+    memcpy(value + 1, nkroBitmap_, sizeof(nkroBitmap_));
+    return sendRawReport(ESP_BLE_HID_REPORT_ID_KEYBOARD, value, sizeof(value));
+  }
   EspBleHidKeyboardReport report;
   report.modifiers = modifiers;
   report.keys[0] = usage;
   return sendReport(report);
+}
+
+bool EspBleHidKeyboard::releaseUsage(uint8_t usage)
+{
+  if (!nkroEnabled_) return releaseAll();
+  if (usage >= 0xe0 && usage <= 0xe7)
+    nkroModifiers_ &= static_cast<uint8_t>(~(1u << (usage - 0xe0)));
+  else if (usage <= 0xdf)
+    nkroBitmap_[usage >> 3] &= static_cast<uint8_t>(~(1u << (usage & 7)));
+  else
+  {
+    owner_->setError(EspBleError::InvalidArgument, "NKRO keyboard usage must be at most 0xe7");
+    return false;
+  }
+  uint8_t value[29] = {nkroModifiers_};
+  memcpy(value + 1, nkroBitmap_, sizeof(nkroBitmap_));
+  return sendRawReport(ESP_BLE_HID_REPORT_ID_KEYBOARD, value, sizeof(value));
 }
 
 bool EspBleHidKeyboard::tapUsage(uint8_t usage, uint8_t modifiers, uint32_t holdMs)
@@ -3890,6 +4028,8 @@ EspBleKeyboardLayout EspBleHidKeyboard::layout() const
 
 bool EspBleHidKeyboard::releaseAll()
 {
+  nkroModifiers_ = 0;
+  memset(nkroBitmap_, 0, sizeof(nkroBitmap_));
   return sendReport(EspBleHidKeyboardReport());
 }
 
@@ -3955,6 +4095,8 @@ bool EspBleHidKeyboard::configured() const
 
 void EspBleHidKeyboard::resetBackend()
 {
+  nkroModifiers_ = 0;
+  memset(nkroBitmap_, 0, sizeof(nkroBitmap_));
   if (impl_ == nullptr)
   {
     return;
