@@ -1,226 +1,62 @@
-# 開発状況とTODO
+# 開発状況
 
 最終更新: 2026-07-19
 
-この文書は、EspBleの現在地と次に着手する作業を短く確認するための進捗メモです。確定仕様は各仕様書と`DECISIONS.ja.md`を正とし、この文書では実装状況、優先順位、未解決事項を追跡します。
+この文書は現在の実装状況、既知の制限、1.0.0までの残作業だけを追跡します。対応機能の一覧は[FEATURE_MATRIX.ja.md](FEATURE_MATRIX.ja.md)、確定仕様は[REQUIREMENTS.ja.md](REQUIREMENTS.ja.md)・[DECISIONS.ja.md](DECISIONS.ja.md)・各仕様書を正とします。
 
 ## 現在地
 
-初期ターゲットであるESP32-S3、Arduino-ESP32 3.3.10、同梱NimBLE backendで、BLE共通基盤と複合HID Device / Hostが動作しています。ESP32-S3 2台のPeerテストで実radioを使用した自動検証が可能です。
+Arduino-ESP32 3.3.10のNimBLE backendを使い、Central / Peripheral、GATT Client / Server、Security、複合HID Device / Hostが動作しています。ESP32-S3 2台を使うPeerテスト環境とhost unit testがあり、公開exampleはESP32-S3でコンパイル検証されています。
 
-ESP32KeyBridge用途についても、BLE Keyboard入力をraw HID usageのままKeyBridgeへ渡し、remap、modifier、切断release、LED返送、Bond再接続後の再Discoveryまで検証済みです。ただし公開APIはまだ確定しておらず、初回リリース前の設計整理と耐久・相互運用試験が残っています。
+HIDはKeyboard（6KRO / NKRO）、Mouse、Consumer Control、System Control、Gamepad、Vendor Input / Output / Featureを1つのServiceへ合成できます。Hostは対応する全Input ReportをDiscoveryし、種別別eventへ配送します。
 
-## 実装・検証済み
+## 検証状況
 
-### BLE共通基盤
+- Peer test: 22 suite、33 test。接続、GATT、Security、標準Service、複合HID、NKRO、異常系、再接続を実機検証
+- Unit test: keymap変換、HID Report Map parser
+- Example compile: ESP32-S3向け36 example
+- ESP32KeyBridge試作adapter: raw usage、remap、modifier、切断release、LED返送、Bond再接続をPeer検証
 
-- ✅ Arduino-ESP32同梱NimBLEの初期化と終了
-- ✅ Legacy Advertising、Scanning、Scan Resultの値型copy
-- ✅ Central接続、Peripheral接続受け入れ、切断、Connection ID
-- ✅ GATT Server / Clientの既知UUID Discovery、Read、Write with Response
-- ✅ Notify / Indicate、購読、解除、CCCD event
-- ✅ standalone Battery ServiceのRead / Notify / unsubscribe
-- ✅ standalone Device Information Serviceの標準文字列とPnP ID Read
-- ✅ standalone Current Time Serviceの10-byte Read / Notify
-- ✅ standalone Heart Rate Serviceの可変長Measurement / Notify
-- ✅ standalone Environmental SensingのTemperature / Humidity / Pressure
-- ✅ 汎用GATTによるNUS互換Server / Client example
-- ✅ 接続時MTU交換、Connection snapshot、payload上限検証
-- ✅ callbackを`ble.update()` contextへ配送
-- ✅ 基本的なエラー名と詳細
+実行方法は[tests/TEST_PLAN.ja.md](../tests/TEST_PLAN.ja.md)、リリース時の確認項目は[RELEASE_CHECKLIST.ja.md](RELEASE_CHECKLIST.ja.md)を参照してください。
 
-### Security
+## 既知の制限
 
-- ✅ Just Works、LE Secure Connections、Bonding
-- ✅ encrypted / authenticated Characteristic permission
-- ✅ Bond一覧、個別削除、全削除、Bond再接続
-- ✅ DisplayOnly / KeyboardOnlyの静的6桁passkeyとMITM
+- 1.0.0リリース前のため、公開APIは互換性を保証しません。
+- HID KeyboardのBoot Protocol characteristic / Protocol Mode切替は未対応です。
+- Custom HIDは固定Vendor Report以外の任意Report Descriptorをまだ登録できません。
+- Gamepad Hostはvariable input fieldを解析しますが、vendor固有array inputの意味解釈は行いません。
+- HID Hostは接続ごとに明示的な`discover(connectionId)`が必要です。Security有効時はSecurity完了後に呼びます。
+- Central側GATT operationは同時1件です。operation queueと強制cancelはありません。
+- GATT Client Discovery snapshotは最新1接続分で、永続cacheとService Changed追従はありません。
+- 切断理由、接続パラメータ更新、実行時passkey、Numeric Comparisonは未対応です。
+- Descriptor Write eventはbackendがconnection contextを公開しないためConnection IDを持ちません。詳細は[upstream依頼案](UPSTREAM_REQUEST_ARDUINO_ESP32_DESCRIPTOR_CONTEXT.ja.md)を参照してください。
+- 接続後のMTU変更は追跡できず、接続時snapshotを使用します。
+- 同時複数接続は接続単位APIを維持していますが、自動試験と公開動作保証の対象外です。
+- 自動実機検証はESP32-S3中心です。市販機器およびAndroid / Linux / Windows / macOSとの相互運用確認は未完了です。
+- Bluedroid backend、Bluetooth Classic、外部NimBLE-Arduinoは対象外です。
 
-### 複合HID Device
+## 1.0.0までの残作業
 
-- ✅ Report Protocolの6KRO / NKRO Keyboard
-- ✅ Input Report、全release、Output LED Report
-- ✅ HID / Device Information / Battery Serviceの合成
-- ✅ Report ID、Report Map、Report Reference
-- ✅ Battery Level更新
-- ✅ Mouse、Consumer Control、System Control、Gamepad
-- ✅ Vendor HID Input / Output / Feature（固定Report ID 6）
-- ✅ EspUsbDevice互換29-byte NKRO bitmapと個別press / release
-- ✅ 固定Report IDによる1 Service内の複合Report Map
-- ✅ Report IDごとのInput characteristic、CCCD、notify routing
-- ✅ keyboardの19 layout対応`write()` / `pressKey()`
+1. `FEATURE_MATRIX.ja.md`のうち1.0.0へ含めるHID拡張を可能な範囲で実装する。
+2. 全Peer + unit testを`--clean`で連続実行し、複数回反復する。
+3. board / Arduino-ESP32 core matrixをCIで再生成し、対応環境を確定する。
+4. 市販BLE Keyboardと複数の外部Hostでmanual interoperabilityを確認する。
+5. metadata、CHANGELOG、example、仕様書を最終APIと照合する。
+6. `library.properties`を含むrelease metadataを1.0.0へ更新し、release workflowを実行する。
 
-### HID Host
+初回リリース範囲は固定せず、安全に実装・検証できる機能は1.0.0へ含めます。未実装候補は約束ではなく、採用時に仕様、example、unit/build/Peer testを同時に追加します。
 
-- ✅ HID Service DiscoveryとInput Report購読
-- ✅ Report Map / Report Referenceから6KRO array / NKRO bitmapを識別
-- ✅ 256-bit Keyboard Usage snapshotとchanged bitmap
-- ✅ modifier単独eventと切断時の全release
-- ✅ `onKeyboard()` press / release convenience event
-- ✅ EspUsbHost互換の19 layout識別子・usage-to-8-bit変換table
-- ✅ HID Information country code、Battery Level read、LED Output write
-- ✅ 単一`on*()`と共存する固定容量listener登録・解除
-- ✅ Mouse / Consumer / System / GamepadのReport Map識別と横断購読
-- ✅ Vendor-defined Reportの識別、Input配送、Output / Feature書込み
-- ✅ NKROを256-bit usage snapshotへ正規化
-- ✅ 共通`EspBleHidReport` baseと種別別event
-- ✅ shared ownership snapshot方式のlistener registry
+## 次の機能候補
 
-### ESP32KeyBridge接続
-
-- ✅ raw usage snapshotからKeyBridge `KeySet`への写像
-- ✅ KeyBridgeによるremapとmodifier同時押し
-- ✅ BLE切断時のstuck key防止
-- ✅ KeyBridge LockStateからBLE Keyboard LEDへの返送
-- ✅ Bond再接続、新Connection IDでの再Discovery、LED状態復元
-- ✅ sketch callbackとKeyBridge adapter listenerの共存
-
-### 自動Peerテスト
-
-以下のscenarioをESP32-S3 2台で実装済みです。
-
-- ✅ `stack_smoke`
-- ✅ `advertise_scan`
-- ✅ `connect_disconnect`
-- ✅ `gatt_read_write`
-- ✅ `battery_service`
-- ✅ `device_information`
-- ✅ `current_time`
-- ✅ `heart_rate`
-- ✅ `environmental_sensing`
-- ✅ `notify_indicate`
-- ✅ `mtu`
-- ✅ `security_bond`
-- ✅ `security_passkey`
-- ✅ `hid_keyboard_device`
-- ✅ `hid_keyboard_host`
-- ✅ `ble_keybridge_keyboard`
-- ✅ `lifecycle_stress`
-- ✅ `hid_robustness`
-- ✅ `hid_security`
-- ✅ `hid_boot_keyboard`
-- ✅ `advertise_payload`
-
-host上のunit test（`tests/unit/`）としてkeymap変換とHID Report Map parserを実装済みです。
-
-## 現在の主な制限
-
-- 公開APIは試行段階で、互換性を保証する初回リリース前です。
-- Keyboardは6KRO / NKROのReport Protocolに対応します。Boot Protocol切替は未対応です。Gamepad HostはReport Mapのvariable input fieldをdescriptor-drivenで分解しますが、vendor固有のarray input解釈は未対応です。
-- HID Hostの再接続では、利用者がscan/connectし、Security完了後に新しいConnection IDで`discover()`を再実行します。
-- GATT Client一覧Discoveryは最新1接続分のsnapshot（Service 16 / Characteristic 48 / Descriptor 48）を保持します。永続cacheとService Changed追従は未実装です。
-- Central側GATT operationは同時1件です。operation queue、ID、cancelは未実装です。
-- 切断理由の取得と接続パラメータ更新のAPIは未実装です。
-- GATT Server Descriptorの動的Read callbackは未実装です。Write callbackは対応済みですが、backendがconnection handleを渡さないため、Descriptor WriteイベントにConnection IDは含めません（[Arduino-ESP32への修正依頼案](UPSTREAM_REQUEST_ARDUINO_ESP32_DESCRIPTOR_CONTEXT.ja.md)）。
-- GATT Clientの操作単位timeoutは完了eventを期限内に確定しますが、backend処理の強制cancelは行いません。backendが戻るまでは次操作を受理しません。
-- 実行時passkey入力、Numeric Comparison、Pairing確認・拒否UIは未対応です。
-- passkey表示イベントのConnectionは「最初の未暗号化Connection」の推定です。複数接続の同時Pairingでは誤ったConnectionを報告する可能性があります（DECISIONS Security #8）。
-- Central側のMTUは接続時のsnapshotのみで、接続後の変化は追跡できません（同梱backendにMTU変更callbackがないため）。MTU交換が接続timeoutまでに完了しない場合、snapshotが23になる可能性があります（DECISIONS Connection/GATT #23）。
-- callback event queueは満杯時にNotification / key stateのみをdropし（lifecycle・完了イベントは優先保持）、drop数を`droppedEventCount()`等で観測できます。queue容量はcompile-time定数で、実行時設定APIとoverflowイベントは設けません（DECISIONS 確定 #21）。
-- 自動実機検証はESP32-S3中心です。ESP32-P4 + C6 Hosted BLEなどは対応候補ですが未検証です。
-- Bluedroidが既定のSoC（無印ESP32など、NimBLEを同梱しない構成）は対象外です。将来、別ライブラリ（`EspBleBluedroid`等）で「似た使い方・完全互換ではない」対応を検討します（DECISIONS 確定 #23）。
-- 市販BLE KeyboardやAndroid / Linux / Windows / macOSとのmanual interoperabilityは未完了です。
-
-## 次の作業
-
-### P0: 初回リリースまでに優先する作業
-
-> **初回リリース(0.1.0)のスコープ決定（2026-07-18）**: 複合HID対応＋EspUsbDevice/Host流のAPI再設計を初回リリースに含める。破壊的変更を伴うが0.x（互換性保証なし）のうちに実施する。HID以外のラップ改善（[FEATURE_MATRIX.ja.md](FEATURE_MATRIX.ja.md)のA/B/C）は0.2.0以降。
-
-0. ✅ **HID複合対応・API再設計**（Device/Host API、descriptor-driven Host parser、Peer/unitテスト、example・仕様書まで完了）。
-
-1. **ESP32KeyBridge利用形から公開APIを固める**
-   - ✅ `ble.update()`必須を最終仕様として確定（DECISIONS 確定 #17）。
-   - ✅ HID Discoveryは明示`discover()`維持、security有効時はSecurity完了後に呼ぶ規範で統一（DECISIONS HID Host #17）。
-   - ✅ `setKeyboardLeds()`はWrite Without Response優先の同期`bool` helperとして確定（DECISIONS HID Host #6）。
-   - 正式なBLE input adapterは初回リリースの要件から外し、リリース後にそのリリース版へ対応するadapterをESP32KeyBridge側で作成してもらう（2026-07-18裁定）。
-
-2. **共通APIの未確定事項を整理する**
-   - ✅ Result型の役割分担とoperation ID見送りを確定（DECISIONS 確定 #19）。
-   - ✅ byte containerはpointer+length+`String` overloadで確定、値型containerへの移行余地のみ残す（DECISIONS 確定 #20）。
-   - ✅ event queue容量・overflow方針を確定（DECISIONS 確定 #21）、listener APIの一般化は見送り（DECISIONS HID Host #10）。
-   - object / handle ownershipと複数接続時の送信対象は複数接続実装時に決める。
-
-3. **障害・再接続・耐久試験を追加する**
-   - ✅ peer loss（supervision timeout）、接続timeoutの非同期失敗、Notification中の切断（`lifecycle_stress`）。
-   - ✅ 再接続と再購読の反復（`lifecycle_stress`のheap検証付き反復）。
-   - ✅ queue overflow、異常payload、GATT operation競合（`lifecycle_stress` / `hid_robustness` / `hid_boot_keyboard`）。
-   - 長時間実行時のheap、task、Bond/NVS状態。
-   - ✅ Peer suite全体の連続実行（2026-07-19: 通常29 passed、`--clean` 29 passed）。リリース直前の複数回反復は継続。
-
-4. **初回リリース用のテストと文書を完成させる**
-   - ✅ 全exampleのcompile matrixを自動化する（`.github/workflows/compile-examples.yml`、esp32s3 profile、push/PRで実行）。
-   - ✅ host上のunit testを追加する（keymap変換とReport Map parserを`tests/unit/`で実装済み。Advertising parser等の追加は任意）。
-   - 市販BLE KeyboardとAndroid / Linuxなどでmanual interoperabilityをある程度確認する（必須の合格基準にはしない。2026-07-18裁定、ユーザーが実施）。
-   - ✅ README、API説明、CHANGELOG、Release Checklistを更新する。
-   - examplesを充実させ、触りながら公開APIの確定判断を行う（診断系`Info/`を追加済み。追加候補があれば継続）。
-   - Release workflowは現在の`0.1.0`を必ずincrementするため、初回tagを`v0.1.0`にする場合の手順（現commitを直接tagするか、共通toolkit側で初回releaseを扱うか）を確定する。
-
-### P1: 初期基盤を補完する作業
-
-- ✅ Write Without ResponseのPeer検証。
-- ✅ Service / Characteristic / Descriptor一覧DiscoveryとDescriptor Read / Write。
-- ✅ GATT Client操作単位timeout、遅延完了抑止、回収後の再操作。
-- ✅ 専用値型によるGATT Server Descriptor Write event。
-- ✅ Battery Service standalone Client / Server exampleとPeerテスト。
-- ✅ Device Information Service standalone Client / Server exampleとPnP ID Peerテスト。
-- ✅ Current Time Service standalone Client / Server exampleとwire形式Peerテスト。
-- ✅ Heart Rate Service standalone Client / Server exampleと可変長wire形式Peerテスト。
-- ✅ Environmental Sensing standalone Client / Server exampleと数値scale Peerテスト。
-- 実行時passkey入力とNumeric Comparison。
-- ESP32-S3以外のcompile matrixと実機検証。
-- 3台Peerによる複数接続、またはBLE-to-BLE bridge E2E。
-
-### P2: 初回リリース後に優先順位を決める候補
-
-1. 任意Report DescriptorのCustom HID
-2. Boot Protocol切替
-3. BLE MIDI
-4. reconnect cache、複数接続強化
-5. Sensor profile
-6. Extended / Periodic Advertising、PHY、Privacy
-7. Beacon / Connectionless（iBeacon、Eddystone、任意Advertisingデータ）
-
-これらは採用決定ではありません。利用例、実装量、Peerテスト方法を確認し、1機能ずつ正式スコープへ移します。
-
-### 保留中のドキュメント作業メモ
-
-- **スキャン→接続→通信の入門ガイド（ドラフト）**: [GUIDE_SCAN_TO_COMM.draft.ja.md](GUIDE_SCAN_TO_COMM.draft.ja.md) に作成済み。BLE未経験者向けに主要APIの順番とUUID（フル/短縮形・絞り込みの理由と注意点）を丁寧に解説する教材。最終的な置き場所は examples/README.ja.md + README.md。**公開への昇格は0.2.0のUUID型（ラップ改善C）とscanフィルタhelper（同D）の確定後**（絞り込みコード断片がその2つのAPIに依存するため）。概念説明はAPI変更の影響を受けないので流用可能。
-
-## 直近の推奨順序
-
-1. ✅ KeyBridge adapter試作を基準に`update()`、Discovery、LED writeの仕様を決める。
-2. ✅ 決まったAPIでKeyboardHost / KeyboardDevice exampleを整理する。
-3. ✅ peer lossと再接続反復テストを追加する。
-4. ✅ examples compile matrixとhost unit testを整備する。
-5. manual interoperabilityを実施し、初回リリース判定へ進む。
-
-## 初回リリース判定の目安
-
-- [x] 公開するAPIと初期対応範囲が文書上で確定している。
-- [ ] 全exampleが対象build matrixでコンパイルする（ESP32-S3全exampleは2026-07-19にローカル成功。新規HID exampleを含むcross-board matrixの再生成待ち）。
-- [x] 全Peer＋unitテストが連続実行で通過する（2026-07-19: 通常29 passed / 15:44、`--clean` 29 passed / 22:05）。反復はリリース直前にも実施する。
-- [x] 切断、再接続、peer lossでstuck keyや資源リークがない（lifecycle stress / HID robustnessで検証）。
-- [ ] 市販機器と少なくとも2種類の外部BLE実装で相互運用できる。
-- [x] README、API文書、CHANGELOG、Release Checklistが揃っている。
-- [x] `memo.ja.md`の移行確認と削除が完了している（2026-07-18）。
-
-## 関連文書
-
-- [要件](REQUIREMENTS.ja.md)
-- [コア設計](CORE_DESIGN.ja.md)
-- [API設計](API_DESIGN.ja.md)
-- [HID Device仕様](HID_DEVICE_SPEC.ja.md)
-- [HID Host仕様](HID_HOST_SPEC.ja.md)
-- [設計決定](DECISIONS.ja.md)
-- [機能対応マトリクス](FEATURE_MATRIX.ja.md)
-- [開発計画](DEVELOPMENT_PLAN.ja.md)
-- [テスト計画](../tests/TEST_PLAN.ja.md)
-- [リリースチェックリスト](RELEASE_CHECKLIST.ja.md)
+1. Custom HID Report Descriptor
+2. HID Boot Protocol切替
+3. 実行時passkey / Numeric Comparison
+4. reconnect cache / resubscribe / multiple connections
+5. BLE MIDI、Sensor profile
+6. Extended / Periodic Advertising、PHY、Privacy、Beacon
 
 ## 更新ルール
 
-- 機能を実装しただけでは完了にせず、対応するbuild / Peer / manual testの状況も記録する。
-- 仕様を確定した項目は`DECISIONS.ja.md`へ移し、この文書では完了または次の課題だけを残す。
-- 優先順位が変わった場合はP0 / P1 / P2と「直近の推奨順序」を同時に更新する。
-- 日付と実装状況はまとまった作業単位ごとに更新する。
+- 完了機能の詳細な列挙はFeature Matrixと仕様書へ記載し、この文書へ重複させません。
+- 実装だけで完了にせず、対応するexampleとunit/build/Peer/manual testの状況も更新します。
+- 過去の計画や完了チェックリストは残さず、設計上の理由だけを`DECISIONS.ja.md`へ残します。

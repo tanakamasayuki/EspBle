@@ -78,7 +78,7 @@ The design documents are currently written in Japanese.
 - [Terminology and naming rules](docs/TERMINOLOGY.ja.md)
 - [Design decision ledger](docs/DECISIONS.ja.md)
 - [Feature support matrix](docs/FEATURE_MATRIX.ja.md)
-- [Development plan](docs/DEVELOPMENT_PLAN.ja.md)
+- [Development status](docs/STATUS.ja.md)
 - [Test plan](tests/TEST_PLAN.ja.md)
 - [Release checklist](docs/RELEASE_CHECKLIST.md)
 

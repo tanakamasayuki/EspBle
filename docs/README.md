@@ -7,7 +7,7 @@ The design documents are written in Japanese. This guide lists them and shows th
 ## Get oriented (recommended order for newcomers)
 
 1. [../README.md](../README.md) — library overview, supported/unsupported chips, getting started
-2. [STATUS.ja.md](STATUS.ja.md) — **where things stand**: implemented features, main limitations, next work (P0). This is the entry point.
+2. [STATUS.ja.md](STATUS.ja.md) — **where things stand**: verification, limitations, and remaining work for 1.0.0
 3. [DECISIONS.ja.md](DECISIONS.ja.md) — the ledger of settled design decisions (the "why")
 4. [HID_DEVICE_SPEC.ja.md](HID_DEVICE_SPEC.ja.md) / [HID_HOST_SPEC.ja.md](HID_HOST_SPEC.ja.md) — specifications for the completed composite HID API redesign
 
@@ -25,9 +25,10 @@ The design documents are written in Japanese. This guide lists them and shows th
 | Terminology and naming rules | [TERMINOLOGY.ja.md](TERMINOLOGY.ja.md) |
 | Settled decisions and their rationale | [DECISIONS.ja.md](DECISIONS.ja.md) |
 | HID spec (Device / Host) | [HID_DEVICE_SPEC.ja.md](HID_DEVICE_SPEC.ja.md) / [HID_HOST_SPEC.ja.md](HID_HOST_SPEC.ja.md) |
-| Overall development phases | [DEVELOPMENT_PLAN.ja.md](DEVELOPMENT_PLAN.ja.md) |
+| Scan-to-GATT beginner guide (Japanese) | [GUIDE_SCAN_TO_COMM.ja.md](GUIDE_SCAN_TO_COMM.ja.md) |
 | Test strategy and coverage | [../tests/TEST_PLAN.ja.md](../tests/TEST_PLAN.ja.md) |
-| Pre-release checks | [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) |
+| Release checks | [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) |
+| Arduino-ESP32 upstream request draft (Japanese) | [UPSTREAM_REQUEST_ARDUINO_ESP32_DESCRIPTOR_CONTEXT.ja.md](UPSTREAM_REQUEST_ARDUINO_ESP32_DESCRIPTOR_CONTEXT.ja.md) |
 | Board / core build matrices (CI-generated) | `BOARDS.<version>.md` / `COMPATIBILITY.<version>.md` |
 | Usage examples | [../examples/README.md](../examples/README.md) |
 
@@ -35,9 +36,8 @@ The design documents are written in Japanese. This guide lists them and shows th
 
 - **Settled specification (authoritative)**: [REQUIREMENTS.ja.md](REQUIREMENTS.ja.md), [DECISIONS.ja.md](DECISIONS.ja.md), and the SPEC files.
 - **Status tracking**: [STATUS.ja.md](STATUS.ja.md) — progress, limitations, TODO; updated per work batch.
-- **Plans in progress (may contain unsettled items)**: [DEVELOPMENT_PLAN.ja.md](DEVELOPMENT_PLAN.ja.md).
 - **CI-generated (do not hand-edit)**: `BOARDS.<version>.md`, `COMPATIBILITY.<version>.md`, produced by `.github/workflows/board-matrix.yml` and `core-matrix.yml`.
 
 ## One-line status (as of 2026-07-19)
 
-The **composite HID + EspUsbDevice/Host-style API redesign is implemented and covered by peer/unit tests** for the initial release (0.1.0). The next work is endurance testing, interoperability checks, and release-documentation cleanup. See STATUS for details.
+The **BLE foundation and composite HID Device / Host are implemented and covered by peer/unit tests**. Further practical HID extensions and interoperability checks are in progress, with 1.0.0 planned as the first public release.

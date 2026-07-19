@@ -1,6 +1,6 @@
 # API Design
 
-この文書は公開APIの設計規則と、実装中の試行APIを記録します。具体的なclass名とsignatureは各vertical sliceのPeer実機検証を通して確定します。
+この文書は公開APIの設計規則と現在のAPI構成を記録します。具体的なclass名とsignatureは`src/EspBle.h`を正とします。
 
 用語とexampleの変数命名は[TERMINOLOGY.ja.md](TERMINOLOGY.ja.md)に従います。
 
@@ -22,7 +22,7 @@
 - Connectionは切断後に無効化を判定できるlibrary handleで表す。
 - backend native objectはadvanced APIからのみ参照可能にする。
 
-## GAP / Connection vertical sliceの試行API
+## GAP / Connection API
 
 GAP/Connectionの最初の実装では、次の利用形をPeer実機で検証しています。汎用GATTまで通してから公開APIとして確定します。
 
@@ -66,7 +66,7 @@ root objectには接続操作・状態のAPIとして`connect(address, EspBleAdd
 
 `EspBleConnection`はlibrary connection id、backend handle、peer address/address type、local role、MTU、暗号化・認証・Bond状態、暗号鍵長の値snapshotです。初期実装は最大4接続を内部管理しますが、この上限と設定方法はまだ公開仕様として確定していません。
 
-## MTU vertical sliceの試行API
+## MTU API
 
 希望MTUはstack初期化前の設定として指定します。値域はATTで定められた23〜517で、範囲外は`begin()`が`EspBleError::InvalidArgument`で拒否します。同梱NimBLE backendが接続時にMTU交換を行い、合意した値をConnection snapshotと`onMtuChanged()`へ反映します。
 
@@ -90,7 +90,7 @@ Legacy Advertising payloadが31 bytesへ収まらない場合、Arduino-ESP32 ba
 
 Advertisingの構成は`setName()` / `addServiceUuid()`（16/32/128-bit、サイズごとに単一のComplete List AD構造へ統合）に加えて、`setManufacturerData()`、`setAppearance()`、`setScanResponseEnabled()`、`clear()`で行い、`start(durationSeconds)` / `stop()` / `isAdvertising()`で制御します。Service UUIDは最大`EspBleAdvertising::MaxServiceUuids`（4）件です。
 
-## Generic GATT vertical sliceの試行API
+## Generic GATT API
 
 GATT ServerのService/Characteristic定義は`begin()`前に登録します。この順序により、後からSecurity permissionをCharacteristic定義へ追加できます。
 
@@ -155,7 +155,7 @@ Central側のWrite完了は`onCharacteristicWritten()`へ配送します。`resp
 
 GATT値はpointer+lengthを基本とし、NULを含めてcopyできる`String`を便宜overloadとして提供します（同梱backendの`String`構築は長さ明示でbinary-safe。DECISIONS 確定 #20）。Server側は`addDescriptor()`、`setDescriptorValue()`、`descriptorValue()`、`onDescriptorWritten()`も提供します。構成上限はService 4、Characteristic 16、Descriptor 16です。Descriptor Writeは専用の`EspBleGattDescriptorWrite`値イベントへ配送します。同梱backendがDescriptor callbackへconnection handleを渡さないため、推測値は公開せずConnection IDを型に含めません。Descriptorの動的Read callbackはまだ提供しません。
 
-## Subscription / Notify / Indicateの試行API
+## Subscription / Notify / Indicate API
 
 Central側は既知UUIDのCharacteristicへNotificationまたはIndicationを購読します。`notifications=true`がNotification、`false`がIndicationです。CCCD書込み完了は`onSubscribed()`、解除完了は`onUnsubscribed()`、受信payloadは`onNotification()`へ配送します。
 
@@ -189,7 +189,7 @@ gattServer.indicate(serviceUuid, characteristicUuid, String("confirmed value"));
 
 現在のServer送信は、そのCharacteristicで該当方式を購読している全Connectionが対象です。Connectionを指定する送信、複数購読者ごとの送信結果、送信queueとbackpressureは複数接続Peerテストと合わせて設計します。
 
-## Security / Bonding vertical sliceの試行API
+## Security / Bonding API
 
 初期SecurityはLE Secure Connectionsを使用し、No Input / No OutputのJust Worksと静的passkeyによるMITM Pairingを扱います。Securityは`begin()`前の設定で有効にし、接続時の自動PairingとBond保存を個別に指定できます。無効が既定値です。
 
@@ -238,7 +238,7 @@ valueConfig.encryptedWrite = true;
 
 MITM認証済みlinkを要求する場合は`authenticatedRead` / `authenticatedWrite`を使用します。静的passkey Peerテストで`authenticated=true`のConnectionだけがread/writeできることを確認しています。
 
-Bond storeには`bondCount()`、`bond(index, result)`、`deleteBond(const EspBleBond &)`、`deleteAllBonds()`でアクセスします。`bond(index)`はmutableなbond store上のsnapshot indexアクセスで、削除・追加により呼び出し間で並びが変わりうるため、特定削除には列挙直後に取得した`EspBleBond`値（addressで対象を特定）を渡します。削除中の接続状態との不整合を避けるため、現在の試行APIではすべての接続を切断してから削除します。保存上限はArduino-ESP32の`CONFIG_BT_NIMBLE_MAX_BONDS`に従います。
+Bond storeには`bondCount()`、`bond(index, result)`、`deleteBond(const EspBleBond &)`、`deleteAllBonds()`でアクセスします。`bond(index)`はmutableなbond store上のsnapshot indexアクセスで、削除・追加により呼び出し間で並びが変わりうるため、特定削除には列挙直後に取得した`EspBleBond`値（addressで対象を特定）を渡します。削除中の接続状態との不整合を避けるため、すべての接続を切断してから削除します。保存上限はArduino-ESP32の`CONFIG_BT_NIMBLE_MAX_BONDS`に従います。
 
 実行時のpasskey入力、Numeric Comparison、Pairing確認・拒否UI、Privacyは未実装です。これらはstack contextで即時回答が必要なbackend callbackと、現在の`ble.update()`配送をどう両立するかを先に設計します。Pairing失敗理由のbackend code表現と、Bond操作を同期Resultのままにするかも今後確定します。
 
@@ -336,17 +336,6 @@ keyboard.setKeyboardLeds(connectionId,
 
 GATTコアはbyte sequenceを扱います。string、integer、Bluetooth SIG形式、HID report、Battery Levelなどは明示的なcodec/profile helperで変換します。CPUのendiannessやC++ struct layoutを暗黙にwire formatへ使用しません。
 
-## 未確定事項
+## 将来拡張の扱い
 
-- handleを値型、index+generation、参照classのどれにするか
-- Service builderと明示的add APIの比較
-- 将来の値型byte container（`EspBleBytes`等）への移行時期
-- 全Service/Characteristic列挙APIとDiscovery Resultの保持方法
-- 複数GATT operationのqueueとcancel
-- Connection指定Notify/Indicate、送信queue、backpressure
-- 接続後のMTU再交換APIと複数接続時のpayload上限判定
-- 同期helperを初期版へ含める範囲
-- 実行時passkey入力、Numeric Comparison、Pairing拒否と失敗理由のAPI
-- raw backend accessの公開範囲
-
-これらはHIDのvertical slice、Security拡張、複数接続試験で検証し、確定したものから`DECISIONS.ja.md`へ記録します。
+未実装機能と優先順位は[FEATURE_MATRIX.ja.md](FEATURE_MATRIX.ja.md)と[STATUS.ja.md](STATUS.ja.md)で管理します。新しいAPIは既存のConnection ID、非同期event、`update()`配送、byte sequence境界を維持し、採用した設計判断を`DECISIONS.ja.md`へ記録します。

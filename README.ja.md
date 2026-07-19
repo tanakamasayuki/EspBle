@@ -7,7 +7,7 @@ ESP32 Arduino向けの汎用Bluetooth Low Energyライブラリです。**Arduin
 > [!IMPORTANT]
 > **無印ESP32（classic）では動作しません。** EspBleはNimBLE backendを必要としますが、無印`esp32`ビルドはNimBLEを同梱せず（Bluedroidが既定）、設計上コンパイルできません。対応ターゲットはNimBLEを同梱するSoC（**ESP32-S3 / ESP32-C3 / ESP32-C6 / ESP32-H2**）です。無印ESP32でBLEを使いたい場合は、代わりに [NimBLE-Arduino](https://github.com/h2zero/NimBLE-Arduino) を利用してください（[対応環境](#対応環境)を参照）。
 
-公開APIはまだ確定していません。初回リリース前の試行段階で、APIは変更される可能性があります。
+1.0.0リリース前のため公開APIはまだ確定しておらず、破壊的に変更する可能性があります。
 
 ## 機能
 
@@ -76,7 +76,7 @@ void loop() {
 - [用語と命名規則](docs/TERMINOLOGY.ja.md)
 - [設計決定](docs/DECISIONS.ja.md)
 - [機能対応マトリクス](docs/FEATURE_MATRIX.ja.md)
-- [開発計画](docs/DEVELOPMENT_PLAN.ja.md)
+- [開発状況](docs/STATUS.ja.md)
 - [テスト計画](tests/TEST_PLAN.ja.md)
 - [リリースチェックリスト](docs/RELEASE_CHECKLIST.ja.md)
 

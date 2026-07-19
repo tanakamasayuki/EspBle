@@ -7,6 +7,7 @@
 - Add standalone Battery, Device Information, Current Time, Heart Rate, Environmental Sensing, and Nordic UART Service compatible Server/Client examples, plus real-device coverage of their standard wire formats and notifications.
 - Redesign HID around the EspUsbDevice/EspUsbHost API shape: `hidKeyboard()` / `hidMouse()` / `hidConsumerControl()` / `hidSystemControl()` / `hidGamepad()` / `hidVendor()` compose one HOGP service, while `hidHost()` discovers and dispatches all supported report types, including bidirectional Vendor Input / Output / Feature reports.
 - Add fixed cross-library Report IDs, keyboard layout-aware sending, configurable mouse buttons, mouse/consumer/system/gamepad helpers, per-report CCCD routing, descriptor-driven Report Map/input parsing, wrap-safe shared-ownership Host listeners, disconnect state reset, composite peer coverage, and new HID examples.
+- Add EspUsbDevice-compatible 29-byte NKRO Keyboard reports, `enableNkro()` / `releaseUsage()`, Host bitmap parsing, and real-device coverage for eight simultaneous keys, high usages, individual release, and LED output.
 - Establish the initial project, specification, and test structure.
 - Add the first EspBle stack, legacy advertising, scanning, deferred scan-result callback, examples, and two-board peer test.
 - Add central/peripheral connections with library connection IDs, disconnect, connection snapshots, and MTU exchange with `onMtuChanged()`.
