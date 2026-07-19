@@ -2,7 +2,7 @@
 
 > 日本語版: [README.ja.md](README.ja.md)
 
-Registers a custom GATT service with one readable/writable characteristic, then advertises it. All GATT server configuration must happen before `begin()` — the bundled backend cannot add services after the server starts.
+Registers a custom GATT service with one readable/writable characteristic and descriptor, then advertises it. The characteristic supports writes with and without response.
 
 Use the [Gatt/Client](../Client/) example on a second board (it targets the same UUIDs), or any GATT client app such as nRF Connect.
 
@@ -13,7 +13,7 @@ Use the [Gatt/Client](../Client/) example on a second board (it targets the same
 
 ## What it does
 
-- Adds service `10da4dd0-…` with characteristic `10da4dd1-…` (readable and writable) before `begin()`
+- Adds service `10da4dd0-…`, characteristic `10da4dd1-…`, and descriptor `10da4dd2-…` before `begin()`
 - Sets the initial value to `ready`
 - Prints each write received from a client, together with the connection ID
 - Advertises the service UUID so clients can find it
@@ -22,6 +22,7 @@ Use the [Gatt/Client](../Client/) example on a second board (it targets the same
 
 - `ble.gattServer().addService(uuid)` / `addCharacteristic(serviceUuid, characteristicUuid, config)` — must be called before `begin()`
 - `EspBleGattCharacteristicConfig` — `readable`, `writable`, plus `notifiable`, `indicatable`, and encrypted/authenticated permissions
+- `addDescriptor()` / `EspBleGattDescriptorConfig` / `setDescriptorValue()` — descriptor definition, permissions, and binary-safe value
 - `gattServer.setValue(...)` / `gattServer.value(...)` — held value (binary-safe `String`, pointer+length overloads available)
 - `gattServer.onWritten(callback)` — `EspBleGattWrite` with `connectionId`, UUIDs, and the written value
 

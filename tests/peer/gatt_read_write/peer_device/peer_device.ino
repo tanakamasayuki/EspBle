@@ -4,6 +4,7 @@
 
 static constexpr const char *TEST_SERVICE_UUID = "10da4dd0-8eaa-4c69-9003-676174747277";
 static constexpr const char *TEST_CHARACTERISTIC_UUID = "10da4dd1-8eaa-4c69-9003-676174747277";
+static constexpr const char *TEST_DESCRIPTOR_UUID = "10da4dd2-8eaa-4c69-9003-676174747277";
 
 EspBle ble;
 TaskHandle_t loopTask = nullptr;
@@ -18,11 +19,20 @@ void setup()
   EspBleGattCharacteristicConfig characteristicConfig;
   characteristicConfig.readable = true;
   characteristicConfig.writable = true;
+  characteristicConfig.writableWithoutResponse = true;
+  EspBleGattDescriptorConfig descriptorConfig;
+  descriptorConfig.readable = true;
+  descriptorConfig.writable = true;
   if (!gattServer.addService(TEST_SERVICE_UUID) ||
       !gattServer.addCharacteristic(
         TEST_SERVICE_UUID, TEST_CHARACTERISTIC_UUID, characteristicConfig) ||
+      !gattServer.addDescriptor(
+        TEST_SERVICE_UUID, TEST_CHARACTERISTIC_UUID, TEST_DESCRIPTOR_UUID, descriptorConfig) ||
       !gattServer.setValue(
-        TEST_SERVICE_UUID, TEST_CHARACTERISTIC_UUID, String("peer-ready")))
+        TEST_SERVICE_UUID, TEST_CHARACTERISTIC_UUID, String("peer-ready")) ||
+      !gattServer.setDescriptorValue(
+        TEST_SERVICE_UUID, TEST_CHARACTERISTIC_UUID,
+        TEST_DESCRIPTOR_UUID, String("peer-description")))
   {
     Serial.printf("GATT_CONFIG_FAILED %s %s\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
     return;
@@ -58,9 +68,21 @@ void setup()
 
 void loop()
 {
-  if (Serial.available() > 0 && Serial.read() == '?')
+  if (Serial.available() > 0)
   {
-    Serial.printf("ADVERTISING %u\n", ble.advertising().isAdvertising() ? 1 : 0);
+    const char command = Serial.read();
+    if (command == '?')
+    {
+      Serial.printf("ADVERTISING %u\n", ble.advertising().isAdvertising() ? 1 : 0);
+    }
+    else if (command == 'd')
+    {
+      String value;
+      const bool found = ble.gattServer().descriptorValue(
+        TEST_SERVICE_UUID, TEST_CHARACTERISTIC_UUID, TEST_DESCRIPTOR_UUID, value);
+      Serial.printf("SERVER_DESCRIPTOR found=%u value=%s\n",
+        found ? 1 : 0, value.c_str());
+    }
   }
 
   ble.update();

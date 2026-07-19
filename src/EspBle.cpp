@@ -4,7 +4,9 @@
 #include <BLECharacteristic.h>
 #include <BLEClient.h>
 #include <BLEDevice.h>
+#include <BLEDescriptor.h>
 #include <BLERemoteCharacteristic.h>
+#include <BLERemoteDescriptor.h>
 #include <BLERemoteService.h>
 #include <BLEScan.h>
 #include <BLEServer.h>
@@ -86,6 +88,28 @@ struct EspBleImpl
   };
 
   static constexpr size_t RetiredClientCapacity = ConnectionCapacity * 2;
+
+  struct GattDatabaseSnapshot
+  {
+    EspBleConnectionId connectionId = 0;
+    bool valid = false;
+    EspBleGattServiceInfo services[EspBle::MaxDiscoveredGattServices];
+    size_t serviceCount = 0;
+    EspBleGattCharacteristicInfo
+      characteristics[EspBle::MaxDiscoveredGattCharacteristics];
+    size_t characteristicCount = 0;
+    EspBleGattDescriptorInfo descriptors[EspBle::MaxDiscoveredGattDescriptors];
+    size_t descriptorCount = 0;
+
+    void reset(EspBleConnectionId newConnectionId = 0)
+    {
+      connectionId = newConnectionId;
+      valid = false;
+      serviceCount = 0;
+      characteristicCount = 0;
+      descriptorCount = 0;
+    }
+  };
 
   struct Event
   {
@@ -209,6 +233,7 @@ struct EspBleImpl
 
   ~EspBleImpl()
   {
+    delete gattDatabase;
     delete securityBackend;
   }
 
@@ -375,6 +400,10 @@ struct EspBleImpl
     event.type = EventType::Disconnected;
     event.connection = slot.connection;
     pushEvent(event);
+    if (gattDatabase != nullptr && gattDatabase->connectionId == slot.connection.id)
+    {
+      gattDatabase->reset();
+    }
     slot = ConnectionSlot();
   }
 
@@ -632,8 +661,10 @@ struct EspBleImpl
       result.connectionId = impl->gattConnectionId;
       result.serviceUuid = impl->gattServiceUuid;
       result.characteristicUuid = impl->gattCharacteristicUuid;
+      result.descriptorUuid = impl->gattDescriptorUuid;
       writeValue = impl->gattWriteValue;
       response = impl->gattWriteResponse;
+      result.response = response;
       for (const ConnectionSlot &slot : impl->connections)
       {
         if (slot.used && slot.connection.id == result.connectionId)
@@ -648,6 +679,125 @@ struct EspBleImpl
     {
       result.error = EspBleError::InvalidState;
       result.detail = "connection is not an active Central connection";
+    }
+    else if (result.operation == EspBleGattOperation::DiscoverServices)
+    {
+      GattDatabaseSnapshot *database = nullptr;
+      {
+        std::lock_guard<std::mutex> lock(impl->mutex);
+        if (impl->gattDatabase == nullptr)
+        {
+          impl->gattDatabase = new (std::nothrow) GattDatabaseSnapshot();
+        }
+        database = impl->gattDatabase;
+        if (database != nullptr) database->reset(result.connectionId);
+      }
+      if (database == nullptr)
+      {
+        result.error = EspBleError::ResourceExhausted;
+        result.detail = "failed to allocate the GATT database snapshot";
+      }
+      else
+      {
+        std::map<std::string, BLERemoteService *> *services = client->getServices();
+        if (services == nullptr)
+        {
+          result.error = EspBleError::BackendFailure;
+          result.detail = "failed to enumerate GATT services";
+        }
+        else result.success = true;
+        if (services != nullptr)
+        for (const auto &serviceItem : *services)
+        {
+          BLERemoteService *service = serviceItem.second;
+          if (service == nullptr) continue;
+          const String serviceUuid = service->getUUID().toString();
+          {
+            std::lock_guard<std::mutex> lock(impl->mutex);
+            if (database->serviceCount == EspBle::MaxDiscoveredGattServices)
+            {
+              result.success = false;
+              result.error = EspBleError::ResourceExhausted;
+              result.detail = "too many discovered GATT services";
+            }
+            else
+            {
+              EspBleGattServiceInfo &info = database->services[database->serviceCount++];
+              info.serviceUuid = serviceUuid;
+              info.handle = service->getHandle();
+            }
+          }
+          if (!result.success) break;
+
+          std::map<std::string, BLERemoteCharacteristic *> *characteristics =
+            service->getCharacteristics();
+          if (characteristics == nullptr)
+          {
+            result.success = false;
+            result.error = EspBleError::BackendFailure;
+            result.detail = "failed to enumerate GATT characteristics";
+            break;
+          }
+          for (const auto &characteristicItem : *characteristics)
+          {
+            BLERemoteCharacteristic *characteristic = characteristicItem.second;
+            if (characteristic == nullptr) continue;
+            const String characteristicUuid = characteristic->getUUID().toString();
+            {
+              std::lock_guard<std::mutex> lock(impl->mutex);
+              if (database->characteristicCount == EspBle::MaxDiscoveredGattCharacteristics)
+              {
+                result.success = false;
+                result.error = EspBleError::ResourceExhausted;
+                result.detail = "too many discovered GATT characteristics";
+              }
+              else
+              {
+                EspBleGattCharacteristicInfo &info =
+                  database->characteristics[database->characteristicCount++];
+                info.serviceUuid = serviceUuid;
+                info.characteristicUuid = characteristicUuid;
+                info.handle = characteristic->getHandle();
+                info.readable = characteristic->canRead();
+                info.writable = characteristic->canWrite();
+                info.writableWithoutResponse = characteristic->canWriteNoResponse();
+                info.notifiable = characteristic->canNotify();
+                info.indicatable = characteristic->canIndicate();
+              }
+            }
+            if (!result.success) break;
+
+            std::map<std::string, BLERemoteDescriptor *> *descriptors =
+              characteristic->getDescriptors();
+            if (descriptors == nullptr) continue;
+            for (const auto &descriptorItem : *descriptors)
+            {
+              BLERemoteDescriptor *descriptor = descriptorItem.second;
+              if (descriptor == nullptr) continue;
+              std::lock_guard<std::mutex> lock(impl->mutex);
+              if (database->descriptorCount == EspBle::MaxDiscoveredGattDescriptors)
+              {
+                result.success = false;
+                result.error = EspBleError::ResourceExhausted;
+                result.detail = "too many discovered GATT descriptors";
+                break;
+              }
+              EspBleGattDescriptorInfo &info =
+                database->descriptors[database->descriptorCount++];
+              info.serviceUuid = serviceUuid;
+              info.characteristicUuid = characteristicUuid;
+              info.descriptorUuid = descriptor->getUUID().toString();
+              info.handle = descriptor->getHandle();
+            }
+            if (!result.success) break;
+          }
+          if (!result.success) break;
+        }
+      }
+      {
+        std::lock_guard<std::mutex> lock(impl->mutex);
+        if (database != nullptr) database->valid = result.success;
+      }
     }
     else
     {
@@ -711,6 +861,34 @@ struct EspBleImpl
               {
                 result.error = EspBleError::BackendFailure;
                 result.detail = "GATT write failed";
+              }
+            }
+          }
+          else if (result.operation == EspBleGattOperation::ReadDescriptor ||
+                   result.operation == EspBleGattOperation::WriteDescriptor)
+          {
+            BLERemoteDescriptor *descriptor =
+              characteristic->getDescriptor(BLEUUID(result.descriptorUuid.c_str()));
+            if (descriptor == nullptr)
+            {
+              result.error = EspBleError::NotFound;
+              result.detail = "GATT descriptor was not found";
+            }
+            else if (result.operation == EspBleGattOperation::ReadDescriptor)
+            {
+              result.value = descriptor->readValue();
+              result.success = true;
+            }
+            else
+            {
+              result.success = descriptor->writeValue(
+                reinterpret_cast<uint8_t *>(const_cast<char *>(writeValue.c_str())),
+                writeValue.length(),
+                response);
+              if (!result.success)
+              {
+                result.error = EspBleError::BackendFailure;
+                result.detail = "GATT descriptor write failed";
               }
             }
           }
@@ -810,8 +988,10 @@ struct EspBleImpl
   EspBleConnectionId gattConnectionId = 0;
   String gattServiceUuid;
   String gattCharacteristicUuid;
+  String gattDescriptorUuid;
   String gattWriteValue;
   bool gattWriteResponse = true;
+  GattDatabaseSnapshot *gattDatabase = nullptr;
 };
 
 struct EspBleGattServerImpl
@@ -829,6 +1009,16 @@ struct EspBleGattServerImpl
     EspBleGattCharacteristicConfig config;
     String value;
     BLECharacteristic *backend = nullptr;
+  };
+
+  struct DescriptorDefinition
+  {
+    String serviceUuid;
+    String characteristicUuid;
+    String uuid;
+    EspBleGattDescriptorConfig config;
+    String value;
+    BLEDescriptor *backend = nullptr;
   };
 
   class BackendCallbacks : public BLECharacteristicCallbacks
@@ -922,8 +1112,33 @@ struct EspBleGattServerImpl
     EspBleGattServerImpl *owner_;
   };
 
+  class DescriptorCallbacks : public BLEDescriptorCallbacks
+  {
+  public:
+    explicit DescriptorCallbacks(EspBleGattServerImpl *owner) : owner_(owner) {}
+
+    void onWrite(BLEDescriptor *descriptor) override
+    {
+      std::lock_guard<std::mutex> lock(owner_->mutex);
+      for (DescriptorDefinition &definition : owner_->descriptors)
+      {
+        if (definition.backend == descriptor)
+        {
+          const uint8_t *data = descriptor->getValue();
+          definition.value = descriptor->getLength() == 0
+            ? String()
+            : String(reinterpret_cast<const char *>(data), descriptor->getLength());
+          return;
+        }
+      }
+    }
+
+  private:
+    EspBleGattServerImpl *owner_;
+  };
+
   explicit EspBleGattServerImpl(EspBleGattServer *server)
-      : server(server), callbacks(this)
+      : server(server), callbacks(this), descriptorCallbacks(this)
   {
   }
 
@@ -1010,7 +1225,10 @@ struct EspBleGattServerImpl
   size_t serviceCount = 0;
   CharacteristicDefinition characteristics[EspBleGattServer::MaxCharacteristics];
   size_t characteristicCount = 0;
+  DescriptorDefinition descriptors[EspBleGattServer::MaxDescriptors];
+  size_t descriptorCount = 0;
   BackendCallbacks callbacks;
+  DescriptorCallbacks descriptorCallbacks;
   bool realized = false;
   bool sending = false;
   TaskHandle_t sendTask = nullptr;
@@ -2423,6 +2641,87 @@ bool EspBleGattServer::addCharacteristic(
   return true;
 }
 
+bool EspBleGattServer::addDescriptor(
+  const char *serviceUuid,
+  const char *characteristicUuid,
+  const char *descriptorUuid,
+  const EspBleGattDescriptorConfig &config)
+{
+  if (owner_->initialized())
+  {
+    owner_->setError(EspBleError::InvalidState, "GATT descriptors must be configured before begin");
+    return false;
+  }
+  if (serviceUuid == nullptr || serviceUuid[0] == '\0' ||
+      characteristicUuid == nullptr || characteristicUuid[0] == '\0' ||
+      descriptorUuid == nullptr || descriptorUuid[0] == '\0' || config.maximumLength == 0)
+  {
+    owner_->setError(EspBleError::InvalidArgument, "invalid GATT descriptor arguments");
+    return false;
+  }
+  if (!config.readable && !config.writable)
+  {
+    owner_->setError(EspBleError::InvalidArgument, "GATT descriptor has no access permissions");
+    return false;
+  }
+  if ((config.encryptedRead || config.authenticatedRead) && !config.readable)
+  {
+    owner_->setError(EspBleError::InvalidArgument, "secured descriptor read requires readable access");
+    return false;
+  }
+  if ((config.encryptedWrite || config.authenticatedWrite) && !config.writable)
+  {
+    owner_->setError(EspBleError::InvalidArgument, "secured descriptor write requires writable access");
+    return false;
+  }
+  if (impl_ == nullptr)
+  {
+    owner_->setError(EspBleError::NotFound, "GATT characteristic was not added");
+    return false;
+  }
+
+  std::lock_guard<std::mutex> lock(impl_->mutex);
+  bool characteristicFound = false;
+  for (size_t index = 0; index < impl_->characteristicCount; ++index)
+  {
+    const auto &definition = impl_->characteristics[index];
+    if (uuidEquals(definition.serviceUuid, serviceUuid) &&
+        uuidEquals(definition.uuid, characteristicUuid))
+    {
+      characteristicFound = true;
+      break;
+    }
+  }
+  if (!characteristicFound)
+  {
+    owner_->setError(EspBleError::NotFound, "GATT characteristic was not added");
+    return false;
+  }
+  for (size_t index = 0; index < impl_->descriptorCount; ++index)
+  {
+    const auto &definition = impl_->descriptors[index];
+    if (uuidEquals(definition.serviceUuid, serviceUuid) &&
+        uuidEquals(definition.characteristicUuid, characteristicUuid) &&
+        uuidEquals(definition.uuid, descriptorUuid))
+    {
+      owner_->setError(EspBleError::InvalidArgument, "GATT descriptor already exists");
+      return false;
+    }
+  }
+  if (impl_->descriptorCount == MaxDescriptors)
+  {
+    owner_->setError(EspBleError::ResourceExhausted, "too many GATT descriptors");
+    return false;
+  }
+  auto &definition = impl_->descriptors[impl_->descriptorCount++];
+  definition.serviceUuid = serviceUuid;
+  definition.characteristicUuid = characteristicUuid;
+  definition.uuid = descriptorUuid;
+  definition.config = config;
+  owner_->clearError();
+  return true;
+}
+
 bool EspBleGattServer::setValue(
   const char *serviceUuid,
   const char *characteristicUuid,
@@ -2490,6 +2789,83 @@ bool EspBleGattServer::value(
     const auto &definition = impl_->characteristics[index];
     if (uuidEquals(definition.serviceUuid, serviceUuid) &&
         uuidEquals(definition.uuid, characteristicUuid))
+    {
+      value = definition.value;
+      return true;
+    }
+  }
+  return false;
+}
+
+bool EspBleGattServer::setDescriptorValue(
+  const char *serviceUuid,
+  const char *characteristicUuid,
+  const char *descriptorUuid,
+  const uint8_t *data,
+  size_t length)
+{
+  if (serviceUuid == nullptr || characteristicUuid == nullptr || descriptorUuid == nullptr ||
+      (data == nullptr && length != 0) || impl_ == nullptr)
+  {
+    owner_->setError(EspBleError::InvalidArgument, "invalid GATT descriptor value arguments");
+    return false;
+  }
+  std::lock_guard<std::mutex> lock(impl_->mutex);
+  for (size_t index = 0; index < impl_->descriptorCount; ++index)
+  {
+    auto &definition = impl_->descriptors[index];
+    if (uuidEquals(definition.serviceUuid, serviceUuid) &&
+        uuidEquals(definition.characteristicUuid, characteristicUuid) &&
+        uuidEquals(definition.uuid, descriptorUuid))
+    {
+      if (length > definition.config.maximumLength)
+      {
+        owner_->setError(EspBleError::InvalidArgument, "GATT descriptor value exceeds maximum length");
+        return false;
+      }
+      definition.value = length == 0
+        ? String()
+        : String(reinterpret_cast<const char *>(data), length);
+      if (definition.backend != nullptr)
+      {
+        definition.backend->setValue(
+          reinterpret_cast<const uint8_t *>(definition.value.c_str()),
+          definition.value.length());
+      }
+      owner_->clearError();
+      return true;
+    }
+  }
+  owner_->setError(EspBleError::NotFound, "GATT descriptor was not found");
+  return false;
+}
+
+bool EspBleGattServer::setDescriptorValue(
+  const char *serviceUuid,
+  const char *characteristicUuid,
+  const char *descriptorUuid,
+  const String &value)
+{
+  return setDescriptorValue(
+    serviceUuid, characteristicUuid, descriptorUuid,
+    reinterpret_cast<const uint8_t *>(value.c_str()), value.length());
+}
+
+bool EspBleGattServer::descriptorValue(
+  const char *serviceUuid,
+  const char *characteristicUuid,
+  const char *descriptorUuid,
+  String &value) const
+{
+  if (serviceUuid == nullptr || characteristicUuid == nullptr || descriptorUuid == nullptr ||
+      impl_ == nullptr) return false;
+  std::lock_guard<std::mutex> lock(impl_->mutex);
+  for (size_t index = 0; index < impl_->descriptorCount; ++index)
+  {
+    const auto &definition = impl_->descriptors[index];
+    if (uuidEquals(definition.serviceUuid, serviceUuid) &&
+        uuidEquals(definition.characteristicUuid, characteristicUuid) &&
+        uuidEquals(definition.uuid, descriptorUuid))
     {
       value = definition.value;
       return true;
@@ -2727,6 +3103,40 @@ bool EspBleGattServer::realize()
       characteristicDefinition.backend->setValue(
         reinterpret_cast<const uint8_t *>(characteristicDefinition.value.c_str()),
         characteristicDefinition.value.length());
+
+      for (size_t descriptorIndex = 0;
+           descriptorIndex < impl_->descriptorCount;
+           ++descriptorIndex)
+      {
+        auto &descriptorDefinition = impl_->descriptors[descriptorIndex];
+        if (!uuidEquals(descriptorDefinition.serviceUuid, serviceDefinition.uuid.c_str()) ||
+            !uuidEquals(descriptorDefinition.characteristicUuid,
+                        characteristicDefinition.uuid.c_str()))
+        {
+          continue;
+        }
+        descriptorDefinition.backend = new BLEDescriptor(
+          descriptorDefinition.uuid.c_str(), descriptorDefinition.config.maximumLength);
+        if (descriptorDefinition.backend == nullptr)
+        {
+          owner_->setError(EspBleError::ResourceExhausted, "failed to create GATT descriptor");
+          return false;
+        }
+        uint16_t permissions = 0;
+        const EspBleGattDescriptorConfig &descriptorConfig = descriptorDefinition.config;
+        if (descriptorConfig.readable) permissions |= ESP_GATT_PERM_READ;
+        if (descriptorConfig.writable) permissions |= ESP_GATT_PERM_WRITE;
+        if (descriptorConfig.encryptedRead) permissions |= ESP_GATT_PERM_READ_ENCRYPTED;
+        if (descriptorConfig.encryptedWrite) permissions |= ESP_GATT_PERM_WRITE_ENCRYPTED;
+        if (descriptorConfig.authenticatedRead) permissions |= ESP_GATT_PERM_READ_ENC_MITM;
+        if (descriptorConfig.authenticatedWrite) permissions |= ESP_GATT_PERM_WRITE_ENC_MITM;
+        descriptorDefinition.backend->setAccessPermissions(permissions);
+        descriptorDefinition.backend->setCallbacks(&impl_->descriptorCallbacks);
+        descriptorDefinition.backend->setValue(
+          reinterpret_cast<const uint8_t *>(descriptorDefinition.value.c_str()),
+          descriptorDefinition.value.length());
+        characteristicDefinition.backend->addDescriptor(descriptorDefinition.backend);
+      }
     }
     if (!serviceDefinition.backend->start())
     {
@@ -2752,6 +3162,10 @@ void EspBleGattServer::resetBackend()
   for (size_t index = 0; index < impl_->characteristicCount; ++index)
   {
     impl_->characteristics[index].backend = nullptr;
+  }
+  for (size_t index = 0; index < impl_->descriptorCount; ++index)
+  {
+    impl_->descriptors[index].backend = nullptr;
   }
   impl_->realized = false;
 }
@@ -4747,6 +5161,124 @@ bool EspBle::discoverCharacteristic(
     EspBleGattOperation::Discover, connectionId, serviceUuid, characteristicUuid);
 }
 
+bool EspBle::discoverServices(EspBleConnectionId connectionId)
+{
+  return startGattOperation(
+    EspBleGattOperation::DiscoverServices, connectionId, nullptr, nullptr);
+}
+
+size_t EspBle::discoveredServiceCount(EspBleConnectionId connectionId) const
+{
+  if (impl_ == nullptr) return 0;
+  std::lock_guard<std::mutex> lock(impl_->mutex);
+  const auto *database = impl_->gattDatabase;
+  return database != nullptr && database->valid && database->connectionId == connectionId
+    ? database->serviceCount : 0;
+}
+
+bool EspBle::discoveredService(
+  EspBleConnectionId connectionId,
+  size_t index,
+  EspBleGattServiceInfo &service) const
+{
+  if (impl_ == nullptr) return false;
+  std::lock_guard<std::mutex> lock(impl_->mutex);
+  const auto *database = impl_->gattDatabase;
+  if (database == nullptr || !database->valid || database->connectionId != connectionId ||
+      index >= database->serviceCount) return false;
+  service = database->services[index];
+  return true;
+}
+
+size_t EspBle::discoveredCharacteristicCount(
+  EspBleConnectionId connectionId,
+  const char *serviceUuid) const
+{
+  if (impl_ == nullptr) return 0;
+  std::lock_guard<std::mutex> lock(impl_->mutex);
+  const auto *database = impl_->gattDatabase;
+  if (database == nullptr || !database->valid || database->connectionId != connectionId) return 0;
+  size_t count = 0;
+  for (size_t index = 0; index < database->characteristicCount; ++index)
+  {
+    if (serviceUuid == nullptr ||
+        uuidEquals(database->characteristics[index].serviceUuid, serviceUuid)) ++count;
+  }
+  return count;
+}
+
+bool EspBle::discoveredCharacteristic(
+  EspBleConnectionId connectionId,
+  size_t index,
+  EspBleGattCharacteristicInfo &characteristic,
+  const char *serviceUuid) const
+{
+  if (impl_ == nullptr) return false;
+  std::lock_guard<std::mutex> lock(impl_->mutex);
+  const auto *database = impl_->gattDatabase;
+  if (database == nullptr || !database->valid || database->connectionId != connectionId) return false;
+  size_t found = 0;
+  for (size_t candidate = 0; candidate < database->characteristicCount; ++candidate)
+  {
+    const auto &value = database->characteristics[candidate];
+    if (serviceUuid != nullptr && !uuidEquals(value.serviceUuid, serviceUuid)) continue;
+    if (found++ == index)
+    {
+      characteristic = value;
+      return true;
+    }
+  }
+  return false;
+}
+
+size_t EspBle::discoveredDescriptorCount(
+  EspBleConnectionId connectionId,
+  const char *serviceUuid,
+  const char *characteristicUuid) const
+{
+  if (impl_ == nullptr) return 0;
+  std::lock_guard<std::mutex> lock(impl_->mutex);
+  const auto *database = impl_->gattDatabase;
+  if (database == nullptr || !database->valid || database->connectionId != connectionId) return 0;
+  size_t count = 0;
+  for (size_t index = 0; index < database->descriptorCount; ++index)
+  {
+    const auto &value = database->descriptors[index];
+    if (serviceUuid != nullptr && !uuidEquals(value.serviceUuid, serviceUuid)) continue;
+    if (characteristicUuid != nullptr &&
+        !uuidEquals(value.characteristicUuid, characteristicUuid)) continue;
+    ++count;
+  }
+  return count;
+}
+
+bool EspBle::discoveredDescriptor(
+  EspBleConnectionId connectionId,
+  size_t index,
+  EspBleGattDescriptorInfo &descriptor,
+  const char *serviceUuid,
+  const char *characteristicUuid) const
+{
+  if (impl_ == nullptr) return false;
+  std::lock_guard<std::mutex> lock(impl_->mutex);
+  const auto *database = impl_->gattDatabase;
+  if (database == nullptr || !database->valid || database->connectionId != connectionId) return false;
+  size_t found = 0;
+  for (size_t candidate = 0; candidate < database->descriptorCount; ++candidate)
+  {
+    const auto &value = database->descriptors[candidate];
+    if (serviceUuid != nullptr && !uuidEquals(value.serviceUuid, serviceUuid)) continue;
+    if (characteristicUuid != nullptr &&
+        !uuidEquals(value.characteristicUuid, characteristicUuid)) continue;
+    if (found++ == index)
+    {
+      descriptor = value;
+      return true;
+    }
+  }
+  return false;
+}
+
 bool EspBle::readCharacteristic(
   EspBleConnectionId connectionId,
   const char *serviceUuid,
@@ -4772,6 +5304,43 @@ bool EspBle::writeCharacteristic(
     data,
     length,
     response);
+}
+
+bool EspBle::readDescriptor(
+  EspBleConnectionId connectionId,
+  const char *serviceUuid,
+  const char *characteristicUuid,
+  const char *descriptorUuid)
+{
+  return startGattOperation(
+    EspBleGattOperation::ReadDescriptor,
+    connectionId,
+    serviceUuid,
+    characteristicUuid,
+    nullptr,
+    0,
+    true,
+    descriptorUuid);
+}
+
+bool EspBle::writeDescriptor(
+  EspBleConnectionId connectionId,
+  const char *serviceUuid,
+  const char *characteristicUuid,
+  const char *descriptorUuid,
+  const uint8_t *data,
+  size_t length,
+  bool response)
+{
+  return startGattOperation(
+    EspBleGattOperation::WriteDescriptor,
+    connectionId,
+    serviceUuid,
+    characteristicUuid,
+    data,
+    length,
+    response,
+    descriptorUuid);
 }
 
 bool EspBle::subscribe(
@@ -4818,6 +5387,24 @@ bool EspBle::writeCharacteristic(
     response);
 }
 
+bool EspBle::writeDescriptor(
+  EspBleConnectionId connectionId,
+  const char *serviceUuid,
+  const char *characteristicUuid,
+  const char *descriptorUuid,
+  const String &value,
+  bool response)
+{
+  return writeDescriptor(
+    connectionId,
+    serviceUuid,
+    characteristicUuid,
+    descriptorUuid,
+    reinterpret_cast<const uint8_t *>(value.c_str()),
+    value.length(),
+    response);
+}
+
 void EspBle::onCharacteristicDiscovered(GattResultCallback callback)
 {
   characteristicDiscoveredCallback_ = std::move(callback);
@@ -4831,6 +5418,21 @@ void EspBle::onCharacteristicRead(GattResultCallback callback)
 void EspBle::onCharacteristicWritten(GattResultCallback callback)
 {
   characteristicWrittenCallback_ = std::move(callback);
+}
+
+void EspBle::onServicesDiscovered(GattResultCallback callback)
+{
+  servicesDiscoveredCallback_ = std::move(callback);
+}
+
+void EspBle::onDescriptorRead(GattResultCallback callback)
+{
+  descriptorReadCallback_ = std::move(callback);
+}
+
+void EspBle::onDescriptorWritten(GattResultCallback callback)
+{
+  descriptorWrittenCallback_ = std::move(callback);
 }
 
 void EspBle::onSubscribed(GattResultCallback callback)
@@ -4856,15 +5458,21 @@ bool EspBle::startGattOperation(
   const char *characteristicUuid,
   const uint8_t *data,
   size_t length,
-  bool response)
+  bool response,
+  const char *descriptorUuid)
 {
   if (!initialized_)
   {
     setError(EspBleError::InvalidState, "BLE stack is not initialized");
     return false;
   }
-  if (serviceUuid == nullptr || serviceUuid[0] == '\0' ||
-      characteristicUuid == nullptr || characteristicUuid[0] == '\0' ||
+  const bool databaseDiscovery = operation == EspBleGattOperation::DiscoverServices;
+  const bool descriptorOperation = operation == EspBleGattOperation::ReadDescriptor ||
+    operation == EspBleGattOperation::WriteDescriptor;
+  if ((!databaseDiscovery &&
+       (serviceUuid == nullptr || serviceUuid[0] == '\0' ||
+        characteristicUuid == nullptr || characteristicUuid[0] == '\0')) ||
+      (descriptorOperation && (descriptorUuid == nullptr || descriptorUuid[0] == '\0')) ||
       (data == nullptr && length != 0))
   {
     setError(EspBleError::InvalidArgument, "invalid GATT operation arguments");
@@ -4895,8 +5503,9 @@ bool EspBle::startGattOperation(
 
     impl_->gattOperation = operation;
     impl_->gattConnectionId = connectionId;
-    impl_->gattServiceUuid = serviceUuid;
-    impl_->gattCharacteristicUuid = characteristicUuid;
+    impl_->gattServiceUuid = serviceUuid == nullptr ? "" : serviceUuid;
+    impl_->gattCharacteristicUuid = characteristicUuid == nullptr ? "" : characteristicUuid;
+    impl_->gattDescriptorUuid = descriptorUuid == nullptr ? "" : descriptorUuid;
     impl_->gattWriteValue = length == 0
       ? String()
       : String(reinterpret_cast<const char *>(data), length);
@@ -5035,6 +5644,15 @@ void EspBle::dispatchConnectionEvents()
         break;
       case EspBleGattOperation::Unsubscribe:
         callback = &unsubscribedCallback_;
+        break;
+      case EspBleGattOperation::DiscoverServices:
+        callback = &servicesDiscoveredCallback_;
+        break;
+      case EspBleGattOperation::ReadDescriptor:
+        callback = &descriptorReadCallback_;
+        break;
+      case EspBleGattOperation::WriteDescriptor:
+        callback = &descriptorWrittenCallback_;
         break;
       }
       if (callback != nullptr && *callback)

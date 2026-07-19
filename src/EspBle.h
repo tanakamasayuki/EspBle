@@ -182,6 +182,17 @@ struct EspBleGattCharacteristicConfig
   bool authenticatedWrite = false;
 };
 
+struct EspBleGattDescriptorConfig
+{
+  bool readable = true;
+  bool writable = false;
+  bool encryptedRead = false;
+  bool encryptedWrite = false;
+  bool authenticatedRead = false;
+  bool authenticatedWrite = false;
+  uint16_t maximumLength = 100;
+};
+
 enum class EspBleGattOperation : uint8_t
 {
   Discover = 0,
@@ -189,6 +200,9 @@ enum class EspBleGattOperation : uint8_t
   Write,
   Subscribe,
   Unsubscribe,
+  DiscoverServices,
+  ReadDescriptor,
+  WriteDescriptor,
 };
 
 struct EspBleGattResult
@@ -197,6 +211,7 @@ struct EspBleGattResult
   EspBleConnectionId connectionId = 0;
   String serviceUuid;
   String characteristicUuid;
+  String descriptorUuid;
   bool success = false;
   EspBleError error = EspBleError::None;
   String detail;
@@ -208,6 +223,33 @@ struct EspBleGattResult
   bool indicatable = false;
   bool subscribedToNotifications = false;
   bool subscribedToIndications = false;
+  bool response = true;
+};
+
+struct EspBleGattServiceInfo
+{
+  String serviceUuid;
+  uint16_t handle = 0;
+};
+
+struct EspBleGattCharacteristicInfo
+{
+  String serviceUuid;
+  String characteristicUuid;
+  uint16_t handle = 0;
+  bool readable = false;
+  bool writable = false;
+  bool writableWithoutResponse = false;
+  bool notifiable = false;
+  bool indicatable = false;
+};
+
+struct EspBleGattDescriptorInfo
+{
+  String serviceUuid;
+  String characteristicUuid;
+  String descriptorUuid;
+  uint16_t handle = 0;
 };
 
 struct EspBleGattWrite
@@ -511,6 +553,7 @@ class EspBleGattServer
 public:
   static constexpr size_t MaxServices = 4;
   static constexpr size_t MaxCharacteristics = 16;
+  static constexpr size_t MaxDescriptors = 16;
   using WriteCallback = std::function<void(const EspBleGattWrite &write)>;
   using SubscriptionCallback = std::function<void(const EspBleGattSubscription &subscription)>;
   using SendCallback = std::function<void(const EspBleGattSendResult &result)>;
@@ -520,6 +563,11 @@ public:
     const char *serviceUuid,
     const char *characteristicUuid,
     const EspBleGattCharacteristicConfig &config);
+  bool addDescriptor(
+    const char *serviceUuid,
+    const char *characteristicUuid,
+    const char *descriptorUuid,
+    const EspBleGattDescriptorConfig &config = EspBleGattDescriptorConfig());
   bool setValue(
     const char *serviceUuid,
     const char *characteristicUuid,
@@ -527,6 +575,22 @@ public:
     size_t length);
   bool setValue(const char *serviceUuid, const char *characteristicUuid, const String &value);
   bool value(const char *serviceUuid, const char *characteristicUuid, String &value) const;
+  bool setDescriptorValue(
+    const char *serviceUuid,
+    const char *characteristicUuid,
+    const char *descriptorUuid,
+    const uint8_t *data,
+    size_t length);
+  bool setDescriptorValue(
+    const char *serviceUuid,
+    const char *characteristicUuid,
+    const char *descriptorUuid,
+    const String &value);
+  bool descriptorValue(
+    const char *serviceUuid,
+    const char *characteristicUuid,
+    const char *descriptorUuid,
+    String &value) const;
   bool notify(
     const char *serviceUuid,
     const char *characteristicUuid,
@@ -787,6 +851,9 @@ private:
 class EspBle
 {
 public:
+  static constexpr size_t MaxDiscoveredGattServices = 16;
+  static constexpr size_t MaxDiscoveredGattCharacteristics = 48;
+  static constexpr size_t MaxDiscoveredGattDescriptors = 48;
   using ConnectionCallback = std::function<void(const EspBleConnection &connection)>;
   using ConnectionFailureCallback = std::function<void(const EspBleConnectionFailure &failure)>;
   using MtuChangedCallback = std::function<void(const EspBleMtuChanged &event)>;
@@ -826,6 +893,30 @@ public:
     EspBleConnectionId connectionId,
     const char *serviceUuid,
     const char *characteristicUuid);
+  bool discoverServices(EspBleConnectionId connectionId);
+  size_t discoveredServiceCount(EspBleConnectionId connectionId) const;
+  bool discoveredService(
+    EspBleConnectionId connectionId,
+    size_t index,
+    EspBleGattServiceInfo &service) const;
+  size_t discoveredCharacteristicCount(
+    EspBleConnectionId connectionId,
+    const char *serviceUuid = nullptr) const;
+  bool discoveredCharacteristic(
+    EspBleConnectionId connectionId,
+    size_t index,
+    EspBleGattCharacteristicInfo &characteristic,
+    const char *serviceUuid = nullptr) const;
+  size_t discoveredDescriptorCount(
+    EspBleConnectionId connectionId,
+    const char *serviceUuid = nullptr,
+    const char *characteristicUuid = nullptr) const;
+  bool discoveredDescriptor(
+    EspBleConnectionId connectionId,
+    size_t index,
+    EspBleGattDescriptorInfo &descriptor,
+    const char *serviceUuid = nullptr,
+    const char *characteristicUuid = nullptr) const;
   bool readCharacteristic(
     EspBleConnectionId connectionId,
     const char *serviceUuid,
@@ -843,6 +934,26 @@ public:
     const char *characteristicUuid,
     const String &value,
     bool response = true);
+  bool readDescriptor(
+    EspBleConnectionId connectionId,
+    const char *serviceUuid,
+    const char *characteristicUuid,
+    const char *descriptorUuid);
+  bool writeDescriptor(
+    EspBleConnectionId connectionId,
+    const char *serviceUuid,
+    const char *characteristicUuid,
+    const char *descriptorUuid,
+    const uint8_t *data,
+    size_t length,
+    bool response = true);
+  bool writeDescriptor(
+    EspBleConnectionId connectionId,
+    const char *serviceUuid,
+    const char *characteristicUuid,
+    const char *descriptorUuid,
+    const String &value,
+    bool response = true);
   bool subscribe(
     EspBleConnectionId connectionId,
     const char *serviceUuid,
@@ -855,6 +966,9 @@ public:
   void onCharacteristicDiscovered(GattResultCallback callback);
   void onCharacteristicRead(GattResultCallback callback);
   void onCharacteristicWritten(GattResultCallback callback);
+  void onServicesDiscovered(GattResultCallback callback);
+  void onDescriptorRead(GattResultCallback callback);
+  void onDescriptorWritten(GattResultCallback callback);
   void onSubscribed(GattResultCallback callback);
   void onUnsubscribed(GattResultCallback callback);
   void onNotification(std::function<void(const EspBleGattNotification &notification)> callback);
@@ -903,7 +1017,8 @@ private:
     const char *characteristicUuid,
     const uint8_t *data = nullptr,
     size_t length = 0,
-    bool response = true);
+    bool response = true,
+    const char *descriptorUuid = nullptr);
 
   bool initialized_ = false;
   String activeDeviceName_;
@@ -930,6 +1045,9 @@ private:
   GattResultCallback characteristicDiscoveredCallback_;
   GattResultCallback characteristicReadCallback_;
   GattResultCallback characteristicWrittenCallback_;
+  GattResultCallback servicesDiscoveredCallback_;
+  GattResultCallback descriptorReadCallback_;
+  GattResultCallback descriptorWrittenCallback_;
   GattResultCallback subscribedCallback_;
   GattResultCallback unsubscribedCallback_;
   std::function<void(const EspBleGattNotification &notification)> notificationCallback_;

@@ -110,6 +110,23 @@ ble.begin();
 
 Central側のDiscovery、Read、Writeは要求の受理と完了を分離します。同梱backendの待機型操作は内部taskで実行し、結果は`update()` contextのcallbackへ配送します。
 
+一覧Discoveryは1件ずつevent queueへ流さず、完了後に接続単位の固定容量snapshotを照会します。これにより大きなGATT databaseでも完了eventがqueue容量に依存しません。
+
+```cpp
+ble.onServicesDiscovered([](const EspBleGattResult &result) {
+  if (!result.success) return;
+  for (size_t i = 0; i < ble.discoveredServiceCount(result.connectionId); ++i) {
+    EspBleGattServiceInfo service;
+    if (ble.discoveredService(result.connectionId, i, service)) {
+      Serial.println(service.serviceUuid);
+    }
+  }
+});
+ble.discoverServices(connectionId);
+```
+
+snapshotは最新の一覧Discovery 1件を保持し、同じConnection IDの切断時に無効化します。上限はService 16、Characteristic 48、Descriptor 48です。Service/Characteristic UUIDで絞り込むcount/index APIも提供します。
+
 ```cpp
 ble.onCharacteristicDiscovered([](const EspBleGattResult &result) {
   if (result.success && result.readable) {
@@ -126,11 +143,11 @@ ble.onCharacteristicRead([](const EspBleGattResult &result) {
 ble.discoverCharacteristic(connectionId, serviceUuid, characteristicUuid);
 ```
 
-Central側のWrite完了は`onCharacteristicWritten()`へ配送します。Discovery / Read / Writeの完了はいずれも`EspBleGattResult`（success、error、detail、connectionId、UUID、値）を持つ値イベントです。
+Central側のWrite完了は`onCharacteristicWritten()`へ配送します。`response=false`でWrite Without Responseを選び、結果の`response`にも方式を保持します。Descriptorは`readDescriptor()` / `writeDescriptor()`と`onDescriptorRead()` / `onDescriptorWritten()`を使います。各完了は`EspBleGattResult`（success、error、detail、connectionId、Service/Characteristic/Descriptor UUID、値）を持つ値イベントです。
 
-現在のDiscoveryは既知のService/Characteristic UUIDを指定し、存在とpropertyを取得する最小形です。Service一覧やCharacteristic一覧を列挙するAPIは未実装です。また、初期実装は同時に1件のCentral GATT操作だけを受理します。operation idはこの制限が続く間は導入しません（DECISIONS 確定 #19）。operation queueとcancelは実装経験を基に後で確定します。
+`discoverCharacteristic()`は既知のService/Characteristic UUIDを指定して存在とpropertyを取得する軽量経路として維持します。Central GATT操作は同時に1件だけ受理します。operation idはこの制限が続く間は導入せず（DECISIONS 確定 #19）、operation queue、cancel、操作単位timeoutは今後の対象です。
 
-GATT値はpointer+lengthを基本とし、NULを含めてcopyできる`String`を便宜overloadとして提供します（同梱backendの`String`構築は長さ明示でbinary-safe。DECISIONS 確定 #20）。Server側の現在値は`gattServer.value(serviceUuid, characteristicUuid, out)`で読み出せます。Server構成の上限は`EspBleGattServer::MaxServices`（4）と`MaxCharacteristics`（16）です。
+GATT値はpointer+lengthを基本とし、NULを含めてcopyできる`String`を便宜overloadとして提供します（同梱backendの`String`構築は長さ明示でbinary-safe。DECISIONS 確定 #20）。Server側は`addDescriptor()`、`setDescriptorValue()`、`descriptorValue()`も提供します。構成上限はService 4、Characteristic 16、Descriptor 16です。Descriptorの動的Read callbackと接続元つきWrite callbackはまだ提供しません。
 
 ## Subscription / Notify / Indicateの試行API
 

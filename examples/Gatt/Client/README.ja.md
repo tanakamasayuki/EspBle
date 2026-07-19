@@ -2,7 +2,7 @@
 
 > English: [README.md](README.md)
 
-[Gatt/Server](../Server/) exampleへ接続し、CentralのGATT Clientフローを一通り実行します: 既知UUIDのDiscovery → Read → Write with Response。各ステップは`bool`を返す要求APIで受理され、完了は`ble.update()`からのイベントとして後から届きます。
+[Gatt/Server](../Server/) exampleへ接続し、CentralのGATT Clientフローを一通り実行します: database一覧Discovery → 既知UUIDのDiscovery → Read → 応答あり/なしWrite → Descriptor Read/Write。各要求は直ちに`bool`を返し、完了は`ble.update()`からのイベントとして後から届きます。
 
 ## ハードウェア
 
@@ -12,20 +12,25 @@
 ## 動作内容
 
 - ServerのService UUIDをscanして接続します
-- 既知のCharacteristicをDiscoveryし、Read → 値を表示 → `hello from Central`をWrite → Write結果を表示、と連鎖します
+- Service、Characteristic、Descriptorを接続単位のsnapshotへ一覧Discoveryします
+- 既知CharacteristicのDiscovery後、Read、応答あり/なしWrite、Descriptor Read/Writeを連鎖します
 - Central GATT操作が同時1件であることを示します — 次の操作は前の操作の完了callbackから発行します
 
 ## 主なAPI
 
-- `ble.discoverCharacteristic(connectionId, serviceUuid, characteristicUuid)` — 既知UUIDのDiscovery（Service/Characteristicの一覧列挙は未実装です）
+- `ble.discoverServices()` / `onServicesDiscovered()` — peer databaseの一覧Discovery
+- `discoveredService*()` / `discoveredCharacteristic*()` / `discoveredDescriptor*()` — 切断または次の一覧Discoveryまでsnapshotを照会
+- `ble.discoverCharacteristic(connectionId, serviceUuid, characteristicUuid)` — 既知UUIDのDiscovery
 - `ble.onCharacteristicDiscovered(callback)` — `success`、property、`detail`を持つ`EspBleGattResult`
 - `ble.readCharacteristic(...)` / `ble.onCharacteristicRead(callback)` — `result.value`が値を保持します（binary-safe）
 - `ble.writeCharacteristic(connectionId, serviceUuid, characteristicUuid, value, withResponse)` / `ble.onCharacteristicWritten(callback)`
+- `ble.readDescriptor()` / `writeDescriptor()`と各完了callback
 - Central GATT操作は排他です: 実行中に2つ目を要求すると`InvalidState`で同期的に失敗します
 
 ## 期待されるSerial出力
 
 ```
 Read: ready
-Write complete
+Descriptor: EspBle value
+Descriptor write complete
 ```

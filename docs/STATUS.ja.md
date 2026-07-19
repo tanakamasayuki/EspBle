@@ -93,12 +93,12 @@ host上のunit test（`tests/unit/`）としてkeymap変換とHID Report Map par
 - 公開APIは試行段階で、互換性を保証する初回リリース前です。
 - Keyboardは固定6KRO Report Protocolのみで、Boot ProtocolとNKROは未対応です。Gamepad HostはReport Mapのvariable input fieldをdescriptor-drivenで分解しますが、vendor固有のarray input解釈は未対応です。
 - HID Hostの再接続では、利用者がscan/connectし、Security完了後に新しいConnection IDで`discover()`を再実行します。
-- GATT Client Discoveryは既知UUID指定のみで、Service / Characteristic一覧列挙は未実装です。
+- GATT Client一覧Discoveryは最新1接続分のsnapshot（Service 16 / Characteristic 48 / Descriptor 48）を保持します。永続cacheとService Changed追従は未実装です。
 - Central側GATT operationは同時1件です。operation queue、ID、cancelは未実装です。
 - Central接続はScan Result指定のみで、address直接指定の接続は未実装です。
 - 切断理由の取得と接続パラメータ更新のAPIは未実装です。
-- GATT ServerのDescriptor定義とRead時callbackは未実装です（値保持と`onWritten()`のみ）。
-- GATT ClientのDescriptor Read / Writeと操作単位のtimeout指定は未実装です。
+- GATT Server Descriptorの動的Read callbackと接続元つきWrite callbackは未実装です（定義・permission・値保持は対応済み）。
+- GATT Clientの操作単位timeout指定は未実装です。
 - 実行時passkey入力、Numeric Comparison、Pairing確認・拒否UIは未対応です。
 - passkey表示イベントのConnectionは「最初の未暗号化Connection」の推定です。複数接続の同時Pairingでは誤ったConnectionを報告する可能性があります（DECISIONS Security #8）。
 - Central側のMTUは接続時のsnapshotのみで、接続後の変化は追跡できません（同梱backendにMTU変更callbackがないため）。MTU交換が接続timeoutまでに完了しない場合、snapshotが23になる可能性があります（DECISIONS Connection/GATT #23）。
@@ -144,8 +144,8 @@ host上のunit test（`tests/unit/`）としてkeymap変換とHID Report Map par
 
 ### P1: 初期基盤を補完する作業
 
-- Write Without ResponseのPeer検証。
-- Service / Characteristic一覧Discovery。
+- ✅ Write Without ResponseのPeer検証。
+- ✅ Service / Characteristic / Descriptor一覧DiscoveryとDescriptor Read / Write。
 - Battery Service standalone Client / Server。
 - 実行時passkey入力とNumeric Comparison。
 - ESP32-S3以外のcompile matrixと実機検証。

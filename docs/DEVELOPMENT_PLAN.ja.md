@@ -24,8 +24,9 @@
 - ✅ GATT Server Service/Characteristic
 - ✅ 既知UUIDを指定するGATT Client Discovery
 - ✅ Read / Write with Response
-- Service/Characteristic一覧Discovery
-- Write Without ResponseのPeer検証
+- ✅ Service/Characteristic/Descriptor一覧Discovery
+- ✅ Write Without ResponseのPeer検証
+- ✅ Descriptor Read / WriteとServer Descriptor定義
 - ✅ Notify / Indicate / subscription / unsubscribe
 - ✅ MTU設定、Connection snapshot、payload上限検証
 - ✅ `gatt_read_write` Peerテスト

@@ -6,10 +6,11 @@
 //     Service追加ができないため）。Gatt/Client example や汎用GATTアプリから操作できる。
 #include <EspBle.h>
 
-// en: Custom 128-bit UUIDs (service / characteristic).
-// ja: 独自の128-bit UUID（Service / Characteristic）。
+// en: Custom 128-bit UUIDs (service / characteristic / descriptor).
+// ja: 独自の128-bit UUID（Service / Characteristic / Descriptor）。
 static constexpr const char *SERVICE_UUID = "10da4dd0-8eaa-4c69-9003-676174747277";
 static constexpr const char *CHARACTERISTIC_UUID = "10da4dd1-8eaa-4c69-9003-676174747277";
+static constexpr const char *DESCRIPTOR_UUID = "10da4dd2-8eaa-4c69-9003-676174747277";
 
 EspBle ble;
 
@@ -21,12 +22,19 @@ void setup()
   EspBleGattCharacteristicConfig valueConfig;
   valueConfig.readable = true;  // en: allow read / ja: Read許可
   valueConfig.writable = true;  // en: allow write / ja: Write許可
+  valueConfig.writableWithoutResponse = true;
+  EspBleGattDescriptorConfig descriptorConfig;
+  descriptorConfig.writable = true;
 
   // en: Register service -> characteristic -> initial value, all before begin().
   // ja: begin() 前に Service → Characteristic → 初期値 の順で登録する。
   if (!gattServer.addService(SERVICE_UUID) ||
       !gattServer.addCharacteristic(SERVICE_UUID, CHARACTERISTIC_UUID, valueConfig) ||
-      !gattServer.setValue(SERVICE_UUID, CHARACTERISTIC_UUID, String("ready")))
+      !gattServer.addDescriptor(
+        SERVICE_UUID, CHARACTERISTIC_UUID, DESCRIPTOR_UUID, descriptorConfig) ||
+      !gattServer.setValue(SERVICE_UUID, CHARACTERISTIC_UUID, String("ready")) ||
+      !gattServer.setDescriptorValue(
+        SERVICE_UUID, CHARACTERISTIC_UUID, DESCRIPTOR_UUID, String("EspBle value")))
   {
     Serial.printf("GATT configuration failed: %s\n", ble.lastErrorDetail().c_str());
     return;
