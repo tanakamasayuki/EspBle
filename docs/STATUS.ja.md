@@ -98,7 +98,7 @@ host上のunit test（`tests/unit/`）としてkeymap変換とHID Report Map par
 - Central接続はScan Result指定のみで、address直接指定の接続は未実装です。
 - 切断理由の取得と接続パラメータ更新のAPIは未実装です。
 - GATT Server Descriptorの動的Read callbackと接続元つきWrite callbackは未実装です（定義・permission・値保持は対応済み）。
-- GATT Clientの操作単位timeout指定は未実装です。
+- GATT Clientの操作単位timeoutは完了eventを期限内に確定しますが、backend処理の強制cancelは行いません。backendが戻るまでは次操作を受理しません。
 - 実行時passkey入力、Numeric Comparison、Pairing確認・拒否UIは未対応です。
 - passkey表示イベントのConnectionは「最初の未暗号化Connection」の推定です。複数接続の同時Pairingでは誤ったConnectionを報告する可能性があります（DECISIONS Security #8）。
 - Central側のMTUは接続時のsnapshotのみで、接続後の変化は追跡できません（同梱backendにMTU変更callbackがないため）。MTU交換が接続timeoutまでに完了しない場合、snapshotが23になる可能性があります（DECISIONS Connection/GATT #23）。
@@ -146,6 +146,7 @@ host上のunit test（`tests/unit/`）としてkeymap変換とHID Report Map par
 
 - ✅ Write Without ResponseのPeer検証。
 - ✅ Service / Characteristic / Descriptor一覧DiscoveryとDescriptor Read / Write。
+- ✅ GATT Client操作単位timeout、遅延完了抑止、回収後の再操作。
 - Battery Service standalone Client / Server。
 - 実行時passkey入力とNumeric Comparison。
 - ESP32-S3以外のcompile matrixと実機検証。

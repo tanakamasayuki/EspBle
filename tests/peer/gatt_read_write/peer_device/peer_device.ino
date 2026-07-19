@@ -1,13 +1,25 @@
 #include <EspBle.h>
+#include <BLEDevice.h>
+#include <BLEServer.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
 static constexpr const char *TEST_SERVICE_UUID = "10da4dd0-8eaa-4c69-9003-676174747277";
 static constexpr const char *TEST_CHARACTERISTIC_UUID = "10da4dd1-8eaa-4c69-9003-676174747277";
 static constexpr const char *TEST_DESCRIPTOR_UUID = "10da4dd2-8eaa-4c69-9003-676174747277";
+static constexpr const char *SLOW_SERVICE_UUID = "10da4de0-8eaa-4c69-9003-676174747277";
+static constexpr const char *SLOW_CHARACTERISTIC_UUID = "10da4de1-8eaa-4c69-9003-676174747277";
 
 EspBle ble;
 TaskHandle_t loopTask = nullptr;
+
+class SlowReadCallbacks : public BLECharacteristicCallbacks
+{
+  void onRead(BLECharacteristic *) override
+  {
+    delay(1000);
+  }
+};
 
 void setup()
 {
@@ -56,6 +68,16 @@ void setup()
     Serial.printf("BLE_INIT_FAILED %s %s\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
     return;
   }
+
+  // A deliberately slow backend characteristic verifies client operation
+  // timeout and late-completion suppression without changing the public
+  // EspBle GATT Server API solely for test instrumentation.
+  BLEService *slowService = BLEDevice::getServer()->createService(SLOW_SERVICE_UUID);
+  BLECharacteristic *slowCharacteristic = slowService->createCharacteristic(
+    SLOW_CHARACTERISTIC_UUID, BLECharacteristic::PROPERTY_READ);
+  slowCharacteristic->setValue("slow-ready");
+  slowCharacteristic->setCallbacks(new SlowReadCallbacks());
+  slowService->start();
 
   auto &advertising = ble.advertising();
   advertising.setName("EspBle GATT Peer");

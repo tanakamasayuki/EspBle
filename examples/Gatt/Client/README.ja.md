@@ -25,6 +25,7 @@
 - `ble.readCharacteristic(...)` / `ble.onCharacteristicRead(callback)` — `result.value`が値を保持します（binary-safe）
 - `ble.writeCharacteristic(connectionId, serviceUuid, characteristicUuid, value, withResponse)` / `ble.onCharacteristicWritten(callback)`
 - `ble.readDescriptor()` / `writeDescriptor()`と各完了callback
+- 各操作の末尾の`timeoutMilliseconds`（既定10000、0は無効）— timeoutは`EspBleError::Timeout`で完了します
 - Central GATT操作は排他です: 実行中に2つ目を要求すると`InvalidState`で同期的に失敗します
 
 ## 期待されるSerial出力

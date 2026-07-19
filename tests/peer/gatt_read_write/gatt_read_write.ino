@@ -5,12 +5,18 @@
 static constexpr const char *TEST_SERVICE_UUID = "10da4dd0-8eaa-4c69-9003-676174747277";
 static constexpr const char *TEST_CHARACTERISTIC_UUID = "10da4dd1-8eaa-4c69-9003-676174747277";
 static constexpr const char *TEST_DESCRIPTOR_UUID = "10da4dd2-8eaa-4c69-9003-676174747277";
+static constexpr const char *SLOW_SERVICE_UUID = "10da4de0-8eaa-4c69-9003-676174747277";
+static constexpr const char *SLOW_CHARACTERISTIC_UUID = "10da4de1-8eaa-4c69-9003-676174747277";
 
 EspBle ble;
 TaskHandle_t loopTask = nullptr;
 bool connectionRequested = false;
 unsigned writePhase = 0;
 EspBleConnectionId connectionId = 0;
+bool timeoutRecoveryPending = false;
+bool timeoutRecoveryInFlight = false;
+uint32_t timeoutObservedAt = 0;
+unsigned timeoutResultCount = 0;
 
 static const char *callbackContext()
 {
@@ -102,6 +108,33 @@ void setup()
     }
   });
   ble.onCharacteristicRead([](const EspBleGattResult &result) {
+    if (result.characteristicUuid.equalsIgnoreCase(SLOW_CHARACTERISTIC_UUID))
+    {
+      ++timeoutResultCount;
+      Serial.printf(
+        "TIMEOUT_RESULT success=%u error=%s count=%u context=%s\n",
+        result.success ? 1 : 0,
+        result.error == EspBleError::Timeout ? "TIMEOUT" : "OTHER",
+        timeoutResultCount,
+        callbackContext());
+      const bool accepted = ble.readCharacteristic(
+        result.connectionId, TEST_SERVICE_UUID, TEST_CHARACTERISTIC_UUID);
+      Serial.printf("TIMEOUT_BUSY next=%u\n", accepted ? 1 : 0);
+      timeoutRecoveryPending = true;
+      timeoutObservedAt = millis();
+      return;
+    }
+    if (timeoutRecoveryInFlight)
+    {
+      timeoutRecoveryInFlight = false;
+      Serial.printf(
+        "TIMEOUT_RECOVERY success=%u value=%s timeout_count=%u context=%s\n",
+        result.success ? 1 : 0,
+        result.value.c_str(),
+        timeoutResultCount,
+        callbackContext());
+      return;
+    }
     Serial.printf(
       "READ success=%u value=%s context=%s\n",
       result.success ? 1 : 0,
@@ -205,6 +238,26 @@ void loop()
     {
       Serial.println(ble.disconnect(connectionId) ? "DISCONNECT_REQUESTED" : "DISCONNECT_FAILED");
     }
+    else if (command == 't' && connectionId != 0)
+    {
+      const bool zeroAccepted = ble.readCharacteristic(
+        connectionId, SLOW_SERVICE_UUID, SLOW_CHARACTERISTIC_UUID, 0);
+      Serial.printf("TIMEOUT_ZERO accepted=%u error=%s\n",
+        zeroAccepted ? 1 : 0, ble.lastErrorName());
+      const bool accepted = ble.readCharacteristic(
+        connectionId, SLOW_SERVICE_UUID, SLOW_CHARACTERISTIC_UUID, 100);
+      Serial.println(accepted ? "TIMEOUT_REQUESTED" : "TIMEOUT_REQUEST_FAILED");
+    }
+  }
+
+  if (timeoutRecoveryPending && (millis() - timeoutObservedAt) >= 1500)
+  {
+    timeoutRecoveryPending = false;
+    timeoutRecoveryInFlight = ble.readCharacteristic(
+      connectionId, TEST_SERVICE_UUID, TEST_CHARACTERISTIC_UUID);
+    Serial.println(timeoutRecoveryInFlight
+      ? "TIMEOUT_RECOVERY_REQUESTED"
+      : "TIMEOUT_RECOVERY_REQUEST_FAILED");
   }
 
   ble.update();

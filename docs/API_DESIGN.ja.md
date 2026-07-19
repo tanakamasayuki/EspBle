@@ -108,7 +108,7 @@ gattServer.onWritten([](const EspBleGattWrite &write) {
 ble.begin();
 ```
 
-Central側のDiscovery、Read、Writeは要求の受理と完了を分離します。同梱backendの待機型操作は内部taskで実行し、結果は`update()` contextのcallbackへ配送します。
+Central側のDiscovery、Read、Writeは要求の受理と完了を分離します。同梱backendの待機型操作は内部taskで実行し、結果は`update()` contextのcallbackへ配送します。各要求の末尾ではtimeoutをミリ秒単位（既定10000、0は無効）で指定できます。
 
 一覧Discoveryは1件ずつevent queueへ流さず、完了後に接続単位の固定容量snapshotを照会します。これにより大きなGATT databaseでも完了eventがqueue容量に依存しません。
 
@@ -145,7 +145,7 @@ ble.discoverCharacteristic(connectionId, serviceUuid, characteristicUuid);
 
 Central側のWrite完了は`onCharacteristicWritten()`へ配送します。`response=false`でWrite Without Responseを選び、結果の`response`にも方式を保持します。Descriptorは`readDescriptor()` / `writeDescriptor()`と`onDescriptorRead()` / `onDescriptorWritten()`を使います。各完了は`EspBleGattResult`（success、error、detail、connectionId、Service/Characteristic/Descriptor UUID、値）を持つ値イベントです。
 
-`discoverCharacteristic()`は既知のService/Characteristic UUIDを指定して存在とpropertyを取得する軽量経路として維持します。Central GATT操作は同時に1件だけ受理します。operation idはこの制限が続く間は導入せず（DECISIONS 確定 #19）、operation queue、cancel、操作単位timeoutは今後の対象です。
+`discoverCharacteristic()`は既知のService/Characteristic UUIDを指定して存在とpropertyを取得する軽量経路として維持します。Central GATT操作は同時に1件だけ受理します。operation idはこの制限が続く間は導入しません（DECISIONS 確定 #19）。timeout時は`EspBleError::Timeout`を持つ完了eventを1回だけ配送し、遅れて戻ったbackend結果を破棄します。remote service treeを別taskから強制破棄しないため、backend処理が戻るまでは次操作を`InvalidState`で拒否します。operation queueと明示cancelは今後の対象です。
 
 GATT値はpointer+lengthを基本とし、NULを含めてcopyできる`String`を便宜overloadとして提供します（同梱backendの`String`構築は長さ明示でbinary-safe。DECISIONS 確定 #20）。Server側は`addDescriptor()`、`setDescriptorValue()`、`descriptorValue()`も提供します。構成上限はService 4、Characteristic 16、Descriptor 16です。Descriptorの動的Read callbackと接続元つきWrite callbackはまだ提供しません。
 

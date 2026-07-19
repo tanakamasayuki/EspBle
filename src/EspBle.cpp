@@ -794,10 +794,6 @@ struct EspBleImpl
           if (!result.success) break;
         }
       }
-      {
-        std::lock_guard<std::mutex> lock(impl->mutex);
-        if (database != nullptr) database->valid = result.success;
-      }
     }
     else
     {
@@ -948,11 +944,30 @@ struct EspBleImpl
       }
     }
 
-    // Push the result before clearing the busy flag: end() deletes this
-    // object as soon as gattOperating is observed false.
-    impl->pushGattResult(result);
     {
       std::lock_guard<std::mutex> lock(impl->mutex);
+      // Publish and clear atomically so update() cannot enqueue a timeout for
+      // an operation that already completed. A late backend completion after
+      // a timeout is deliberately suppressed.
+      if (!impl->gattTimedOut)
+      {
+        if (result.operation == EspBleGattOperation::DiscoverServices &&
+            impl->gattDatabase != nullptr &&
+            impl->gattDatabase->connectionId == result.connectionId)
+        {
+          impl->gattDatabase->valid = result.success;
+        }
+        Event event;
+        event.type = EventType::GattResult;
+        event.gattResult = result;
+        impl->pushEvent(event);
+      }
+      else if (result.operation == EspBleGattOperation::DiscoverServices &&
+               impl->gattDatabase != nullptr &&
+               impl->gattDatabase->connectionId == result.connectionId)
+      {
+        impl->gattDatabase->reset();
+      }
       impl->gattOperating = false;
       impl->gattTask = nullptr;
     }
@@ -991,6 +1006,9 @@ struct EspBleImpl
   String gattDescriptorUuid;
   String gattWriteValue;
   bool gattWriteResponse = true;
+  uint32_t gattStartMilliseconds = 0;
+  uint32_t gattTimeoutMilliseconds = 10000;
+  bool gattTimedOut = false;
   GattDatabaseSnapshot *gattDatabase = nullptr;
 };
 
@@ -4748,11 +4766,37 @@ void EspBle::end()
 void EspBle::update()
 {
   cancelExpiredConnectAttempt();
+  expireGattOperation();
   scanner_.dispatchPendingResults();
   dispatchConnectionEvents();
   reapRetiredClients();
   hidKeyboardDevice_.dispatchPendingOutputReports();
   hidKeyboardHost_.dispatchPendingEvents();
+}
+
+void EspBle::expireGattOperation()
+{
+  if (impl_ == nullptr) return;
+
+  std::lock_guard<std::mutex> lock(impl_->mutex);
+  if (!impl_->gattOperating || impl_->gattTimedOut ||
+      (millis() - impl_->gattStartMilliseconds) < impl_->gattTimeoutMilliseconds)
+  {
+    return;
+  }
+
+  impl_->gattTimedOut = true;
+  EspBleImpl::Event event;
+  event.type = EspBleImpl::EventType::GattResult;
+  event.gattResult.operation = impl_->gattOperation;
+  event.gattResult.connectionId = impl_->gattConnectionId;
+  event.gattResult.serviceUuid = impl_->gattServiceUuid;
+  event.gattResult.characteristicUuid = impl_->gattCharacteristicUuid;
+  event.gattResult.descriptorUuid = impl_->gattDescriptorUuid;
+  event.gattResult.response = impl_->gattWriteResponse;
+  event.gattResult.error = EspBleError::Timeout;
+  event.gattResult.detail = "GATT operation timed out";
+  impl_->pushEvent(event);
 }
 
 void EspBle::cancelExpiredConnectAttempt()
@@ -5155,16 +5199,21 @@ void EspBle::onPasskeyDisplayed(PasskeyDisplayedCallback callback)
 bool EspBle::discoverCharacteristic(
   EspBleConnectionId connectionId,
   const char *serviceUuid,
-  const char *characteristicUuid)
+  const char *characteristicUuid,
+  uint32_t timeoutMilliseconds)
 {
   return startGattOperation(
-    EspBleGattOperation::Discover, connectionId, serviceUuid, characteristicUuid);
+    EspBleGattOperation::Discover, connectionId, serviceUuid, characteristicUuid,
+    nullptr, 0, true, nullptr, timeoutMilliseconds);
 }
 
-bool EspBle::discoverServices(EspBleConnectionId connectionId)
+bool EspBle::discoverServices(
+  EspBleConnectionId connectionId,
+  uint32_t timeoutMilliseconds)
 {
   return startGattOperation(
-    EspBleGattOperation::DiscoverServices, connectionId, nullptr, nullptr);
+    EspBleGattOperation::DiscoverServices, connectionId, nullptr, nullptr,
+    nullptr, 0, true, nullptr, timeoutMilliseconds);
 }
 
 size_t EspBle::discoveredServiceCount(EspBleConnectionId connectionId) const
@@ -5282,10 +5331,12 @@ bool EspBle::discoveredDescriptor(
 bool EspBle::readCharacteristic(
   EspBleConnectionId connectionId,
   const char *serviceUuid,
-  const char *characteristicUuid)
+  const char *characteristicUuid,
+  uint32_t timeoutMilliseconds)
 {
   return startGattOperation(
-    EspBleGattOperation::Read, connectionId, serviceUuid, characteristicUuid);
+    EspBleGattOperation::Read, connectionId, serviceUuid, characteristicUuid,
+    nullptr, 0, true, nullptr, timeoutMilliseconds);
 }
 
 bool EspBle::writeCharacteristic(
@@ -5294,7 +5345,8 @@ bool EspBle::writeCharacteristic(
   const char *characteristicUuid,
   const uint8_t *data,
   size_t length,
-  bool response)
+  bool response,
+  uint32_t timeoutMilliseconds)
 {
   return startGattOperation(
     EspBleGattOperation::Write,
@@ -5303,14 +5355,17 @@ bool EspBle::writeCharacteristic(
     characteristicUuid,
     data,
     length,
-    response);
+    response,
+    nullptr,
+    timeoutMilliseconds);
 }
 
 bool EspBle::readDescriptor(
   EspBleConnectionId connectionId,
   const char *serviceUuid,
   const char *characteristicUuid,
-  const char *descriptorUuid)
+  const char *descriptorUuid,
+  uint32_t timeoutMilliseconds)
 {
   return startGattOperation(
     EspBleGattOperation::ReadDescriptor,
@@ -5320,7 +5375,8 @@ bool EspBle::readDescriptor(
     nullptr,
     0,
     true,
-    descriptorUuid);
+    descriptorUuid,
+    timeoutMilliseconds);
 }
 
 bool EspBle::writeDescriptor(
@@ -5330,7 +5386,8 @@ bool EspBle::writeDescriptor(
   const char *descriptorUuid,
   const uint8_t *data,
   size_t length,
-  bool response)
+  bool response,
+  uint32_t timeoutMilliseconds)
 {
   return startGattOperation(
     EspBleGattOperation::WriteDescriptor,
@@ -5340,14 +5397,16 @@ bool EspBle::writeDescriptor(
     data,
     length,
     response,
-    descriptorUuid);
+    descriptorUuid,
+    timeoutMilliseconds);
 }
 
 bool EspBle::subscribe(
   EspBleConnectionId connectionId,
   const char *serviceUuid,
   const char *characteristicUuid,
-  bool notifications)
+  bool notifications,
+  uint32_t timeoutMilliseconds)
 {
   return startGattOperation(
     EspBleGattOperation::Subscribe,
@@ -5356,19 +5415,27 @@ bool EspBle::subscribe(
     characteristicUuid,
     nullptr,
     0,
-    notifications);
+    notifications,
+    nullptr,
+    timeoutMilliseconds);
 }
 
 bool EspBle::unsubscribe(
   EspBleConnectionId connectionId,
   const char *serviceUuid,
-  const char *characteristicUuid)
+  const char *characteristicUuid,
+  uint32_t timeoutMilliseconds)
 {
   return startGattOperation(
     EspBleGattOperation::Unsubscribe,
     connectionId,
     serviceUuid,
-    characteristicUuid);
+    characteristicUuid,
+    nullptr,
+    0,
+    true,
+    nullptr,
+    timeoutMilliseconds);
 }
 
 bool EspBle::writeCharacteristic(
@@ -5376,7 +5443,8 @@ bool EspBle::writeCharacteristic(
   const char *serviceUuid,
   const char *characteristicUuid,
   const String &value,
-  bool response)
+  bool response,
+  uint32_t timeoutMilliseconds)
 {
   return writeCharacteristic(
     connectionId,
@@ -5384,7 +5452,8 @@ bool EspBle::writeCharacteristic(
     characteristicUuid,
     reinterpret_cast<const uint8_t *>(value.c_str()),
     value.length(),
-    response);
+    response,
+    timeoutMilliseconds);
 }
 
 bool EspBle::writeDescriptor(
@@ -5393,7 +5462,8 @@ bool EspBle::writeDescriptor(
   const char *characteristicUuid,
   const char *descriptorUuid,
   const String &value,
-  bool response)
+  bool response,
+  uint32_t timeoutMilliseconds)
 {
   return writeDescriptor(
     connectionId,
@@ -5402,7 +5472,8 @@ bool EspBle::writeDescriptor(
     descriptorUuid,
     reinterpret_cast<const uint8_t *>(value.c_str()),
     value.length(),
-    response);
+    response,
+    timeoutMilliseconds);
 }
 
 void EspBle::onCharacteristicDiscovered(GattResultCallback callback)
@@ -5459,7 +5530,8 @@ bool EspBle::startGattOperation(
   const uint8_t *data,
   size_t length,
   bool response,
-  const char *descriptorUuid)
+  const char *descriptorUuid,
+  uint32_t timeoutMilliseconds)
 {
   if (!initialized_)
   {
@@ -5473,7 +5545,7 @@ bool EspBle::startGattOperation(
        (serviceUuid == nullptr || serviceUuid[0] == '\0' ||
         characteristicUuid == nullptr || characteristicUuid[0] == '\0')) ||
       (descriptorOperation && (descriptorUuid == nullptr || descriptorUuid[0] == '\0')) ||
-      (data == nullptr && length != 0))
+      (data == nullptr && length != 0) || timeoutMilliseconds == 0)
   {
     setError(EspBleError::InvalidArgument, "invalid GATT operation arguments");
     return false;
@@ -5510,6 +5582,13 @@ bool EspBle::startGattOperation(
       ? String()
       : String(reinterpret_cast<const char *>(data), length);
     impl_->gattWriteResponse = response;
+    impl_->gattStartMilliseconds = millis();
+    impl_->gattTimeoutMilliseconds = timeoutMilliseconds;
+    impl_->gattTimedOut = false;
+    if (databaseDiscovery && impl_->gattDatabase != nullptr)
+    {
+      impl_->gattDatabase->reset(connectionId);
+    }
     impl_->gattOperating = true;
   }
 
@@ -5746,6 +5825,8 @@ const char *EspBle::lastErrorName() const
     return "RESOURCE_EXHAUSTED";
   case EspBleError::NotFound:
     return "NOT_FOUND";
+  case EspBleError::Timeout:
+    return "TIMEOUT";
   }
   return "UNKNOWN";
 }

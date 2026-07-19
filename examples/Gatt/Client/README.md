@@ -25,6 +25,7 @@ Connects to the [Gatt/Server](../Server/) example and walks through the central 
 - `ble.readCharacteristic(...)` / `ble.onCharacteristicRead(callback)` — `result.value` holds the value (binary-safe)
 - `ble.writeCharacteristic(connectionId, serviceUuid, characteristicUuid, value, withResponse)` / `ble.onCharacteristicWritten(callback)`
 - `ble.readDescriptor()` / `writeDescriptor()` and their completion callbacks
+- Trailing `timeoutMilliseconds` on each operation (default 10000; zero is invalid) — expiration completes with `EspBleError::Timeout`
 - Central GATT operations are exclusive: a second request while one is in flight fails synchronously with `InvalidState`
 
 ## Expected Serial output

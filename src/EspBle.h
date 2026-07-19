@@ -22,6 +22,7 @@ enum class EspBleError : uint8_t
   BackendFailure,
   ResourceExhausted,
   NotFound,
+  Timeout,
 };
 
 enum class EspBleSecurityIoCapability : uint8_t
@@ -892,8 +893,11 @@ public:
   bool discoverCharacteristic(
     EspBleConnectionId connectionId,
     const char *serviceUuid,
-    const char *characteristicUuid);
-  bool discoverServices(EspBleConnectionId connectionId);
+    const char *characteristicUuid,
+    uint32_t timeoutMilliseconds = 10000);
+  bool discoverServices(
+    EspBleConnectionId connectionId,
+    uint32_t timeoutMilliseconds = 10000);
   size_t discoveredServiceCount(EspBleConnectionId connectionId) const;
   bool discoveredService(
     EspBleConnectionId connectionId,
@@ -920,25 +924,29 @@ public:
   bool readCharacteristic(
     EspBleConnectionId connectionId,
     const char *serviceUuid,
-    const char *characteristicUuid);
+    const char *characteristicUuid,
+    uint32_t timeoutMilliseconds = 10000);
   bool writeCharacteristic(
     EspBleConnectionId connectionId,
     const char *serviceUuid,
     const char *characteristicUuid,
     const uint8_t *data,
     size_t length,
-    bool response = true);
+    bool response = true,
+    uint32_t timeoutMilliseconds = 10000);
   bool writeCharacteristic(
     EspBleConnectionId connectionId,
     const char *serviceUuid,
     const char *characteristicUuid,
     const String &value,
-    bool response = true);
+    bool response = true,
+    uint32_t timeoutMilliseconds = 10000);
   bool readDescriptor(
     EspBleConnectionId connectionId,
     const char *serviceUuid,
     const char *characteristicUuid,
-    const char *descriptorUuid);
+    const char *descriptorUuid,
+    uint32_t timeoutMilliseconds = 10000);
   bool writeDescriptor(
     EspBleConnectionId connectionId,
     const char *serviceUuid,
@@ -946,23 +954,27 @@ public:
     const char *descriptorUuid,
     const uint8_t *data,
     size_t length,
-    bool response = true);
+    bool response = true,
+    uint32_t timeoutMilliseconds = 10000);
   bool writeDescriptor(
     EspBleConnectionId connectionId,
     const char *serviceUuid,
     const char *characteristicUuid,
     const char *descriptorUuid,
     const String &value,
-    bool response = true);
+    bool response = true,
+    uint32_t timeoutMilliseconds = 10000);
   bool subscribe(
     EspBleConnectionId connectionId,
     const char *serviceUuid,
     const char *characteristicUuid,
-    bool notifications = true);
+    bool notifications = true,
+    uint32_t timeoutMilliseconds = 10000);
   bool unsubscribe(
     EspBleConnectionId connectionId,
     const char *serviceUuid,
-    const char *characteristicUuid);
+    const char *characteristicUuid,
+    uint32_t timeoutMilliseconds = 10000);
   void onCharacteristicDiscovered(GattResultCallback callback);
   void onCharacteristicRead(GattResultCallback callback);
   void onCharacteristicWritten(GattResultCallback callback);
@@ -1010,6 +1022,7 @@ private:
   void dispatchConnectionEvents();
   void reapRetiredClients();
   void cancelExpiredConnectAttempt();
+  void expireGattOperation();
   bool startGattOperation(
     EspBleGattOperation operation,
     EspBleConnectionId connectionId,
@@ -1018,7 +1031,8 @@ private:
     const uint8_t *data = nullptr,
     size_t length = 0,
     bool response = true,
-    const char *descriptorUuid = nullptr);
+    const char *descriptorUuid = nullptr,
+    uint32_t timeoutMilliseconds = 10000);
 
   bool initialized_ = false;
   String activeDeviceName_;

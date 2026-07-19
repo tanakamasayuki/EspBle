@@ -47,6 +47,18 @@ def test_gatt_read_write(dut, peers):
     peripheral.expect_exact(
         "SERVER_DESCRIPTOR found=1 value=descriptor-written", timeout=20
     )
+    dut.write("t")
+    dut.expect_exact("TIMEOUT_ZERO accepted=0 error=INVALID_ARGUMENT", timeout=10)
+    dut.expect_exact("TIMEOUT_REQUESTED", timeout=10)
+    dut.expect_exact(
+        "TIMEOUT_RESULT success=0 error=TIMEOUT count=1 context=loop", timeout=10
+    )
+    dut.expect_exact("TIMEOUT_BUSY next=0", timeout=10)
+    dut.expect_exact("TIMEOUT_RECOVERY_REQUESTED", timeout=10)
+    dut.expect_exact(
+        "TIMEOUT_RECOVERY success=1 value=central-no-response timeout_count=1 context=loop",
+        timeout=20,
+    )
     dut.write("x")
     dut.expect_exact("DISCONNECT_REQUESTED", timeout=10)
     dut.expect_exact("DISCONNECTED services=0 context=loop", timeout=20)
