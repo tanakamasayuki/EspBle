@@ -15,7 +15,7 @@ def test_hid_keyboard_device_reports(dut, peers):
     keyboard_device.expect_exact("HID_CONNECTED id=1", timeout=20)
     central.expect_exact("PEER_SECURITY encrypted=1 bonded=1", timeout=20)
     keyboard_device.expect_exact("HID_SECURITY encrypted=1 bonded=1 context=loop", timeout=20)
-    central.expect_exact("REPORT_MAP keyboard=1 mouse=1", timeout=20)
+    central.expect_exact("REPORT_MAP keyboard=1 mouse=1 buttons=3", timeout=20)
     central.expect_exact("HID_REPORTS keyboard=1 mouse=1 output=1 battery=87", timeout=20)
     central.expect_exact("INPUT_SUBSCRIBED keyboard=1 mouse=1", timeout=20)
     central.expect_exact("HID_READY", timeout=10)

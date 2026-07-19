@@ -121,6 +121,7 @@ static bool connectAndDiscover()
   const String mapValue = reportMap == nullptr ? String() : reportMap->readValue();
   bool keyboardMap = false;
   bool mouseMap = false;
+  uint8_t mouseButtons = 0;
   for (size_t index = 0; index + 1 < mapValue.length(); ++index)
   {
     if (static_cast<uint8_t>(mapValue[index]) == 0x09 &&
@@ -133,9 +134,19 @@ static bool connectAndDiscover()
     {
       mouseMap = true;
     }
+    if (index + 5 < mapValue.length() &&
+        static_cast<uint8_t>(mapValue[index]) == 0x05 &&
+        static_cast<uint8_t>(mapValue[index + 1]) == 0x09 &&
+        static_cast<uint8_t>(mapValue[index + 2]) == 0x19 &&
+        static_cast<uint8_t>(mapValue[index + 3]) == 0x01 &&
+        static_cast<uint8_t>(mapValue[index + 4]) == 0x29)
+    {
+      mouseButtons = static_cast<uint8_t>(mapValue[index + 5]);
+    }
   }
-  Serial.printf("REPORT_MAP keyboard=%u mouse=%u length=%u\n",
-    keyboardMap ? 1 : 0, mouseMap ? 1 : 0, static_cast<unsigned>(mapValue.length()));
+  Serial.printf("REPORT_MAP keyboard=%u mouse=%u buttons=%u length=%u\n",
+    keyboardMap ? 1 : 0, mouseMap ? 1 : 0, mouseButtons,
+    static_cast<unsigned>(mapValue.length()));
 
   std::map<uint16_t, BLERemoteCharacteristic *> *characteristics =
     hidService->getCharacteristicsByHandle();

@@ -89,5 +89,5 @@ EspBleはNimBLE（BLE専用）を使い、初期ターゲットのESP32-S3等は
 ## 補足
 
 - 「📝 exampleのみで対応可能」は、`ble.gattServer()`で任意UUIDのService/Characteristicを登録し`notify`/`indicate`できる現状のAPIで書ける、という意味です。標準プロファイルとして正式に対応（profile helper・専用イベント・wire format検証）する場合は🔧になります。
-- USB由来機能のうち🔧のもの（HID Mouse/Consumer/Gamepad、BLE MIDI、DIS/NUS、複数接続）は[DECISIONS.ja.md](DECISIONS.ja.md)の優先順位候補と整合しています。採用時にexampleとPeer/unitテストを同時に追加します。
+- USB由来機能のうち未対応のもの（Vendor/Custom HID、BLE MIDI、standalone DIS/NUS、複数接続）は[DECISIONS.ja.md](DECISIONS.ja.md)の優先順位候補と整合しています。採用時にexampleとPeer/unitテストを同時に追加します。
 - ❌のうちMSC/Audio/ネットワーク/Mesh/LE Audioは、BLEの技術的範囲外か、別スタック・別ライブラリの領域として対象外です。

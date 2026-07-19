@@ -91,7 +91,7 @@ host上のunit test（`tests/unit/`）としてkeymap変換とHID Report Map par
 ## 現在の主な制限
 
 - 公開APIは試行段階で、互換性を保証する初回リリース前です。
-- Keyboardは固定6KRO Report Protocolのみで、Boot ProtocolとNKROは未対応です。Gamepad Hostのfield分解は現在の固定Device descriptorを対象とします。
+- Keyboardは固定6KRO Report Protocolのみで、Boot ProtocolとNKROは未対応です。Gamepad HostはReport Mapのvariable input fieldをdescriptor-drivenで分解しますが、vendor固有のarray input解釈は未対応です。
 - HID Hostの再接続では、利用者がscan/connectし、Security完了後に新しいConnection IDで`discover()`を再実行します。
 - GATT Client Discoveryは既知UUID指定のみで、Service / Characteristic一覧列挙は未実装です。
 - Central側GATT operationは同時1件です。operation queue、ID、cancelは未実装です。
@@ -111,9 +111,9 @@ host上のunit test（`tests/unit/`）としてkeymap変換とHID Report Map par
 
 ### P0: 初回リリースまでに優先する作業
 
-> **初回リリース(0.1.0)のスコープ決定（2026-07-18）**: HIDは現状のkeyboard専用APIのままでは出さず、**複合HID対応＋EspUsbDevice/Host流のAPI再設計**（[HID_REDESIGN_PLAN.ja.md](HID_REDESIGN_PLAN.ja.md)）を初回リリースに含める。破壊的変更を伴うが0.x（互換性保証なし）のうちに実施する。HID以外のラップ改善（[FEATURE_MATRIX.ja.md](FEATURE_MATRIX.ja.md)のA/B/C）は0.2.0以降。
+> **初回リリース(0.1.0)のスコープ決定（2026-07-18）**: 複合HID対応＋EspUsbDevice/Host流のAPI再設計を初回リリースに含める。破壊的変更を伴うが0.x（互換性保証なし）のうちに実施する。HID以外のラップ改善（[FEATURE_MATRIX.ja.md](FEATURE_MATRIX.ja.md)のA/B/C）は0.2.0以降。
 
-0. **HID複合対応・API再設計を完了する**（初回リリースの主目玉、[HID_REDESIGN_PLAN.ja.md](HID_REDESIGN_PLAN.ja.md) Phase 1-6）。
+0. ✅ **HID複合対応・API再設計**（Device/Host API、descriptor-driven Host parser、Peer/unitテスト、example・仕様書まで完了）。
 
 1. **ESP32KeyBridge利用形から公開APIを固める**
    - ✅ `ble.update()`必須を最終仕様として確定（DECISIONS 確定 #17）。

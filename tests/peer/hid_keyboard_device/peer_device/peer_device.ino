@@ -29,7 +29,9 @@ void setup()
     Serial.printf("HID_CONFIG_FAILED %s %s\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
     return;
   }
-  if (!ble.hidMouse().configure())
+  EspBleHidMouseConfig mouseConfig;
+  mouseConfig.buttons = 3;
+  if (!ble.hidMouse().configure(mouseConfig))
   {
     Serial.printf("MOUSE_CONFIG_FAILED %s %s\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
     return;

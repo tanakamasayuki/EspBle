@@ -9,7 +9,7 @@ The design documents are written in Japanese. This guide lists them and shows th
 1. [../README.md](../README.md) — library overview, supported/unsupported chips, getting started
 2. [STATUS.ja.md](STATUS.ja.md) — **where things stand**: implemented features, main limitations, next work (P0). This is the entry point.
 3. [DECISIONS.ja.md](DECISIONS.ja.md) — the ledger of settled design decisions (the "why")
-4. Work in progress → [HID_REDESIGN_PLAN.ja.md](HID_REDESIGN_PLAN.ja.md) — task list for the initial release's centerpiece (composite HID + API redesign)
+4. [HID_DEVICE_SPEC.ja.md](HID_DEVICE_SPEC.ja.md) / [HID_HOST_SPEC.ja.md](HID_HOST_SPEC.ja.md) — specifications for the completed composite HID API redesign
 
 **When in doubt, read STATUS then DECISIONS** — that gives you the current state and the reasoning behind it.
 
@@ -24,8 +24,7 @@ The design documents are written in Japanese. This guide lists them and shows th
 | Public API design principles | [API_DESIGN.ja.md](API_DESIGN.ja.md) |
 | Terminology and naming rules | [TERMINOLOGY.ja.md](TERMINOLOGY.ja.md) |
 | Settled decisions and their rationale | [DECISIONS.ja.md](DECISIONS.ja.md) |
-| HID Keyboard spec (Device / Host) | [HID_DEVICE_SPEC.ja.md](HID_DEVICE_SPEC.ja.md) / [HID_HOST_SPEC.ja.md](HID_HOST_SPEC.ja.md) |
-| The in-progress HID redesign plan | [HID_REDESIGN_PLAN.ja.md](HID_REDESIGN_PLAN.ja.md) |
+| HID spec (Device / Host) | [HID_DEVICE_SPEC.ja.md](HID_DEVICE_SPEC.ja.md) / [HID_HOST_SPEC.ja.md](HID_HOST_SPEC.ja.md) |
 | Overall development phases | [DEVELOPMENT_PLAN.ja.md](DEVELOPMENT_PLAN.ja.md) |
 | Test strategy and coverage | [../tests/TEST_PLAN.ja.md](../tests/TEST_PLAN.ja.md) |
 | Board / core build matrices (CI-generated) | `BOARDS.<version>.md` / `COMPATIBILITY.<version>.md` |
@@ -35,9 +34,9 @@ The design documents are written in Japanese. This guide lists them and shows th
 
 - **Settled specification (authoritative)**: [REQUIREMENTS.ja.md](REQUIREMENTS.ja.md), [DECISIONS.ja.md](DECISIONS.ja.md), and the SPEC files.
 - **Status tracking**: [STATUS.ja.md](STATUS.ja.md) — progress, limitations, TODO; updated per work batch.
-- **Plans in progress (may contain unsettled items)**: [HID_REDESIGN_PLAN.ja.md](HID_REDESIGN_PLAN.ja.md), [DEVELOPMENT_PLAN.ja.md](DEVELOPMENT_PLAN.ja.md).
+- **Plans in progress (may contain unsettled items)**: [DEVELOPMENT_PLAN.ja.md](DEVELOPMENT_PLAN.ja.md).
 - **CI-generated (do not hand-edit)**: `BOARDS.<version>.md`, `COMPATIBILITY.<version>.md`, produced by `.github/workflows/board-matrix.yml` and `core-matrix.yml`.
 
-## One-line status (as of 2026-07-18)
+## One-line status (as of 2026-07-19)
 
-Design-freeze phase toward the initial release (0.1.0). Decided to include the **HID API redesign (composite HID + EspUsbDevice/Host-style API)** in the first release; Phase 0 (design freeze) of [HID_REDESIGN_PLAN.ja.md](HID_REDESIGN_PLAN.ja.md) is done. Next is implementing Phase 1 (device backend consolidation) test-first. See STATUS for details.
+The **composite HID + EspUsbDevice/Host-style API redesign is implemented and covered by peer/unit tests** for the initial release (0.1.0). The next work is endurance testing, interoperability checks, and release-documentation cleanup. See STATUS for details.

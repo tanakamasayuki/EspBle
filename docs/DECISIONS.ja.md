@@ -116,7 +116,7 @@
 16. keymap変換はEspUsbHostのUnicode 4-plane表現に揃える。tableは`uint16_t KEYCODE_TO_UNICODE_XX[N][4]`（無shift/Shift/AltGr/AltGr+Shift、Unicodeコードポイント）でEspUsbHostの`src/keymap/*.h`と同一内容を共有し、主関数`espBleUsageToUnicode()`がAltGr層選択と文字ペア判定CapsLockを行う。`espBleUsageToAscii()`はLatin-1 wrapper（非Latin-1は0）として維持し、`EspBleHidKeyboardEvent`は`unicode`と`ascii`の両方を持つ。en-US系（EnUs/KoKr/ZhCn/ZhTw）のみ内蔵変換パス（table等価）を使う。
 17. 再接続時は新しいConnection IDに対してSecurity完了後に再度`discover()`が必要で、Discovery完了後にinputをconnectedとして扱う。自動再接続・自動Discoveryは今回のadapter境界には含めない。HID Discoveryの自動化optionは初期リリースに含めず、明示`discover()`を維持する。security有効構成では`onSecurityChanged`成功後に呼ぶことを規範とし、HOST_SPECとexampleを揃える。
 18. `onKeyboard()`は同一report内の変化をpress（usage昇順）→release（usage昇順）の順で配送する仕様とする。一般的なOS Hostのchord処理（release先行）とは順序が異なるが、bridge用途の主境界はusage snapshot（`EspBleHidKeyboardState`）であり影響しない。順序に依存する用途はraw usage境界を使う。
-19. HID Host listener registryは、EspUsbHostが先行実装した方式（実機peer test 56件PASS）に倣ってHID再設計（[HID_REDESIGN_PLAN.ja.md](HID_REDESIGN_PLAN.ja.md) Phase 4）で実装する。(1) 配送時に`std::function`をコピーせずshared ownershipをsnapshotし、解除との競合を防ぎつつmutable callback状態を保持、イベントごとの動的コピーも回避する。(2) IDはHostインスタンス内でイベント種別をまたいで一意。(3) registryはmutexで保護するがcallback実行中はロックしない。(4) 単一`on*`→listener登録順で配送。(5) callback内の追加・解除は次イベントから反映。現行の`dispatchPendingEvents`は配送のたびに`std::function`を固定長配列へコピーしており、この点を置き換える（#10のsnapshot方針を具体化・改善したもの）。
+19. HID Host listener registryは、EspUsbHostが先行実装した方式（実機peer test 56件PASS）に倣う。(1) 配送時に`std::function`をコピーせずshared ownershipをsnapshotし、解除との競合を防ぎつつmutable callback状態を保持する。(2) IDはHostインスタンス内でイベント種別をまたいで一意。(3) registryはmutexで保護するがcallback実行中はロックしない。(4) 単一`on*`→listener登録順で配送。(5) callback内の追加・解除は次イベントから反映する。
 
 ## 複合HID再設計で確定（2026-07-19）
 

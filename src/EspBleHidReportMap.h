@@ -248,13 +248,32 @@ struct EspBleHidReportMapEntry
   EspBleHidReportKind kind = EspBleHidReportKind::Unknown;
   bool hasReportId = false;
   uint8_t reportId = 0;
+  uint16_t inputBitLength = 0;
+
+  size_t inputByteLength() const { return (inputBitLength + 7) / 8; }
+};
+
+struct EspBleHidReportField
+{
+  EspBleHidReportKind kind = EspBleHidReportKind::Unknown;
+  uint8_t reportId = 0;
+  uint16_t usagePage = 0;
+  uint16_t usage = 0;
+  int32_t logicalMin = 0;
+  int32_t logicalMax = 0;
+  uint16_t bitOffset = 0;
+  uint8_t bitSize = 0;
+  uint8_t flags = 0;
 };
 
 struct EspBleHidReportMapInfo
 {
   static constexpr size_t MaxEntries = 8;
+  static constexpr size_t MaxFields = 64;
   EspBleHidReportMapEntry entries[MaxEntries];
   size_t count = 0;
+  EspBleHidReportField fields[MaxFields];
+  size_t fieldCount = 0;
 
   EspBleHidReportKind kindForReportId(uint8_t reportId) const
   {
@@ -266,17 +285,73 @@ struct EspBleHidReportMapInfo
   }
 };
 
+inline int32_t espBleHidReadFieldValue(
+  const EspBleHidReportField &field, const uint8_t *data, size_t length)
+{
+  if (data == nullptr || field.bitSize == 0 || field.bitSize > 32 ||
+      static_cast<size_t>(field.bitOffset) + field.bitSize > length * 8)
+    return 0;
+  uint32_t value = 0;
+  for (uint8_t bit = 0; bit < field.bitSize; ++bit)
+  {
+    const size_t sourceBit = static_cast<size_t>(field.bitOffset) + bit;
+    if ((data[sourceBit >> 3] & static_cast<uint8_t>(1u << (sourceBit & 7))) != 0)
+      value |= static_cast<uint32_t>(1u) << bit;
+  }
+  if (field.logicalMin < 0 && field.bitSize < 32 &&
+      (value & (static_cast<uint32_t>(1u) << (field.bitSize - 1))) != 0)
+    value |= ~((static_cast<uint32_t>(1u) << field.bitSize) - 1u);
+  return static_cast<int32_t>(value);
+}
+
 inline EspBleHidReportMapInfo espBleParseHidReportMap(const uint8_t *data, size_t length)
 {
   EspBleHidReportMapInfo info;
   if (data == nullptr) return info;
   uint16_t usagePage = 0;
-  uint16_t usage = 0;
-  bool haveUsage = false;
+  uint32_t reportSize = 0;
+  uint32_t reportCount = 0;
+  int32_t logicalMin = 0;
+  int32_t logicalMax = 0;
   uint8_t reportId = 0;
   bool hasReportId = false;
+  uint32_t usages[16] = {};
+  size_t usageCount = 0;
+  uint32_t usageMinimum = 0;
+  uint32_t usageMaximum = 0;
+  bool haveUsageRange = false;
   EspBleHidReportKind collectionKinds[8] = {};
   size_t depth = 0;
+
+  auto signedValue = [](uint32_t value, size_t size) -> int32_t {
+    if (size == 1) return static_cast<int8_t>(value);
+    if (size == 2) return static_cast<int16_t>(value);
+    return static_cast<int32_t>(value);
+  };
+  auto localUsagePage = [&usagePage](uint32_t value) -> uint16_t {
+    return value > 0xffff ? static_cast<uint16_t>(value >> 16) : usagePage;
+  };
+  auto localUsageId = [](uint32_t value) -> uint16_t {
+    return static_cast<uint16_t>(value);
+  };
+  auto resetLocal = [&]() {
+    usageCount = 0;
+    usageMinimum = 0;
+    usageMaximum = 0;
+    haveUsageRange = false;
+  };
+  auto findEntry = [&](EspBleHidReportKind kind) -> EspBleHidReportMapEntry * {
+    for (size_t index = 0; index < info.count; ++index)
+      if (info.entries[index].kind == kind && info.entries[index].reportId == reportId &&
+          info.entries[index].hasReportId == hasReportId) return &info.entries[index];
+    if (info.count == EspBleHidReportMapInfo::MaxEntries) return nullptr;
+    EspBleHidReportMapEntry &entry = info.entries[info.count++];
+    entry.kind = kind;
+    entry.reportId = hasReportId ? reportId : 0;
+    entry.hasReportId = hasReportId;
+    return &entry;
+  };
+
   for (size_t offset = 0; offset < length;)
   {
     const uint8_t prefix = data[offset++];
@@ -297,46 +372,85 @@ inline EspBleHidReportMapInfo espBleParseHidReportMap(const uint8_t *data, size_
     offset += itemLength;
     const uint8_t type = (prefix >> 2) & 3;
     const uint8_t tag = (prefix >> 4) & 15;
-    if (type == 1 && tag == 0) usagePage = static_cast<uint16_t>(value);
-    else if (type == 1 && tag == 8) { reportId = static_cast<uint8_t>(value); hasReportId = true; }
-    else if (type == 2 && tag == 0 && !haveUsage)
+    if (type == 1)
     {
-      usage = static_cast<uint16_t>(value);
-      haveUsage = true;
+      if (tag == 0) usagePage = static_cast<uint16_t>(value);
+      else if (tag == 1) logicalMin = signedValue(value, itemLength);
+      else if (tag == 2) logicalMax = logicalMin < 0 ? signedValue(value, itemLength) : static_cast<int32_t>(value);
+      else if (tag == 7) reportSize = value;
+      else if (tag == 8) { reportId = static_cast<uint8_t>(value); hasReportId = true; }
+      else if (tag == 9) reportCount = value;
+    }
+    else if (type == 2)
+    {
+      if (tag == 0 && usageCount < 16) usages[usageCount++] = value;
+      else if (tag == 1) { usageMinimum = value; haveUsageRange = true; }
+      else if (tag == 2) usageMaximum = value;
     }
     else if (type == 0 && tag == 10)
     {
       EspBleHidReportKind kind = depth == 0 ? EspBleHidReportKind::Unknown : collectionKinds[depth - 1];
       if (value == 1)
       {
-        if (usagePage == 0x0c && usage == 0x01) kind = EspBleHidReportKind::ConsumerControl;
-        else if (usagePage == 0x01 && usage == 0x06) kind = EspBleHidReportKind::Keyboard;
-        else if (usagePage == 0x01 && usage == 0x02) kind = EspBleHidReportKind::Mouse;
-        else if (usagePage == 0x01 && (usage == 0x04 || usage == 0x05)) kind = EspBleHidReportKind::Gamepad;
-        else if (usagePage == 0x01 && usage == 0x80) kind = EspBleHidReportKind::SystemControl;
+        const uint32_t applicationUsage = usageCount == 0 ? 0 : usages[0];
+        const uint16_t applicationPage = localUsagePage(applicationUsage);
+        const uint16_t applicationId = localUsageId(applicationUsage);
+        if (applicationPage == 0x0c && applicationId == 0x01) kind = EspBleHidReportKind::ConsumerControl;
+        else if (applicationPage == 0x01 && applicationId == 0x06) kind = EspBleHidReportKind::Keyboard;
+        else if (applicationPage == 0x01 && applicationId == 0x02) kind = EspBleHidReportKind::Mouse;
+        else if (applicationPage == 0x01 && (applicationId == 0x04 || applicationId == 0x05)) kind = EspBleHidReportKind::Gamepad;
+        else if (applicationPage == 0x01 && applicationId == 0x80) kind = EspBleHidReportKind::SystemControl;
       }
       if (depth < 8) collectionKinds[depth++] = kind;
-      haveUsage = false;
+      resetLocal();
     }
     else if (type == 0 && tag == 12)
     {
       if (depth > 0) --depth;
-      haveUsage = false;
+      resetLocal();
     }
     else if (type == 0 && tag == 8)
     {
       const EspBleHidReportKind kind = depth == 0 ? EspBleHidReportKind::Unknown : collectionKinds[depth - 1];
       if (kind != EspBleHidReportKind::Unknown)
       {
-        bool exists = false;
-        for (size_t index = 0; index < info.count; ++index)
-          exists = exists || (info.entries[index].kind == kind && info.entries[index].reportId == reportId);
-        if (!exists && info.count < EspBleHidReportMapInfo::MaxEntries)
-          info.entries[info.count++] = {kind, hasReportId, reportId};
+        EspBleHidReportMapEntry *entry = findEntry(kind);
+        if (entry != nullptr && reportSize <= 32 && reportCount <= 64)
+        {
+          const uint16_t itemOffset = entry->inputBitLength;
+          const uint32_t itemBits = reportSize * reportCount;
+          entry->inputBitLength = static_cast<uint16_t>(
+            itemBits > static_cast<uint32_t>(0xffffu - entry->inputBitLength)
+              ? 0xffffu : entry->inputBitLength + itemBits);
+          const bool constant = (value & 0x01) != 0;
+          const bool variable = (value & 0x02) != 0;
+          if (!constant && variable)
+          {
+            for (uint32_t index = 0; index < reportCount &&
+                 info.fieldCount < EspBleHidReportMapInfo::MaxFields; ++index)
+            {
+              uint32_t fieldUsage = 0;
+              if (index < usageCount) fieldUsage = usages[index];
+              else if (haveUsageRange && usageMinimum + index <= usageMaximum)
+                fieldUsage = usageMinimum + index;
+              else if (usageCount != 0) fieldUsage = usages[usageCount - 1];
+              EspBleHidReportField &field = info.fields[info.fieldCount++];
+              field.kind = kind;
+              field.reportId = hasReportId ? reportId : 0;
+              field.usagePage = localUsagePage(fieldUsage);
+              field.usage = localUsageId(fieldUsage);
+              field.logicalMin = logicalMin;
+              field.logicalMax = logicalMax;
+              field.bitOffset = static_cast<uint16_t>(itemOffset + index * reportSize);
+              field.bitSize = static_cast<uint8_t>(reportSize);
+              field.flags = static_cast<uint8_t>(value);
+            }
+          }
+        }
       }
-      haveUsage = false;
+      resetLocal();
     }
-    else if (type == 0) haveUsage = false;
+    else if (type == 0) resetLocal();
   }
   return info;
 }

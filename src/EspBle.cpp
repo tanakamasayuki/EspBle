@@ -20,6 +20,7 @@
 #include <cstring>
 #include <map>
 #include <mutex>
+#include <new>
 #include <utility>
 
 #include "EspBleHidReportMap.h"
@@ -1023,7 +1024,7 @@ struct EspBleGattServerImpl
   bool sendStatusReceived = false;
 };
 
-struct EspBleHidKeyboardDeviceImpl
+struct EspBleHidDeviceManagerImpl
 {
   static constexpr size_t OutputQueueCapacity = 8;
 
@@ -1037,14 +1038,14 @@ struct EspBleHidKeyboardDeviceImpl
     bool batteryNotifications = false;
   };
 
-  explicit EspBleHidKeyboardDeviceImpl(EspBleHidKeyboard *device)
+  explicit EspBleHidDeviceManagerImpl(EspBleHidKeyboard *device)
       : device(device)
   {
   }
 
   static int gapListenerEntry(ble_gap_event *event, void *argument)
   {
-    EspBleHidKeyboardDeviceImpl *impl = static_cast<EspBleHidKeyboardDeviceImpl *>(argument);
+    EspBleHidDeviceManagerImpl *impl = static_cast<EspBleHidDeviceManagerImpl *>(argument);
     if (event->type == BLE_GAP_EVENT_SUBSCRIBE)
     {
       impl->handleSubscribe(
@@ -1147,7 +1148,7 @@ struct EspBleHidKeyboardDeviceImpl
     ble_gatt_access_ctxt *context,
     void *argument)
   {
-    return static_cast<EspBleHidKeyboardDeviceImpl *>(argument)->handleAccess(
+    return static_cast<EspBleHidDeviceManagerImpl *>(argument)->handleAccess(
       connectionHandle, attributeHandle, context);
   }
 
@@ -1275,6 +1276,7 @@ struct EspBleHidKeyboardDeviceImpl
   EspBleHidDeviceConfig config;
   bool configured = false;
   uint8_t profileMask = 0;
+  uint8_t mouseButtonCount = 5;
   bool realized = false;
   uint16_t inputValueHandles[5] = {};
   uint16_t outputValueHandle = 0;
@@ -1318,6 +1320,15 @@ struct EspBleHidKeyboardDeviceImpl
 struct EspBleHidKeyboardHostImpl
 {
   static constexpr size_t QueueCapacity = 8;
+  static constexpr size_t MaxInputReports = 8;
+  static constexpr size_t MaxFieldsPerReport = 40;
+
+  struct ReportFormat
+  {
+    uint16_t inputBitLength = 0;
+    EspBleHidReportField fields[MaxFieldsPerReport];
+    size_t fieldCount = 0;
+  };
 
   struct Connection
   {
@@ -1326,12 +1337,15 @@ struct EspBleHidKeyboardHostImpl
     uint8_t reportId = 0;
     BLERemoteCharacteristic *inputReport = nullptr;
     BLERemoteCharacteristic *outputReport = nullptr;
-    BLERemoteCharacteristic *inputReports[5] = {};
-    EspBleHidReportKind inputKinds[5] = {};
+    BLERemoteCharacteristic *inputReports[MaxInputReports] = {};
+    EspBleHidReportKind inputKinds[MaxInputReports] = {};
+    uint8_t inputReportIds[MaxInputReports] = {};
+    ReportFormat inputFormats[MaxInputReports];
+    size_t inputReportCount = 0;
     uint8_t mouseButtons = 0;
     uint16_t consumerUsage = 0;
     uint8_t systemUsage = 0;
-    uint8_t gamepadData[16] = {};
+    uint8_t gamepadData[64] = {};
     size_t gamepadLength = 0;
     uint8_t keys[EspBleHidKeyboardState::BitmapSize] = {};
     uint8_t modifiers = 0;
@@ -1357,14 +1371,24 @@ struct EspBleHidKeyboardHostImpl
     EspBleHidReportKind kind = EspBleHidReportKind::Unknown;
     EspBleConnectionId connectionId = 0;
     uint8_t reportId = 0;
-    uint8_t raw[16] = {};
+    uint8_t raw[64] = {};
     size_t rawLength = 0;
     uint8_t previousButtons = 0;
     uint16_t previousUsage = 0;
     bool changed = false;
+    int16_t mouseX = 0;
+    int16_t mouseY = 0;
+    int16_t mouseWheel = 0;
+    uint8_t mouseButtons = 0;
   };
 
   explicit EspBleHidKeyboardHostImpl(EspBleHidHost *host) : host(host) {}
+
+  static void resetConnection(Connection &connection)
+  {
+    connection.~Connection();
+    new (&connection) Connection();
+  }
 
   Connection *findConnection(EspBleConnectionId connectionId)
   {
@@ -1534,11 +1558,37 @@ struct EspBleHidKeyboardHostImpl
     std::lock_guard<std::mutex> lock(mutex);
     Connection *connection = findConnection(connectionId);
     if (connection == nullptr) return;
+    const ReportFormat *format = nullptr;
+    for (size_t index = 0; index < connection->inputReportCount; ++index)
+    {
+      if (connection->inputReportIds[index] == reportId && connection->inputKinds[index] == kind)
+      {
+        format = &connection->inputFormats[index];
+        break;
+      }
+    }
+    if (format == nullptr || (format->inputBitLength != 0 &&
+        length != (format->inputBitLength + 7) / 8))
+    {
+      ++invalidInputReports;
+      return;
+    }
     if (kind == EspBleHidReportKind::Mouse)
     {
       event.previousButtons = connection->mouseButtons;
-      connection->mouseButtons = data[0];
-      event.changed = length >= 4 && (data[0] != event.previousButtons || data[1] || data[2] || data[3]);
+      for (size_t index = 0; index < format->fieldCount; ++index)
+      {
+        const EspBleHidReportField &field = format->fields[index];
+        const int32_t value = espBleHidReadFieldValue(field, data, length);
+        if (field.usagePage == 0x09 && field.usage >= 1 && field.usage <= 8 && value != 0)
+          event.mouseButtons |= static_cast<uint8_t>(1u << (field.usage - 1));
+        else if (field.usagePage == 0x01 && field.usage == 0x30) event.mouseX = value;
+        else if (field.usagePage == 0x01 && field.usage == 0x31) event.mouseY = value;
+        else if (field.usagePage == 0x01 && field.usage == 0x38) event.mouseWheel = value;
+      }
+      connection->mouseButtons = event.mouseButtons;
+      event.changed = event.mouseButtons != event.previousButtons || event.mouseX != 0 ||
+        event.mouseY != 0 || event.mouseWheel != 0;
     }
     else if (kind == EspBleHidReportKind::ConsumerControl && length >= 2)
     {
@@ -1723,12 +1773,26 @@ struct EspBleHidKeyboardHostImpl
                 connection->reportId = result.reportId;
                 connection->inputReport = nullptr;
                 connection->outputReport = outputReport;
+                connection->inputReportCount = inputReportCount;
                 for (size_t index = 0; index < inputReportCount; ++index)
                 {
-                  const uint8_t slot = inputReportIds[index] >= 1 && inputReportIds[index] <= 5
-                    ? inputReportIds[index] - 1 : static_cast<uint8_t>(index);
-                  connection->inputReports[slot] = inputReports[index];
-                  connection->inputKinds[slot] = inputKinds[index];
+                  connection->inputReports[index] = inputReports[index];
+                  connection->inputKinds[index] = inputKinds[index];
+                  connection->inputReportIds[index] = inputReportIds[index];
+                  ReportFormat &format = connection->inputFormats[index];
+                  for (size_t entryIndex = 0; entryIndex < mapInfo.count; ++entryIndex)
+                  {
+                    if (mapInfo.entries[entryIndex].kind == inputKinds[index] &&
+                        mapInfo.entries[entryIndex].reportId == inputReportIds[index])
+                      format.inputBitLength = mapInfo.entries[entryIndex].inputBitLength;
+                  }
+                  for (size_t fieldIndex = 0; fieldIndex < mapInfo.fieldCount &&
+                       format.fieldCount < MaxFieldsPerReport; ++fieldIndex)
+                  {
+                    if (mapInfo.fields[fieldIndex].kind == inputKinds[index] &&
+                        mapInfo.fields[fieldIndex].reportId == inputReportIds[index])
+                      format.fields[format.fieldCount++] = mapInfo.fields[fieldIndex];
+                  }
                   if (inputKinds[index] == EspBleHidReportKind::Keyboard)
                     connection->inputReport = inputReports[index];
                 }
@@ -1760,7 +1824,7 @@ struct EspBleHidKeyboardHostImpl
                 Connection *connection = impl->findConnection(result.connectionId);
                 if (connection != nullptr)
                 {
-                  *connection = Connection();
+                  resetConnection(*connection);
                 }
               }
             }
@@ -2747,7 +2811,7 @@ bool EspBleHidKeyboard::configureProfile(
   }
   if (impl_ == nullptr)
   {
-    impl_ = new EspBleHidKeyboardDeviceImpl(this);
+    impl_ = new EspBleHidDeviceManagerImpl(this);
     if (impl_ == nullptr)
     {
       owner_->setError(EspBleError::ResourceExhausted, "failed to allocate HID Keyboard Device state");
@@ -2848,8 +2912,15 @@ bool EspBleHidKeyboard::realize()
   for (uint8_t index = 0; index < 5; ++index)
   {
     if ((impl_->profileMask & static_cast<uint8_t>(1u << index)) == 0) continue;
+    const size_t mapOffset = impl_->reportMapLength;
     memcpy(impl_->reportMap + impl_->reportMapLength, maps[index].data, maps[index].length);
     impl_->reportMapLength += maps[index].length;
+    if (index == 1)
+    {
+      impl_->reportMap[mapOffset + 17] = impl_->mouseButtonCount;
+      impl_->reportMap[mapOffset + 23] = impl_->mouseButtonCount;
+      impl_->reportMap[mapOffset + 31] = static_cast<uint8_t>(8 - impl_->mouseButtonCount);
+    }
   }
   impl_->hidInformation[2] = impl_->config.countryCode;
   impl_->batteryLevel = impl_->config.initialBatteryLevel;
@@ -2874,19 +2945,19 @@ bool EspBleHidKeyboard::realize()
 
   impl_->outputDescriptors[0].uuid = &impl_->reportReferenceUuid.u;
   impl_->outputDescriptors[0].att_flags = descriptorFlags;
-  impl_->outputDescriptors[0].access_cb = EspBleHidKeyboardDeviceImpl::accessCallback;
+  impl_->outputDescriptors[0].access_cb = EspBleHidDeviceManagerImpl::accessCallback;
   impl_->outputDescriptors[0].arg = impl_;
 
   impl_->hidCharacteristics[0].uuid = &impl_->hidInformationUuid.u;
-  impl_->hidCharacteristics[0].access_cb = EspBleHidKeyboardDeviceImpl::accessCallback;
+  impl_->hidCharacteristics[0].access_cb = EspBleHidDeviceManagerImpl::accessCallback;
   impl_->hidCharacteristics[0].arg = impl_;
   impl_->hidCharacteristics[0].flags = BLE_GATT_CHR_F_READ | encryptedRead;
   impl_->hidCharacteristics[1].uuid = &impl_->reportMapUuid.u;
-  impl_->hidCharacteristics[1].access_cb = EspBleHidKeyboardDeviceImpl::accessCallback;
+  impl_->hidCharacteristics[1].access_cb = EspBleHidDeviceManagerImpl::accessCallback;
   impl_->hidCharacteristics[1].arg = impl_;
   impl_->hidCharacteristics[1].flags = BLE_GATT_CHR_F_READ | encryptedRead;
   impl_->hidCharacteristics[2].uuid = &impl_->hidControlPointUuid.u;
-  impl_->hidCharacteristics[2].access_cb = EspBleHidKeyboardDeviceImpl::accessCallback;
+  impl_->hidCharacteristics[2].access_cb = EspBleHidDeviceManagerImpl::accessCallback;
   impl_->hidCharacteristics[2].arg = impl_;
   impl_->hidCharacteristics[2].flags = BLE_GATT_CHR_F_WRITE_NO_RSP | encryptedWrite;
   size_t characteristicIndex = 3;
@@ -2895,11 +2966,11 @@ bool EspBleHidKeyboard::realize()
     if ((impl_->profileMask & static_cast<uint8_t>(1u << index)) == 0) continue;
     impl_->inputDescriptors[index][0].uuid = &impl_->reportReferenceUuid.u;
     impl_->inputDescriptors[index][0].att_flags = descriptorFlags;
-    impl_->inputDescriptors[index][0].access_cb = EspBleHidKeyboardDeviceImpl::accessCallback;
+    impl_->inputDescriptors[index][0].access_cb = EspBleHidDeviceManagerImpl::accessCallback;
     impl_->inputDescriptors[index][0].arg = impl_;
     ble_gatt_chr_def &characteristic = impl_->hidCharacteristics[characteristicIndex++];
     characteristic.uuid = &impl_->reportUuid.u;
-    characteristic.access_cb = EspBleHidKeyboardDeviceImpl::accessCallback;
+    characteristic.access_cb = EspBleHidDeviceManagerImpl::accessCallback;
     characteristic.arg = impl_;
     characteristic.descriptors = impl_->inputDescriptors[index];
     characteristic.flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY | encryptedRead;
@@ -2910,7 +2981,7 @@ bool EspBleHidKeyboard::realize()
   {
     ble_gatt_chr_def &characteristic = impl_->hidCharacteristics[characteristicIndex++];
     characteristic.uuid = &impl_->reportUuid.u;
-    characteristic.access_cb = EspBleHidKeyboardDeviceImpl::accessCallback;
+    characteristic.access_cb = EspBleHidDeviceManagerImpl::accessCallback;
     characteristic.arg = impl_;
     characteristic.descriptors = impl_->outputDescriptors;
     characteristic.flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_WRITE |
@@ -2921,17 +2992,17 @@ bool EspBleHidKeyboard::realize()
 
   impl_->deviceInformationCharacteristics[0].uuid = &impl_->manufacturerUuid.u;
   impl_->deviceInformationCharacteristics[0].access_cb =
-    EspBleHidKeyboardDeviceImpl::accessCallback;
+    EspBleHidDeviceManagerImpl::accessCallback;
   impl_->deviceInformationCharacteristics[0].arg = impl_;
   impl_->deviceInformationCharacteristics[0].flags = BLE_GATT_CHR_F_READ;
   impl_->deviceInformationCharacteristics[1].uuid = &impl_->pnpIdUuid.u;
   impl_->deviceInformationCharacteristics[1].access_cb =
-    EspBleHidKeyboardDeviceImpl::accessCallback;
+    EspBleHidDeviceManagerImpl::accessCallback;
   impl_->deviceInformationCharacteristics[1].arg = impl_;
   impl_->deviceInformationCharacteristics[1].flags = BLE_GATT_CHR_F_READ;
 
   impl_->batteryCharacteristics[0].uuid = &impl_->batteryLevelUuid.u;
-  impl_->batteryCharacteristics[0].access_cb = EspBleHidKeyboardDeviceImpl::accessCallback;
+  impl_->batteryCharacteristics[0].access_cb = EspBleHidDeviceManagerImpl::accessCallback;
   impl_->batteryCharacteristics[0].arg = impl_;
   impl_->batteryCharacteristics[0].flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY;
   impl_->batteryCharacteristics[0].val_handle = &impl_->batteryValueHandle;
@@ -2975,7 +3046,7 @@ bool EspBleHidKeyboard::realize()
   if (!impl_->gapListenerRegistered &&
       ble_gap_event_listener_register(
         &impl_->gapListener,
-        EspBleHidKeyboardDeviceImpl::gapListenerEntry,
+        EspBleHidDeviceManagerImpl::gapListenerEntry,
         impl_) == 0)
   {
     impl_->gapListenerRegistered = true;
@@ -3244,9 +3315,9 @@ void EspBleHidKeyboard::resetBackend()
   std::lock_guard<std::mutex> lock(impl_->mutex);
   impl_->outputHead = 0;
   impl_->outputCount = 0;
-  for (EspBleHidKeyboardDeviceImpl::SubscriptionSlot &slot : impl_->subscriptions)
+  for (EspBleHidDeviceManagerImpl::SubscriptionSlot &slot : impl_->subscriptions)
   {
-    slot = EspBleHidKeyboardDeviceImpl::SubscriptionSlot();
+    slot = EspBleHidDeviceManagerImpl::SubscriptionSlot();
   }
 }
 
@@ -3266,7 +3337,7 @@ void EspBleHidKeyboard::dispatchPendingOutputReports()
         break;
       }
       report = impl_->outputReports[impl_->outputHead];
-      impl_->outputHead = (impl_->outputHead + 1) % EspBleHidKeyboardDeviceImpl::OutputQueueCapacity;
+      impl_->outputHead = (impl_->outputHead + 1) % EspBleHidDeviceManagerImpl::OutputQueueCapacity;
       --impl_->outputCount;
     }
     outputReportCallback_(report);
@@ -3281,6 +3352,7 @@ bool EspBleHidMouse::configure(const EspBleHidMouseConfig &config)
     return false;
   }
   if (!owner_->hidKeyboardDevice_.configureProfile(ESP_BLE_HID_REPORT_ID_MOUSE, config)) return false;
+  owner_->hidKeyboardDevice_.impl_->mouseButtonCount = config.buttons;
   configured_ = true;
   return true;
 }
@@ -3436,7 +3508,7 @@ bool EspBleHidHost::discover(EspBleConnectionId connectionId)
   const BaseType_t taskResult = xTaskCreate(
     EspBleHidKeyboardHostImpl::discoveryTaskEntry,
     "espble-hid-host",
-    8192,
+    16384,
     impl_,
     1,
     &task);
@@ -3583,11 +3655,8 @@ EspBleListenerId EspBleHidHost::addListener(
   {
     if (slots[i].id == EspBleInvalidListenerId)
     {
-      EspBleListenerId id = nextListenerId_++;
-      if (id == EspBleInvalidListenerId)
-      {
-        id = nextListenerId_++;
-      }
+      const EspBleListenerId id = allocateListenerIdLocked();
+      if (id == EspBleInvalidListenerId) break;
       slots[i].id = id;
       slots[i].callback = std::move(stored);
       owner_->clearError();
@@ -3595,6 +3664,37 @@ EspBleListenerId EspBleHidHost::addListener(
     }
   }
   owner_->setError(EspBleError::ResourceExhausted, "too many HID Keyboard Host listeners");
+  return EspBleInvalidListenerId;
+}
+
+bool EspBleHidHost::listenerIdInUseLocked(EspBleListenerId listenerId) const
+{
+  const auto contains = [listenerId](const auto &slots) {
+    for (const auto &slot : slots) if (slot.id == listenerId) return true;
+    return false;
+  };
+  return contains(discoveryListeners_) || contains(stateListeners_) ||
+    contains(keyboardListeners_) || contains(mouseListeners_) ||
+    contains(consumerControlListeners_) || contains(systemControlListeners_) ||
+    contains(gamepadListeners_);
+}
+
+EspBleListenerId EspBleHidHost::allocateListenerIdLocked()
+{
+  EspBleListenerId candidate = nextListenerId_;
+  if (candidate == EspBleInvalidListenerId) candidate = 1;
+  const EspBleListenerId first = candidate;
+  do
+  {
+    if (!listenerIdInUseLocked(candidate))
+    {
+      nextListenerId_ = candidate + 1;
+      if (nextListenerId_ == EspBleInvalidListenerId) nextListenerId_ = 1;
+      return candidate;
+    }
+    ++candidate;
+    if (candidate == EspBleInvalidListenerId) candidate = 1;
+  } while (candidate != first);
   return EspBleInvalidListenerId;
 }
 
@@ -3735,7 +3835,7 @@ void EspBleHidHost::handleDisconnected(EspBleConnectionId connectionId)
   {
     hasHeldKey = hasHeldKey || value != 0;
   }
-  *connection = EspBleHidKeyboardHostImpl::Connection();
+  EspBleHidKeyboardHostImpl::resetConnection(*connection);
   if (hasHeldKey)
   {
     // The all-release event must not be lost even when the queue is full.
@@ -3752,7 +3852,7 @@ void EspBleHidHost::resetBackend()
   std::lock_guard<std::mutex> lock(impl_->mutex);
   for (EspBleHidKeyboardHostImpl::Connection &connection : impl_->connections)
   {
-    connection = EspBleHidKeyboardHostImpl::Connection();
+    EspBleHidKeyboardHostImpl::resetConnection(connection);
   }
   impl_->eventHead = 0;
   impl_->eventCount = 0;
@@ -3864,14 +3964,13 @@ void EspBleHidHost::dispatchPendingEvents()
         }
       }
     }
-    else if (event.kind == EspBleHidReportKind::Mouse && event.rawLength >= 4)
+    else if (event.kind == EspBleHidReportKind::Mouse)
     {
       EspBleHidMouseEvent value;
       value.connectionId = event.connectionId; value.reportId = event.reportId;
       value.rawData = event.raw; value.rawLength = event.rawLength;
-      value.buttons = event.raw[0]; value.previousButtons = event.previousButtons;
-      value.x = static_cast<int8_t>(event.raw[1]); value.y = static_cast<int8_t>(event.raw[2]);
-      value.wheel = static_cast<int8_t>(event.raw[3]);
+      value.buttons = event.mouseButtons; value.previousButtons = event.previousButtons;
+      value.x = event.mouseX; value.y = event.mouseY; value.wheel = event.mouseWheel;
       value.moved = value.x != 0 || value.y != 0 || value.wheel != 0;
       value.buttonsChanged = value.buttons != value.previousButtons;
       std::shared_ptr<MouseCallback> callbacks[MaxListenersPerEvent + 1];
@@ -3908,35 +4007,48 @@ void EspBleHidHost::dispatchPendingEvents()
       EspBleHidGamepadEvent value;
       value.connectionId = event.connectionId; value.reportId = event.reportId;
       value.rawData = event.raw; value.rawLength = event.rawLength; value.changed = event.changed;
-      EspBleHidFieldValue fields[8];
-      const uint16_t usages[7] = {0x30,0x31,0x32,0x35,0x33,0x34,0x39};
-      const size_t axisCount = event.rawLength < 7 ? event.rawLength : 7;
-      for (size_t index = 0; index < axisCount; ++index)
+      EspBleHidFieldValue *fields = nullptr;
+      size_t fieldCount = 0;
       {
-        fields[index].reportId = event.reportId; fields[index].usagePage = 0x01;
-        fields[index].usage = usages[index]; fields[index].value = index == 6
-          ? event.raw[index] : static_cast<int8_t>(event.raw[index]);
-        fields[index].logicalMin = index == 6 ? 0 : -127;
-        fields[index].logicalMax = index == 6 ? 8 : 127;
-        fields[index].bitOffset = index * 8; fields[index].bitSize = 8; fields[index].flags = 0x02;
-      }
-      size_t fieldCount = axisCount;
-      if (event.rawLength >= 11)
-      {
-        fields[fieldCount].reportId = event.reportId; fields[fieldCount].usagePage = 0x09;
-        fields[fieldCount].usage = 1;
-        fields[fieldCount].value = static_cast<int32_t>(static_cast<uint32_t>(event.raw[7]) |
-          (static_cast<uint32_t>(event.raw[8]) << 8) | (static_cast<uint32_t>(event.raw[9]) << 16) |
-          (static_cast<uint32_t>(event.raw[10]) << 24));
-        fields[fieldCount].logicalMin = 0; fields[fieldCount].logicalMax = 1;
-        fields[fieldCount].bitOffset = 56; fields[fieldCount].bitSize = 32; fields[fieldCount].flags = 0x02;
-        ++fieldCount;
+        std::lock_guard<std::mutex> lock(impl_->mutex);
+        EspBleHidKeyboardHostImpl::Connection *connection = impl_->findConnection(event.connectionId);
+        if (connection != nullptr)
+        {
+          for (size_t reportIndex = 0; reportIndex < connection->inputReportCount; ++reportIndex)
+          {
+            if (connection->inputReportIds[reportIndex] != event.reportId ||
+                connection->inputKinds[reportIndex] != EspBleHidReportKind::Gamepad) continue;
+            const auto &format = connection->inputFormats[reportIndex];
+            fieldCount = format.fieldCount;
+            fields = new (std::nothrow) EspBleHidFieldValue[fieldCount];
+            if (fields == nullptr)
+            {
+              fieldCount = 0;
+              break;
+            }
+            for (size_t index = 0; index < fieldCount; ++index)
+            {
+              const EspBleHidReportField &definition = format.fields[index];
+              fields[index].reportId = event.reportId;
+              fields[index].usagePage = definition.usagePage;
+              fields[index].usage = definition.usage;
+              fields[index].value = espBleHidReadFieldValue(definition, event.raw, event.rawLength);
+              fields[index].logicalMin = definition.logicalMin;
+              fields[index].logicalMax = definition.logicalMax;
+              fields[index].bitOffset = definition.bitOffset;
+              fields[index].bitSize = definition.bitSize;
+              fields[index].flags = definition.flags;
+            }
+            break;
+          }
+        }
       }
       value.fields = fields; value.fieldCount = fieldCount;
       std::shared_ptr<GamepadCallback> callbacks[MaxListenersPerEvent + 1];
       { std::lock_guard<std::mutex> lock(listenerMutex_); callbacks[0] = gamepadCallback_;
         for (size_t i = 0; i < MaxListenersPerEvent; ++i) callbacks[i + 1] = gamepadListeners_[i].callback; }
       for (auto &callback : callbacks) if (callback) (*callback)(value);
+      delete[] fields;
     }
   }
 }

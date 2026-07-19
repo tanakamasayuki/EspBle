@@ -95,7 +95,12 @@ const uint8_t otherTypesMap[] = {
   // Mouse ID 2.
   0x05,0x01, 0x09,0x02, 0xa1,0x01, 0x85,0x02, 0x75,0x08, 0x95,0x04, 0x81,0x02, 0xc0,
   // Gamepad ID 3.
-  0x05,0x01, 0x09,0x05, 0xa1,0x01, 0x85,0x03, 0x75,0x08, 0x95,0x0b, 0x81,0x02, 0xc0,
+  0x05,0x01, 0x09,0x05, 0xa1,0x01, 0x85,0x03,
+  0x15,0x81, 0x25,0x7f, 0x09,0x30, 0x09,0x31, 0x09,0x32,
+  0x09,0x35, 0x09,0x33, 0x09,0x34, 0x75,0x08, 0x95,0x06, 0x81,0x02,
+  0x15,0x00, 0x25,0x08, 0x09,0x39, 0x75,0x08, 0x95,0x01, 0x81,0x02,
+  0x05,0x09, 0x19,0x01, 0x29,0x20, 0x15,0x00, 0x25,0x01,
+  0x75,0x01, 0x95,0x20, 0x81,0x02, 0xc0,
   // Consumer Control ID 4.
   0x05,0x0c, 0x09,0x01, 0xa1,0x01, 0x85,0x04, 0x75,0x10, 0x95,0x01, 0x81,0x00, 0xc0,
   // System Control ID 5.
@@ -153,6 +158,19 @@ int main()
     const EspBleHidReportMapInfo info = espBleParseHidReportMap(mouseMap, sizeof(mouseMap));
     check("generic mouse found", info.count == 1 &&
       info.entries[0].kind == EspBleHidReportKind::Mouse && !info.entries[0].hasReportId);
+    check("generic mouse input length", info.entries[0].inputByteLength() == 3);
+    const uint8_t report[] = {0x05, 0xf7, 0x06};
+    bool xFound = false;
+    bool yFound = false;
+    for (size_t index = 0; index < info.fieldCount; ++index)
+    {
+      if (info.fields[index].usagePage == 1 && info.fields[index].usage == 0x30)
+        xFound = espBleHidReadFieldValue(info.fields[index], report, sizeof(report)) == -9;
+      if (info.fields[index].usagePage == 1 && info.fields[index].usage == 0x31)
+        yFound = espBleHidReadFieldValue(info.fields[index], report, sizeof(report)) == 6;
+    }
+    check("generic mouse x parse", xFound);
+    check("generic mouse y parse", yFound);
   }
   {
     const EspBleHidReportMapInfo info =
@@ -162,6 +180,23 @@ int main()
     check("generic gamepad id", info.kindForReportId(3) == EspBleHidReportKind::Gamepad);
     check("generic consumer id", info.kindForReportId(4) == EspBleHidReportKind::ConsumerControl);
     check("generic system id", info.kindForReportId(5) == EspBleHidReportKind::SystemControl);
+    bool gamepadLength = false;
+    size_t gamepadFields = 0;
+    bool gamepadX = false;
+    const uint8_t report[] = {10, static_cast<uint8_t>(-20), 0, 0, 0, 0, 1, 3, 0, 0, 0};
+    for (size_t index = 0; index < info.count; ++index)
+      if (info.entries[index].kind == EspBleHidReportKind::Gamepad)
+        gamepadLength = info.entries[index].inputByteLength() == sizeof(report);
+    for (size_t index = 0; index < info.fieldCount; ++index)
+    {
+      if (info.fields[index].kind != EspBleHidReportKind::Gamepad) continue;
+      ++gamepadFields;
+      if (info.fields[index].usagePage == 1 && info.fields[index].usage == 0x30)
+        gamepadX = espBleHidReadFieldValue(info.fields[index], report, sizeof(report)) == 10;
+    }
+    check("generic gamepad input length", gamepadLength);
+    check("generic gamepad field count", gamepadFields == 39);
+    check("generic gamepad x parse", gamepadX);
   }
   {
     // Truncated mid-item: must not read out of bounds or crash.

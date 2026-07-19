@@ -449,7 +449,7 @@ class EspBleHidHost;
 struct EspBleScannerImpl;
 struct EspBleImpl;
 struct EspBleGattServerImpl;
-struct EspBleHidKeyboardDeviceImpl;
+struct EspBleHidDeviceManagerImpl;
 struct EspBleHidKeyboardHostImpl;
 
 class EspBleAdvertising
@@ -596,7 +596,7 @@ private:
   friend class EspBleHidConsumerControl;
   friend class EspBleHidSystemControl;
   friend class EspBleHidGamepad;
-  friend struct EspBleHidKeyboardDeviceImpl;
+  friend struct EspBleHidDeviceManagerImpl;
 
   explicit EspBleHidKeyboard(EspBle *owner);
   ~EspBleHidKeyboard();
@@ -607,7 +607,7 @@ private:
   void dispatchPendingOutputReports();
 
   EspBle *owner_;
-  EspBleHidKeyboardDeviceImpl *impl_ = nullptr;
+  EspBleHidDeviceManagerImpl *impl_ = nullptr;
   OutputReportCallback outputReportCallback_;
   EspBleKeyboardLayout layout_ = EspBleKeyboardLayout::EnUs;
 };
@@ -762,6 +762,8 @@ private:
   static bool removeListenerFrom(
     ListenerSlot<Callback> *slots,
     EspBleListenerId listenerId);
+  EspBleListenerId allocateListenerIdLocked();
+  bool listenerIdInUseLocked(EspBleListenerId listenerId) const;
 
   std::shared_ptr<DiscoveryCallback> discoveryCallback_;
   std::shared_ptr<StateCallback> stateCallback_;
@@ -886,7 +888,7 @@ private:
   friend struct EspBleScannerImpl;
   friend struct EspBleImpl;
   friend struct EspBleGattServerImpl;
-  friend struct EspBleHidKeyboardDeviceImpl;
+  friend struct EspBleHidDeviceManagerImpl;
   friend struct EspBleHidKeyboardHostImpl;
 
   void setError(EspBleError error, const char *detail = nullptr);

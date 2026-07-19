@@ -46,7 +46,7 @@ def test_hid_keyboard_host_discovery_state_and_leds(dut, peers):
 
     keyboard_device.write("p")
     keyboard_device.expect_exact("DEVICE_GAMEPAD_SENT success=1", timeout=10)
-    dut.expect_exact("HOST_GAMEPAD fields=8 changed=1 x=10 context=loop", timeout=20)
+    dut.expect_exact("HOST_GAMEPAD fields=39 changed=1 x=10 context=loop", timeout=20)
 
     dut.write("e")
     dut.expect_exact("HOST_LAYOUT en-US", timeout=10)
@@ -165,6 +165,10 @@ def test_hid_keyboard_host_discovery_state_and_leds(dut, peers):
         timeout=20,
     )
     keyboard_device.expect_exact("DEVICE_DISCONNECTED id=1 context=loop", timeout=20)
+    keyboard_device.write("z")
+    keyboard_device.expect_exact(
+        "DEVICE_HID_STATE mouse=0 consumer=0 system=0", timeout=10
+    )
 
     dut.write("x")
     keyboard_device.write("x")

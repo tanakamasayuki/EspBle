@@ -3,7 +3,7 @@
 ## Unreleased
 
 - Redesign HID around the EspUsbDevice/EspUsbHost API shape: `hidKeyboard()` / `hidMouse()` / `hidConsumerControl()` / `hidSystemControl()` / `hidGamepad()` compose one HOGP service, while `hidHost()` discovers and dispatches all supported report types.
-- Add fixed cross-library Report IDs, keyboard layout-aware sending, mouse/consumer/system/gamepad helpers, per-report CCCD routing, generic Report Map parsing, shared-ownership Host listeners, composite peer coverage, and new HID examples.
+- Add fixed cross-library Report IDs, keyboard layout-aware sending, configurable mouse buttons, mouse/consumer/system/gamepad helpers, per-report CCCD routing, descriptor-driven Report Map/input parsing, wrap-safe shared-ownership Host listeners, disconnect state reset, composite peer coverage, and new HID examples.
 - Establish the initial project, specification, and test structure.
 - Add the first EspBle stack, legacy advertising, scanning, deferred scan-result callback, examples, and two-board peer test.
 - Add central/peripheral connections with library connection IDs, disconnect, connection snapshots, and MTU exchange with `onMtuChanged()`.

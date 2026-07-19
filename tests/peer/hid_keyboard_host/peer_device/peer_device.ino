@@ -158,6 +158,11 @@ void loop()
       Serial.printf("DEVICE_GAMEPAD_SENT success=%u\n",
         ble.hidGamepad().send(10, -20, 0, 0, 0, 0, ESP_BLE_HID_GAMEPAD_HAT_UP, 3) ? 1 : 0);
     }
+    else if (command == 'z')
+    {
+      Serial.printf("DEVICE_HID_STATE mouse=%u consumer=%u system=%u\n",
+        ble.hidMouse().buttons(), ble.hidConsumerControl().usage(), ble.hidSystemControl().usage());
+    }
   }
 
   ble.update();
