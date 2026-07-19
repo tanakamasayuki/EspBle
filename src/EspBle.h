@@ -259,6 +259,8 @@ struct EspBleGattWrite
   String serviceUuid;
   String characteristicUuid;
   String value;
+  String descriptorUuid;
+  bool connectionIdentified = false;
 };
 
 struct EspBleGattNotification
@@ -605,6 +607,7 @@ public:
     size_t length);
   bool indicate(const char *serviceUuid, const char *characteristicUuid, const String &value);
   void onWritten(WriteCallback callback);
+  void onDescriptorWritten(WriteCallback callback);
   void onSubscriptionChanged(SubscriptionCallback callback);
   void onSent(SendCallback callback);
 
@@ -618,6 +621,7 @@ private:
   bool realize();
   void resetBackend();
   void dispatchWrite(const EspBleGattWrite &write);
+  void dispatchDescriptorWrite(const EspBleGattWrite &write);
   void dispatchSubscription(const EspBleGattSubscription &subscription);
   void dispatchSendResult(const EspBleGattSendResult &result);
   bool send(
@@ -630,6 +634,7 @@ private:
   EspBle *owner_;
   EspBleGattServerImpl *impl_ = nullptr;
   WriteCallback writeCallback_;
+  WriteCallback descriptorWriteCallback_;
   SubscriptionCallback subscriptionCallback_;
   SendCallback sendCallback_;
 };

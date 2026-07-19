@@ -54,8 +54,24 @@ void setup()
     const bool stored = ble.gattServer().value(
       TEST_SERVICE_UUID, TEST_CHARACTERISTIC_UUID, storedValue);
     Serial.printf(
-      "SERVER_WRITE id=%u value=%s stored=%u context=%s\n",
+      "SERVER_WRITE id=%u identified=%u value=%s stored=%u context=%s\n",
       static_cast<unsigned>(write.connectionId),
+      write.connectionIdentified ? 1 : 0,
+      write.value.c_str(),
+      stored && storedValue == write.value ? 1 : 0,
+      xTaskGetCurrentTaskHandle() == loopTask ? "loop" : "stack");
+  });
+  gattServer.onDescriptorWritten([](const EspBleGattWrite &write) {
+    String storedValue;
+    const bool stored = ble.gattServer().descriptorValue(
+      write.serviceUuid.c_str(),
+      write.characteristicUuid.c_str(),
+      write.descriptorUuid.c_str(),
+      storedValue);
+    Serial.printf(
+      "SERVER_DESCRIPTOR_WRITE id=%u identified=%u value=%s stored=%u context=%s\n",
+      static_cast<unsigned>(write.connectionId),
+      write.connectionIdentified ? 1 : 0,
       write.value.c_str(),
       stored && storedValue == write.value ? 1 : 0,
       xTaskGetCurrentTaskHandle() == loopTask ? "loop" : "stack");

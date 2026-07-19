@@ -27,6 +27,7 @@
 - ✅ Service/Characteristic/Descriptor一覧Discovery
 - ✅ Write Without ResponseのPeer検証
 - ✅ Descriptor Read / WriteとServer Descriptor定義
+- ✅ Descriptor Server Write eventと接続元識別状態
 - ✅ Client操作単位timeoutと遅延完了抑止
 - ✅ Notify / Indicate / subscription / unsubscribe
 - ✅ MTU設定、Connection snapshot、payload上限検証

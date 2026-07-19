@@ -36,11 +36,15 @@ def test_gatt_read_write(dut, peers):
     )
 
     peripheral.expect_exact(
-        "SERVER_WRITE id=1 value=central-write stored=1 context=loop",
+        "SERVER_WRITE id=1 identified=1 value=central-write stored=1 context=loop",
         timeout=20,
     )
     peripheral.expect_exact(
-        "SERVER_WRITE id=1 value=central-no-response stored=1 context=loop",
+        "SERVER_WRITE id=1 identified=1 value=central-no-response stored=1 context=loop",
+        timeout=20,
+    )
+    peripheral.expect_exact(
+        "SERVER_DESCRIPTOR_WRITE id=1 identified=1 value=descriptor-written stored=1 context=loop",
         timeout=20,
     )
     peripheral.write("d")

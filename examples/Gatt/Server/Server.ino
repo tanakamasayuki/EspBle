@@ -48,6 +48,13 @@ void setup()
       static_cast<unsigned>(write.connectionId),
       write.value.c_str());
   });
+  gattServer.onDescriptorWritten([](const EspBleGattWrite &write) {
+    Serial.printf(
+      "Descriptor %s wrote: %s (connection identified: %u)\n",
+      write.descriptorUuid.c_str(),
+      write.value.c_str(),
+      write.connectionIdentified ? 1 : 0);
+  });
 
   EspBleConfig config;
   config.deviceName = "EspBle GATT Server";
@@ -70,8 +77,8 @@ void setup()
 
 void loop()
 {
-  // en: The onWritten callback is delivered from this update().
-  // ja: onWritten コールバックはこの update() から配送される。
+  // en: Write callbacks are delivered from this update().
+  // ja: Writeコールバックはこの update() から配送される。
   ble.update();
   delay(1);
 }

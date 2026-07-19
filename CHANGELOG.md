@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Add connection-scoped GATT database enumeration, descriptor server definitions and client read/write operations, per-operation timeouts, and real-device Write Without Response coverage.
+- Add connection-scoped GATT database enumeration, descriptor server definitions and client read/write operations, descriptor write events, per-operation timeouts, and real-device Write Without Response coverage.
 - Redesign HID around the EspUsbDevice/EspUsbHost API shape: `hidKeyboard()` / `hidMouse()` / `hidConsumerControl()` / `hidSystemControl()` / `hidGamepad()` compose one HOGP service, while `hidHost()` discovers and dispatches all supported report types.
 - Add fixed cross-library Report IDs, keyboard layout-aware sending, configurable mouse buttons, mouse/consumer/system/gamepad helpers, per-report CCCD routing, descriptor-driven Report Map/input parsing, wrap-safe shared-ownership Host listeners, disconnect state reset, composite peer coverage, and new HID examples.
 - Establish the initial project, specification, and test structure.

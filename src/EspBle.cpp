@@ -63,6 +63,7 @@ struct EspBleImpl
     Failed,
     GattResult,
     ServerWrite,
+    ServerDescriptorWrite,
     Notification,
     ServerSubscription,
     ServerSendResult,
@@ -529,6 +530,7 @@ struct EspBleImpl
           slot.connection.localRole == EspBleRole::Peripheral)
       {
         event.serverWrite.connectionId = slot.connection.id;
+        event.serverWrite.connectionIdentified = true;
         break;
       }
     }
@@ -539,6 +541,33 @@ struct EspBleImpl
       ++droppedEvents;
       return;
     }
+    pushEvent(event);
+  }
+
+  void queueServerDescriptorWrite(
+    const String &serviceUuid,
+    const String &characteristicUuid,
+    const String &descriptorUuid,
+    const String &value)
+  {
+    std::lock_guard<std::mutex> lock(mutex);
+    Event event;
+    event.type = EventType::ServerDescriptorWrite;
+    event.serverWrite.serviceUuid = serviceUuid;
+    event.serverWrite.characteristicUuid = characteristicUuid;
+    event.serverWrite.descriptorUuid = descriptorUuid;
+    event.serverWrite.value = value;
+    size_t peripheralCount = 0;
+    for (const ConnectionSlot &slot : connections)
+    {
+      if (slot.used && slot.connection.localRole == EspBleRole::Peripheral)
+      {
+        event.serverWrite.connectionId = slot.connection.id;
+        ++peripheralCount;
+      }
+    }
+    event.serverWrite.connectionIdentified = peripheralCount == 1;
+    if (!event.serverWrite.connectionIdentified) event.serverWrite.connectionId = 0;
     pushEvent(event);
   }
 
@@ -1137,17 +1166,32 @@ struct EspBleGattServerImpl
 
     void onWrite(BLEDescriptor *descriptor) override
     {
-      std::lock_guard<std::mutex> lock(owner_->mutex);
-      for (DescriptorDefinition &definition : owner_->descriptors)
+      String serviceUuid;
+      String characteristicUuid;
+      String descriptorUuid;
+      String value;
       {
-        if (definition.backend == descriptor)
+        std::lock_guard<std::mutex> lock(owner_->mutex);
+        for (DescriptorDefinition &definition : owner_->descriptors)
         {
-          const uint8_t *data = descriptor->getValue();
-          definition.value = descriptor->getLength() == 0
-            ? String()
-            : String(reinterpret_cast<const char *>(data), descriptor->getLength());
-          return;
+          if (definition.backend == descriptor)
+          {
+            const uint8_t *data = descriptor->getValue();
+            definition.value = descriptor->getLength() == 0
+              ? String()
+              : String(reinterpret_cast<const char *>(data), descriptor->getLength());
+            serviceUuid = definition.serviceUuid;
+            characteristicUuid = definition.characteristicUuid;
+            descriptorUuid = definition.uuid;
+            value = definition.value;
+            break;
+          }
         }
+      }
+      if (!descriptorUuid.isEmpty() && owner_->server->owner_->impl_ != nullptr)
+      {
+        owner_->server->owner_->impl_->queueServerDescriptorWrite(
+          serviceUuid, characteristicUuid, descriptorUuid, value);
       }
     }
 
@@ -3052,6 +3096,11 @@ void EspBleGattServer::onWritten(WriteCallback callback)
   writeCallback_ = std::move(callback);
 }
 
+void EspBleGattServer::onDescriptorWritten(WriteCallback callback)
+{
+  descriptorWriteCallback_ = std::move(callback);
+}
+
 void EspBleGattServer::onSubscriptionChanged(SubscriptionCallback callback)
 {
   subscriptionCallback_ = std::move(callback);
@@ -3193,6 +3242,14 @@ void EspBleGattServer::dispatchWrite(const EspBleGattWrite &write)
   if (writeCallback_)
   {
     writeCallback_(write);
+  }
+}
+
+void EspBleGattServer::dispatchDescriptorWrite(const EspBleGattWrite &write)
+{
+  if (descriptorWriteCallback_)
+  {
+    descriptorWriteCallback_(write);
   }
 }
 
@@ -5742,6 +5799,9 @@ void EspBle::dispatchConnectionEvents()
     }
     case EspBleImpl::EventType::ServerWrite:
       gattServer_.dispatchWrite(event.serverWrite);
+      break;
+    case EspBleImpl::EventType::ServerDescriptorWrite:
+      gattServer_.dispatchDescriptorWrite(event.serverWrite);
       break;
     case EspBleImpl::EventType::Notification:
       if (notificationCallback_)

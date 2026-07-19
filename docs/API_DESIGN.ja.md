@@ -104,6 +104,9 @@ gattServer.setValue(serviceUuid, characteristicUuid, String("ready"));
 gattServer.onWritten([](const EspBleGattWrite &write) {
   // connectionId、Service/Characteristic UUID、書込み値を保持する値イベント。
 });
+gattServer.onDescriptorWritten([](const EspBleGattWrite &write) {
+  // Descriptor UUID、書込み値、connectionIdentifiedを保持する値イベント。
+});
 
 ble.begin();
 ```
@@ -147,7 +150,7 @@ Central側のWrite完了は`onCharacteristicWritten()`へ配送します。`resp
 
 `discoverCharacteristic()`は既知のService/Characteristic UUIDを指定して存在とpropertyを取得する軽量経路として維持します。Central GATT操作は同時に1件だけ受理します。operation idはこの制限が続く間は導入しません（DECISIONS 確定 #19）。timeout時は`EspBleError::Timeout`を持つ完了eventを1回だけ配送し、遅れて戻ったbackend結果を破棄します。remote service treeを別taskから強制破棄しないため、backend処理が戻るまでは次操作を`InvalidState`で拒否します。operation queueと明示cancelは今後の対象です。
 
-GATT値はpointer+lengthを基本とし、NULを含めてcopyできる`String`を便宜overloadとして提供します（同梱backendの`String`構築は長さ明示でbinary-safe。DECISIONS 確定 #20）。Server側は`addDescriptor()`、`setDescriptorValue()`、`descriptorValue()`も提供します。構成上限はService 4、Characteristic 16、Descriptor 16です。Descriptorの動的Read callbackと接続元つきWrite callbackはまだ提供しません。
+GATT値はpointer+lengthを基本とし、NULを含めてcopyできる`String`を便宜overloadとして提供します（同梱backendの`String`構築は長さ明示でbinary-safe。DECISIONS 確定 #20）。Server側は`addDescriptor()`、`setDescriptorValue()`、`descriptorValue()`、`onDescriptorWritten()`も提供します。構成上限はService 4、Characteristic 16、Descriptor 16です。同梱backendのDescriptor callbackはconnection handleを渡さないため、Peripheral接続が1件なら`connectionIdentified=true`とConnection ID、複数なら`false`とID 0を配送します。Descriptorの動的Read callbackはまだ提供しません。
 
 ## Subscription / Notify / Indicateの試行API
 
