@@ -48,23 +48,27 @@
 - ✅ HID Keyboard Device（Peripheral / GATT Server）
 - ✅ HID Keyboard Host（Central / GATT Client、初期6KRO）
 - ✅ HID Keyboard Hostの`onKeyboard()` press/release convenience event
+- ✅ HID Mouse / Consumer Control / System Control / Gamepad Device
+- ✅ 複合HID Device（固定Report ID、Report別CCCD/notify routing）
+- ✅ HID Hostの複数Report識別とMouse / Consumer / System / Gamepad event
 - ✅ layout選択と任意のusage-to-ASCII変換
 - ✅ EspUsbHost互換の19 layout識別子・変換table
 - ✅ HID Information country codeの取得（layout自動決定には使用しない）
 - ✅ HID Output Report
 - ✅ `hid_keyboard_device` Peerテスト（Battery ReadとOutput Reportを含む）
 - ✅ `hid_keyboard_host` Peerテスト
-- `battery` standalone / NKRO・複合HID Host Peerテスト
+- Battery standalone / NKRO
+- ✅ 複合HID Device / Host Peerテスト
 - ✅ ESP32KeyBridge input adapterの接続点検証（試作adapterとPeerテスト）
 - ESP32KeyBridge側への正式adapter追加（EspBle公開API確定後）
 
 ## 5. 初期リリース判定
 
-- examples compile matrix
-- Peer test反復
+- ✅ ESP32-S3の全example compile（cross-board matrixは新規example追加後に再生成する）
+- ✅ 全Peer＋unit testの連続実行
 - Android/Linuxなど複数実装とのmanual interoperability
-- memory/error/reconnect試験
-- README/API/Release Checklist完成
+- ✅ memory/error/reconnect試験（lifecycle stress / robustness）
+- ✅ README/API/Release Checklist整備
 
 ## 以後
 

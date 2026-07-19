@@ -74,7 +74,7 @@ arduino-cli compile --profile esp32s3 examples/<path>
 | [Security/StaticPasskeyServer](Security/StaticPasskeyServer/) | Peripheral | MITM-authenticated characteristic with a static passkey (display side) |
 | [Security/StaticPasskeyClient](Security/StaticPasskeyClient/) | Central | Passkey input side: `requestSecurity()` and authenticated reads |
 | [Hid/KeyboardDevice](Hid/KeyboardDevice/) | HID Device | BLE keyboard typing via Serial commands, LED report reception |
-| [Hid/KeyboardHost](Hid/KeyboardHost/) | HID Host | Connect to a BLE keyboard, print keys, write LEDs |
+| [Hid/KeyboardHost](Hid/KeyboardHost/) | HID Host | Connect to composite BLE HID, print every supported report type, write keyboard LEDs |
 | [Hid/Mouse](Hid/Mouse/) | HID Device | Five-button relative mouse |
 | [Hid/ConsumerControl](Hid/ConsumerControl/) | HID Device | Volume and play/pause media keys |
 | [Hid/CompositeKeyboardMouse](Hid/CompositeKeyboardMouse/) | HID Device | One composite HID Service with keyboard and mouse reports |
@@ -88,5 +88,5 @@ Suggested pairings on two boards:
 - Gatt/NotifyServer ↔ Gatt/SubscribeClient (and Gap/Mtu)
 - Gatt/IndicateServer ↔ Gatt/IndicateClient
 - Security/StaticPasskeyServer ↔ Security/StaticPasskeyClient
-- Hid/KeyboardDevice ↔ Hid/KeyboardHost
+- Hid/KeyboardDevice / Hid/CompositeKeyboardMouse ↔ Hid/KeyboardHost
 - Info/ScanDump and Info/ConnectionInspector can observe anything — the other examples, smartphones, or commercial BLE devices

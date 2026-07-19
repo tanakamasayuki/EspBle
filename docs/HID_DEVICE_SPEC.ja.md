@@ -13,7 +13,7 @@ ble.begin(config);
 | 入口 | 固定ID | payload | 主なAPI |
 |---|---:|---|---|
 | `hidKeyboard()` | 1 | modifier + reserved + 6 usage（8 bytes） | `sendReport`、`pressUsage`、`tapUsage`、`pressKey`、`tapKey`、`write`、`releaseAll`、`setLayout` |
-| `hidMouse()` | 2 | buttons、X、Y、wheel（4 bytes） | `move`、`wheel`、`press`、`release`、`click`、`releaseAll` |
+| `hidMouse()` | 2 | buttons、X、Y、wheel（4 bytes） | `move`、`wheel`、`press`、`release`、`click`、`releaseAll`。`EspBleHidMouseConfig::buttons`で1〜5 buttons |
 | `hidGamepad()` | 3 | 6 axis、hat、32 buttons（11 bytes） | `send`、`sendReport`、`releaseAll` |
 | `hidConsumerControl()` | 4 | 16-bit usage | `press`、`release`、`click`、`sendUsage` |
 | `hidSystemControl()` | 5 | 8-bit usage | `press`、`release`、`click`、`sendUsage` |

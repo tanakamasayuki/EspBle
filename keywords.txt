@@ -1,0 +1,177 @@
+#######################################
+# Syntax coloring map for EspBle
+#######################################
+
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+
+EspBle	KEYWORD1
+EspBleAdvertising	KEYWORD1
+EspBleScanner	KEYWORD1
+EspBleGattServer	KEYWORD1
+EspBleHidKeyboard	KEYWORD1
+EspBleHidMouse	KEYWORD1
+EspBleHidConsumerControl	KEYWORD1
+EspBleHidSystemControl	KEYWORD1
+EspBleHidGamepad	KEYWORD1
+EspBleHidHost	KEYWORD1
+EspBleConfig	KEYWORD1
+EspBleScanConfig	KEYWORD1
+EspBleScanResult	KEYWORD1
+EspBleConnection	KEYWORD1
+EspBleConnectionFailure	KEYWORD1
+EspBleMtuChanged	KEYWORD1
+EspBleGattCharacteristicConfig	KEYWORD1
+EspBleGattResult	KEYWORD1
+EspBleGattWrite	KEYWORD1
+EspBleGattNotification	KEYWORD1
+EspBleGattSubscription	KEYWORD1
+EspBleGattSendResult	KEYWORD1
+EspBleSecurityConfig	KEYWORD1
+EspBleSecurityChanged	KEYWORD1
+EspBleSecurityIoCapability	KEYWORD1
+EspBlePasskeyDisplayed	KEYWORD1
+EspBleBond	KEYWORD1
+EspBleError	KEYWORD1
+EspBleRole	KEYWORD1
+EspBleKeyboardLayout	KEYWORD1
+EspBleHidDeviceConfig	KEYWORD1
+EspBleHidKeyboardConfig	KEYWORD1
+EspBleHidMouseConfig	KEYWORD1
+EspBleHidConsumerControlConfig	KEYWORD1
+EspBleHidSystemControlConfig	KEYWORD1
+EspBleHidGamepadConfig	KEYWORD1
+EspBleHidKeyboardInputReport	KEYWORD1
+EspBleHidMouseReport	KEYWORD1
+EspBleHidGamepadReport	KEYWORD1
+EspBleHidKeyboardOutputReport	KEYWORD1
+EspBleHidKeyboardHostDiscovery	KEYWORD1
+EspBleHidKeyboardState	KEYWORD1
+EspBleHidReport	KEYWORD1
+EspBleHidKeyboardEvent	KEYWORD1
+EspBleHidMouseEvent	KEYWORD1
+EspBleHidConsumerControlEvent	KEYWORD1
+EspBleHidSystemControlEvent	KEYWORD1
+EspBleHidFieldValue	KEYWORD1
+EspBleHidGamepadEvent	KEYWORD1
+EspBleConnectionId	KEYWORD1
+EspBleListenerId	KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+
+begin	KEYWORD2
+end	KEYWORD2
+update	KEYWORD2
+advertising	KEYWORD2
+scanner	KEYWORD2
+gattServer	KEYWORD2
+hidKeyboard	KEYWORD2
+hidMouse	KEYWORD2
+hidConsumerControl	KEYWORD2
+hidSystemControl	KEYWORD2
+hidGamepad	KEYWORD2
+hidHost	KEYWORD2
+connect	KEYWORD2
+disconnect	KEYWORD2
+connectionCount	KEYWORD2
+connection	KEYWORD2
+initialized	KEYWORD2
+onConnected	KEYWORD2
+onDisconnected	KEYWORD2
+onConnectionFailed	KEYWORD2
+onMtuChanged	KEYWORD2
+onSecurityChanged	KEYWORD2
+onPasskeyDisplayed	KEYWORD2
+requestSecurity	KEYWORD2
+bondCount	KEYWORD2
+bond	KEYWORD2
+deleteBond	KEYWORD2
+deleteAllBonds	KEYWORD2
+discoverCharacteristic	KEYWORD2
+readCharacteristic	KEYWORD2
+writeCharacteristic	KEYWORD2
+subscribe	KEYWORD2
+unsubscribe	KEYWORD2
+onCharacteristicDiscovered	KEYWORD2
+onCharacteristicRead	KEYWORD2
+onCharacteristicWritten	KEYWORD2
+onSubscribed	KEYWORD2
+onUnsubscribed	KEYWORD2
+onNotification	KEYWORD2
+lastError	KEYWORD2
+lastErrorName	KEYWORD2
+lastErrorDetail	KEYWORD2
+clearError	KEYWORD2
+droppedEventCount	KEYWORD2
+setName	KEYWORD2
+addServiceUuid	KEYWORD2
+setManufacturerData	KEYWORD2
+setAppearance	KEYWORD2
+setScanResponseEnabled	KEYWORD2
+isAdvertising	KEYWORD2
+onResult	KEYWORD2
+droppedResultCount	KEYWORD2
+addService	KEYWORD2
+addCharacteristic	KEYWORD2
+setValue	KEYWORD2
+notify	KEYWORD2
+indicate	KEYWORD2
+onWritten	KEYWORD2
+onSubscriptionChanged	KEYWORD2
+onSent	KEYWORD2
+configure	KEYWORD2
+configured	KEYWORD2
+sendReport	KEYWORD2
+sendUsage	KEYWORD2
+pressUsage	KEYWORD2
+tapUsage	KEYWORD2
+pressKey	KEYWORD2
+tapKey	KEYWORD2
+write	KEYWORD2
+setLayout	KEYWORD2
+layout	KEYWORD2
+move	KEYWORD2
+wheel	KEYWORD2
+press	KEYWORD2
+release	KEYWORD2
+click	KEYWORD2
+releaseAll	KEYWORD2
+setBatteryLevel	KEYWORD2
+onOutputReport	KEYWORD2
+discover	KEYWORD2
+setKeyboardLeds	KEYWORD2
+setKeyboardLayout	KEYWORD2
+keyboardLayout	KEYWORD2
+ready	KEYWORD2
+onDiscovered	KEYWORD2
+onKeyboardState	KEYWORD2
+onKeyboard	KEYWORD2
+onMouse	KEYWORD2
+onConsumerControl	KEYWORD2
+onSystemControl	KEYWORD2
+onGamepad	KEYWORD2
+addDiscoveredListener	KEYWORD2
+addKeyboardStateListener	KEYWORD2
+addKeyboardListener	KEYWORD2
+addMouseListener	KEYWORD2
+addConsumerControlListener	KEYWORD2
+addSystemControlListener	KEYWORD2
+addGamepadListener	KEYWORD2
+removeListener	KEYWORD2
+invalidInputReportCount	KEYWORD2
+advertisesService	KEYWORD2
+hasName	KEYWORD2
+maximumNotificationPayload	KEYWORD2
+isDown	KEYWORD2
+wasPressed	KEYWORD2
+wasReleased	KEYWORD2
+
+#######################################
+# Constants (LITERAL1)
+#######################################
+
+ESPBLE_VERSION_STR	LITERAL1
+EspBleInvalidListenerId	LITERAL1

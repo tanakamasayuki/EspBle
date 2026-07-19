@@ -27,6 +27,7 @@ The design documents are written in Japanese. This guide lists them and shows th
 | HID spec (Device / Host) | [HID_DEVICE_SPEC.ja.md](HID_DEVICE_SPEC.ja.md) / [HID_HOST_SPEC.ja.md](HID_HOST_SPEC.ja.md) |
 | Overall development phases | [DEVELOPMENT_PLAN.ja.md](DEVELOPMENT_PLAN.ja.md) |
 | Test strategy and coverage | [../tests/TEST_PLAN.ja.md](../tests/TEST_PLAN.ja.md) |
+| Pre-release checks | [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) |
 | Board / core build matrices (CI-generated) | `BOARDS.<version>.md` / `COMPATIBILITY.<version>.md` |
 | Usage examples | [../examples/README.md](../examples/README.md) |
 

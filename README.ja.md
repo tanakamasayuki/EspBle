@@ -78,6 +78,7 @@ void loop() {
 - [機能対応マトリクス](docs/FEATURE_MATRIX.ja.md)
 - [開発計画](docs/DEVELOPMENT_PLAN.ja.md)
 - [テスト計画](tests/TEST_PLAN.ja.md)
+- [リリースチェックリスト](docs/RELEASE_CHECKLIST.ja.md)
 
 ## 関連ライブラリ
 

@@ -80,6 +80,7 @@ The design documents are currently written in Japanese.
 - [Feature support matrix](docs/FEATURE_MATRIX.ja.md)
 - [Development plan](docs/DEVELOPMENT_PLAN.ja.md)
 - [Test plan](tests/TEST_PLAN.ja.md)
+- [Release checklist](docs/RELEASE_CHECKLIST.md)
 
 ## Sibling libraries
 

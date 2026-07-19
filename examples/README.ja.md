@@ -74,7 +74,7 @@ arduino-cli compile --profile esp32s3 examples/<path>
 | [Security/StaticPasskeyServer](Security/StaticPasskeyServer/) | Peripheral | 静的passkeyによるMITM認証Characteristic（表示側） |
 | [Security/StaticPasskeyClient](Security/StaticPasskeyClient/) | Central | passkey入力側。`requestSecurity()`と認証必須Read |
 | [Hid/KeyboardDevice](Hid/KeyboardDevice/) | HID Device | SerialコマンドでキーをタイプするBLE keyboard。LED report受信 |
-| [Hid/KeyboardHost](Hid/KeyboardHost/) | HID Host | BLE keyboardへ接続してキー表示、LED書込み |
+| [Hid/KeyboardHost](Hid/KeyboardHost/) | HID Host | 複合BLE HIDへ接続し、全対応Reportを種別別表示。keyboard LED書込み |
 | [Hid/Mouse](Hid/Mouse/) | HID Device | 5ボタン相対mouse |
 | [Hid/ConsumerControl](Hid/ConsumerControl/) | HID Device | 音量・再生/一時停止media key |
 | [Hid/CompositeKeyboardMouse](Hid/CompositeKeyboardMouse/) | HID Device | keyboardとmouseを1つのHID Serviceへ複合 |
@@ -88,5 +88,5 @@ arduino-cli compile --profile esp32s3 examples/<path>
 - Gatt/NotifyServer ↔ Gatt/SubscribeClient（およびGap/Mtu）
 - Gatt/IndicateServer ↔ Gatt/IndicateClient
 - Security/StaticPasskeyServer ↔ Security/StaticPasskeyClient
-- Hid/KeyboardDevice ↔ Hid/KeyboardHost
+- Hid/KeyboardDevice / Hid/CompositeKeyboardMouse ↔ Hid/KeyboardHost
 - Info/ScanDump・Info/ConnectionInspectorは任意の相手（他のexampleやスマートフォン、市販BLE機器）の観察に使えます

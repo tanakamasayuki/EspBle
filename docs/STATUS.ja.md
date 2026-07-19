@@ -132,14 +132,15 @@ host上のunit test（`tests/unit/`）としてkeymap変換とHID Report Map par
    - ✅ 再接続と再購読の反復（`lifecycle_stress`のheap検証付き反復）。
    - ✅ queue overflow、異常payload、GATT operation競合（`lifecycle_stress` / `hid_robustness` / `hid_boot_keyboard`）。
    - 長時間実行時のheap、task、Bond/NVS状態。
-   - Peer suite全体の連続実行とflaky要因の除去。
+   - ✅ Peer suite全体の連続実行（2026-07-19: 通常29 passed、`--clean` 29 passed）。リリース直前の複数回反復は継続。
 
 4. **初回リリース用のテストと文書を完成させる**
    - ✅ 全exampleのcompile matrixを自動化する（`.github/workflows/compile-examples.yml`、esp32s3 profile、push/PRで実行）。
    - ✅ host上のunit testを追加する（keymap変換とReport Map parserを`tests/unit/`で実装済み。Advertising parser等の追加は任意）。
    - 市販BLE KeyboardとAndroid / Linuxなどでmanual interoperabilityをある程度確認する（必須の合格基準にはしない。2026-07-18裁定、ユーザーが実施）。
-   - README、API説明、CHANGELOG、Release Checklistを更新する。
+   - ✅ README、API説明、CHANGELOG、Release Checklistを更新する。
    - examplesを充実させ、触りながら公開APIの確定判断を行う（診断系`Info/`を追加済み。追加候補があれば継続）。
+   - Release workflowは現在の`0.1.0`を必ずincrementするため、初回tagを`v0.1.0`にする場合の手順（現commitを直接tagするか、共通toolkit側で初回releaseを扱うか）を確定する。
 
 ### P1: 初期基盤を補完する作業
 
@@ -152,15 +153,14 @@ host上のunit test（`tests/unit/`）としてkeymap変換とHID Report Map par
 
 ### P2: 初回リリース後に優先順位を決める候補
 
-1. HID Consumer Control
-2. HID Mouse
-3. NKRO / composite HID
-4. Device Information / NUS
-5. BLE MIDI
-6. reconnect cache、複数接続強化
-7. Sensor profile
-8. Extended / Periodic Advertising、PHY、Privacy
-9. Beacon / Connectionless（iBeacon、Eddystone、任意Advertisingデータ）
+1. Vendor / Custom HID
+2. NKRO / Boot Protocol切替
+3. Device Information / NUS
+4. BLE MIDI
+5. reconnect cache、複数接続強化
+6. Sensor profile
+7. Extended / Periodic Advertising、PHY、Privacy
+8. Beacon / Connectionless（iBeacon、Eddystone、任意Advertisingデータ）
 
 これらは採用決定ではありません。利用例、実装量、Peerテスト方法を確認し、1機能ずつ正式スコープへ移します。
 
@@ -178,12 +178,12 @@ host上のunit test（`tests/unit/`）としてkeymap変換とHID Report Map par
 
 ## 初回リリース判定の目安
 
-- [ ] 公開するAPIと初期対応範囲が文書上で確定している。
-- [ ] 全exampleが対象build matrixでコンパイルする。
-- [ ] 全Peerテストを反復実行して安定して通過する。
-- [ ] 切断、再接続、peer lossでstuck keyや資源リークがない。
+- [x] 公開するAPIと初期対応範囲が文書上で確定している。
+- [ ] 全exampleが対象build matrixでコンパイルする（ESP32-S3全exampleは2026-07-19にローカル成功。新規HID exampleを含むcross-board matrixの再生成待ち）。
+- [x] 全Peer＋unitテストが連続実行で通過する（2026-07-19: 通常29 passed / 15:44、`--clean` 29 passed / 22:05）。反復はリリース直前にも実施する。
+- [x] 切断、再接続、peer lossでstuck keyや資源リークがない（lifecycle stress / HID robustnessで検証）。
 - [ ] 市販機器と少なくとも2種類の外部BLE実装で相互運用できる。
-- [ ] README、API文書、CHANGELOG、Release Checklistが揃っている。
+- [x] README、API文書、CHANGELOG、Release Checklistが揃っている。
 - [x] `memo.ja.md`の移行確認と削除が完了している（2026-07-18）。
 
 ## 関連文書
@@ -197,6 +197,7 @@ host上のunit test（`tests/unit/`）としてkeymap変換とHID Report Map par
 - [機能対応マトリクス](FEATURE_MATRIX.ja.md)
 - [開発計画](DEVELOPMENT_PLAN.ja.md)
 - [テスト計画](../tests/TEST_PLAN.ja.md)
+- [リリースチェックリスト](RELEASE_CHECKLIST.ja.md)
 
 ## 更新ルール
 

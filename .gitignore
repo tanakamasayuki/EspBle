@@ -12,6 +12,7 @@ temp/
 arduino_secrets.h
 *.bat
 *.txt
+!keywords.txt
 
 # Release helper cache
 tools/cache/
