@@ -41,6 +41,8 @@ void setup()
       roleName(connection.localRole),
       static_cast<unsigned>(ble.connectionCount()),
       xTaskGetCurrentTaskHandle() == loopTask ? "loop" : "stack");
+    ble.advertising().start();
+    Serial.printf("READVERTISING %u\n", ble.advertising().isAdvertising() ? 1 : 0);
   });
 
   auto &advertising = ble.advertising();

@@ -19,6 +19,7 @@
 #include <os/os_mbuf.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <cctype>
 #include <cstring>
 #include <map>
 #include <mutex>
@@ -51,6 +52,29 @@ bool uuidEquals(const String &left, const char *right)
     return true;
   }
   return BLEUUID(left.c_str()).equals(BLEUUID(right));
+}
+
+bool isValidBleAddress(const char *address)
+{
+  if (address == nullptr || strlen(address) != 17) return false;
+  for (size_t index = 0; index < 17; ++index)
+  {
+    if ((index + 1) % 3 == 0)
+    {
+      if (address[index] != ':') return false;
+    }
+    else if (!isxdigit(static_cast<unsigned char>(address[index])))
+    {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool isValidAddressType(EspBleAddressType type)
+{
+  return static_cast<uint8_t>(type) <=
+    static_cast<uint8_t>(EspBleAddressType::RandomIdentity);
 }
 } // namespace
 
@@ -119,6 +143,7 @@ struct EspBleImpl
     EspBleConnectionFailure failure;
     EspBleGattResult gattResult;
     EspBleGattWrite serverWrite;
+    String serverDescriptorUuid;
     EspBleGattNotification notification;
     EspBleGattSubscription serverSubscription;
     EspBleGattSendResult serverSendResult;
@@ -140,7 +165,7 @@ struct EspBleImpl
       if (!owner_->addConnection(
             client->getConnId(),
             peerAddress.toString(),
-            peerAddress.getType(),
+            static_cast<EspBleAddressType>(peerAddress.getType()),
             EspBleRole::Central,
             client->getMTU(),
             description.sec_state.encrypted,
@@ -175,7 +200,7 @@ struct EspBleImpl
       if (!owner_->addConnection(
             description->conn_handle,
             peerAddress.toString(),
-            peerAddress.getType(),
+            static_cast<EspBleAddressType>(peerAddress.getType()),
             EspBleRole::Peripheral,
             server->getPeerMTU(description->conn_handle),
             description->sec_state.encrypted,
@@ -283,7 +308,7 @@ struct EspBleImpl
   bool addConnection(
     uint16_t handle,
     const String &peerAddress,
-    uint8_t peerAddressType,
+    EspBleAddressType peerAddressType,
     EspBleRole localRole,
     uint16_t mtu,
     bool encrypted,
@@ -530,7 +555,6 @@ struct EspBleImpl
           slot.connection.localRole == EspBleRole::Peripheral)
       {
         event.serverWrite.connectionId = slot.connection.id;
-        event.serverWrite.connectionIdentified = true;
         break;
       }
     }
@@ -555,19 +579,8 @@ struct EspBleImpl
     event.type = EventType::ServerDescriptorWrite;
     event.serverWrite.serviceUuid = serviceUuid;
     event.serverWrite.characteristicUuid = characteristicUuid;
-    event.serverWrite.descriptorUuid = descriptorUuid;
     event.serverWrite.value = value;
-    size_t peripheralCount = 0;
-    for (const ConnectionSlot &slot : connections)
-    {
-      if (slot.used && slot.connection.localRole == EspBleRole::Peripheral)
-      {
-        event.serverWrite.connectionId = slot.connection.id;
-        ++peripheralCount;
-      }
-    }
-    event.serverWrite.connectionIdentified = peripheralCount == 1;
-    if (!event.serverWrite.connectionIdentified) event.serverWrite.connectionId = 0;
+    event.serverDescriptorUuid = descriptorUuid;
     pushEvent(event);
   }
 
@@ -659,8 +672,8 @@ struct EspBleImpl
       }
       client->setClientCallbacks(&impl->clientCallbacks);
       connected = client->connect(
-        BLEAddress(target.address, target.addressType),
-        target.addressType,
+        BLEAddress(target.address, static_cast<uint8_t>(target.addressType)),
+        static_cast<uint8_t>(target.addressType),
         timeoutMilliseconds);
     }
     if (!connected)
@@ -2153,7 +2166,7 @@ struct EspBleScannerImpl
     {
       EspBleScanResult result;
       result.address = device.getAddress().toString();
-      result.addressType = device.getAddressType();
+      result.addressType = static_cast<EspBleAddressType>(device.getAddressType());
       result.rssi = device.getRSSI();
       result.connectable = device.isConnectable();
       result.scannable = device.isScannable();
@@ -3096,7 +3109,7 @@ void EspBleGattServer::onWritten(WriteCallback callback)
   writeCallback_ = std::move(callback);
 }
 
-void EspBleGattServer::onDescriptorWritten(WriteCallback callback)
+void EspBleGattServer::onDescriptorWritten(DescriptorWriteCallback callback)
 {
   descriptorWriteCallback_ = std::move(callback);
 }
@@ -3245,7 +3258,7 @@ void EspBleGattServer::dispatchWrite(const EspBleGattWrite &write)
   }
 }
 
-void EspBleGattServer::dispatchDescriptorWrite(const EspBleGattWrite &write)
+void EspBleGattServer::dispatchDescriptorWrite(const EspBleGattDescriptorWrite &write)
 {
   if (descriptorWriteCallback_)
   {
@@ -4932,9 +4945,10 @@ bool EspBle::connect(const EspBleScanResult &scanResult, uint32_t timeoutMillise
     setError(EspBleError::InvalidState, "BLE stack is not initialized");
     return false;
   }
-  if (scanResult.address.isEmpty() || timeoutMilliseconds == 0)
+  if (!isValidBleAddress(scanResult.address.c_str()) ||
+      !isValidAddressType(scanResult.addressType) || timeoutMilliseconds == 0)
   {
-    setError(EspBleError::InvalidArgument, "peer address and a nonzero timeout are required");
+    setError(EspBleError::InvalidArgument, "valid peer address, address type, and nonzero timeout are required");
     return false;
   }
   if (impl_ == nullptr)
@@ -4982,6 +4996,17 @@ bool EspBle::connect(const EspBleScanResult &scanResult, uint32_t timeoutMillise
 
   clearError();
   return true;
+}
+
+bool EspBle::connect(
+  const char *address,
+  EspBleAddressType addressType,
+  uint32_t timeoutMilliseconds)
+{
+  EspBleScanResult target;
+  target.address = address == nullptr ? "" : address;
+  target.addressType = addressType;
+  return connect(target, timeoutMilliseconds);
 }
 
 bool EspBle::disconnect(EspBleConnectionId connectionId)
@@ -5148,7 +5173,7 @@ bool EspBle::bond(size_t index, EspBleBond &bond) const
   }
   const BLEAddress address(peers[index]);
   bond.peerAddress = address.toString();
-  bond.peerAddressType = address.getType();
+  bond.peerAddressType = static_cast<EspBleAddressType>(address.getType());
   return true;
 }
 
@@ -5175,7 +5200,7 @@ bool EspBle::deleteBond(const EspBleBond &bond)
   for (int index = 0; index < count; ++index)
   {
     const BLEAddress address(peers[index]);
-    if (address.getType() == bond.peerAddressType &&
+    if (address.getType() == static_cast<uint8_t>(bond.peerAddressType) &&
         address.toString().equalsIgnoreCase(bond.peerAddress))
     {
       if (ble_store_util_delete_peer(&peers[index]) != 0)
@@ -5801,8 +5826,15 @@ void EspBle::dispatchConnectionEvents()
       gattServer_.dispatchWrite(event.serverWrite);
       break;
     case EspBleImpl::EventType::ServerDescriptorWrite:
-      gattServer_.dispatchDescriptorWrite(event.serverWrite);
+    {
+      EspBleGattDescriptorWrite write;
+      write.serviceUuid = event.serverWrite.serviceUuid;
+      write.characteristicUuid = event.serverWrite.characteristicUuid;
+      write.descriptorUuid = event.serverDescriptorUuid;
+      write.value = event.serverWrite.value;
+      gattServer_.dispatchDescriptorWrite(write);
       break;
+    }
     case EspBleImpl::EventType::Notification:
       if (notificationCallback_)
       {

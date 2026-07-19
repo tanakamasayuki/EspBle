@@ -48,12 +48,11 @@ void setup()
       static_cast<unsigned>(write.connectionId),
       write.value.c_str());
   });
-  gattServer.onDescriptorWritten([](const EspBleGattWrite &write) {
+  gattServer.onDescriptorWritten([](const EspBleGattDescriptorWrite &write) {
     Serial.printf(
-      "Descriptor %s wrote: %s (connection identified: %u)\n",
+      "Descriptor %s wrote: %s\n",
       write.descriptorUuid.c_str(),
-      write.value.c_str(),
-      write.connectionIdentified ? 1 : 0);
+      write.value.c_str());
   });
 
   EspBleConfig config;

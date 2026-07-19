@@ -157,7 +157,7 @@ void loop()
       autoConnect = false;
       EspBleScanResult bogus;
       bogus.address = "11:22:33:44:55:66";
-      bogus.addressType = 0;
+      bogus.addressType = EspBleAddressType::Public;
       bogus.connectable = true;
       timingConnect = true;
       connectStartMs = millis();
@@ -183,7 +183,7 @@ void loop()
       // must cancel it instead of blocking until the connect timeout.
       EspBleScanResult bogus;
       bogus.address = "11:22:33:44:55:66";
-      bogus.addressType = 0;
+      bogus.addressType = EspBleAddressType::Public;
       bogus.connectable = true;
       const bool started = ble.connect(bogus);
       const uint32_t startMs = millis();

@@ -25,11 +25,11 @@ Read/Write可能なCharacteristicとDescriptorを1つずつ持つ独自GATT Serv
 - `addDescriptor()` / `EspBleGattDescriptorConfig` / `setDescriptorValue()` — Descriptor定義、permission、binary-safeな値
 - `gattServer.setValue(...)` / `gattServer.value(...)` — 保持値（binary-safeな`String`。pointer+length overloadもあります）
 - `gattServer.onWritten(callback)` — `connectionId`、UUID、書込み値を持つ`EspBleGattWrite`
-- `gattServer.onDescriptorWritten(callback)` — Descriptor UUIDと値。接続が1件なら`connectionIdentified=true`
+- `gattServer.onDescriptorWritten(callback)` — UUIDと値を持つ`EspBleGattDescriptorWrite`
 
 ## 期待されるSerial出力
 
 ```
 Connection 1 wrote: hello from Central
-Descriptor 10da4dd2-8eaa-4c69-9003-676174747277 wrote: descriptor value (connection identified: 1)
+Descriptor 10da4dd2-8eaa-4c69-9003-676174747277 wrote: descriptor value
 ```

@@ -8,6 +8,8 @@ EspBle ble;
 TaskHandle_t loopTask = nullptr;
 EspBleConnectionId activeConnectionId = 0;
 bool connectionRequested = false;
+String savedAddress;
+EspBleAddressType savedAddressType = EspBleAddressType::Public;
 
 static const char *roleName(EspBleRole role)
 {
@@ -45,6 +47,7 @@ void setup()
       static_cast<unsigned>(ble.connectionCount()),
       xTaskGetCurrentTaskHandle() == loopTask ? "loop" : "stack");
     activeConnectionId = 0;
+    connectionRequested = false;
   });
   ble.onConnectionFailed([](const EspBleConnectionFailure &failure) {
     Serial.printf("CONNECT_FAILED %s %s\n", failure.peerAddress.c_str(), failure.detail.c_str());
@@ -56,6 +59,8 @@ void setup()
     }
 
     ble.scanner().stop();
+    savedAddress = scanResult.address;
+    savedAddressType = scanResult.addressType;
     connectionRequested = ble.connect(scanResult);
     Serial.println(connectionRequested ? "CONNECT_REQUESTED" : "CONNECT_REQUEST_FAILED");
   });
@@ -72,9 +77,28 @@ void loop()
       scanConfig.active = true;
       Serial.println(ble.scanner().start(scanConfig) ? "SCAN_STARTED" : "SCAN_START_FAILED");
     }
+    else if (command == 'i')
+    {
+      const bool badAddress = ble.connect("invalid", EspBleAddressType::Public);
+      const String addressError = ble.lastErrorName();
+      const bool badType = ble.connect(
+        "00:11:22:33:44:55", static_cast<EspBleAddressType>(99));
+      Serial.printf("DIRECT_INVALID address=%u/%s type=%u/%s\n",
+        badAddress ? 1 : 0,
+        addressError.c_str(),
+        badType ? 1 : 0,
+        ble.lastErrorName());
+    }
     else if (command == 'd' && activeConnectionId != 0)
     {
       Serial.println(ble.disconnect(activeConnectionId) ? "DISCONNECT_REQUESTED" : "DISCONNECT_REQUEST_FAILED");
+    }
+    else if (command == 'r' && activeConnectionId == 0 && !savedAddress.isEmpty())
+    {
+      connectionRequested = ble.connect(savedAddress.c_str(), savedAddressType);
+      Serial.println(connectionRequested
+        ? "DIRECT_CONNECT_REQUESTED"
+        : "DIRECT_CONNECT_REQUEST_FAILED");
     }
   }
 

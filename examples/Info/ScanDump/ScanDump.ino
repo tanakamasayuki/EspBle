@@ -35,7 +35,7 @@ void setup()
     Serial.printf(
       "%s type=%u rssi=%d%s%s",
       scanResult.address.c_str(),
-      scanResult.addressType,
+      static_cast<unsigned>(scanResult.addressType),
       scanResult.rssi,
       scanResult.connectable ? " connectable" : "",
       scanResult.scannable ? " scannable" : "");

@@ -16,6 +16,7 @@
 - ✅ Connection identityと切断
 - ✅ `advertise_scan` Peerテスト
 - ✅ `connect_disconnect` Peerテスト
+- ✅ 公開Address typeとScan不要のaddress直接接続
 
 この段階で所有権、event context、Result型を実コードで確定します。
 
@@ -27,7 +28,7 @@
 - ✅ Service/Characteristic/Descriptor一覧Discovery
 - ✅ Write Without ResponseのPeer検証
 - ✅ Descriptor Read / WriteとServer Descriptor定義
-- ✅ Descriptor Server Write eventと接続元識別状態
+- ✅ 専用値型によるDescriptor Server Write event
 - ✅ Client操作単位timeoutと遅延完了抑止
 - ✅ Notify / Indicate / subscription / unsubscribe
 - ✅ MTU設定、Connection snapshot、payload上限検証

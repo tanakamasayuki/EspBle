@@ -41,7 +41,7 @@ static void printConnection(const EspBleConnection &connection)
     static_cast<unsigned>(connection.id),
     connection.handle,
     connection.peerAddress.c_str(),
-    connection.peerAddressType,
+    static_cast<unsigned>(connection.peerAddressType),
     connection.localRole == EspBleRole::Central ? "Central" : "Peripheral",
     connection.mtu,
     static_cast<unsigned>(connection.maximumNotificationPayload()),
@@ -62,7 +62,8 @@ static void printBonds()
     EspBleBond bond;
     if (ble.bond(i, bond))
     {
-      Serial.printf("  [%u] %s type=%u\n", static_cast<unsigned>(i), bond.peerAddress.c_str(), bond.peerAddressType);
+      Serial.printf("  [%u] %s type=%u\n", static_cast<unsigned>(i), bond.peerAddress.c_str(),
+        static_cast<unsigned>(bond.peerAddressType));
     }
   }
 }

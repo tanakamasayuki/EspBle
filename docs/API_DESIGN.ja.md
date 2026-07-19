@@ -53,13 +53,16 @@ ble.onDisconnected([](const EspBleConnection &connection) {
 ble.onConnectionFailed([](const EspBleConnectionFailure &failure) {
   // 非同期接続失敗。
 });
+
+// 保存済みaddressからScanなしで再接続する場合。
+ble.connect("aa:bb:cc:dd:ee:ff", EspBleAddressType::Random, 10000);
 ```
 
 `ble.update()`はstack callbackからqueueへcopyしたScan ResultとConnection eventをユーザーcallbackへ配送します。Arduino-ESP32 backendの待機型接続処理はEspBle内部taskで実行するため、`connect()`はloopやScan Result callbackを接続完了までblockしません。利用者が`update()`を定期的に呼ぶ明示駆動は確定仕様です（DECISIONS 確定 #17）。`update()`を呼ばない限り、接続・切断・Discovery等の完了通知は配送されません。
 
 Scanは`EspBleScanConfig`（active scan、duplicate配送、interval/window、duration）を`start()`へ渡して構成できます。Scan Result queueが満杯のときの取りこぼし数は`ble.scanner().droppedResultCount()`で観測できます（overflowは専用イベントではなくカウンタで観測する方針。DECISIONS 確定 #21）。
 
-root objectには接続操作・状態のAPIとして`disconnect(connectionId)`、`connectionCount()`、`connection(index, result)`、`initialized()`があり、エラーは`lastError()`（`EspBleError`値）、`lastErrorName()`、`lastErrorDetail()`、`clearError()`で確認・消去します。`EspBleError`は`None` / `InvalidState` / `InvalidArgument` / `BackendFailure` / `ResourceExhausted` / `NotFound`です。
+root objectには接続操作・状態のAPIとして`connect(address, EspBleAddressType, timeout)`、`disconnect(connectionId)`、`connectionCount()`、`connection(index, result)`、`initialized()`があり、エラーは`lastError()`（`EspBleError`値）、`lastErrorName()`、`lastErrorDetail()`、`clearError()`で確認・消去します。`EspBleError`は`None` / `InvalidState` / `InvalidArgument` / `BackendFailure` / `ResourceExhausted` / `NotFound` / `Timeout`です。address typeはScan Result、Connection、Bond、直接接続のすべてで`EspBleAddressType`を使用します。
 
 `EspBleConnection`はlibrary connection id、backend handle、peer address/address type、local role、MTU、暗号化・認証・Bond状態、暗号鍵長の値snapshotです。初期実装は最大4接続を内部管理しますが、この上限と設定方法はまだ公開仕様として確定していません。
 
@@ -104,8 +107,8 @@ gattServer.setValue(serviceUuid, characteristicUuid, String("ready"));
 gattServer.onWritten([](const EspBleGattWrite &write) {
   // connectionId、Service/Characteristic UUID、書込み値を保持する値イベント。
 });
-gattServer.onDescriptorWritten([](const EspBleGattWrite &write) {
-  // Descriptor UUID、書込み値、connectionIdentifiedを保持する値イベント。
+gattServer.onDescriptorWritten([](const EspBleGattDescriptorWrite &write) {
+  // Service/Characteristic/Descriptor UUIDと書込み値を保持する値イベント。
 });
 
 ble.begin();
@@ -150,7 +153,7 @@ Central側のWrite完了は`onCharacteristicWritten()`へ配送します。`resp
 
 `discoverCharacteristic()`は既知のService/Characteristic UUIDを指定して存在とpropertyを取得する軽量経路として維持します。Central GATT操作は同時に1件だけ受理します。operation idはこの制限が続く間は導入しません（DECISIONS 確定 #19）。timeout時は`EspBleError::Timeout`を持つ完了eventを1回だけ配送し、遅れて戻ったbackend結果を破棄します。remote service treeを別taskから強制破棄しないため、backend処理が戻るまでは次操作を`InvalidState`で拒否します。operation queueと明示cancelは今後の対象です。
 
-GATT値はpointer+lengthを基本とし、NULを含めてcopyできる`String`を便宜overloadとして提供します（同梱backendの`String`構築は長さ明示でbinary-safe。DECISIONS 確定 #20）。Server側は`addDescriptor()`、`setDescriptorValue()`、`descriptorValue()`、`onDescriptorWritten()`も提供します。構成上限はService 4、Characteristic 16、Descriptor 16です。同梱backendのDescriptor callbackはconnection handleを渡さないため、Peripheral接続が1件なら`connectionIdentified=true`とConnection ID、複数なら`false`とID 0を配送します。Descriptorの動的Read callbackはまだ提供しません。
+GATT値はpointer+lengthを基本とし、NULを含めてcopyできる`String`を便宜overloadとして提供します（同梱backendの`String`構築は長さ明示でbinary-safe。DECISIONS 確定 #20）。Server側は`addDescriptor()`、`setDescriptorValue()`、`descriptorValue()`、`onDescriptorWritten()`も提供します。構成上限はService 4、Characteristic 16、Descriptor 16です。Descriptor Writeは専用の`EspBleGattDescriptorWrite`値イベントへ配送します。同梱backendがDescriptor callbackへconnection handleを渡さないため、推測値は公開せずConnection IDを型に含めません。Descriptorの動的Read callbackはまだ提供しません。
 
 ## Subscription / Notify / Indicateの試行API
 

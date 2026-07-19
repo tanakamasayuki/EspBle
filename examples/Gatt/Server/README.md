@@ -25,11 +25,11 @@ Use the [Gatt/Client](../Client/) example on a second board (it targets the same
 - `addDescriptor()` / `EspBleGattDescriptorConfig` / `setDescriptorValue()` — descriptor definition, permissions, and binary-safe value
 - `gattServer.setValue(...)` / `gattServer.value(...)` — held value (binary-safe `String`, pointer+length overloads available)
 - `gattServer.onWritten(callback)` — `EspBleGattWrite` with `connectionId`, UUIDs, and the written value
-- `gattServer.onDescriptorWritten(callback)` — descriptor UUID and value; `connectionIdentified` is true with one connection
+- `gattServer.onDescriptorWritten(callback)` — `EspBleGattDescriptorWrite` with UUIDs and value
 
 ## Expected Serial output
 
 ```
 Connection 1 wrote: hello from Central
-Descriptor 10da4dd2-8eaa-4c69-9003-676174747277 wrote: descriptor value (connection identified: 1)
+Descriptor 10da4dd2-8eaa-4c69-9003-676174747277 wrote: descriptor value
 ```

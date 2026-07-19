@@ -19,6 +19,7 @@ EspBleHidHost	KEYWORD1
 EspBleConfig	KEYWORD1
 EspBleScanConfig	KEYWORD1
 EspBleScanResult	KEYWORD1
+EspBleAddressType	KEYWORD1
 EspBleConnection	KEYWORD1
 EspBleConnectionFailure	KEYWORD1
 EspBleMtuChanged	KEYWORD1
@@ -29,6 +30,7 @@ EspBleGattServiceInfo	KEYWORD1
 EspBleGattCharacteristicInfo	KEYWORD1
 EspBleGattDescriptorInfo	KEYWORD1
 EspBleGattWrite	KEYWORD1
+EspBleGattDescriptorWrite	KEYWORD1
 EspBleGattNotification	KEYWORD1
 EspBleGattSubscription	KEYWORD1
 EspBleGattSendResult	KEYWORD1

@@ -59,12 +59,20 @@ struct EspBleScanConfig
   uint32_t durationSeconds = 0;
 };
 
+enum class EspBleAddressType : uint8_t
+{
+  Public = 0,
+  Random,
+  PublicIdentity,
+  RandomIdentity,
+};
+
 struct EspBleScanResult
 {
   static constexpr size_t MaxServiceUuids = 8;
 
   String address;
-  uint8_t addressType = 0;
+  EspBleAddressType addressType = EspBleAddressType::Public;
   String name;
   int rssi = 0;
   bool connectable = false;
@@ -126,7 +134,7 @@ struct EspBleConnection
   EspBleConnectionId id = 0;
   uint16_t handle = 0xffff;
   String peerAddress;
-  uint8_t peerAddressType = 0;
+  EspBleAddressType peerAddressType = EspBleAddressType::Public;
   EspBleRole localRole = EspBleRole::Central;
   uint16_t mtu = 23;
   bool encrypted = false;
@@ -167,7 +175,7 @@ struct EspBlePasskeyDisplayed
 struct EspBleBond
 {
   String peerAddress;
-  uint8_t peerAddressType = 0;
+  EspBleAddressType peerAddressType = EspBleAddressType::Public;
 };
 
 struct EspBleGattCharacteristicConfig
@@ -259,8 +267,14 @@ struct EspBleGattWrite
   String serviceUuid;
   String characteristicUuid;
   String value;
+};
+
+struct EspBleGattDescriptorWrite
+{
+  String serviceUuid;
+  String characteristicUuid;
   String descriptorUuid;
-  bool connectionIdentified = false;
+  String value;
 };
 
 struct EspBleGattNotification
@@ -558,6 +572,8 @@ public:
   static constexpr size_t MaxCharacteristics = 16;
   static constexpr size_t MaxDescriptors = 16;
   using WriteCallback = std::function<void(const EspBleGattWrite &write)>;
+  using DescriptorWriteCallback =
+    std::function<void(const EspBleGattDescriptorWrite &write)>;
   using SubscriptionCallback = std::function<void(const EspBleGattSubscription &subscription)>;
   using SendCallback = std::function<void(const EspBleGattSendResult &result)>;
 
@@ -607,7 +623,7 @@ public:
     size_t length);
   bool indicate(const char *serviceUuid, const char *characteristicUuid, const String &value);
   void onWritten(WriteCallback callback);
-  void onDescriptorWritten(WriteCallback callback);
+  void onDescriptorWritten(DescriptorWriteCallback callback);
   void onSubscriptionChanged(SubscriptionCallback callback);
   void onSent(SendCallback callback);
 
@@ -621,7 +637,7 @@ private:
   bool realize();
   void resetBackend();
   void dispatchWrite(const EspBleGattWrite &write);
-  void dispatchDescriptorWrite(const EspBleGattWrite &write);
+  void dispatchDescriptorWrite(const EspBleGattDescriptorWrite &write);
   void dispatchSubscription(const EspBleGattSubscription &subscription);
   void dispatchSendResult(const EspBleGattSendResult &result);
   bool send(
@@ -634,7 +650,7 @@ private:
   EspBle *owner_;
   EspBleGattServerImpl *impl_ = nullptr;
   WriteCallback writeCallback_;
-  WriteCallback descriptorWriteCallback_;
+  DescriptorWriteCallback descriptorWriteCallback_;
   SubscriptionCallback subscriptionCallback_;
   SendCallback sendCallback_;
 };
@@ -878,6 +894,10 @@ public:
   void update();
 
   bool connect(const EspBleScanResult &scanResult, uint32_t timeoutMilliseconds = 10000);
+  bool connect(
+    const char *address,
+    EspBleAddressType addressType,
+    uint32_t timeoutMilliseconds = 10000);
   bool disconnect(EspBleConnectionId connectionId);
   size_t droppedEventCount() const;
   size_t connectionCount() const;

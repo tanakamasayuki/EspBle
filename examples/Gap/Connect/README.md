@@ -23,6 +23,7 @@ Edit `TARGET_SERVICE_UUID` at the top of the sketch to the UUID your peripheral 
 - `scanResult.advertisesService(uuid)` — match either the 16-bit form (`"1812"`) or the 128-bit form
 - `ble.connect(scanResult)` — accepts the request and returns immediately; the connection itself runs on an internal task
   - `ble.connect(scanResult, timeoutMilliseconds)` — the timeout is enforced from `update()` (default 10000 ms)
+- `ble.connect(address, EspBleAddressType, timeoutMilliseconds)` — connect from a saved address without scanning
 - `ble.onConnected(callback)` / `ble.onDisconnected(callback)` — both carry the same stable library `connection.id`
 - `ble.onConnectionFailed(callback)` — asynchronous failure with `failure.detail`
 
