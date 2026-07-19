@@ -69,6 +69,13 @@ void setup()
       static_cast<unsigned>(event.fieldCount), event.changed ? 1 : 0,
       event.fieldCount > 0 ? static_cast<long>(event.fields[0].value) : 0L, callbackContext());
   });
+  keyboard.onVendorInput([](const EspBleHidVendorInputEvent &event) {
+    Serial.printf("HOST_VENDOR_INPUT report=%u len=%u first=%u last=%u context=%s\n",
+      event.reportId, static_cast<unsigned>(event.rawLength),
+      event.rawLength > 0 ? event.rawData[0] : 0,
+      event.rawLength > 0 ? event.rawData[event.rawLength - 1] : 0,
+      callbackContext());
+  });
 
   EspBleConfig config;
   config.deviceName = "EspBle HID Host Test";
@@ -131,6 +138,20 @@ void loop()
         "HOST_LEDS_WRITTEN success=%u\n",
         ble.hidHost().setKeyboardLeds(
           keyboardConnectionId, true, true, false) ? 1 : 0);
+    }
+    else if (command == 'O')
+    {
+      const uint8_t report[] = {10, 11, 12, 13, 14, 15, 16, 17};
+      Serial.printf("HOST_VENDOR_OUTPUT success=%u\n",
+        ble.hidHost().sendVendorOutput(
+          keyboardConnectionId, report, sizeof(report)) ? 1 : 0);
+    }
+    else if (command == 'F')
+    {
+      const uint8_t report[] = {20, 21, 22, 23, 24, 25, 26, 27};
+      Serial.printf("HOST_VENDOR_FEATURE success=%u\n",
+        ble.hidHost().sendVendorFeature(
+          keyboardConnectionId, report, sizeof(report)) ? 1 : 0);
     }
     else if (command == 'L')
     {

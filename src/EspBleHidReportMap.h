@@ -241,6 +241,7 @@ enum class EspBleHidReportKind : uint8_t
   Gamepad,
   ConsumerControl,
   SystemControl,
+  Vendor,
 };
 
 struct EspBleHidReportMapEntry
@@ -400,6 +401,7 @@ inline EspBleHidReportMapInfo espBleParseHidReportMap(const uint8_t *data, size_
         else if (applicationPage == 0x01 && applicationId == 0x02) kind = EspBleHidReportKind::Mouse;
         else if (applicationPage == 0x01 && (applicationId == 0x04 || applicationId == 0x05)) kind = EspBleHidReportKind::Gamepad;
         else if (applicationPage == 0x01 && applicationId == 0x80) kind = EspBleHidReportKind::SystemControl;
+        else if (applicationPage >= 0xff00) kind = EspBleHidReportKind::Vendor;
       }
       if (depth < 8) collectionKinds[depth++] = kind;
       resetLocal();

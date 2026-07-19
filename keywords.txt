@@ -15,6 +15,7 @@ EspBleHidMouse	KEYWORD1
 EspBleHidConsumerControl	KEYWORD1
 EspBleHidSystemControl	KEYWORD1
 EspBleHidGamepad	KEYWORD1
+EspBleHidVendor	KEYWORD1
 EspBleHidHost	KEYWORD1
 EspBleConfig	KEYWORD1
 EspBleScanConfig	KEYWORD1
@@ -48,6 +49,7 @@ EspBleHidMouseConfig	KEYWORD1
 EspBleHidConsumerControlConfig	KEYWORD1
 EspBleHidSystemControlConfig	KEYWORD1
 EspBleHidGamepadConfig	KEYWORD1
+EspBleHidVendorConfig	KEYWORD1
 EspBleHidKeyboardInputReport	KEYWORD1
 EspBleHidMouseReport	KEYWORD1
 EspBleHidGamepadReport	KEYWORD1
@@ -61,6 +63,9 @@ EspBleHidConsumerControlEvent	KEYWORD1
 EspBleHidSystemControlEvent	KEYWORD1
 EspBleHidFieldValue	KEYWORD1
 EspBleHidGamepadEvent	KEYWORD1
+EspBleHidVendorReport	KEYWORD1
+EspBleHidVendorInputEvent	KEYWORD1
+EspBleHidReportType	KEYWORD1
 EspBleConnectionId	KEYWORD1
 EspBleListenerId	KEYWORD1
 
@@ -79,6 +84,7 @@ hidMouse	KEYWORD2
 hidConsumerControl	KEYWORD2
 hidSystemControl	KEYWORD2
 hidGamepad	KEYWORD2
+hidVendor	KEYWORD2
 hidHost	KEYWORD2
 connect	KEYWORD2
 disconnect	KEYWORD2
@@ -162,6 +168,8 @@ click	KEYWORD2
 releaseAll	KEYWORD2
 setBatteryLevel	KEYWORD2
 onOutputReport	KEYWORD2
+onFeatureReport	KEYWORD2
+sendInput	KEYWORD2
 discover	KEYWORD2
 setKeyboardLeds	KEYWORD2
 setKeyboardLayout	KEYWORD2
@@ -174,6 +182,9 @@ onMouse	KEYWORD2
 onConsumerControl	KEYWORD2
 onSystemControl	KEYWORD2
 onGamepad	KEYWORD2
+onVendorInput	KEYWORD2
+sendVendorOutput	KEYWORD2
+sendVendorFeature	KEYWORD2
 addDiscoveredListener	KEYWORD2
 addKeyboardStateListener	KEYWORD2
 addKeyboardListener	KEYWORD2
@@ -181,6 +192,7 @@ addMouseListener	KEYWORD2
 addConsumerControlListener	KEYWORD2
 addSystemControlListener	KEYWORD2
 addGamepadListener	KEYWORD2
+addVendorInputListener	KEYWORD2
 removeListener	KEYWORD2
 invalidInputReportCount	KEYWORD2
 advertisesService	KEYWORD2
@@ -196,3 +208,7 @@ wasReleased	KEYWORD2
 
 ESPBLE_VERSION_STR	LITERAL1
 EspBleInvalidListenerId	LITERAL1
+ESP_BLE_HID_REPORT_ID_VENDOR	LITERAL1
+ESP_BLE_HID_REPORT_TYPE_INPUT	LITERAL1
+ESP_BLE_HID_REPORT_TYPE_OUTPUT	LITERAL1
+ESP_BLE_HID_REPORT_TYPE_FEATURE	LITERAL1

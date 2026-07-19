@@ -90,6 +90,8 @@ arduino-cli compile --profile esp32s3 examples/<path>
 | [Hid/Mouse](Hid/Mouse/) | HID Device | Five-button relative mouse |
 | [Hid/ConsumerControl](Hid/ConsumerControl/) | HID Device | Volume and play/pause media keys |
 | [Hid/CompositeKeyboardMouse](Hid/CompositeKeyboardMouse/) | HID Device | One composite HID Service with keyboard and mouse reports |
+| [Hid/VendorDevice](Hid/VendorDevice/) | HID Device | Report ID 6 Vendor Input / Output / Feature |
+| [Hid/VendorHost](Hid/VendorHost/) | HID Host | Vendor Input reception and Output / Feature writes |
 | [Info/ScanDump](Info/ScanDump/) | Diagnostics | Dump every advertisement field (UUIDs, manufacturer data, …) |
 | [Info/ConnectionInspector](Info/ConnectionInspector/) | Diagnostics | Interactively connect and dump MTU, security state, bonds, counters |
 
@@ -107,4 +109,5 @@ Suggested pairings on two boards:
 - Gatt/NusServer ↔ Gatt/NusClient
 - Security/StaticPasskeyServer ↔ Security/StaticPasskeyClient
 - Hid/KeyboardDevice / Hid/CompositeKeyboardMouse ↔ Hid/KeyboardHost
+- Hid/VendorDevice ↔ Hid/VendorHost
 - Info/ScanDump and Info/ConnectionInspector can observe anything — the other examples, smartphones, or commercial BLE devices

@@ -101,6 +101,14 @@ static constexpr uint8_t ESP_BLE_HID_REPORT_ID_MOUSE = 0x02;
 static constexpr uint8_t ESP_BLE_HID_REPORT_ID_GAMEPAD = 0x03;
 static constexpr uint8_t ESP_BLE_HID_REPORT_ID_CONSUMER_CONTROL = 0x04;
 static constexpr uint8_t ESP_BLE_HID_REPORT_ID_SYSTEM_CONTROL = 0x05;
+static constexpr uint8_t ESP_BLE_HID_REPORT_ID_VENDOR = 0x06;
+
+enum EspBleHidReportType : uint8_t
+{
+  ESP_BLE_HID_REPORT_TYPE_INPUT = 0x01,
+  ESP_BLE_HID_REPORT_TYPE_OUTPUT = 0x02,
+  ESP_BLE_HID_REPORT_TYPE_FEATURE = 0x03,
+};
 
 static constexpr uint8_t ESP_BLE_HID_MOUSE_LEFT = 0x01;
 static constexpr uint8_t ESP_BLE_HID_MOUSE_RIGHT = 0x02;
@@ -330,6 +338,11 @@ struct EspBleHidConsumerControlConfig : EspBleHidDeviceConfig {};
 struct EspBleHidSystemControlConfig : EspBleHidDeviceConfig {};
 struct EspBleHidGamepadConfig : EspBleHidDeviceConfig {};
 
+struct EspBleHidVendorConfig : EspBleHidDeviceConfig
+{
+  uint8_t reportSize = 63;
+};
+
 struct EspBleHidKeyboardInputReport
 {
   static constexpr uint8_t LeftControl = 0x01;
@@ -499,11 +512,21 @@ struct EspBleHidGamepadEvent : EspBleHidReport
   bool changed = false;
 };
 
+struct EspBleHidVendorReport : EspBleHidReport
+{
+  uint8_t reportType = 0;
+  const uint8_t *data = nullptr;
+  size_t length = 0;
+};
+
+struct EspBleHidVendorInputEvent : EspBleHidReport {};
+
 class EspBle;
 class EspBleAdvertising;
 class EspBleScanner;
 class EspBleGattServer;
 class EspBleHidKeyboard;
+class EspBleHidVendor;
 class EspBleHidHost;
 struct EspBleScannerImpl;
 struct EspBleImpl;
@@ -682,6 +705,7 @@ private:
   friend class EspBleHidConsumerControl;
   friend class EspBleHidSystemControl;
   friend class EspBleHidGamepad;
+  friend class EspBleHidVendor;
   friend struct EspBleHidDeviceManagerImpl;
 
   explicit EspBleHidKeyboard(EspBle *owner);
@@ -779,6 +803,29 @@ private:
   bool configured_ = false;
 };
 
+class EspBleHidVendor
+{
+public:
+  using ReportCallback = std::function<void(const EspBleHidVendorReport &report)>;
+
+  bool configure(const EspBleHidVendorConfig &config = EspBleHidVendorConfig());
+  bool configured() const;
+  bool sendInput(const void *data, size_t length);
+  void onOutputReport(ReportCallback callback);
+  void onFeatureReport(ReportCallback callback);
+
+private:
+  friend class EspBle;
+  friend struct EspBleHidDeviceManagerImpl;
+  explicit EspBleHidVendor(EspBle *owner) : owner_(owner) {}
+  void dispatchPendingReports();
+
+  EspBle *owner_;
+  bool configured_ = false;
+  ReportCallback outputCallback_;
+  ReportCallback featureCallback_;
+};
+
 class EspBleHidHost
 {
 public:
@@ -791,6 +838,7 @@ public:
   using ConsumerControlCallback = std::function<void(const EspBleHidConsumerControlEvent &event)>;
   using SystemControlCallback = std::function<void(const EspBleHidSystemControlEvent &event)>;
   using GamepadCallback = std::function<void(const EspBleHidGamepadEvent &event)>;
+  using VendorInputCallback = std::function<void(const EspBleHidVendorInputEvent &event)>;
 
   bool discover(EspBleConnectionId connectionId);
   bool setKeyboardLeds(
@@ -800,6 +848,10 @@ public:
     bool scrollLock,
     bool compose = false,
     bool kana = false);
+  bool sendVendorOutput(
+    EspBleConnectionId connectionId, const uint8_t *data, size_t length);
+  bool sendVendorFeature(
+    EspBleConnectionId connectionId, const uint8_t *data, size_t length);
   void onDiscovered(DiscoveryCallback callback);
   void onKeyboardState(StateCallback callback);
   void onKeyboard(KeyboardCallback callback);
@@ -807,6 +859,7 @@ public:
   void onConsumerControl(ConsumerControlCallback callback);
   void onSystemControl(SystemControlCallback callback);
   void onGamepad(GamepadCallback callback);
+  void onVendorInput(VendorInputCallback callback);
   EspBleListenerId addDiscoveredListener(DiscoveryCallback callback);
   EspBleListenerId addKeyboardStateListener(StateCallback callback);
   EspBleListenerId addKeyboardListener(KeyboardCallback callback);
@@ -814,6 +867,7 @@ public:
   EspBleListenerId addConsumerControlListener(ConsumerControlCallback callback);
   EspBleListenerId addSystemControlListener(SystemControlCallback callback);
   EspBleListenerId addGamepadListener(GamepadCallback callback);
+  EspBleListenerId addVendorInputListener(VendorInputCallback callback);
   bool removeListener(EspBleListenerId listenerId);
   void setKeyboardLayout(EspBleKeyboardLayout layout);
   EspBleKeyboardLayout keyboardLayout() const;
@@ -830,6 +884,11 @@ private:
   void resetBackend();
   void handleDisconnected(EspBleConnectionId connectionId);
   void dispatchPendingEvents();
+  bool sendVendorReport(
+    EspBleConnectionId connectionId,
+    const uint8_t *data,
+    size_t length,
+    bool feature);
 
   EspBle *owner_;
   EspBleHidKeyboardHostImpl *impl_ = nullptr;
@@ -858,6 +917,7 @@ private:
   std::shared_ptr<ConsumerControlCallback> consumerControlCallback_;
   std::shared_ptr<SystemControlCallback> systemControlCallback_;
   std::shared_ptr<GamepadCallback> gamepadCallback_;
+  std::shared_ptr<VendorInputCallback> vendorInputCallback_;
   ListenerSlot<DiscoveryCallback> discoveryListeners_[MaxListenersPerEvent];
   ListenerSlot<StateCallback> stateListeners_[MaxListenersPerEvent];
   ListenerSlot<KeyboardCallback> keyboardListeners_[MaxListenersPerEvent];
@@ -865,6 +925,7 @@ private:
   ListenerSlot<ConsumerControlCallback> consumerControlListeners_[MaxListenersPerEvent];
   ListenerSlot<SystemControlCallback> systemControlListeners_[MaxListenersPerEvent];
   ListenerSlot<GamepadCallback> gamepadListeners_[MaxListenersPerEvent];
+  ListenerSlot<VendorInputCallback> vendorInputListeners_[MaxListenersPerEvent];
   EspBleListenerId nextListenerId_ = 1;
   mutable std::mutex listenerMutex_;
   EspBleKeyboardLayout keyboardLayout_ = EspBleKeyboardLayout::EnUs;
@@ -1019,6 +1080,7 @@ public:
   EspBleHidConsumerControl &hidConsumerControl();
   EspBleHidSystemControl &hidSystemControl();
   EspBleHidGamepad &hidGamepad();
+  EspBleHidVendor &hidVendor();
   EspBleHidHost &hidHost();
 
   EspBleError lastError() const;
@@ -1036,6 +1098,7 @@ private:
   friend class EspBleHidConsumerControl;
   friend class EspBleHidSystemControl;
   friend class EspBleHidGamepad;
+  friend class EspBleHidVendor;
   friend struct EspBleScannerImpl;
   friend struct EspBleImpl;
   friend struct EspBleGattServerImpl;
@@ -1073,6 +1136,7 @@ private:
   EspBleHidConsumerControl hidConsumerControl_;
   EspBleHidSystemControl hidSystemControl_;
   EspBleHidGamepad hidGamepad_;
+  EspBleHidVendor hidVendor_;
   EspBleHidHost hidKeyboardHost_;
   EspBleImpl *impl_ = nullptr;
   ConnectionCallback connectedCallback_;

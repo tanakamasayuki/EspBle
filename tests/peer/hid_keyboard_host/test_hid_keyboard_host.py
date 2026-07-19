@@ -48,6 +48,29 @@ def test_hid_keyboard_host_discovery_state_and_leds(dut, peers):
     keyboard_device.expect_exact("DEVICE_GAMEPAD_SENT success=1", timeout=10)
     dut.expect_exact("HOST_GAMEPAD fields=39 changed=1 x=10 context=loop", timeout=20)
 
+    keyboard_device.write("v")
+    keyboard_device.expect_exact("DEVICE_VENDOR_INPUT_SENT success=1", timeout=10)
+    dut.expect_exact(
+        "HOST_VENDOR_INPUT report=6 len=8 first=1 last=8 context=loop", timeout=20
+    )
+
+    keyboard_device.write("V")
+    keyboard_device.expect_exact(
+        "DEVICE_VENDOR_SHORT success=0 error=INVALID_ARGUMENT", timeout=10
+    )
+
+    dut.write("O")
+    dut.expect_exact("HOST_VENDOR_OUTPUT success=1", timeout=20)
+    keyboard_device.expect_exact(
+        "DEVICE_VENDOR_OUTPUT type=2 len=8 first=10 last=17 context=loop", timeout=20
+    )
+
+    dut.write("F")
+    dut.expect_exact("HOST_VENDOR_FEATURE success=1", timeout=20)
+    keyboard_device.expect_exact(
+        "DEVICE_VENDOR_FEATURE type=3 len=8 first=20 last=27 context=loop", timeout=20
+    )
+
     dut.write("e")
     dut.expect_exact("HOST_LAYOUT en-US", timeout=10)
     keyboard_device.write("t")

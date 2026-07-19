@@ -57,6 +57,7 @@
 - ✅ HID Keyboard Host（Central / GATT Client、初期6KRO）
 - ✅ HID Keyboard Hostの`onKeyboard()` press/release convenience event
 - ✅ HID Mouse / Consumer Control / System Control / Gamepad Device
+- ✅ Vendor HID Device / Host（Input / Output / Feature、固定Report ID 6）
 - ✅ 複合HID Device（固定Report ID、Report別CCCD/notify routing）
 - ✅ HID Hostの複数Report識別とMouse / Consumer / System / Gamepad event
 - ✅ layout選択と任意のusage-to-ASCII変換

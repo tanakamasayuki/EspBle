@@ -40,12 +40,34 @@ void setup()
     Serial.printf("DEVICE_COMPOSITE_CONFIG_FAILED %s %s\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
     return;
   }
+  EspBleHidVendorConfig vendorConfig;
+  vendorConfig.reportSize = 8;
+  if (!ble.hidVendor().configure(vendorConfig))
+  {
+    Serial.printf("DEVICE_VENDOR_CONFIG_FAILED %s %s\n",
+      ble.lastErrorName(), ble.lastErrorDetail().c_str());
+    return;
+  }
   keyboard.onOutputReport([](const EspBleHidKeyboardOutputReport &report) {
     Serial.printf(
       "DEVICE_OUTPUT leds=%u num=%u caps=%u context=%s\n",
       report.leds,
       report.numLock() ? 1 : 0,
       report.capsLock() ? 1 : 0,
+      callbackContext());
+  });
+  ble.hidVendor().onOutputReport([](const EspBleHidVendorReport &report) {
+    Serial.printf("DEVICE_VENDOR_OUTPUT type=%u len=%u first=%u last=%u context=%s\n",
+      report.reportType, static_cast<unsigned>(report.length),
+      report.length > 0 ? report.data[0] : 0,
+      report.length > 0 ? report.data[report.length - 1] : 0,
+      callbackContext());
+  });
+  ble.hidVendor().onFeatureReport([](const EspBleHidVendorReport &report) {
+    Serial.printf("DEVICE_VENDOR_FEATURE type=%u len=%u first=%u last=%u context=%s\n",
+      report.reportType, static_cast<unsigned>(report.length),
+      report.length > 0 ? report.data[0] : 0,
+      report.length > 0 ? report.data[report.length - 1] : 0,
       callbackContext());
   });
 
@@ -157,6 +179,19 @@ void loop()
     {
       Serial.printf("DEVICE_GAMEPAD_SENT success=%u\n",
         ble.hidGamepad().send(10, -20, 0, 0, 0, 0, ESP_BLE_HID_GAMEPAD_HAT_UP, 3) ? 1 : 0);
+    }
+    else if (command == 'v')
+    {
+      const uint8_t report[] = {1, 2, 3, 4, 5, 6, 7, 8};
+      Serial.printf("DEVICE_VENDOR_INPUT_SENT success=%u\n",
+        ble.hidVendor().sendInput(report, sizeof(report)) ? 1 : 0);
+    }
+    else if (command == 'V')
+    {
+      const uint8_t shortReport[] = {1, 2, 3};
+      Serial.printf("DEVICE_VENDOR_SHORT success=%u error=%s\n",
+        ble.hidVendor().sendInput(shortReport, sizeof(shortReport)) ? 1 : 0,
+        ble.lastErrorName());
     }
     else if (command == 'z')
     {

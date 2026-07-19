@@ -105,6 +105,12 @@ const uint8_t otherTypesMap[] = {
   0x05,0x0c, 0x09,0x01, 0xa1,0x01, 0x85,0x04, 0x75,0x10, 0x95,0x01, 0x81,0x00, 0xc0,
   // System Control ID 5.
   0x05,0x01, 0x09,0x80, 0xa1,0x01, 0x85,0x05, 0x75,0x08, 0x95,0x01, 0x81,0x00, 0xc0,
+  // Vendor-defined ID 6, 8-byte Input / Output / Feature.
+  0x06,0x00,0xff, 0x09,0x01, 0xa1,0x01, 0x85,0x06,
+  0x15,0x00, 0x26,0xff,0x00, 0x75,0x08,
+  0x09,0x01, 0x95,0x08, 0x81,0x02,
+  0x09,0x02, 0x95,0x08, 0x91,0x02,
+  0x09,0x03, 0x95,0x08, 0xb1,0x02, 0xc0,
 };
 } // namespace
 
@@ -175,11 +181,17 @@ int main()
   {
     const EspBleHidReportMapInfo info =
       espBleParseHidReportMap(otherTypesMap, sizeof(otherTypesMap));
-    check("generic other types count", info.count == 4);
+    check("generic other types count", info.count == 5);
     check("generic mouse id", info.kindForReportId(2) == EspBleHidReportKind::Mouse);
     check("generic gamepad id", info.kindForReportId(3) == EspBleHidReportKind::Gamepad);
     check("generic consumer id", info.kindForReportId(4) == EspBleHidReportKind::ConsumerControl);
     check("generic system id", info.kindForReportId(5) == EspBleHidReportKind::SystemControl);
+    check("generic vendor id", info.kindForReportId(6) == EspBleHidReportKind::Vendor);
+    bool vendorLength = false;
+    for (size_t index = 0; index < info.count; ++index)
+      if (info.entries[index].kind == EspBleHidReportKind::Vendor)
+        vendorLength = info.entries[index].inputByteLength() == 8;
+    check("generic vendor input length", vendorLength);
     bool gamepadLength = false;
     size_t gamepadFields = 0;
     bool gamepadX = false;

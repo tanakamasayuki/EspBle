@@ -274,7 +274,7 @@ keyboard.releaseAll();
 
 LED Output Reportはstack callbackからcopyされ、`ble.update()` contextで配送されます。値には送信元Connection IDとNum Lock、Caps Lock、Scroll Lock、Compose、Kanaのbitが含まれます。Battery Levelは`setBatteryLevel(0..100)`で更新します。`configured()`で構成済みかを確認できます。
 
-`hidMouse()`、`hidConsumerControl()`、`hidSystemControl()`、`hidGamepad()`も同じく`begin()`前に`configure()`します。構成したprofileだけが固定Report ID（keyboard=1、mouse=2、gamepad=3、consumer=4、system=5）で1つのHID Serviceへ合成されます。keyboardは`write()` / `pressKey()` / `setLayout()`、mouseは`move()` / `click()`、consumer/systemは`press()` / `release()` / `click()`、gamepadは`send()`を追加で持ちます。詳細は[HID Device仕様](HID_DEVICE_SPEC.ja.md)に記載します。
+`hidMouse()`、`hidConsumerControl()`、`hidSystemControl()`、`hidGamepad()`、`hidVendor()`も同じく`begin()`前に`configure()`します。構成したprofileだけが固定Report ID（keyboard=1、mouse=2、gamepad=3、consumer=4、system=5、vendor=6）で1つのHID Serviceへ合成されます。Vendorは`sendInput()`とOutput / Feature callbackを持ちます。詳細は[HID Device仕様](HID_DEVICE_SPEC.ja.md)に記載します。
 
 ## HID Host API
 
@@ -313,7 +313,7 @@ keyboard.setKeyboardLeds(connectionId,
   /*numLock=*/false, /*capsLock=*/true, /*scrollLock=*/false);
 ```
 
-`discover()`は内部taskでReport Map read、Report Reference列挙、対応する全Input Reportの購読、Battery readを行います。`onMouse()`、`onConsumerControl()`、`onSystemControl()`、`onGamepad()`はkeyboard callbackと同じHost objectへ集約します。`setKeyboardLeds()`はWrite Without Response優先、Discoveryは明示`discover()`、再接続時は新しいConnection IDでの再Discoveryが仕様です。詳細は[HID Host仕様](HID_HOST_SPEC.ja.md)に記載します。
+`discover()`は内部taskでReport Map read、Report Reference列挙、対応する全Input Reportの購読、Battery readを行います。`onMouse()`、`onConsumerControl()`、`onSystemControl()`、`onGamepad()`、`onVendorInput()`はkeyboard callbackと同じHost objectへ集約します。Vendor Output / Featureは`sendVendorOutput()` / `sendVendorFeature()`、keyboard LEDは`setKeyboardLeds()`で送ります。Discoveryは明示`discover()`、再接続時は新しいConnection IDでの再Discoveryが仕様です。詳細は[HID Host仕様](HID_HOST_SPEC.ja.md)に記載します。
 
 ## 結果型
 

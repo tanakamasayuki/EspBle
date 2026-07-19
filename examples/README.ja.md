@@ -90,6 +90,8 @@ arduino-cli compile --profile esp32s3 examples/<path>
 | [Hid/Mouse](Hid/Mouse/) | HID Device | 5ボタン相対mouse |
 | [Hid/ConsumerControl](Hid/ConsumerControl/) | HID Device | 音量・再生/一時停止media key |
 | [Hid/CompositeKeyboardMouse](Hid/CompositeKeyboardMouse/) | HID Device | keyboardとmouseを1つのHID Serviceへ複合 |
+| [Hid/VendorDevice](Hid/VendorDevice/) | HID Device | Report ID 6のVendor Input / Output / Feature |
+| [Hid/VendorHost](Hid/VendorHost/) | HID Host | Vendor Input受信とOutput / Feature書込み |
 | [Info/ScanDump](Info/ScanDump/) | 診断 | advertisementの全フィールド（UUID・Manufacturer Data等）をダンプ |
 | [Info/ConnectionInspector](Info/ConnectionInspector/) | 診断 | 対話式に接続してMTU・security状態・Bond・カウンタをダンプ |
 
@@ -107,4 +109,5 @@ arduino-cli compile --profile esp32s3 examples/<path>
 - Gatt/NusServer ↔ Gatt/NusClient
 - Security/StaticPasskeyServer ↔ Security/StaticPasskeyClient
 - Hid/KeyboardDevice / Hid/CompositeKeyboardMouse ↔ Hid/KeyboardHost
+- Hid/VendorDevice ↔ Hid/VendorHost
 - Info/ScanDump・Info/ConnectionInspectorは任意の相手（他のexampleやスマートフォン、市販BLE機器）の観察に使えます

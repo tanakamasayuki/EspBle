@@ -120,12 +120,13 @@
 
 ## 複合HID再設計で確定（2026-07-19）
 
-1. Device入口は`hidKeyboard()` / `hidMouse()` / `hidConsumerControl()` / `hidSystemControl()` / `hidGamepad()`とし、構成したprofileを1つのHID Serviceへ合成する。
-2. Report IDはEspUsbDevice/EspUsbHostと同じ固定値（keyboard=1、mouse=2、gamepad=3、consumer=4、system=5）とし、利用者configから除く。
+1. Device入口は`hidKeyboard()` / `hidMouse()` / `hidConsumerControl()` / `hidSystemControl()` / `hidGamepad()` / `hidVendor()`とし、構成したprofileを1つのHID Serviceへ合成する。
+2. Report IDはEspUsbDevice/EspUsbHostと同じ固定値（keyboard=1、mouse=2、gamepad=3、consumer=4、system=5、vendor=6）とし、利用者configから除く。
 3. Host入口は`hidHost()`へ集約し、Report Mapで識別した全対応Input Reportを購読して種別別callbackへ配送する。
 4. Host eventは`connectionId`、`reportId`、raw bytesを持つ`EspBleHidReport`を共通baseとする。gamepadは`EspBleHidFieldValue`も配送する。
 5. Device共通マネージャがHID/DIS/Battery登録、Report Map合成、Report characteristic、Report ID別CCCD、暗号化permission、notify routingを一元管理する。
 6. Host listenerはshared ownershipをmutex下でsnapshotし、mutexを解放してから単一callback→listener登録順に実行する。旧keyboard専用型・入口は残さない。
+7. Vendor HIDは1〜64-byteの同一サイズをInput / Output / Featureで共有し、Deviceは`sendInput()`とOutput / Feature callback、Hostは`onVendorInput()`とOutput / Feature送信を提供する。
 
 ## 優先順位候補
 
