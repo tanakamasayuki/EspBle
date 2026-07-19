@@ -9,7 +9,7 @@ Bluetooth Low Energy (BLE) is a radio standard for exchanging small amounts of d
 - **Bluetooth Classic**: always-connected stream transport for audio (A2DP/HFP) and serial (SPP). Comparatively power-hungry.
 - **BLE**: event-oriented, short bursts of communication — sensor values, key input, configuration data. Designed for battery-powered devices.
 
-EspBle is a **BLE-only library** built on the NimBLE backend bundled with Arduino-ESP32. Bluetooth Classic A2DP/HFP/**SPP are not available**. If you want a serial-like link over BLE, use a GATT-based approach such as a Nordic UART Service (NUS) compatible service (a future extension candidate for EspBle).
+EspBle is a **BLE-only library** built on the NimBLE backend bundled with Arduino-ESP32. Bluetooth Classic A2DP/HFP/**SPP are not available**. For a serial-like BLE link, use a GATT-based approach such as the NUS-compatible [server](Gatt/NusServer/) and [client](Gatt/NusClient/) examples.
 
 ### GAP — discovering and connecting
 
@@ -70,6 +70,18 @@ arduino-cli compile --profile esp32s3 examples/<path>
 | [Gatt/SubscribeClient](Gatt/SubscribeClient/) | Central | Subscribe to NotifyServer and print notifications |
 | [Gatt/IndicateServer](Gatt/IndicateServer/) | Peripheral | Acknowledged indications with `onSent()` delivery confirmation |
 | [Gatt/IndicateClient](Gatt/IndicateClient/) | Central | Subscribe to IndicateServer's indications |
+| [Gatt/BatteryServer](Gatt/BatteryServer/) | Peripheral | Standard Battery Level reads and notifications |
+| [Gatt/BatteryClient](Gatt/BatteryClient/) | Central | Read and subscribe to Battery Level |
+| [Gatt/DeviceInfoServer](Gatt/DeviceInfoServer/) | Peripheral | Standard Device Information strings and PnP ID |
+| [Gatt/DeviceInfoClient](Gatt/DeviceInfoClient/) | Central | Sequential Device Information reads and PnP ID decoding |
+| [Gatt/CurrentTimeServer](Gatt/CurrentTimeServer/) | Peripheral | Standard 10-byte Current Time reads and notifications |
+| [Gatt/CurrentTimeClient](Gatt/CurrentTimeClient/) | Central | Current Time decoding and notification subscription |
+| [Gatt/HeartRateServer](Gatt/HeartRateServer/) | Peripheral | Standard Heart Rate Measurement and Body Sensor Location |
+| [Gatt/HeartRateClient](Gatt/HeartRateClient/) | Central | Flags-driven Heart Rate Measurement decoding and subscription |
+| [Gatt/EnvironmentalServer](Gatt/EnvironmentalServer/) | Peripheral | Standard Temperature, Humidity, and Pressure values |
+| [Gatt/EnvironmentalClient](Gatt/EnvironmentalClient/) | Central | Scaled sensor reads and Temperature notification subscription |
+| [Gatt/NusServer](Gatt/NusServer/) | Peripheral | NUS-compatible RX writes and TX notification echo |
+| [Gatt/NusClient](Gatt/NusClient/) | Central | NUS-compatible TX subscription and RX Write Without Response |
 | [Security/JustWorksServer](Security/JustWorksServer/) | Peripheral | Encrypted characteristic with Just Works pairing + bonding |
 | [Security/StaticPasskeyServer](Security/StaticPasskeyServer/) | Peripheral | MITM-authenticated characteristic with a static passkey (display side) |
 | [Security/StaticPasskeyClient](Security/StaticPasskeyClient/) | Central | Passkey input side: `requestSecurity()` and authenticated reads |
@@ -87,6 +99,12 @@ Suggested pairings on two boards:
 - Gatt/Server ↔ Gatt/Client
 - Gatt/NotifyServer ↔ Gatt/SubscribeClient (and Gap/Mtu)
 - Gatt/IndicateServer ↔ Gatt/IndicateClient
+- Gatt/BatteryServer ↔ Gatt/BatteryClient
+- Gatt/DeviceInfoServer ↔ Gatt/DeviceInfoClient
+- Gatt/CurrentTimeServer ↔ Gatt/CurrentTimeClient
+- Gatt/HeartRateServer ↔ Gatt/HeartRateClient
+- Gatt/EnvironmentalServer ↔ Gatt/EnvironmentalClient
+- Gatt/NusServer ↔ Gatt/NusClient
 - Security/StaticPasskeyServer ↔ Security/StaticPasskeyClient
 - Hid/KeyboardDevice / Hid/CompositeKeyboardMouse ↔ Hid/KeyboardHost
 - Info/ScanDump and Info/ConnectionInspector can observe anything — the other examples, smartphones, or commercial BLE devices

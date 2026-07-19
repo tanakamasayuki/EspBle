@@ -9,7 +9,7 @@ Bluetooth Low Energy（BLE）は、小さなデータを低消費電力でやり
 - **Bluetooth Classic**: 常時接続のストリーム通信。音声（A2DP/HFP）やシリアル（SPP）向け。消費電力が大きい。
 - **BLE**: 必要なときだけ短く通信するイベント指向。センサー値、キー入力、設定値など「小さいデータのやり取り」向け。ボタン電池で年単位の動作を狙える。
 
-EspBleはArduino-ESP32同梱のNimBLE backendを使う**BLE専用ライブラリ**です。Bluetooth ClassicのA2DP/HFP/**SPPは使えません**。「BLEでシリアル通信っぽいことをしたい」場合は、Nordic UART Service（NUS）互換などのGATTベースの手法を使います（EspBleでは将来の拡張候補です）。
+EspBleはArduino-ESP32同梱のNimBLE backendを使う**BLE専用ライブラリ**です。Bluetooth ClassicのA2DP/HFP/**SPPは使えません**。「BLEでシリアル通信っぽいことをしたい」場合は、[NUS互換Server](Gatt/NusServer/) / [Client](Gatt/NusClient/)のようなGATTベースの手法を使います。
 
 ### GAP — 相手を見つける・つながる
 
@@ -70,6 +70,18 @@ arduino-cli compile --profile esp32s3 examples/<path>
 | [Gatt/SubscribeClient](Gatt/SubscribeClient/) | Central | NotifyServerを購読してNotificationを表示 |
 | [Gatt/IndicateServer](Gatt/IndicateServer/) | Peripheral | 確認応答つきのIndication配信と`onSent()`での配信確認 |
 | [Gatt/IndicateClient](Gatt/IndicateClient/) | Central | IndicateServerのIndicationを購読 |
+| [Gatt/BatteryServer](Gatt/BatteryServer/) | Peripheral | 標準Battery LevelのReadとNotification |
+| [Gatt/BatteryClient](Gatt/BatteryClient/) | Central | Battery LevelのReadとNotification購読 |
+| [Gatt/DeviceInfoServer](Gatt/DeviceInfoServer/) | Peripheral | 標準Device Information文字列とPnP ID |
+| [Gatt/DeviceInfoClient](Gatt/DeviceInfoClient/) | Central | Device Informationの順次ReadとPnP ID decode |
+| [Gatt/CurrentTimeServer](Gatt/CurrentTimeServer/) | Peripheral | 標準10-byte Current TimeのReadとNotification |
+| [Gatt/CurrentTimeClient](Gatt/CurrentTimeClient/) | Central | Current TimeのdecodeとNotification購読 |
+| [Gatt/HeartRateServer](Gatt/HeartRateServer/) | Peripheral | 標準Heart Rate MeasurementとBody Sensor Location |
+| [Gatt/HeartRateClient](Gatt/HeartRateClient/) | Central | flagsに従うHeart Rate Measurementのdecodeと購読 |
+| [Gatt/EnvironmentalServer](Gatt/EnvironmentalServer/) | Peripheral | 標準Temperature、Humidity、Pressure値 |
+| [Gatt/EnvironmentalClient](Gatt/EnvironmentalClient/) | Central | scale付きSensor値ReadとTemperature Notification購読 |
+| [Gatt/NusServer](Gatt/NusServer/) | Peripheral | NUS互換RX Write / TX Notification echo |
+| [Gatt/NusClient](Gatt/NusClient/) | Central | NUS互換TX購読とRX Write Without Response |
 | [Security/JustWorksServer](Security/JustWorksServer/) | Peripheral | Just Works Pairing + Bondingと暗号化Characteristic |
 | [Security/StaticPasskeyServer](Security/StaticPasskeyServer/) | Peripheral | 静的passkeyによるMITM認証Characteristic（表示側） |
 | [Security/StaticPasskeyClient](Security/StaticPasskeyClient/) | Central | passkey入力側。`requestSecurity()`と認証必須Read |
@@ -87,6 +99,12 @@ arduino-cli compile --profile esp32s3 examples/<path>
 - Gatt/Server ↔ Gatt/Client
 - Gatt/NotifyServer ↔ Gatt/SubscribeClient（およびGap/Mtu）
 - Gatt/IndicateServer ↔ Gatt/IndicateClient
+- Gatt/BatteryServer ↔ Gatt/BatteryClient
+- Gatt/DeviceInfoServer ↔ Gatt/DeviceInfoClient
+- Gatt/CurrentTimeServer ↔ Gatt/CurrentTimeClient
+- Gatt/HeartRateServer ↔ Gatt/HeartRateClient
+- Gatt/EnvironmentalServer ↔ Gatt/EnvironmentalClient
+- Gatt/NusServer ↔ Gatt/NusClient
 - Security/StaticPasskeyServer ↔ Security/StaticPasskeyClient
 - Hid/KeyboardDevice / Hid/CompositeKeyboardMouse ↔ Hid/KeyboardHost
 - Info/ScanDump・Info/ConnectionInspectorは任意の相手（他のexampleやスマートフォン、市販BLE機器）の観察に使えます

@@ -48,7 +48,11 @@
 ## 4. 初期Profile
 
 - ✅ Battery Service Server（HID Keyboard Deviceへの組込み）
-- Battery Service Client / standalone Server
+- ✅ Battery Service Client / standalone Server exampleとPeerテスト
+- ✅ Device Information Service standalone Server / Client exampleとPnP ID Peerテスト
+- ✅ Current Time Service standalone Server / Client exampleと10-byte wire形式Peerテスト
+- ✅ Heart Rate Service standalone Server / Client exampleと可変長Measurement Peerテスト
+- ✅ Environmental Sensing standalone Server / Client exampleと数値scale Peerテスト
 - ✅ HID Keyboard Device（Peripheral / GATT Server）
 - ✅ HID Keyboard Host（Central / GATT Client、初期6KRO）
 - ✅ HID Keyboard Hostの`onKeyboard()` press/release convenience event
@@ -61,7 +65,7 @@
 - ✅ HID Output Report
 - ✅ `hid_keyboard_device` Peerテスト（Battery ReadとOutput Reportを含む）
 - ✅ `hid_keyboard_host` Peerテスト
-- Battery standalone / NKRO
+- Battery profile専用helper / NKRO
 - ✅ 複合HID Device / Host Peerテスト
 - ✅ ESP32KeyBridge input adapterの接続点検証（試作adapterとPeerテスト）
 - ESP32KeyBridge側への正式adapter追加（EspBle公開API確定後）

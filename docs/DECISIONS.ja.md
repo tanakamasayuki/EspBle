@@ -129,13 +129,11 @@
 
 ## 優先順位候補
 
-1. HID Mouse / Consumer Control / composite HID
-2. Device Information / NUS
-3. BLE MIDI
-4. reconnect / resubscribe / discovery cache / multiple connections
-5. Sensor profile
-6. Extended/Periodic Advertising、PHY、Privacy
-7. Beacon / Connectionless（任意Advertisingデータ送受信、iBeacon、Eddystone）
+1. BLE MIDI
+2. reconnect / resubscribe / discovery cache / multiple connections
+3. Sensor profile
+4. Extended/Periodic Advertising、PHY、Privacy
+5. Beacon / Connectionless（任意Advertisingデータ送受信、iBeacon、Eddystone）
 
 候補は採用決定ではありません。ユースケース、実機、Peerテスト方法が揃った機能だけを正式スコープへ移します。
 

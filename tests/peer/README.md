@@ -26,4 +26,9 @@ The profile names do not describe BLE roles. Sketches are flashed to and run on 
 - `hid_security`: a security-enabled HID keyboard device rejects report-map reads, HID discovery, and input-report delivery over an unencrypted link.
 - `hid_boot_keyboard`: a generic GATT server emulates a boot keyboard without a report ID (no Report Reference descriptor) — discovery and input work, and input reports with a length other than 8 leave the key state unchanged and are counted by `invalidInputReportCount()`.
 - `advertise_payload`: the parent uses the bundled API's passive scan to capture the raw advertisement payload and asserts that multiple 16-bit service UUIDs are merged into a single Complete List AD structure with no duplicated AD types.
+- `battery_service`: validates standalone Battery Service one-byte reads, CCCD subscription, notifications, send completion, and unsubscribe.
+- `device_information`: validates standalone Device Information string reads and the standard 7-byte little-endian PnP ID wire format.
+- `current_time`: validates standalone Current Time 10-byte decoding, CCCD subscription, notifications, send completion, and unsubscribe.
+- `heart_rate`: validates Body Sensor Location reads and flags-driven 16-bit heart rate, Energy Expended, and RR-Interval notification decoding.
+- `environmental_sensing`: validates signed Temperature, scaled Humidity and 32-bit Pressure reads, plus Temperature notification and unsubscribe.
 - `connect_disconnect`, `gatt_read_write`, `notify_indicate`, `mtu`, `security_bond`, `security_passkey`, `hid_keyboard_device`, `hid_keyboard_host`, `ble_keybridge_keyboard`: the per-feature suites listed in the [test plan](../TEST_PLAN.ja.md).
