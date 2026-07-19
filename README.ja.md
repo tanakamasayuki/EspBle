@@ -16,8 +16,8 @@ ESP32 Arduino向けの汎用Bluetooth Low Energyライブラリです。**Arduin
 - 汎用GATT Server / Client: Database一覧・既知UUID Discovery、Characteristic/Descriptor Read・Write、操作timeout、Notify / Indicate、購読
 - MTU交換、Connection snapshot、payload上限検証
 - Security: Just Worksと静的passkey Pairing（LE Secure Connections）、Bonding、暗号化/認証Characteristic permission
-- 複合HID Device: keyboard、mouse、consumer/system control、gamepadを1つのHID / Device Information / Battery Service群へ合成
-- HID Host: 全対応Reportを横断Discoveryして種別別eventへ配送。keyboardは256-bit usage snapshot、19 layout、LED出力に対応
+- 複合HID Device: keyboard、mouse、consumer/system control、gamepad、Vendor Input / Output / Featureを1つのHID / Device Information / Battery Service群へ合成
+- HID Host: 全対応Reportを横断Discoveryして種別別eventへ配送。keyboardは256-bit usage snapshot、19 layout、LED出力、Vendorは双方向Reportに対応
 - ユーザーcallbackはすべてloop task上の`ble.update()`から配送されます（BLE stack taskからは呼ばれません）
 
 上記はすべてESP32-S3 2台の自動Peerテストとhost上のunit testで検証しています。詳細は[テスト計画](tests/TEST_PLAN.ja.md)を参照してください。
