@@ -18,6 +18,7 @@ The public API is not stable yet: this is the trial stage ahead of the first rel
 - Security: Just Works and static-passkey pairing (LE Secure Connections), bonding, encrypted/authenticated characteristic permissions
 - Composite HID Device: 6KRO/NKRO keyboard, mouse, consumer/system control, gamepad, and Vendor Input / Output / Feature profiles in one HID / Device Information / Battery service set
 - HID Host: cross-report discovery and events for all supported types; keyboard includes 6KRO/NKRO parsing, 256-bit usage snapshots, 19 layouts, and LED output, while Vendor reports are bidirectional
+- BLE MIDI Device and Host: timestamp/running-status/SysEx packet codec with `EspBleMidiDevice` / `EspBleMidiHost` helpers following the EspUsbDevice/EspUsbHost MIDI API
 - All user callbacks are delivered from `ble.update()` on the loop task — never from the BLE stack task
 
 Everything above is verified with an automated two-board ESP32-S3 peer test suite plus host-side unit tests; see [tests/TEST_PLAN.ja.md](tests/TEST_PLAN.ja.md).

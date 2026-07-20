@@ -129,13 +129,22 @@
 7. Vendor HIDは1〜64-byteの同一サイズをInput / Output / Featureで共有し、Deviceは`sendInput()`とOutput / Feature callback、Hostは`onVendorInput()`とOutput / Feature送信を提供する。
 8. NKROはEspUsbDeviceと同じmodifier 1 byte + 224-bit usage bitmapを採用し、`enableNkro()`は`configure()`前に選択する。Hostは6KRO / NKROを同じ256-bit usage snapshotへ正規化する。29-byte notificationのためMTU 32以上を利用者configで指定する。
 
+## BLE MIDIで確定
+
+1. BLE MIDIの wire codec（timestamp header/lowバイト、13-bit ミリ秒timestamp、MIDI running status、System Real-Time割り込み、複数BLEパケットにまたがるSystem Exclusive）はbackend非依存のheader `EspBleMidi.h`に置き、host unit test（`tests/unit/midi`）で検証する。keymap変換やReport Map parserと同じ「backend非依存ロジックはheader＋unit test」方針に揃える。
+2. profile helperはHID/DIS/Battery等の標準Serviceと同じく、既存の公開GATT API（`gattServer()`とClient側`discover`/`subscribe`/`onNotification`/`writeCharacteristic`）の上に薄く実装する。raw NimBLE登録（HID Device managerの方式）は使わない。MIDI Serviceは単一characteristic（read＋writeWithoutResponse＋notify）で複雑なGATT tableを持たないため、公開API上で完結できる。
+3. APIはUSB姉妹ライブラリに合わせる。`EspBleMidiDevice`は`EspUsbDeviceMidi(device)`同様に`EspBle &`参照で構築し`noteOn`/`noteOff`/`controlChange`/`programChange`/`polyPressure`/`channelPressure`/`pitchBend`を持つ。`EspBleMidiHost`は`EspUsbHost`のMIDI境界に倣い`onMidiMessage`と`sendNoteOn`等を持つ。イベント型`EspBleMidiMessage`は`EspUsbHostMidiMessage`と同じ`status`/`data1`/`data2`/`raw`/`length`を持つ。
+4. profile helperは必要な単一の汎用GATT callback（Deviceは`gattServer().onWritten`/`onSubscriptionChanged`、Hostは`onNotification`/`onCharacteristicDiscovered`/`onSubscribed`）を占有する。MIDI helperを使うsketchはこれらのcallbackを自前で併用しない前提とし、専用用途向けとしてheaderへ明記する。
+5. timestampは`millis() & 0x1FFF`（BLE MIDIの13-bit ミリ秒clock）から生成し、送信は running status圧縮を行わず全メッセージに完全なstatusバイトを付ける（あらゆる準拠receiverが受理できる保守的なencode）。
+6. 送信encoderは単一BLEパケット単位の`EspBleMidiPacketBuilder`とし、header の高位6bit windowを跨ぐtimestampのメッセージはappendを拒否して呼び出し側にflushを促す。大きなSysExの複数パケット分割送信は現時点で未実装とし、初期は単一パケットに収まるSysExのみ送れる（受信側parserは複数パケットSysExを再構成できる）。
+7. `midi_device` Peerテストは親側を同梱BLE API直接実装のCentralにしてEspBleMidiDeviceのwire形式を独立検証し、`midi_host` Peerテストは`peer_device/`側を同梱BLE API直接実装のPeripheralにして running statusパケットのHost decodeを独立検証する。確定#10（一方を同梱BLE API直接実装にする）に沿う。
+
 ## 優先順位候補
 
-1. BLE MIDI
-2. reconnect / resubscribe / discovery cache / multiple connections
-3. Sensor profile
-4. Extended/Periodic Advertising、PHY、Privacy
-5. Beacon / Connectionless（任意Advertisingデータ送受信、iBeacon、Eddystone）
+1. reconnect / resubscribe / discovery cache / multiple connections
+2. Sensor profile
+3. Extended/Periodic Advertising、PHY、Privacy
+4. Beacon / Connectionless（任意Advertisingデータ送受信、iBeacon、Eddystone）
 
 候補は採用決定ではありません。ユースケース、実機、Peerテスト方法が揃った機能だけを正式スコープへ移します。
 

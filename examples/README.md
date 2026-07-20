@@ -37,6 +37,15 @@ HID over GATT (HOGP) carries the same HID model as USB keyboards/mice over BLE. 
 - **HID Device**: keyboard, mouse, consumer/system control, and gamepad profiles can be composed in one HID Service.
 - **HID Host**: one `hidHost()` receives all supported report types; keyboard input is also layout-converted to Unicode/ASCII (19 layouts).
 
+### MIDI — BLE MIDI instruments
+
+BLE MIDI carries MIDI messages over a single GATT characteristic with a 13-bit millisecond timestamp per message. EspBle provides both sides on top of the packet codec in `EspBleMidi.h`:
+
+- **MIDI Device** (`EspBleMidiDevice`): advertise a BLE MIDI peripheral and send Note On/Off, Control Change, and other messages.
+- **MIDI Host** (`EspBleMidiHost`): connect to a BLE MIDI peripheral, subscribe, and receive decoded messages (running status and System Real-Time handled).
+
+The API mirrors the [EspUsbDevice](https://github.com/tanakamasayuki/EspUsbDevice) / [EspUsbHost](https://github.com/tanakamasayuki/EspUsbHost) MIDI classes so code ports across USB and BLE.
+
 ### Security — pairing, bonding, encryption
 
 BLE security is established per connection.
@@ -92,6 +101,8 @@ arduino-cli compile --profile esp32s3 examples/<path>
 | [Hid/CompositeKeyboardMouse](Hid/CompositeKeyboardMouse/) | HID Device | One composite HID Service with keyboard and mouse reports |
 | [Hid/VendorDevice](Hid/VendorDevice/) | HID Device | Report ID 6 Vendor Input / Output / Feature |
 | [Hid/VendorHost](Hid/VendorHost/) | HID Host | Vendor Input reception and Output / Feature writes |
+| [Midi/MidiDevice](Midi/MidiDevice/) | MIDI Device | BLE MIDI peripheral: send Note On/Off, print received MIDI |
+| [Midi/MidiHost](Midi/MidiHost/) | MIDI Host | BLE MIDI central: discover/subscribe and print MIDI, send notes |
 | [Info/ScanDump](Info/ScanDump/) | Diagnostics | Dump every advertisement field (UUIDs, manufacturer data, …) |
 | [Info/ConnectionInspector](Info/ConnectionInspector/) | Diagnostics | Interactively connect and dump MTU, security state, bonds, counters |
 
@@ -110,4 +121,5 @@ Suggested pairings on two boards:
 - Security/StaticPasskeyServer ↔ Security/StaticPasskeyClient
 - Hid/KeyboardDevice / Hid/CompositeKeyboardMouse ↔ Hid/KeyboardHost
 - Hid/VendorDevice ↔ Hid/VendorHost
+- Midi/MidiDevice ↔ Midi/MidiHost
 - Info/ScanDump and Info/ConnectionInspector can observe anything — the other examples, smartphones, or commercial BLE devices

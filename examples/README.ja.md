@@ -37,6 +37,15 @@ HID over GATT（HOGP）は、USBキーボード・マウスと同じHIDの仕組
 - **HID Device**: keyboard、mouse、consumer/system control、gamepadを1つのHID Serviceへ複合できます。
 - **HID Host**: 1つの`hidHost()`で全対応Reportを受信し、keyboardはUnicode/ASCIIへの19レイアウト変換にも対応します。
 
+### MIDI — BLE MIDI楽器
+
+BLE MIDIは、メッセージごとに13-bitミリ秒timestampを付けて単一のGATT characteristicでMIDIを流します。EspBleは`EspBleMidi.h`のpacket codecの上に両側を提供します。
+
+- **MIDI Device**（`EspBleMidiDevice`）: BLE MIDI Peripheralをadvertiseし、Note On/Off、Control Change等を送信します。
+- **MIDI Host**（`EspBleMidiHost`）: BLE MIDI Peripheralへ接続・購読し、デコード済みメッセージ（running statusやSystem Real-Timeも処理）を受信します。
+
+APIは[EspUsbDevice](https://github.com/tanakamasayuki/EspUsbDevice) / [EspUsbHost](https://github.com/tanakamasayuki/EspUsbHost)のMIDIクラスに揃えており、USBとBLEでコードを移植できます。
+
 ### Security — Pairing・Bonding・暗号化
 
 BLEのセキュリティは接続ごとに確立します。
@@ -92,6 +101,8 @@ arduino-cli compile --profile esp32s3 examples/<path>
 | [Hid/CompositeKeyboardMouse](Hid/CompositeKeyboardMouse/) | HID Device | keyboardとmouseを1つのHID Serviceへ複合 |
 | [Hid/VendorDevice](Hid/VendorDevice/) | HID Device | Report ID 6のVendor Input / Output / Feature |
 | [Hid/VendorHost](Hid/VendorHost/) | HID Host | Vendor Input受信とOutput / Feature書込み |
+| [Midi/MidiDevice](Midi/MidiDevice/) | MIDI Device | BLE MIDI Peripheral: Note On/Off送信、受信MIDI表示 |
+| [Midi/MidiHost](Midi/MidiHost/) | MIDI Host | BLE MIDI Central: Discovery/購読してMIDI表示、ノート送信 |
 | [Info/ScanDump](Info/ScanDump/) | 診断 | advertisementの全フィールド（UUID・Manufacturer Data等）をダンプ |
 | [Info/ConnectionInspector](Info/ConnectionInspector/) | 診断 | 対話式に接続してMTU・security状態・Bond・カウンタをダンプ |
 
@@ -110,4 +121,5 @@ arduino-cli compile --profile esp32s3 examples/<path>
 - Security/StaticPasskeyServer ↔ Security/StaticPasskeyClient
 - Hid/KeyboardDevice / Hid/CompositeKeyboardMouse ↔ Hid/KeyboardHost
 - Hid/VendorDevice ↔ Hid/VendorHost
+- Midi/MidiDevice ↔ Midi/MidiHost
 - Info/ScanDump・Info/ConnectionInspectorは任意の相手（他のexampleやスマートフォン、市販BLE機器）の観察に使えます
