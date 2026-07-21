@@ -113,6 +113,8 @@ arduino-cli compile --profile esp32s3 examples/<path>
 | [Gatt/ReferenceTimeUpdateClient](Gatt/ReferenceTimeUpdateClient/) | Central | reference update要求/キャンセルとTime Update StateのRead |
 | [Gatt/BondManagementServer](Gatt/BondManagementServer/) | Peripheral | Bond Management Feature Read、Control Pointのbond削除op code |
 | [Gatt/BondManagementClient](Gatt/BondManagementClient/) | Central | Feature bit fieldのReadとbond削除op codeのWrite |
+| [Gatt/ContinuousGlucoseMonitoringServer](Gatt/ContinuousGlucoseMonitoringServer/) | Peripheral | E2E-CRC保護のCGM FeatureとCGM MeasurementのNotify |
+| [Gatt/ContinuousGlucoseMonitoringClient](Gatt/ContinuousGlucoseMonitoringClient/) | Central | E2E-CRC検証とSFLOAT血糖値/time offsetのdecode |
 | [Gatt/CyclingSpeedCadenceServer](Gatt/CyclingSpeedCadenceServer/) | Peripheral | 多フィールドwheel/crank CSC MeasurementのNotify、Feature、Sensor Location |
 | [Gatt/CyclingSpeedCadenceClient](Gatt/CyclingSpeedCadenceClient/) | Central | Sensor location ReadとCSC MeasurementのNotification decode |
 | [Gatt/RunningSpeedCadenceServer](Gatt/RunningSpeedCadenceServer/) | Peripheral | speed/cadence/stride/distance RSC MeasurementのNotify、Feature、Sensor Location |
@@ -163,6 +165,7 @@ arduino-cli compile --profile esp32s3 examples/<path>
 - Gatt/ProximityServer ↔ Gatt/ProximityClient
 - Gatt/ReferenceTimeUpdateServer ↔ Gatt/ReferenceTimeUpdateClient
 - Gatt/BondManagementServer ↔ Gatt/BondManagementClient
+- Gatt/ContinuousGlucoseMonitoringServer ↔ Gatt/ContinuousGlucoseMonitoringClient
 - Gatt/CyclingSpeedCadenceServer ↔ Gatt/CyclingSpeedCadenceClient
 - Gatt/RunningSpeedCadenceServer ↔ Gatt/RunningSpeedCadenceClient
 - Gatt/GlucoseServer ↔ Gatt/GlucoseClient

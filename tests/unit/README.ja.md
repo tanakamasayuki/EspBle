@@ -14,3 +14,4 @@ uv run --env-file .env pytest unit/
 - `report_map`: `src/EspBleHidReportMap.h`のHID Report Map parserを検証する。項目順序が異なるkeyboard、Report IDなしのboot keyboard、Consumer Control併載機、mouse-only descriptorや途中で切れたdescriptorを扱う。
 - `midi`: `src/EspBleMidi.h`のBLE MIDI packet codecを検証する。timestamp header/lowバイトのデコード、running status（timestampバイト有無の両方）、System Real-Time割り込み、単一/2パケットのSystem Exclusive、異常系パケット、packet builder（単一/複数メッセージ、timestamp window拒否、overflow、round trip）、複数パケットSysEx encoder（単一パケット出力、分割encode→parse round trip、framing検証）を扱う。
 - `medical_float`: `src/EspBleMedicalFloat.h`のIEEE-11073 medical float codecを検証する。32-bit FLOATと16-bit SFLOATのencode/decode round trip、正確なlittle-endianバイト配置、負のmantissa、Health Thermometer/Blood Pressure/Glucoseで使う予約値（NaN / NRes / ±INFINITY）を扱う。
+- `cgm_crc`: `src/EspBleCgmCrc.h`のCGM E2E-CRC codec（CRC-16/MCRF4XX）を検証する。「123456789」の既知チェック値0x6F91、空入力の初期値、代表的なCGM Measurementに対するappend/verify round trip、破損検出、CRCを収められない短すぎる値の拒否を扱う。
