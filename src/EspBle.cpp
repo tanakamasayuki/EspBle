@@ -2932,6 +2932,9 @@ void EspBleAdvertising::clear()
   serviceUuidCount_ = 0;
   appearance_ = 0;
   scanResponseEnabled_ = true;
+  connectable_ = true;
+  intervalMinMs_ = 0;
+  intervalMaxMs_ = 0;
 }
 
 void EspBleAdvertising::setName(const char *name)
@@ -2983,6 +2986,26 @@ void EspBleAdvertising::setAppearance(uint16_t appearance)
 void EspBleAdvertising::setScanResponseEnabled(bool enabled)
 {
   scanResponseEnabled_ = enabled;
+}
+
+void EspBleAdvertising::setConnectable(bool connectable)
+{
+  connectable_ = connectable;
+}
+
+bool EspBleAdvertising::setInterval(uint16_t minMilliseconds, uint16_t maxMilliseconds)
+{
+  // BLE advertising interval range is 20 ms .. 10.24 s.
+  if (minMilliseconds < 20 || maxMilliseconds > 10240 || minMilliseconds > maxMilliseconds)
+  {
+    owner_->setError(EspBleError::InvalidArgument,
+      "advertising interval must be 20..10240 ms with min <= max");
+    return false;
+  }
+  intervalMinMs_ = minMilliseconds;
+  intervalMaxMs_ = maxMilliseconds;
+  owner_->clearError();
+  return true;
 }
 
 bool EspBleAdvertising::start(uint32_t durationSeconds)
@@ -3114,6 +3137,18 @@ bool EspBleAdvertising::start(uint32_t durationSeconds)
       owner_->setError(EspBleError::BackendFailure, "failed to set scan response data");
       return false;
     }
+  }
+
+  // Connectable (default) vs non-connectable (beacon / broadcaster) mode.
+  backend->setAdvertisementType(
+    connectable_ ? BLE_GAP_CONN_MODE_UND : BLE_GAP_CONN_MODE_NON);
+  // Advertising interval: convert milliseconds to 0.625 ms units.
+  if (intervalMinMs_ != 0 && intervalMaxMs_ != 0)
+  {
+    backend->setMinInterval(static_cast<uint16_t>(
+      (static_cast<uint32_t>(intervalMinMs_) * 8) / 5));
+    backend->setMaxInterval(static_cast<uint16_t>(
+      (static_cast<uint32_t>(intervalMaxMs_) * 8) / 5));
   }
 
   if (!backend->start(durationSeconds))

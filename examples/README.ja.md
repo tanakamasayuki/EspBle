@@ -70,6 +70,7 @@ arduino-cli compile --profile esp32s3 examples/<path>
 |---|---|---|
 | [CompileSmoke](CompileSmoke/) | — | 最小のビルド確認。ライブラリバージョンを表示 |
 | [Gap/Advertise](Gap/Advertise/) | Peripheral | 名前+Service UUIDつきのconnectable Legacy Advertising |
+| [Gap/Beacon](Gap/Beacon/) | Broadcaster | manufacturer data＋間隔制御のnon-connectable・non-scannable beacon |
 | [Gap/Scan](Gap/Scan/) | Central | address / RSSI / nameを表示する継続active scan |
 | [Gap/Connect](Gap/Connect/) | Central | Service UUIDをscanして接続。非同期の接続/切断/失敗イベント |
 | [Gap/Mtu](Gap/Mtu/) | Central | 希望MTUの交換とNotification payload上限 |

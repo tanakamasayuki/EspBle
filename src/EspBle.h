@@ -570,6 +570,13 @@ public:
   void setManufacturerData(const uint8_t *data, size_t length);
   void setAppearance(uint16_t appearance);
   void setScanResponseEnabled(bool enabled);
+  // Beacon support. setConnectable(false) advertises in a non-connectable mode
+  // (a pure broadcaster / beacon); pair it with setScanResponseEnabled(false)
+  // for non-connectable non-scannable advertising. setInterval() sets the
+  // advertising interval in milliseconds (20..10240 ms; 0 restores the backend
+  // default). The BLE spec requires >= 100 ms for non-connectable advertising.
+  void setConnectable(bool connectable);
+  bool setInterval(uint16_t minMilliseconds, uint16_t maxMilliseconds);
   bool start(uint32_t durationSeconds = 0);
   bool stop();
   bool isAdvertising() const;
@@ -586,6 +593,9 @@ private:
   size_t serviceUuidCount_ = 0;
   uint16_t appearance_ = 0;
   bool scanResponseEnabled_ = true;
+  bool connectable_ = true;
+  uint16_t intervalMinMs_ = 0;
+  uint16_t intervalMaxMs_ = 0;
 };
 
 class EspBleScanner

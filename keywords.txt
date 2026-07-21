@@ -193,6 +193,8 @@ addServiceUuid	KEYWORD2
 setManufacturerData	KEYWORD2
 setAppearance	KEYWORD2
 setScanResponseEnabled	KEYWORD2
+setConnectable	KEYWORD2
+setInterval	KEYWORD2
 isAdvertising	KEYWORD2
 onResult	KEYWORD2
 droppedResultCount	KEYWORD2
