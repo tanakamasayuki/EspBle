@@ -144,6 +144,7 @@
 1. IEEE-11073 medical FLOAT（32-bit）/ SFLOAT（16-bit）はbackend非依存のheader `EspBleMedicalFloat.h`（host unit test付き、`tests/unit/medical_float`）で共有する。keymap/Report Map/MIDIと同じ「backend非依存の数値・wire変換はheader＋unit test」方針に揃える。Health Thermometer / Blood Pressure / Glucose / Pulse Oximeterで再利用できる。
 2. 標準Sensor Serviceは、Heart Rate / Environmental Sensing / Current Timeと同じく公開GATT API上のexample＋Peerテストで対応する（ライブラリ本体へprofile helperは追加しない）。wire形式の妥当性はcodec unit testで固定し、Peerテストはindicate購読・配送・decodeのend-to-endを検証する。
 3. Health ThermometerのTemperature Measurement（0x2A1C）はIndication、Temperature Type（0x2A1D）はReadとする。`health_thermometer` PeerテストでType Read、Indication購読、37.5℃のFLOAT decodeを検証済み。
+4. Blood PressureのBlood Pressure Measurement（0x2A35）はIndication、Blood Pressure Feature（0x2A49）はReadとする。systolic/diastolic/meanは16-bit SFLOATで、`blood_pressure` PeerテストでFeature Read、Indication購読、120/80/93 mmHgのSFLOAT decodeを検証済み。SFLOATは`EspBleMedicalFloat.h`をFLOATと共有する。
 
 ## 優先順位候補
 
