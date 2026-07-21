@@ -105,6 +105,8 @@ arduino-cli compile --profile esp32s3 examples/<path>
 | [Gatt/AlertNotificationClient](Gatt/AlertNotificationClient/) | Central | Control Point「Notify New Alert Immediately」とNew Alertのdecode |
 | [Gatt/ImmediateAlertServer](Gatt/ImmediateAlertServer/) | Peripheral | Find Meターゲット: Alert LevelのWrite Without Response処理 |
 | [Gatt/ImmediateAlertClient](Gatt/ImmediateAlertClient/) | Central | Find Me locator: Write Without ResponseでAlert Levelを鳴動/解除 |
+| [Gatt/PhoneAlertStatusServer](Gatt/PhoneAlertStatusServer/) | Peripheral | Alert Status / Ringer SettingのNotify、Ringer Control PointでSilent Mode |
+| [Gatt/PhoneAlertStatusClient](Gatt/PhoneAlertStatusClient/) | Central | Alert Status Read、Ringer Control Point操作、Ringer Settingのdecode |
 | [Gatt/CyclingSpeedCadenceServer](Gatt/CyclingSpeedCadenceServer/) | Peripheral | 多フィールドwheel/crank CSC MeasurementのNotify、Feature、Sensor Location |
 | [Gatt/CyclingSpeedCadenceClient](Gatt/CyclingSpeedCadenceClient/) | Central | Sensor location ReadとCSC MeasurementのNotification decode |
 | [Gatt/RunningSpeedCadenceServer](Gatt/RunningSpeedCadenceServer/) | Peripheral | speed/cadence/stride/distance RSC MeasurementのNotify、Feature、Sensor Location |
@@ -151,6 +153,7 @@ arduino-cli compile --profile esp32s3 examples/<path>
 - Gatt/UserDataServer ↔ Gatt/UserDataClient
 - Gatt/AlertNotificationServer ↔ Gatt/AlertNotificationClient
 - Gatt/ImmediateAlertServer ↔ Gatt/ImmediateAlertClient
+- Gatt/PhoneAlertStatusServer ↔ Gatt/PhoneAlertStatusClient
 - Gatt/CyclingSpeedCadenceServer ↔ Gatt/CyclingSpeedCadenceClient
 - Gatt/RunningSpeedCadenceServer ↔ Gatt/RunningSpeedCadenceClient
 - Gatt/GlucoseServer ↔ Gatt/GlucoseClient
