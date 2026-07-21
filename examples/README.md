@@ -103,6 +103,8 @@ arduino-cli compile --profile esp32s3 examples/<path>
 | [Gatt/UserDataClient](Gatt/UserDataClient/) | Central | Write Age/First Name and observe Database Change Increment notifications |
 | [Gatt/AlertNotificationServer](Gatt/AlertNotificationServer/) | Peripheral | Category bitmask read, Control Point writes, New Alert notifications |
 | [Gatt/AlertNotificationClient](Gatt/AlertNotificationClient/) | Central | Control Point "Notify New Alert Immediately" and New Alert decoding |
+| [Gatt/ImmediateAlertServer](Gatt/ImmediateAlertServer/) | Peripheral | Find Me target: Alert Level Write Without Response handling |
+| [Gatt/ImmediateAlertClient](Gatt/ImmediateAlertClient/) | Central | Find Me locator: raise/clear Alert Level via Write Without Response |
 | [Gatt/CyclingSpeedCadenceServer](Gatt/CyclingSpeedCadenceServer/) | Peripheral | Multi-field wheel/crank CSC Measurement notifications, Feature, Sensor Location |
 | [Gatt/CyclingSpeedCadenceClient](Gatt/CyclingSpeedCadenceClient/) | Central | Sensor Location read and CSC Measurement notification decoding |
 | [Gatt/RunningSpeedCadenceServer](Gatt/RunningSpeedCadenceServer/) | Peripheral | Speed/cadence/stride/distance RSC Measurement notifications, Feature, Sensor Location |
@@ -148,6 +150,7 @@ Suggested pairings on two boards:
 - Gatt/LocationNavigationServer ↔ Gatt/LocationNavigationClient
 - Gatt/UserDataServer ↔ Gatt/UserDataClient
 - Gatt/AlertNotificationServer ↔ Gatt/AlertNotificationClient
+- Gatt/ImmediateAlertServer ↔ Gatt/ImmediateAlertClient
 - Gatt/CyclingSpeedCadenceServer ↔ Gatt/CyclingSpeedCadenceClient
 - Gatt/RunningSpeedCadenceServer ↔ Gatt/RunningSpeedCadenceClient
 - Gatt/GlucoseServer ↔ Gatt/GlucoseClient
