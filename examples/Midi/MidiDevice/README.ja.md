@@ -26,6 +26,7 @@
 - `EspBleMidiDevice midi(ble)` — 参照で構築（`EspUsbDeviceMidi(device)`と同様）
 - `midi.begin()` — Serviceを登録。`ble.begin()`より前に呼ぶ
 - `midi.noteOn/noteOff/controlChange/programChange/polyPressure/channelPressure/pitchBend(...)`
+- `midi.sendSysEx(data, length)` — framed SysEx（`0xF0 .. 0xF7`）を送信。大きなメッセージは自動で複数パケットへ分割
 - `midi.onMessage(callback)` — Hostから届いたMIDIを`EspBleMidiMessage`へデコード
 - `midi.ready()` — Hostが購読中はtrue
 

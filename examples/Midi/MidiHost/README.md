@@ -29,6 +29,7 @@ Connects to a BLE MIDI peripheral as a central: scan → connect → discover �
 - `midi.discover(connectionId)` — discover and subscribe (call after connect / security)
 - `midi.onMidiMessage(callback)` — decoded `EspBleMidiMessage` (status/data1/data2/timestamp)
 - `midi.sendNoteOn/sendNoteOff/sendControlChange/sendProgramChange(connectionId, ...)`
+- `midi.sendSysEx(connectionId, data, length)` — send a framed SysEx; large messages are split across packets automatically
 
 ## Expected Serial output
 

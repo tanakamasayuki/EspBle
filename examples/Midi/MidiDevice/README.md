@@ -26,6 +26,7 @@ Turns the board into a BLE MIDI peripheral. Pair it from a phone/tablet DAW or t
 - `EspBleMidiDevice midi(ble)` — construct with a reference (like `EspUsbDeviceMidi(device)`)
 - `midi.begin()` — register the service; call before `ble.begin()`
 - `midi.noteOn/noteOff/controlChange/programChange/polyPressure/channelPressure/pitchBend(...)`
+- `midi.sendSysEx(data, length)` — send a framed SysEx (`0xF0 .. 0xF7`); large messages are split across packets automatically
 - `midi.onMessage(callback)` — MIDI received from the host, decoded into `EspBleMidiMessage`
 - `midi.ready()` — true while a host is subscribed
 

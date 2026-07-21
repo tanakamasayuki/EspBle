@@ -29,6 +29,7 @@ CentralとしてBLE MIDI Peripheralへ接続します。scan → 接続 → Disc
 - `midi.discover(connectionId)` — Discovery・購読（接続後／security完了後に呼ぶ）
 - `midi.onMidiMessage(callback)` — デコード済み`EspBleMidiMessage`（status/data1/data2/timestamp）
 - `midi.sendNoteOn/sendNoteOff/sendControlChange/sendProgramChange(connectionId, ...)`
+- `midi.sendSysEx(connectionId, data, length)` — framed SysExを送信。大きなメッセージは自動で複数パケットへ分割
 
 ## 期待されるSerial出力
 

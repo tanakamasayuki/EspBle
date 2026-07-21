@@ -8,6 +8,9 @@ HOST_MIDI_PATTERN = re.compile(
 )
 HOST_IN_PATTERN = re.compile(rb"HOST_IN count=(\d+) length=(\d+) b2=(\d+) b3=(\d+) b4=(\d+)")
 READY_PATTERN = re.compile(rb"HOST_READY (\d)")
+SYSEX_PATTERN = re.compile(
+    rb"SYSEX complete=(\d+) length=(\d+) first=(\d+) last=(\d+) sum=(\d+)"
+)
 
 
 def _wait_ready(dut, attempts=20):
@@ -66,6 +69,21 @@ def test_midi_host_decodes_running_status(dut, peers):
     assert int(received.group(2)) == 5, "unexpected packet length"
     assert int(received.group(3)) == 0x90, "expected Note On status byte"
     assert int(received.group(4)) == 64 and int(received.group(5)) == 100
+
+    # Host -> device multi-packet SysEx: 300-byte payload split across several
+    # Write Without Response packets issued one at a time by the host's send
+    # queue; the peripheral's independent reassembler must recover it.
+    device.write("c")
+    device.expect_exact("PEER_RESET", timeout=10)
+    dut.write("y")
+    dut.expect_exact("HOST_SYSEX_SENT 1", timeout=10)
+    time.sleep(2.0)
+    device.write("g")
+    sysex = device.expect(SYSEX_PATTERN, timeout=10)
+    assert sysex.group(1) == b"1", "SysEx did not complete on the peripheral"
+    assert int(sysex.group(2)) == 300, f"reassembled length {int(sysex.group(2))} != 300"
+    assert int(sysex.group(3)) == 0 and int(sysex.group(4)) == 43, "payload endpoints wrong"
+    assert int(sysex.group(5)) == 17202, "payload checksum mismatch"
 
     dut.write("d")
     dut.expect_exact("HOST_DISCONNECT_REQUESTED", timeout=10)

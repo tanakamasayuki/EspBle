@@ -93,6 +93,15 @@ void loop()
     {
       Serial.printf("HOST_NOTE_SENT %u\n", midi.sendNoteOn(connectionId, 0, 64, 100) ? 1 : 0);
     }
+    else if (command == 'y' && connectionId != 0)
+    {
+      static uint8_t sysex[302];
+      sysex[0] = 0xF0;
+      for (size_t i = 0; i < 300; ++i)
+        sysex[1 + i] = static_cast<uint8_t>(i & 0x7F);
+      sysex[301] = 0xF7;
+      Serial.printf("HOST_SYSEX_SENT %u\n", midi.sendSysEx(connectionId, sysex, sizeof(sysex)) ? 1 : 0);
+    }
     else if (command == 'q')
     {
       Serial.printf(

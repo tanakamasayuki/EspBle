@@ -58,6 +58,14 @@ public:
         return;
       setSubscribed(subscription.connectionId, subscription.notifications);
     });
+    // A BLE MIDI send is single-in-flight, so a multi-packet SysEx is sent one
+    // packet per send completion, driven from update() via onSent.
+    ble_.gattServer().onSent([this](const EspBleGattSendResult &result) {
+      if (!uuidEquals(result.characteristicUuid, ESP_BLE_MIDI_IO_CHARACTERISTIC_UUID))
+        return;
+      if (sysExActive_)
+        pumpSysEx();
+    });
     return true;
   }
 
@@ -122,9 +130,12 @@ public:
   }
 
   // Send one raw channel/system MIDI message (status byte + up to 2 data bytes)
-  // as a single BLE MIDI notification carrying the current timestamp.
+  // as a single BLE MIDI notification carrying the current timestamp. Rejected
+  // while a SysEx transfer is in progress to avoid interleaving the stream.
   bool sendMessage(const uint8_t *message, size_t length)
   {
+    if (sysExActive_)
+      return false;
     uint8_t buffer[8];
     EspBleMidiPacketBuilder builder(buffer, sizeof(buffer));
     if (!builder.appendMessage(nowTimestamp(), message, length))
@@ -134,8 +145,37 @@ public:
       builder.data(), builder.size());
   }
 
+  // Send a full System Exclusive message (framed 0xF0 .. 0xF7). Large messages
+  // are split across BLE packets that are notified one at a time as previous
+  // sends complete, so this returns after queuing and the transfer proceeds
+  // across ble.update() cycles. Only one SysEx transfer runs at a time.
+  bool sendSysEx(const uint8_t *data, size_t length)
+  {
+    if (sysExActive_)
+      return false;
+    if (data == nullptr || length < 2 || length > kMaxSysEx)
+      return false;
+    size_t maxPayload = minSubscriberPayload();
+    if (maxPayload == 0)
+      return false;
+    if (maxPayload > kPacketCapacity)
+      maxPayload = kPacketCapacity;
+    for (size_t i = 0; i < length; ++i)
+      sysExSource_[i] = data[i];
+    if (!sysExEncoder_.begin(sysExSource_, length, nowTimestamp(), maxPayload))
+      return false;
+    sysExPacketLength_ = 0;
+    sysExActive_ = true;
+    return pumpSysEx();
+  }
+
+  // True while a multi-packet SysEx transfer is still in flight.
+  bool sendingSysEx() const { return sysExActive_; }
+
 private:
   static constexpr size_t MaxSubscribers = 4;
+  static constexpr size_t kMaxSysEx = 320;
+  static constexpr size_t kPacketCapacity = 244;
 
   static uint16_t nowTimestamp() { return static_cast<uint16_t>(millis() & 0x1FFF); }
 
@@ -153,6 +193,58 @@ private:
       message.connectionId = connectionId;
       messageCallback_(message);
     });
+  }
+
+  size_t minSubscriberPayload() const
+  {
+    size_t minPayload = static_cast<size_t>(-1);
+    bool any = false;
+    for (size_t i = 0; i < MaxSubscribers; ++i)
+    {
+      if (!subscribers_[i].used)
+        continue;
+      EspBleConnection connection;
+      if (ble_.connection(subscribers_[i].connectionId, connection))
+      {
+        any = true;
+        const size_t payload = connection.maximumNotificationPayload();
+        if (payload < minPayload)
+          minPayload = payload;
+      }
+    }
+    return any ? minPayload : 0;
+  }
+
+  // Emit the next SysEx packet if one can be sent now. If the send stack is busy
+  // the packet is retained and retried from the next onSent.
+  bool pumpSysEx()
+  {
+    if (!sysExActive_)
+      return false;
+    if (sysExPacketLength_ == 0)
+    {
+      if (sysExEncoder_.finished())
+      {
+        sysExActive_ = false;
+        return false;
+      }
+      sysExPacketLength_ = sysExEncoder_.next(sysExPacket_, sizeof(sysExPacket_));
+      if (sysExPacketLength_ == 0)
+      {
+        sysExActive_ = false;
+        return false;
+      }
+    }
+    const bool sent = ble_.gattServer().notify(
+      ESP_BLE_MIDI_SERVICE_UUID, ESP_BLE_MIDI_IO_CHARACTERISTIC_UUID,
+      sysExPacket_, sysExPacketLength_);
+    if (sent)
+    {
+      sysExPacketLength_ = 0;
+      if (sysExEncoder_.finished())
+        sysExActive_ = false;
+    }
+    return sent;
   }
 
   void setSubscribed(EspBleConnectionId connectionId, bool subscribed)
@@ -195,6 +287,12 @@ private:
   EspBleMidiParser parser_;
   Subscriber subscribers_[MaxSubscribers];
   size_t subscriberCount_ = 0;
+
+  EspBleMidiSysExEncoder sysExEncoder_;
+  uint8_t sysExSource_[kMaxSysEx];
+  uint8_t sysExPacket_[kPacketCapacity];
+  size_t sysExPacketLength_ = 0;
+  bool sysExActive_ = false;
 };
 
 // Central-side BLE MIDI. After connecting (and completing security if enabled),
@@ -231,6 +329,13 @@ public:
         return;
       if (result.success)
         markReady(result.connectionId);
+    });
+    // Drive the next SysEx packet from each write completion (single-in-flight).
+    ble_.onCharacteristicWritten([this](const EspBleGattResult &result) {
+      if (!uuidEquals(result.characteristicUuid, ESP_BLE_MIDI_IO_CHARACTERISTIC_UUID))
+        return;
+      if (sysExActive_ && result.connectionId == sysExConnectionId_)
+        pumpSysEx();
     });
     return true;
   }
@@ -287,9 +392,11 @@ public:
   }
 
   // Send one raw channel/system MIDI message to a connected device using a
-  // Write Without Response.
+  // Write Without Response. Rejected while a SysEx transfer is in progress.
   bool sendMessage(EspBleConnectionId connectionId, const uint8_t *message, size_t length)
   {
+    if (sysExActive_ && connectionId == sysExConnectionId_)
+      return false;
     uint8_t buffer[8];
     EspBleMidiPacketBuilder builder(buffer, sizeof(buffer));
     if (!builder.appendMessage(nowTimestamp(), message, length))
@@ -299,8 +406,38 @@ public:
       builder.data(), builder.size(), false);
   }
 
+  // Send a full System Exclusive message (framed 0xF0 .. 0xF7) to a device.
+  // Large messages are split across BLE writes issued one at a time as previous
+  // writes complete. Only one SysEx transfer runs at a time across the host.
+  bool sendSysEx(EspBleConnectionId connectionId, const uint8_t *data, size_t length)
+  {
+    if (sysExActive_)
+      return false;
+    if (data == nullptr || length < 2 || length > kMaxSysEx)
+      return false;
+    EspBleConnection connection;
+    if (!ble_.connection(connectionId, connection))
+      return false;
+    size_t maxPayload = connection.maximumNotificationPayload();
+    if (maxPayload > kPacketCapacity)
+      maxPayload = kPacketCapacity;
+    for (size_t i = 0; i < length; ++i)
+      sysExSource_[i] = data[i];
+    if (!sysExEncoder_.begin(sysExSource_, length, nowTimestamp(), maxPayload))
+      return false;
+    sysExPacketLength_ = 0;
+    sysExActive_ = true;
+    sysExConnectionId_ = connectionId;
+    return pumpSysEx();
+  }
+
+  // True while a multi-packet SysEx transfer is still in flight.
+  bool sendingSysEx() const { return sysExActive_; }
+
 private:
   static constexpr size_t MaxConnections = 4;
+  static constexpr size_t kMaxSysEx = 320;
+  static constexpr size_t kPacketCapacity = 244;
 
   static uint16_t nowTimestamp() { return static_cast<uint16_t>(millis() & 0x1FFF); }
 
@@ -354,9 +491,46 @@ private:
     });
   }
 
+  bool pumpSysEx()
+  {
+    if (!sysExActive_)
+      return false;
+    if (sysExPacketLength_ == 0)
+    {
+      if (sysExEncoder_.finished())
+      {
+        sysExActive_ = false;
+        return false;
+      }
+      sysExPacketLength_ = sysExEncoder_.next(sysExPacket_, sizeof(sysExPacket_));
+      if (sysExPacketLength_ == 0)
+      {
+        sysExActive_ = false;
+        return false;
+      }
+    }
+    const bool sent = ble_.writeCharacteristic(
+      sysExConnectionId_, ESP_BLE_MIDI_SERVICE_UUID, ESP_BLE_MIDI_IO_CHARACTERISTIC_UUID,
+      sysExPacket_, sysExPacketLength_, false);
+    if (sent)
+    {
+      sysExPacketLength_ = 0;
+      if (sysExEncoder_.finished())
+        sysExActive_ = false;
+    }
+    return sent;
+  }
+
   EspBle &ble_;
   MessageCallback messageCallback_;
   Slot slots_[MaxConnections];
+
+  EspBleMidiSysExEncoder sysExEncoder_;
+  uint8_t sysExSource_[kMaxSysEx];
+  uint8_t sysExPacket_[kPacketCapacity];
+  size_t sysExPacketLength_ = 0;
+  bool sysExActive_ = false;
+  EspBleConnectionId sysExConnectionId_ = 0;
 };
 
 #endif // ESP_BLE_MIDI_PROFILE_H

@@ -7,6 +7,9 @@ NOTIFY_PATTERN = re.compile(
 DEVICE_IN_PATTERN = re.compile(
     rb"DEVICE_IN count=(\d+) status=(\d+) data1=(\d+) data2=(\d+) context=(\w+)"
 )
+SYSEX_PATTERN = re.compile(
+    rb"SYSEX complete=(\d+) length=(\d+) first=(\d+) last=(\d+) sum=(\d+)"
+)
 
 
 def _notify(dut):
@@ -69,6 +72,22 @@ def test_midi_device_wire_format(dut, peers):
     assert note_off["count"] >= 2, note_off
     assert note_off["bytes"][2] == 0x80, note_off
     assert note_off["bytes"][3] == 60 and note_off["bytes"][4] == 0, note_off
+
+    # Multi-packet SysEx: a 300-byte payload spans several notifications sent one
+    # at a time from the device's async send queue; the independent reassembler
+    # on the central must recover the exact payload.
+    dut.write("c")
+    dut.expect_exact("MIDI_COUNTERS_RESET", timeout=10)
+    device.write("y")
+    device.expect_exact("SYSEX_SENT 1", timeout=10)
+    time.sleep(2.0)
+    dut.write("g")
+    sysex = dut.expect(SYSEX_PATTERN, timeout=10)
+    assert sysex.group(1) == b"1", "SysEx did not complete (missing F7 or dropped packets)"
+    assert int(sysex.group(2)) == 300, f"reassembled length {int(sysex.group(2))} != 300"
+    assert int(sysex.group(3)) == 0, "first payload byte wrong"
+    assert int(sysex.group(4)) == 43, "last payload byte wrong"
+    assert int(sysex.group(5)) == 17202, "payload checksum mismatch"
 
     # Host -> device: the central writes a raw Control Change packet.
     dut.write("w")

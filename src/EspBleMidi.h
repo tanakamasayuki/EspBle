@@ -368,4 +368,85 @@ private:
   uint8_t headerHigh_ = 0;
 };
 
+// Splits one framed System Exclusive message (0xF0 .. 0xF7) into BLE MIDI
+// packets that each fit `maxPayload` bytes, emitting a single packet per
+// next() call. This lets a large SysEx be sent across several notifications or
+// writes that are issued one at a time (BLE MIDI sends are single-in-flight),
+// driving the next packet from each send-completion event. The source bytes are
+// referenced, not copied, so the caller must keep them valid until finished().
+class EspBleMidiSysExEncoder
+{
+public:
+  // Prepare to encode. Returns false (and leaves finished() true) if the
+  // message is not a valid framed SysEx or maxPayload is too small.
+  bool begin(const uint8_t *data, size_t length, uint16_t timestampMs, size_t maxPayload)
+  {
+    data_ = data;
+    length_ = length;
+    timestamp_ = static_cast<uint16_t>(timestampMs & 0x1FFF);
+    innerIndex_ = 0;
+    firstPacket_ = true;
+    finished_ = true;
+    perPacket_ = maxPayload;
+    if (data == nullptr || length < 2 || data[0] != 0xF0 || data[length - 1] != 0xF7)
+      return false;
+    if (perPacket_ < 4)
+      return false;
+    finished_ = false;
+    return true;
+  }
+
+  bool finished() const { return finished_; }
+
+  // Write the next packet into buffer. Returns the packet length, or 0 when
+  // there is nothing more to send.
+  size_t next(uint8_t *buffer, size_t capacity)
+  {
+    if (finished_ || buffer == nullptr)
+      return 0;
+    size_t perPacket = perPacket_ < capacity ? perPacket_ : capacity;
+    if (perPacket < 4)
+    {
+      finished_ = true;
+      return 0;
+    }
+    const uint8_t headerByte = static_cast<uint8_t>(0x80 | ((timestamp_ >> 7) & 0x3F));
+    const uint8_t timestampByte = static_cast<uint8_t>(0x80 | (timestamp_ & 0x7F));
+    const size_t innerCount = length_ - 2; // inner bytes = data_[1 .. length_-2]
+
+    size_t pos = 0;
+    buffer[pos++] = headerByte;
+    if (firstPacket_)
+    {
+      buffer[pos++] = timestampByte;
+      buffer[pos++] = 0xF0;
+      firstPacket_ = false;
+    }
+    const size_t room = perPacket - pos;
+    const size_t remaining = innerCount - innerIndex_;
+    if (remaining + 2 <= room)
+    {
+      for (size_t k = 0; k < remaining; ++k)
+        buffer[pos++] = data_[1 + innerIndex_++];
+      buffer[pos++] = timestampByte;
+      buffer[pos++] = 0xF7;
+      finished_ = true;
+      return pos;
+    }
+    size_t take = room < remaining ? room : remaining;
+    for (size_t k = 0; k < take; ++k)
+      buffer[pos++] = data_[1 + innerIndex_++];
+    return pos;
+  }
+
+private:
+  const uint8_t *data_ = nullptr;
+  size_t length_ = 0;
+  uint16_t timestamp_ = 0;
+  size_t innerIndex_ = 0;
+  bool firstPacket_ = true;
+  bool finished_ = true;
+  size_t perPacket_ = 0;
+};
+
 #endif // ESP_BLE_MIDI_H

@@ -72,6 +72,17 @@ void loop()
     {
       Serial.printf("NOTE_OFF_SENT %u\n", midi.noteOff(0, 60, 0) ? 1 : 0);
     }
+    else if (command == 'y')
+    {
+      // A 300-byte SysEx payload always exceeds one packet (packets are capped
+      // at 244 bytes), forcing the multi-packet send queue regardless of MTU.
+      static uint8_t sysex[302];
+      sysex[0] = 0xF0;
+      for (size_t i = 0; i < 300; ++i)
+        sysex[1 + i] = static_cast<uint8_t>(i & 0x7F);
+      sysex[301] = 0xF7;
+      Serial.printf("SYSEX_SENT %u\n", midi.sendSysEx(sysex, sizeof(sysex)) ? 1 : 0);
+    }
     else if (command == 'q')
     {
       Serial.printf("DEVICE_IN count=%u status=%u data1=%u data2=%u context=%s\n",

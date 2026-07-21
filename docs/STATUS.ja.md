@@ -14,9 +14,9 @@ BLE MIDIはbackend非依存のpacket codec（timestamp・running status・複数
 
 ## 検証状況
 
-- Peer test: 24 suite、35 test。接続、GATT、Security、標準Service、複合HID、NKRO、BLE MIDI、異常系、再接続を実機検証
-- Unit test: keymap変換、HID Report Map parser、BLE MIDI codec
-- Example compile: ESP32-S3向け38 example
+- Peer test: 25 suite、36 test。接続、GATT、Security、標準Service、複合HID、NKRO、BLE MIDI、Health Thermometer、異常系、再接続を実機検証
+- Unit test: keymap変換、HID Report Map parser、BLE MIDI codec、IEEE-11073 medical float codec
+- Example compile: ESP32-S3向け40 example
 - ESP32KeyBridge試作adapter: raw usage、remap、modifier、切断release、LED返送、Bond再接続をPeer検証
 
 実行方法は[tests/TEST_PLAN.ja.md](../tests/TEST_PLAN.ja.md)、リリース時の確認項目は[RELEASE_CHECKLIST.ja.md](RELEASE_CHECKLIST.ja.md)を参照してください。
@@ -26,7 +26,7 @@ BLE MIDIはbackend非依存のpacket codec（timestamp・running status・複数
 - 1.0.0リリース前のため、公開APIは互換性を保証しません。
 - HID KeyboardのBoot Protocol characteristic / Protocol Mode切替は未対応です。
 - Custom HIDは固定Vendor Report以外の任意Report Descriptorをまだ登録できません。
-- BLE MIDIの送信は単一BLEパケットに収まるメッセージのみで、大きなSysExの複数パケット分割送信は未対応です（受信側parserは複数パケットSysExを再構成できます）。
+- BLE MIDIのSysEx送信は1メッセージ320 byteまでです（送受信ともに複数BLEパケットへ分割・再構成します）。同時に進行できるSysEx送信は1件です。
 - Gamepad Hostはvariable input fieldを解析しますが、vendor固有array inputの意味解釈は行いません。
 - HID Hostは接続ごとに明示的な`discover(connectionId)`が必要です。Security有効時はSecurity完了後に呼びます。
 - Central側GATT operationは同時1件です。operation queueと強制cancelはありません。
@@ -55,7 +55,7 @@ BLE MIDIはbackend非依存のpacket codec（timestamp・running status・複数
 2. HID Boot Protocol切替
 3. 実行時passkey / Numeric Comparison
 4. reconnect cache / resubscribe / multiple connections
-5. Sensor profile、大きなSysExの複数パケット送信
+5. Sensor profile
 6. Extended / Periodic Advertising、PHY、Privacy、Beacon
 
 ## 更新ルール

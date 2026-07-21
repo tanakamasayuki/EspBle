@@ -25,6 +25,64 @@ volatile uint32_t notifyCount = 0;
 uint8_t lastNotify[16] = {0};
 volatile size_t lastNotifyLength = 0;
 
+// Independent BLE MIDI SysEx reassembler (does not use EspBle), so the device's
+// multi-packet SysEx wire format is validated against separate logic.
+uint8_t sysexBuffer[512] = {0};
+size_t sysexLength = 0;
+bool sysexInProgress = false;
+bool sysexComplete = false;
+
+static void feedSysEx(const uint8_t *data, size_t length)
+{
+  size_t i = 1; // skip the packet header byte
+  while (i < length)
+  {
+    const uint8_t b = data[i];
+    if (sysexInProgress)
+    {
+      if (b & 0x80)
+      {
+        if (i + 1 >= length)
+          break;
+        const uint8_t status = data[i + 1];
+        i += 2;
+        if (status == 0xF7)
+        {
+          sysexInProgress = false;
+          sysexComplete = true;
+        }
+        // real-time status bytes (>= 0xF8) would be ignored here
+      }
+      else
+      {
+        if (sysexLength < sizeof(sysexBuffer))
+          sysexBuffer[sysexLength++] = b;
+        ++i;
+      }
+    }
+    else
+    {
+      if (b & 0x80)
+      {
+        if (i + 1 >= length)
+          break;
+        const uint8_t status = data[i + 1];
+        i += 2;
+        if (status == 0xF0)
+        {
+          sysexInProgress = true;
+          sysexComplete = false;
+          sysexLength = 0;
+        }
+      }
+      else
+      {
+        ++i;
+      }
+    }
+  }
+}
+
 class ScanCallbacks : public BLEAdvertisedDeviceCallbacks
 {
   void onResult(BLEAdvertisedDevice device) override
@@ -44,6 +102,7 @@ static void midiNotification(BLERemoteCharacteristic *, uint8_t *data, size_t le
     lastNotify[i] = data[i];
   lastNotifyLength = copy;
   ++notifyCount;
+  feedSysEx(data, length);
 }
 
 static bool connectAndSubscribe()
@@ -107,7 +166,21 @@ void loop()
     {
       notifyCount = 0;
       lastNotifyLength = 0;
+      sysexLength = 0;
+      sysexInProgress = false;
+      sysexComplete = false;
       Serial.println("MIDI_COUNTERS_RESET");
+    }
+    else if (command == 'g')
+    {
+      uint32_t sum = 0;
+      for (size_t i = 0; i < sysexLength; ++i)
+        sum += sysexBuffer[i];
+      Serial.printf("SYSEX complete=%u length=%u first=%u last=%u sum=%u\n",
+        sysexComplete ? 1 : 0, static_cast<unsigned>(sysexLength),
+        sysexLength > 0 ? sysexBuffer[0] : 0,
+        sysexLength > 0 ? sysexBuffer[sysexLength - 1] : 0,
+        static_cast<unsigned>(sum));
     }
     else if (command == 'q')
     {

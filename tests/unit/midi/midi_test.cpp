@@ -272,6 +272,82 @@ int main()
       msgs[1].data2 == 0x64 && msgs[1].timestampMs == 201);
   }
 
+  // SysEx encoder: a message that fits one packet yields a single packet with
+  // both framing timestamps.
+  {
+    const uint8_t sysex[] = {0xF0, 0x7D, 0x11, 0x22, 0x33, 0xF7};
+    EspBleMidiSysExEncoder encoder;
+    check("encoder begin", encoder.begin(sysex, sizeof(sysex), 165, 64));
+    uint8_t packet[64];
+    const size_t length = encoder.next(packet, sizeof(packet));
+    check("encoder single finished", encoder.finished());
+    // header, ts, F0, 7D, 11, 22, 33, ts, F7
+    check("encoder single length", length == 9);
+    check("encoder single header", (packet[0] & 0x80) && !(packet[0] & 0x40));
+    check("encoder single ts", packet[1] & 0x80);
+    check("encoder single f0", packet[2] == 0xF0);
+    check("encoder single f7", packet[length - 1] == 0xF7);
+    check("encoder single end ts", packet[length - 2] & 0x80);
+  }
+
+  // SysEx encoder: with a tiny packet size the message splits across several
+  // packets; feeding every packet back through the parser must reassemble the
+  // exact payload with correct start/end framing.
+  {
+    uint8_t sysex[12];
+    sysex[0] = 0xF0;
+    for (size_t i = 0; i < 10; ++i)
+      sysex[1 + i] = static_cast<uint8_t>(i + 1); // payload 0x01..0x0a
+    sysex[11] = 0xF7;
+
+    EspBleMidiSysExEncoder encoder;
+    check("encoder split begin", encoder.begin(sysex, sizeof(sysex), 300, 5));
+
+    EspBleMidiParser parser;
+    std::vector<uint8_t> reassembled;
+    bool started = false;
+    bool ended = false;
+    size_t packetCount = 0;
+    bool parseOk = true;
+    uint8_t packet[5];
+    while (!encoder.finished())
+    {
+      const size_t length = encoder.next(packet, sizeof(packet));
+      if (length == 0)
+        break;
+      ++packetCount;
+      const bool ok = parser.parse(packet, length, [&](const EspBleMidiMessage &m) {
+        if (!m.sysEx)
+          return;
+        if (m.sysExStart)
+          started = true;
+        if (m.sysExEnd)
+          ended = true;
+        for (size_t i = 0; i < m.sysExLength; ++i)
+          reassembled.push_back(m.sysExData[i]);
+      });
+      parseOk = parseOk && ok;
+    }
+    check("encoder split parse ok", parseOk);
+    check("encoder split multiple packets", packetCount >= 3);
+    check("encoder split started", started);
+    check("encoder split ended", ended);
+    check("encoder split payload length", reassembled.size() == 10);
+    bool payloadMatches = reassembled.size() == 10;
+    for (size_t i = 0; i < reassembled.size() && payloadMatches; ++i)
+      payloadMatches = reassembled[i] == static_cast<uint8_t>(i + 1);
+    check("encoder split payload matches", payloadMatches);
+  }
+
+  // SysEx encoder rejects unframed input and too-small packets.
+  {
+    const uint8_t notFramed[] = {0x90, 0x3C, 0x40};
+    const uint8_t framed[] = {0xF0, 0x11, 0xF7};
+    EspBleMidiSysExEncoder encoder;
+    check("encoder rejects unframed", !encoder.begin(notFramed, sizeof(notFramed), 0, 64) && encoder.finished());
+    check("encoder rejects small payload", !encoder.begin(framed, sizeof(framed), 0, 3) && encoder.finished());
+  }
+
   if (failures != 0)
   {
     std::printf("%d check(s) failed\n", failures);

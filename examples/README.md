@@ -89,6 +89,8 @@ arduino-cli compile --profile esp32s3 examples/<path>
 | [Gatt/HeartRateClient](Gatt/HeartRateClient/) | Central | Flags-driven Heart Rate Measurement decoding and subscription |
 | [Gatt/EnvironmentalServer](Gatt/EnvironmentalServer/) | Peripheral | Standard Temperature, Humidity, and Pressure values |
 | [Gatt/EnvironmentalClient](Gatt/EnvironmentalClient/) | Central | Scaled sensor reads and Temperature notification subscription |
+| [Gatt/HealthThermometerServer](Gatt/HealthThermometerServer/) | Peripheral | IEEE-11073 FLOAT Temperature Measurement indications and Temperature Type |
+| [Gatt/HealthThermometerClient](Gatt/HealthThermometerClient/) | Central | Temperature Type read and FLOAT measurement indication decoding |
 | [Gatt/NusServer](Gatt/NusServer/) | Peripheral | NUS-compatible RX writes and TX notification echo |
 | [Gatt/NusClient](Gatt/NusClient/) | Central | NUS-compatible TX subscription and RX Write Without Response |
 | [Security/JustWorksServer](Security/JustWorksServer/) | Peripheral | Encrypted characteristic with Just Works pairing + bonding |
@@ -117,6 +119,7 @@ Suggested pairings on two boards:
 - Gatt/CurrentTimeServer ↔ Gatt/CurrentTimeClient
 - Gatt/HeartRateServer ↔ Gatt/HeartRateClient
 - Gatt/EnvironmentalServer ↔ Gatt/EnvironmentalClient
+- Gatt/HealthThermometerServer ↔ Gatt/HealthThermometerClient
 - Gatt/NusServer ↔ Gatt/NusClient
 - Security/StaticPasskeyServer ↔ Security/StaticPasskeyClient
 - Hid/KeyboardDevice / Hid/CompositeKeyboardMouse ↔ Hid/KeyboardHost

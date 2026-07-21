@@ -136,8 +136,14 @@
 3. APIはUSB姉妹ライブラリに合わせる。`EspBleMidiDevice`は`EspUsbDeviceMidi(device)`同様に`EspBle &`参照で構築し`noteOn`/`noteOff`/`controlChange`/`programChange`/`polyPressure`/`channelPressure`/`pitchBend`を持つ。`EspBleMidiHost`は`EspUsbHost`のMIDI境界に倣い`onMidiMessage`と`sendNoteOn`等を持つ。イベント型`EspBleMidiMessage`は`EspUsbHostMidiMessage`と同じ`status`/`data1`/`data2`/`raw`/`length`を持つ。
 4. profile helperは必要な単一の汎用GATT callback（Deviceは`gattServer().onWritten`/`onSubscriptionChanged`、Hostは`onNotification`/`onCharacteristicDiscovered`/`onSubscribed`）を占有する。MIDI helperを使うsketchはこれらのcallbackを自前で併用しない前提とし、専用用途向けとしてheaderへ明記する。
 5. timestampは`millis() & 0x1FFF`（BLE MIDIの13-bit ミリ秒clock）から生成し、送信は running status圧縮を行わず全メッセージに完全なstatusバイトを付ける（あらゆる準拠receiverが受理できる保守的なencode）。
-6. 送信encoderは単一BLEパケット単位の`EspBleMidiPacketBuilder`とし、header の高位6bit windowを跨ぐtimestampのメッセージはappendを拒否して呼び出し側にflushを促す。大きなSysExの複数パケット分割送信は現時点で未実装とし、初期は単一パケットに収まるSysExのみ送れる（受信側parserは複数パケットSysExを再構成できる）。
+6. 単発メッセージ送信は単一BLEパケット単位の`EspBleMidiPacketBuilder`とし、header の高位6bit windowを跨ぐtimestampのメッセージはappendを拒否して呼び出し側にflushを促す。大きなSysExは`EspBleMidiSysExEncoder`でBLEパケット（最大244 byte）へ分割し、`sendSysEx()`が送信完了イベント（Device=`onSent` / Host=`onCharacteristicWritten`、いずれも`update()` context）駆動で1パケットずつ送る非同期queueとする。BLE MIDIの送信は同時1件（`sending`/GATT操作排他）なので、この完了イベント駆動が排他制約と整合する。SysEx進行中は単発メッセージ送信をfalseで拒否してwire上のstreamを乱さない。1メッセージ上限は320 byteとする。
 7. `midi_device` Peerテストは親側を同梱BLE API直接実装のCentralにしてEspBleMidiDeviceのwire形式を独立検証し、`midi_host` Peerテストは`peer_device/`側を同梱BLE API直接実装のPeripheralにして running statusパケットのHost decodeを独立検証する。確定#10（一方を同梱BLE API直接実装にする）に沿う。
+
+## 標準Sensor Serviceで確定
+
+1. IEEE-11073 medical FLOAT（32-bit）/ SFLOAT（16-bit）はbackend非依存のheader `EspBleMedicalFloat.h`（host unit test付き、`tests/unit/medical_float`）で共有する。keymap/Report Map/MIDIと同じ「backend非依存の数値・wire変換はheader＋unit test」方針に揃える。Health Thermometer / Blood Pressure / Glucose / Pulse Oximeterで再利用できる。
+2. 標準Sensor Serviceは、Heart Rate / Environmental Sensing / Current Timeと同じく公開GATT API上のexample＋Peerテストで対応する（ライブラリ本体へprofile helperは追加しない）。wire形式の妥当性はcodec unit testで固定し、Peerテストはindicate購読・配送・decodeのend-to-endを検証する。
+3. Health ThermometerのTemperature Measurement（0x2A1C）はIndication、Temperature Type（0x2A1D）はReadとする。`health_thermometer` PeerテストでType Read、Indication購読、37.5℃のFLOAT decodeを検証済み。
 
 ## 優先順位候補
 

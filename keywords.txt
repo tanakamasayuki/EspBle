@@ -22,6 +22,7 @@ EspBleMidiHost	KEYWORD1
 EspBleMidiMessage	KEYWORD1
 EspBleMidiParser	KEYWORD1
 EspBleMidiPacketBuilder	KEYWORD1
+EspBleMidiSysExEncoder	KEYWORD1
 EspBleConfig	KEYWORD1
 EspBleScanConfig	KEYWORD1
 EspBleScanResult	KEYWORD1
@@ -105,11 +106,19 @@ sendNoteOn	KEYWORD2
 sendNoteOff	KEYWORD2
 sendControlChange	KEYWORD2
 sendProgramChange	KEYWORD2
+sendSysEx	KEYWORD2
+sendingSysEx	KEYWORD2
 appendMessage	KEYWORD2
 appendNoteOn	KEYWORD2
 appendNoteOff	KEYWORD2
 appendControlChange	KEYWORD2
 appendProgramChange	KEYWORD2
+espBleMedicalFloat32	KEYWORD2
+espBleWriteMedicalFloat32LE	KEYWORD2
+espBleReadMedicalFloat32LE	KEYWORD2
+espBleMedicalSFloat	KEYWORD2
+espBleWriteMedicalSFloatLE	KEYWORD2
+espBleReadMedicalSFloatLE	KEYWORD2
 connect	KEYWORD2
 disconnect	KEYWORD2
 connectionCount	KEYWORD2

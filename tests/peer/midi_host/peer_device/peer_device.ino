@@ -21,6 +21,62 @@ uint8_t hostIn[16] = {0};
 size_t hostInLength = 0;
 uint32_t hostInCount = 0;
 
+// Independent BLE MIDI SysEx reassembler (does not use EspBle).
+uint8_t sysexBuffer[512] = {0};
+size_t sysexLength = 0;
+bool sysexInProgress = false;
+bool sysexComplete = false;
+
+static void feedSysEx(const uint8_t *data, size_t length)
+{
+  size_t i = 1; // skip the packet header byte
+  while (i < length)
+  {
+    const uint8_t b = data[i];
+    if (sysexInProgress)
+    {
+      if (b & 0x80)
+      {
+        if (i + 1 >= length)
+          break;
+        const uint8_t status = data[i + 1];
+        i += 2;
+        if (status == 0xF7)
+        {
+          sysexInProgress = false;
+          sysexComplete = true;
+        }
+      }
+      else
+      {
+        if (sysexLength < sizeof(sysexBuffer))
+          sysexBuffer[sysexLength++] = b;
+        ++i;
+      }
+    }
+    else
+    {
+      if (b & 0x80)
+      {
+        if (i + 1 >= length)
+          break;
+        const uint8_t status = data[i + 1];
+        i += 2;
+        if (status == 0xF0)
+        {
+          sysexInProgress = true;
+          sysexComplete = false;
+          sysexLength = 0;
+        }
+      }
+      else
+      {
+        ++i;
+      }
+    }
+  }
+}
+
 class ServerCallbacks : public BLEServerCallbacks
 {
   void onConnect(BLEServer *) override { advertising = false; }
@@ -40,6 +96,11 @@ class CharacteristicCallbacks : public BLECharacteristicCallbacks
     for (size_t i = 0; i < hostInLength; ++i)
       hostIn[i] = static_cast<uint8_t>(value[i]);
     ++hostInCount;
+    static uint8_t packet[512];
+    const size_t copy = value.length() < sizeof(packet) ? value.length() : sizeof(packet);
+    for (size_t i = 0; i < copy; ++i)
+      packet[i] = static_cast<uint8_t>(value[i]);
+    feedSysEx(packet, copy);
   }
 };
 
@@ -100,6 +161,25 @@ void loop()
         hostInLength > 2 ? hostIn[2] : 0,
         hostInLength > 3 ? hostIn[3] : 0,
         hostInLength > 4 ? hostIn[4] : 0);
+    }
+    else if (command == 'c')
+    {
+      hostInCount = 0;
+      sysexLength = 0;
+      sysexInProgress = false;
+      sysexComplete = false;
+      Serial.println("PEER_RESET");
+    }
+    else if (command == 'g')
+    {
+      uint32_t sum = 0;
+      for (size_t i = 0; i < sysexLength; ++i)
+        sum += sysexBuffer[i];
+      Serial.printf("SYSEX complete=%u length=%u first=%u last=%u sum=%u\n",
+        sysexComplete ? 1 : 0, static_cast<unsigned>(sysexLength),
+        sysexLength > 0 ? sysexBuffer[0] : 0,
+        sysexLength > 0 ? sysexBuffer[sysexLength - 1] : 0,
+        static_cast<unsigned>(sum));
     }
   }
   delay(1);
