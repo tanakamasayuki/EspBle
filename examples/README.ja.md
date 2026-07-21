@@ -109,6 +109,8 @@ arduino-cli compile --profile esp32s3 examples/<path>
 | [Gatt/PhoneAlertStatusClient](Gatt/PhoneAlertStatusClient/) | Central | Alert Status Read、Ringer Control Point操作、Ringer Settingのdecode |
 | [Gatt/ProximityServer](Gatt/ProximityServer/) | Peripheral | Proximity Reporter: Link Loss Alert Level＋Tx Power（2 Service） |
 | [Gatt/ProximityClient](Gatt/ProximityClient/) | Central | Proximity Monitor: Tx Power ReadとLink Loss Alert Levelのarm |
+| [Gatt/ReferenceTimeUpdateServer](Gatt/ReferenceTimeUpdateServer/) | Peripheral | Time Update Control Pointがread可能なTime Update Stateを駆動 |
+| [Gatt/ReferenceTimeUpdateClient](Gatt/ReferenceTimeUpdateClient/) | Central | reference update要求/キャンセルとTime Update StateのRead |
 | [Gatt/CyclingSpeedCadenceServer](Gatt/CyclingSpeedCadenceServer/) | Peripheral | 多フィールドwheel/crank CSC MeasurementのNotify、Feature、Sensor Location |
 | [Gatt/CyclingSpeedCadenceClient](Gatt/CyclingSpeedCadenceClient/) | Central | Sensor location ReadとCSC MeasurementのNotification decode |
 | [Gatt/RunningSpeedCadenceServer](Gatt/RunningSpeedCadenceServer/) | Peripheral | speed/cadence/stride/distance RSC MeasurementのNotify、Feature、Sensor Location |
@@ -157,6 +159,7 @@ arduino-cli compile --profile esp32s3 examples/<path>
 - Gatt/ImmediateAlertServer ↔ Gatt/ImmediateAlertClient
 - Gatt/PhoneAlertStatusServer ↔ Gatt/PhoneAlertStatusClient
 - Gatt/ProximityServer ↔ Gatt/ProximityClient
+- Gatt/ReferenceTimeUpdateServer ↔ Gatt/ReferenceTimeUpdateClient
 - Gatt/CyclingSpeedCadenceServer ↔ Gatt/CyclingSpeedCadenceClient
 - Gatt/RunningSpeedCadenceServer ↔ Gatt/RunningSpeedCadenceClient
 - Gatt/GlucoseServer ↔ Gatt/GlucoseClient

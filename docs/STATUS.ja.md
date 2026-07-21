@@ -14,9 +14,9 @@ BLE MIDIはbackend非依存のpacket codec（timestamp・running status・複数
 
 ## 検証状況
 
-- Peer test: 39 suite、50 test。接続、GATT、Security、標準Service、複合HID、NKRO、BLE MIDI、Health Thermometer、Blood Pressure、Weight Scale、Body Composition、Cycling / Running Speed and Cadence、Cycling Power、Pulse Oximeter、Glucose（RACP手続き）、Location and Navigation、User Data（書き込み→onWritten→notify）、Alert Notification（Control Point→notify）、Immediate Alert（Write Without Response）、Phone Alert Status（Control Point→状態変更notify）、Proximity（Link Loss + Tx Power、2 Service同居）、異常系、再接続を実機検証
+- Peer test: 40 suite、51 test。接続、GATT、Security、標準Service、複合HID、NKRO、BLE MIDI、Health Thermometer、Blood Pressure、Weight Scale、Body Composition、Cycling / Running Speed and Cadence、Cycling Power、Pulse Oximeter、Glucose（RACP手続き）、Location and Navigation、User Data（書き込み→onWritten→notify）、Alert Notification（Control Point→notify）、Immediate Alert（Write Without Response）、Phone Alert Status（Control Point→状態変更notify）、Proximity（Link Loss + Tx Power、2 Service同居）、Reference Time Update（Control Point→state遷移）、異常系、再接続を実機検証
 - Unit test: keymap変換、HID Report Map parser、BLE MIDI codec、IEEE-11073 medical float codec
-- Example compile: ESP32-S3向け68 example
+- Example compile: ESP32-S3向け70 example
 - ESP32KeyBridge試作adapter: raw usage、remap、modifier、切断release、LED返送、Bond再接続をPeer検証
 
 実行方法は[tests/TEST_PLAN.ja.md](../tests/TEST_PLAN.ja.md)、リリース時の確認項目は[RELEASE_CHECKLIST.ja.md](RELEASE_CHECKLIST.ja.md)を参照してください。
