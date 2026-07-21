@@ -92,6 +92,7 @@ struct EspBleImpl
     ServerSubscription,
     ServerSendResult,
     MtuChanged,
+    ConnParamsUpdated,
     SecurityChanged,
     PasskeyDisplayed,
   };
@@ -341,6 +342,13 @@ struct EspBleImpl
       slot.connection.authenticated = authenticated;
       slot.connection.bonded = bonded;
       slot.connection.encryptionKeySize = encryptionKeySize;
+      ble_gap_conn_desc paramsDesc{};
+      if (ble_gap_conn_find(handle, &paramsDesc) == 0)
+      {
+        slot.connection.connectionInterval = paramsDesc.conn_itvl;
+        slot.connection.peripheralLatency = paramsDesc.conn_latency;
+        slot.connection.supervisionTimeout = paramsDesc.supervision_timeout;
+      }
 
       Event event;
       event.type = EventType::Connected;
@@ -420,12 +428,17 @@ struct EspBleImpl
     }
   }
 
-  static int disconnectListenerEntry(ble_gap_event *event, void *argument)
+  static int gapEventListenerEntry(ble_gap_event *event, void *argument)
   {
+    EspBleImpl *impl = static_cast<EspBleImpl *>(argument);
     if (event->type == BLE_GAP_EVENT_DISCONNECT)
     {
-      static_cast<EspBleImpl *>(argument)->stampDisconnectReason(
+      impl->stampDisconnectReason(
         event->disconnect.conn.conn_handle, event->disconnect.reason);
+    }
+    else if (event->type == BLE_GAP_EVENT_CONN_UPDATE)
+    {
+      impl->handleConnParamsUpdate(event->conn_update.conn_handle);
     }
     return 0;
   }
@@ -438,6 +451,29 @@ struct EspBleImpl
       if (slot.used && slot.connection.handle == handle)
       {
         slot.connection.disconnectReason = reason;
+        return;
+      }
+    }
+  }
+
+  void handleConnParamsUpdate(uint16_t handle)
+  {
+    std::lock_guard<std::mutex> lock(mutex);
+    for (ConnectionSlot &slot : connections)
+    {
+      if (slot.used && slot.connection.handle == handle)
+      {
+        ble_gap_conn_desc desc{};
+        if (ble_gap_conn_find(handle, &desc) == 0)
+        {
+          slot.connection.connectionInterval = desc.conn_itvl;
+          slot.connection.peripheralLatency = desc.conn_latency;
+          slot.connection.supervisionTimeout = desc.supervision_timeout;
+        }
+        Event event;
+        event.type = EventType::ConnParamsUpdated;
+        event.connection = slot.connection;
+        pushEvent(event);
         return;
       }
     }
@@ -1041,13 +1077,14 @@ struct EspBleImpl
 
   EspBle *owner;
   mutable std::mutex mutex;
-  // Global GAP event listener used only to capture each disconnection's reason
-  // code, which the backend's onDisconnect callbacks do not surface. NimBLE
-  // invokes global listeners before the connection-specific callback, so the
-  // reason is stamped onto the connection slot before removeConnection() reads
-  // it while building the Disconnected event.
-  ble_gap_event_listener disconnectListener = {};
-  bool disconnectListenerRegistered = false;
+  // Global GAP event listener used to capture information the backend's
+  // BLEServer/BLEClient callbacks do not surface: each disconnection's reason
+  // code and connection parameter updates. NimBLE invokes global listeners
+  // before the connection-specific callback, so a disconnect reason is stamped
+  // onto the connection slot before removeConnection() reads it while building
+  // the Disconnected event.
+  ble_gap_event_listener gapEventListener = {};
+  bool gapEventListenerRegistered = false;
   ConnectionSlot connections[ConnectionCapacity];
   RetiredClient retiredClients[RetiredClientCapacity];
   size_t retiredClientCount = 0;
@@ -5230,13 +5267,13 @@ bool EspBle::begin(const EspBleConfig &config)
     return false;
   }
 
-  if (!impl_->disconnectListenerRegistered &&
+  if (!impl_->gapEventListenerRegistered &&
       ble_gap_event_listener_register(
-        &impl_->disconnectListener,
-        EspBleImpl::disconnectListenerEntry,
+        &impl_->gapEventListener,
+        EspBleImpl::gapEventListenerEntry,
         impl_) == 0)
   {
-    impl_->disconnectListenerRegistered = true;
+    impl_->gapEventListenerRegistered = true;
   }
 
   activeDeviceName_ = deviceName;
@@ -5336,10 +5373,10 @@ void EspBle::end()
       delete clients[index];
     }
   }
-  if (impl_ != nullptr && impl_->disconnectListenerRegistered)
+  if (impl_ != nullptr && impl_->gapEventListenerRegistered)
   {
-    ble_gap_event_listener_unregister(&impl_->disconnectListener);
-    impl_->disconnectListenerRegistered = false;
+    ble_gap_event_listener_unregister(&impl_->gapEventListener);
+    impl_->gapEventListenerRegistered = false;
   }
   BLEDevice::deinit(false);
   initialized_ = false;
@@ -5573,6 +5610,64 @@ bool EspBle::disconnect(EspBleConnectionId connectionId)
   return true;
 }
 
+bool EspBle::updateConnectionParameters(
+  EspBleConnectionId connectionId,
+  uint16_t minInterval,
+  uint16_t maxInterval,
+  uint16_t latency,
+  uint16_t supervisionTimeout)
+{
+  if (!initialized_)
+  {
+    setError(EspBleError::InvalidState, "BLE stack is not initialized");
+    return false;
+  }
+  if (minInterval > maxInterval)
+  {
+    setError(EspBleError::InvalidArgument, "minInterval must not exceed maxInterval");
+    return false;
+  }
+
+  BLEClient *client = nullptr;
+  BLEServer *server = nullptr;
+  uint16_t handle = 0xffff;
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    for (const EspBleImpl::ConnectionSlot &slot : impl_->connections)
+    {
+      if (slot.used && slot.connection.id == connectionId)
+      {
+        client = slot.client;
+        server = impl_->server;
+        handle = slot.connection.handle;
+        break;
+      }
+    }
+  }
+
+  if (handle == 0xffff)
+  {
+    setError(EspBleError::InvalidArgument, "connection ID was not found");
+    return false;
+  }
+
+  if (client != nullptr)
+  {
+    if (!client->updateConnParams(minInterval, maxInterval, latency, supervisionTimeout))
+    {
+      setError(EspBleError::BackendFailure, "failed to request connection parameter update");
+      return false;
+    }
+  }
+  else
+  {
+    server->updateConnParams(handle, minInterval, maxInterval, latency, supervisionTimeout);
+  }
+
+  clearError();
+  return true;
+}
+
 size_t EspBle::droppedEventCount() const
 {
   if (impl_ == nullptr)
@@ -5783,6 +5878,11 @@ void EspBle::onConnectionFailed(ConnectionFailureCallback callback)
 void EspBle::onMtuChanged(MtuChangedCallback callback)
 {
   mtuChangedCallback_ = std::move(callback);
+}
+
+void EspBle::onConnectionParametersUpdated(ConnectionCallback callback)
+{
+  connectionParametersUpdatedCallback_ = std::move(callback);
 }
 
 void EspBle::onSecurityChanged(SecurityChangedCallback callback)
@@ -6368,6 +6468,12 @@ void EspBle::dispatchConnectionEvents()
       if (mtuChangedCallback_)
       {
         mtuChangedCallback_(event.mtuChanged);
+      }
+      break;
+    case EspBleImpl::EventType::ConnParamsUpdated:
+      if (connectionParametersUpdatedCallback_)
+      {
+        connectionParametersUpdatedCallback_(event.connection);
       }
       break;
     case EspBleImpl::EventType::SecurityChanged:

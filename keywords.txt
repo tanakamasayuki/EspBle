@@ -123,6 +123,11 @@ espBleCgmCrc	KEYWORD2
 espBleCgmAppendCrc	KEYWORD2
 espBleCgmVerifyCrc	KEYWORD2
 disconnectReason	KEYWORD2
+connectionInterval	KEYWORD2
+peripheralLatency	KEYWORD2
+supervisionTimeout	KEYWORD2
+updateConnectionParameters	KEYWORD2
+onConnectionParametersUpdated	KEYWORD2
 connect	KEYWORD2
 disconnect	KEYWORD2
 connectionCount	KEYWORD2

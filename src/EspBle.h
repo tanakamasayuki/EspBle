@@ -154,6 +154,13 @@ struct EspBleConnection
   // requested disconnect, a remote termination, and a supervision timeout
   // report distinct codes. 0 in the onConnected()/onMtuChanged() events.
   int disconnectReason = 0;
+  // Current connection parameters, populated at connect and refreshed on each
+  // update delivered to onConnectionParametersUpdated(). connectionInterval is
+  // in units of 1.25 ms, supervisionTimeout in units of 10 ms, and
+  // peripheralLatency counts skipped connection events.
+  uint16_t connectionInterval = 0;
+  uint16_t peripheralLatency = 0;
+  uint16_t supervisionTimeout = 0;
 
   size_t maximumNotificationPayload() const;
 };
@@ -971,6 +978,16 @@ public:
     EspBleAddressType addressType,
     uint32_t timeoutMilliseconds = 10000);
   bool disconnect(EspBleConnectionId connectionId);
+  // Request a connection parameter update on an active connection. Intervals are
+  // in units of 1.25 ms, supervisionTimeout in units of 10 ms, and latency
+  // counts skipped connection events. The negotiated result is delivered to
+  // onConnectionParametersUpdated(). Works from either role.
+  bool updateConnectionParameters(
+    EspBleConnectionId connectionId,
+    uint16_t minInterval,
+    uint16_t maxInterval,
+    uint16_t latency,
+    uint16_t supervisionTimeout);
   size_t droppedEventCount() const;
   size_t connectionCount() const;
   bool connection(EspBleConnectionId connectionId, EspBleConnection &connection) const;
@@ -984,6 +1001,7 @@ public:
   void onDisconnected(ConnectionCallback callback);
   void onConnectionFailed(ConnectionFailureCallback callback);
   void onMtuChanged(MtuChangedCallback callback);
+  void onConnectionParametersUpdated(ConnectionCallback callback);
   void onSecurityChanged(SecurityChangedCallback callback);
   void onPasskeyDisplayed(PasskeyDisplayedCallback callback);
 
@@ -1154,6 +1172,7 @@ private:
   ConnectionCallback disconnectedCallback_;
   ConnectionFailureCallback connectionFailedCallback_;
   MtuChangedCallback mtuChangedCallback_;
+  ConnectionCallback connectionParametersUpdatedCallback_;
   SecurityChangedCallback securityChangedCallback_;
   PasskeyDisplayedCallback passkeyDisplayedCallback_;
   GattResultCallback characteristicDiscoveredCallback_;
