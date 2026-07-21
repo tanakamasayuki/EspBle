@@ -111,6 +111,8 @@ arduino-cli compile --profile esp32s3 examples/<path>
 | [Gatt/ProximityClient](Gatt/ProximityClient/) | Central | Proximity Monitor: read Tx Power, arm Link Loss Alert Level |
 | [Gatt/ReferenceTimeUpdateServer](Gatt/ReferenceTimeUpdateServer/) | Peripheral | Time Update Control Point drives a readable Time Update State |
 | [Gatt/ReferenceTimeUpdateClient](Gatt/ReferenceTimeUpdateClient/) | Central | Request/cancel a reference update and read the Time Update State |
+| [Gatt/BondManagementServer](Gatt/BondManagementServer/) | Peripheral | Bond Management Feature read, Control Point delete-bond op codes |
+| [Gatt/BondManagementClient](Gatt/BondManagementClient/) | Central | Read the Feature bit field and write a delete-bond op code |
 | [Gatt/CyclingSpeedCadenceServer](Gatt/CyclingSpeedCadenceServer/) | Peripheral | Multi-field wheel/crank CSC Measurement notifications, Feature, Sensor Location |
 | [Gatt/CyclingSpeedCadenceClient](Gatt/CyclingSpeedCadenceClient/) | Central | Sensor Location read and CSC Measurement notification decoding |
 | [Gatt/RunningSpeedCadenceServer](Gatt/RunningSpeedCadenceServer/) | Peripheral | Speed/cadence/stride/distance RSC Measurement notifications, Feature, Sensor Location |
@@ -160,6 +162,7 @@ Suggested pairings on two boards:
 - Gatt/PhoneAlertStatusServer ↔ Gatt/PhoneAlertStatusClient
 - Gatt/ProximityServer ↔ Gatt/ProximityClient
 - Gatt/ReferenceTimeUpdateServer ↔ Gatt/ReferenceTimeUpdateClient
+- Gatt/BondManagementServer ↔ Gatt/BondManagementClient
 - Gatt/CyclingSpeedCadenceServer ↔ Gatt/CyclingSpeedCadenceClient
 - Gatt/RunningSpeedCadenceServer ↔ Gatt/RunningSpeedCadenceClient
 - Gatt/GlucoseServer ↔ Gatt/GlucoseClient
