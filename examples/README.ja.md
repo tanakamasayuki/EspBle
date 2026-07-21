@@ -101,6 +101,8 @@ arduino-cli compile --profile esp32s3 examples/<path>
 | [Gatt/LocationNavigationClient](Gatt/LocationNavigationClient/) | Central | LN Feature ReadとLocation and SpeedのNotification decode |
 | [Gatt/UserDataServer](Gatt/UserDataServer/) | Peripheral | Age・First Nameのread/write、書き込み時にDatabase Change IncrementをNotify |
 | [Gatt/UserDataClient](Gatt/UserDataClient/) | Central | Age/First NameのWriteとDatabase Change IncrementのNotification観測 |
+| [Gatt/AlertNotificationServer](Gatt/AlertNotificationServer/) | Peripheral | category bitmask Read、Control Point write、New AlertのNotify |
+| [Gatt/AlertNotificationClient](Gatt/AlertNotificationClient/) | Central | Control Point「Notify New Alert Immediately」とNew Alertのdecode |
 | [Gatt/CyclingSpeedCadenceServer](Gatt/CyclingSpeedCadenceServer/) | Peripheral | 多フィールドwheel/crank CSC MeasurementのNotify、Feature、Sensor Location |
 | [Gatt/CyclingSpeedCadenceClient](Gatt/CyclingSpeedCadenceClient/) | Central | Sensor location ReadとCSC MeasurementのNotification decode |
 | [Gatt/RunningSpeedCadenceServer](Gatt/RunningSpeedCadenceServer/) | Peripheral | speed/cadence/stride/distance RSC MeasurementのNotify、Feature、Sensor Location |
@@ -145,6 +147,7 @@ arduino-cli compile --profile esp32s3 examples/<path>
 - Gatt/BodyCompositionServer ↔ Gatt/BodyCompositionClient
 - Gatt/LocationNavigationServer ↔ Gatt/LocationNavigationClient
 - Gatt/UserDataServer ↔ Gatt/UserDataClient
+- Gatt/AlertNotificationServer ↔ Gatt/AlertNotificationClient
 - Gatt/CyclingSpeedCadenceServer ↔ Gatt/CyclingSpeedCadenceClient
 - Gatt/RunningSpeedCadenceServer ↔ Gatt/RunningSpeedCadenceClient
 - Gatt/GlucoseServer ↔ Gatt/GlucoseClient
