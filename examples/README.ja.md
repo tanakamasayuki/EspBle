@@ -95,6 +95,8 @@ arduino-cli compile --profile esp32s3 examples/<path>
 | [Gatt/BloodPressureClient](Gatt/BloodPressureClient/) | Central | Feature ReadとSFLOAT測定値のIndication decode |
 | [Gatt/WeightScaleServer](Gatt/WeightScaleServer/) | Peripheral | uint16 Weight Measurement（0.005 kg分解能）のIndicateとFeature |
 | [Gatt/WeightScaleClient](Gatt/WeightScaleClient/) | Central | Feature ReadとWeight MeasurementのIndication decode |
+| [Gatt/CyclingSpeedCadenceServer](Gatt/CyclingSpeedCadenceServer/) | Peripheral | 多フィールドwheel/crank CSC MeasurementのNotify、Feature、Sensor Location |
+| [Gatt/CyclingSpeedCadenceClient](Gatt/CyclingSpeedCadenceClient/) | Central | Sensor location ReadとCSC MeasurementのNotification decode |
 | [Gatt/NusServer](Gatt/NusServer/) | Peripheral | NUS互換RX Write / TX Notification echo |
 | [Gatt/NusClient](Gatt/NusClient/) | Central | NUS互換TX購読とRX Write Without Response |
 | [Security/JustWorksServer](Security/JustWorksServer/) | Peripheral | Just Works Pairing + Bondingと暗号化Characteristic |
@@ -126,6 +128,7 @@ arduino-cli compile --profile esp32s3 examples/<path>
 - Gatt/HealthThermometerServer ↔ Gatt/HealthThermometerClient
 - Gatt/BloodPressureServer ↔ Gatt/BloodPressureClient
 - Gatt/WeightScaleServer ↔ Gatt/WeightScaleClient
+- Gatt/CyclingSpeedCadenceServer ↔ Gatt/CyclingSpeedCadenceClient
 - Gatt/NusServer ↔ Gatt/NusClient
 - Security/StaticPasskeyServer ↔ Security/StaticPasskeyClient
 - Hid/KeyboardDevice / Hid/CompositeKeyboardMouse ↔ Hid/KeyboardHost
