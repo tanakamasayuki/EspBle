@@ -14,9 +14,9 @@ BLE MIDIはbackend非依存のpacket codec（timestamp・running status・複数
 
 ## 検証状況
 
-- Peer test: 33 suite、44 test。接続、GATT、Security、標準Service、複合HID、NKRO、BLE MIDI、Health Thermometer、Blood Pressure、Weight Scale、Body Composition、Cycling / Running Speed and Cadence、Cycling Power、Pulse Oximeter、Glucose（RACP手続き）、異常系、再接続を実機検証
+- Peer test: 34 suite、45 test。接続、GATT、Security、標準Service、複合HID、NKRO、BLE MIDI、Health Thermometer、Blood Pressure、Weight Scale、Body Composition、Cycling / Running Speed and Cadence、Cycling Power、Pulse Oximeter、Glucose（RACP手続き）、Location and Navigation、異常系、再接続を実機検証
 - Unit test: keymap変換、HID Report Map parser、BLE MIDI codec、IEEE-11073 medical float codec
-- Example compile: ESP32-S3向け56 example
+- Example compile: ESP32-S3向け58 example
 - ESP32KeyBridge試作adapter: raw usage、remap、modifier、切断release、LED返送、Bond再接続をPeer検証
 
 実行方法は[tests/TEST_PLAN.ja.md](../tests/TEST_PLAN.ja.md)、リリース時の確認項目は[RELEASE_CHECKLIST.ja.md](RELEASE_CHECKLIST.ja.md)を参照してください。
