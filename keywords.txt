@@ -16,6 +16,7 @@ EspBleHidConsumerControl	KEYWORD1
 EspBleHidSystemControl	KEYWORD1
 EspBleHidGamepad	KEYWORD1
 EspBleHidVendor	KEYWORD1
+EspBleHidCustom	KEYWORD1
 EspBleHidHost	KEYWORD1
 EspBleMidiDevice	KEYWORD1
 EspBleMidiHost	KEYWORD1
@@ -91,6 +92,7 @@ hidConsumerControl	KEYWORD2
 hidSystemControl	KEYWORD2
 hidGamepad	KEYWORD2
 hidVendor	KEYWORD2
+hidCustom	KEYWORD2
 hidHost	KEYWORD2
 onMessage	KEYWORD2
 onMidiMessage	KEYWORD2
@@ -138,6 +140,10 @@ onNumericComparison	KEYWORD2
 confirmNumericComparison	KEYWORD2
 protocolMode	KEYWORD2
 onProtocolMode	KEYWORD2
+setReportMap	KEYWORD2
+addInputReport	KEYWORD2
+addOutputReport	KEYWORD2
+addFeatureReport	KEYWORD2
 connect	KEYWORD2
 disconnect	KEYWORD2
 connectionCount	KEYWORD2

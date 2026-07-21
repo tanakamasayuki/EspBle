@@ -137,6 +137,8 @@ arduino-cli compile --profile esp32s3 examples/<path>
 | [Hid/CompositeKeyboardMouse](Hid/CompositeKeyboardMouse/) | HID Device | keyboardとmouseを1つのHID Serviceへ複合 |
 | [Hid/VendorDevice](Hid/VendorDevice/) | HID Device | Report ID 6のVendor Input / Output / Feature |
 | [Hid/VendorHost](Hid/VendorHost/) | HID Host | Vendor Input受信とOutput / Feature書込み |
+| [Hid/CustomDevice](Hid/CustomDevice/) | HID Device | `ble.hidCustom()`で任意Report Descriptor（入力＋出力Report） |
+| [Hid/CustomClient](Hid/CustomClient/) | GATT Client | Custom HIDのReport Mapを読み、入力Reportをデコード |
 | [Midi/MidiDevice](Midi/MidiDevice/) | MIDI Device | BLE MIDI Peripheral: Note On/Off送信、受信MIDI表示 |
 | [Midi/MidiHost](Midi/MidiHost/) | MIDI Host | BLE MIDI Central: Discovery/購読してMIDI表示、ノート送信 |
 | [Info/ScanDump](Info/ScanDump/) | 診断 | advertisementの全フィールド（UUID・Manufacturer Data等）をダンプ |
@@ -175,5 +177,6 @@ arduino-cli compile --profile esp32s3 examples/<path>
 - Security/StaticPasskeyServer ↔ Security/StaticPasskeyClient
 - Hid/KeyboardDevice / Hid/CompositeKeyboardMouse ↔ Hid/KeyboardHost
 - Hid/VendorDevice ↔ Hid/VendorHost
+- Hid/CustomDevice ↔ Hid/CustomClient
 - Midi/MidiDevice ↔ Midi/MidiHost
 - Info/ScanDump・Info/ConnectionInspectorは任意の相手（他のexampleやスマートフォン、市販BLE機器）の観察に使えます

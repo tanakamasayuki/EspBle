@@ -544,6 +544,7 @@ class EspBleScanner;
 class EspBleGattServer;
 class EspBleHidKeyboard;
 class EspBleHidVendor;
+class EspBleHidCustom;
 class EspBleHidHost;
 struct EspBleScannerImpl;
 struct EspBleImpl;
@@ -737,13 +738,16 @@ private:
   friend class EspBleHidSystemControl;
   friend class EspBleHidGamepad;
   friend class EspBleHidVendor;
+  friend class EspBleHidCustom;
   friend struct EspBleHidDeviceManagerImpl;
 
   explicit EspBleHidKeyboard(EspBle *owner);
   ~EspBleHidKeyboard();
   bool configureProfile(uint8_t reportId, const EspBleHidDeviceConfig &config);
+  bool configureCustom(const EspBleHidDeviceConfig &config);
   bool realize();
   bool sendRawReport(uint8_t reportId, const uint8_t *data, size_t length);
+  bool sendCustomInput(uint8_t reportId, const uint8_t *data, size_t length);
   void resetBackend();
   void dispatchPendingOutputReports();
   void dispatchPendingProtocolMode();
@@ -854,6 +858,40 @@ private:
   friend class EspBle;
   friend struct EspBleHidDeviceManagerImpl;
   explicit EspBleHidVendor(EspBle *owner) : owner_(owner) {}
+  void dispatchPendingReports();
+
+  EspBle *owner_;
+  bool configured_ = false;
+  ReportCallback outputCallback_;
+  ReportCallback featureCallback_;
+};
+
+// Custom HID with an arbitrary Report Descriptor. Reports are composed into the
+// same HID service as the fixed profiles (keyboard/mouse/...), so a custom
+// report can coexist with them. Report IDs must be unique and, when a fixed
+// profile is also enabled, must not use its reserved report ID (1..6).
+class EspBleHidCustom
+{
+public:
+  static constexpr size_t MaxReports = 4;
+  using ReportCallback = std::function<void(const EspBleHidVendorReport &report)>;
+
+  bool configure(const EspBleHidDeviceConfig &config = EspBleHidDeviceConfig());
+  // Set the raw HID Report Descriptor bytes exposed as the Report Map (0x2A4B).
+  bool setReportMap(const uint8_t *descriptor, size_t length);
+  bool addInputReport(uint8_t reportId, uint16_t sizeBytes);
+  bool addOutputReport(uint8_t reportId, uint16_t sizeBytes);
+  bool addFeatureReport(uint8_t reportId, uint16_t sizeBytes);
+  bool configured() const;
+  bool sendInput(uint8_t reportId, const uint8_t *data, size_t length);
+  void onOutputReport(ReportCallback callback);
+  void onFeatureReport(ReportCallback callback);
+
+private:
+  friend class EspBle;
+  friend struct EspBleHidDeviceManagerImpl;
+  explicit EspBleHidCustom(EspBle *owner) : owner_(owner) {}
+  bool addReport(uint8_t reportId, uint8_t reportType, uint16_t sizeBytes);
   void dispatchPendingReports();
 
   EspBle *owner_;
@@ -1155,6 +1193,7 @@ public:
   EspBleHidSystemControl &hidSystemControl();
   EspBleHidGamepad &hidGamepad();
   EspBleHidVendor &hidVendor();
+  EspBleHidCustom &hidCustom();
   EspBleHidHost &hidHost();
 
   EspBleError lastError() const;
@@ -1173,6 +1212,7 @@ private:
   friend class EspBleHidSystemControl;
   friend class EspBleHidGamepad;
   friend class EspBleHidVendor;
+  friend class EspBleHidCustom;
   friend struct EspBleScannerImpl;
   friend struct EspBleImpl;
   friend struct EspBleGattServerImpl;
@@ -1211,6 +1251,7 @@ private:
   EspBleHidSystemControl hidSystemControl_;
   EspBleHidGamepad hidGamepad_;
   EspBleHidVendor hidVendor_;
+  EspBleHidCustom hidCustom_;
   EspBleHidHost hidKeyboardHost_;
   EspBleImpl *impl_ = nullptr;
   ConnectionCallback connectedCallback_;

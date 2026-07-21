@@ -137,6 +137,8 @@ arduino-cli compile --profile esp32s3 examples/<path>
 | [Hid/CompositeKeyboardMouse](Hid/CompositeKeyboardMouse/) | HID Device | One composite HID Service with keyboard and mouse reports |
 | [Hid/VendorDevice](Hid/VendorDevice/) | HID Device | Report ID 6 Vendor Input / Output / Feature |
 | [Hid/VendorHost](Hid/VendorHost/) | HID Host | Vendor Input reception and Output / Feature writes |
+| [Hid/CustomDevice](Hid/CustomDevice/) | HID Device | Arbitrary Report Descriptor via `ble.hidCustom()` (input + output reports) |
+| [Hid/CustomClient](Hid/CustomClient/) | GATT Client | Read a Custom HID's Report Map and decode its input report |
 | [Midi/MidiDevice](Midi/MidiDevice/) | MIDI Device | BLE MIDI peripheral: send Note On/Off, print received MIDI |
 | [Midi/MidiHost](Midi/MidiHost/) | MIDI Host | BLE MIDI central: discover/subscribe and print MIDI, send notes |
 | [Info/ScanDump](Info/ScanDump/) | Diagnostics | Dump every advertisement field (UUIDs, manufacturer data, …) |
@@ -175,5 +177,6 @@ Suggested pairings on two boards:
 - Security/StaticPasskeyServer ↔ Security/StaticPasskeyClient
 - Hid/KeyboardDevice / Hid/CompositeKeyboardMouse ↔ Hid/KeyboardHost
 - Hid/VendorDevice ↔ Hid/VendorHost
+- Hid/CustomDevice ↔ Hid/CustomClient
 - Midi/MidiDevice ↔ Midi/MidiHost
 - Info/ScanDump and Info/ConnectionInspector can observe anything — the other examples, smartphones, or commercial BLE devices
