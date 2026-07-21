@@ -147,6 +147,7 @@
 4. Blood PressureのBlood Pressure Measurement（0x2A35）はIndication、Blood Pressure Feature（0x2A49）はReadとする。systolic/diastolic/meanは16-bit SFLOATで、`blood_pressure` PeerテストでFeature Read、Indication購読、120/80/93 mmHgのSFLOAT decodeを検証済み。SFLOATは`EspBleMedicalFloat.h`をFLOATと共有する。
 5. Weight ScaleのWeight Measurement（0x2A9D）はIndication、Weight Scale Feature（0x2A9E）はReadとする。weightはIEEE floatではなく固定分解能uint16（SI 0.005 kg/LSB、Imperial 0.01 lb/LSB）で、medical float codecは使わず素のuint16として扱う。`weight_scale` PeerテストでFeature Read、Indication購読、70.000 kg decodeを検証済み。
 6. Cycling Speed and CadenceのCSC Measurement（0x2A5B）はNotification、CSC Feature（0x2A5C）とSensor Location（0x2A5D）はReadとする。Measurementはflags駆動の多フィールド（uint32累積wheel回転数＋uint16イベント時刻、uint16累積crank回転数＋uint16イベント時刻）で、`cycling_speed_cadence` PeerテストでLocation Read、Notification購読、全フィールドdecodeを検証済み。indicateだけでなくnotifyの標準Serviceも同じexample+Peer方針で扱う。
+7. Running Speed and CadenceのRSC Measurement（0x2A53）はNotification、RSC Feature（0x2A54）とSensor Location（0x2A5D、CSCと共有UUID）はReadとする。Measurementはflags駆動の混在幅（uint16 speed 1/256 m/s＋uint8 cadence＋任意のuint16 stride length＋uint32 total distance）で、`running_speed_cadence` PeerテストでLocation Read、Notification購読、全フィールドdecodeを検証済み。
 
 ## 優先順位候補
 
