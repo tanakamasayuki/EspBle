@@ -33,7 +33,7 @@ BLE MIDIはbackend非依存のpacket codec（timestamp・running status・複数
 - GATT Client Discovery snapshotは最新1接続分で、永続cacheとService Changed追従はありません。
 - 実行時passkey、Numeric Comparisonは未対応です。切断理由は`EspBleConnection::disconnectReason`、接続パラメータは`EspBleConnection`のinterval/latency/timeoutと`updateConnectionParameters()` / `onConnectionParametersUpdated()`、LE PHYは`EspBleConnection`のtx/rxPhyと`updatePhy()` / `onPhyUpdated()`で扱えます。
 - Descriptor Write eventはbackendがconnection contextを公開しないためConnection IDを持ちません。詳細は[upstream依頼案](UPSTREAM_REQUEST_ARDUINO_ESP32_DESCRIPTOR_CONTEXT.ja.md)を参照してください。
-- 接続後のMTU変更は追跡できず、接続時snapshotを使用します。
+- MTU交換はグローバルGAPイベント（`BLE_GAP_EVENT_MTU`）で両役割とも追跡し、`onMtuChanged`へ配送します。Central側で接続確立後に完了するMTU交換も反映されます。
 - 同時複数接続は接続単位APIを維持していますが、自動試験と公開動作保証の対象外です。
 - 自動実機検証はESP32-S3中心です。市販機器およびAndroid / Linux / Windows / macOSとの相互運用確認は未完了です。
 - Bluedroid backend、Bluetooth Classic、外部NimBLE-Arduinoは対象外です。

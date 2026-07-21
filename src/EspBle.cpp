@@ -225,7 +225,7 @@ struct EspBleImpl
       ble_gap_conn_desc *description,
       uint16_t mtu) override
     {
-      owner_->updatePeripheralMtu(description->conn_handle, mtu);
+      owner_->updateMtu(description->conn_handle, mtu);
     }
 
   private:
@@ -453,6 +453,12 @@ struct EspBleImpl
       impl->handlePhyUpdate(
         event->phy_updated.conn_handle, event->phy_updated.tx_phy, event->phy_updated.rx_phy);
     }
+    else if (event->type == BLE_GAP_EVENT_MTU)
+    {
+      // Fires on both roles when the ATT MTU is exchanged, letting a central
+      // track the post-connect MTU the BLEClient callbacks do not surface.
+      impl->updateMtu(event->mtu.conn_handle, event->mtu.value);
+    }
     return 0;
   }
 
@@ -523,13 +529,16 @@ struct EspBleImpl
     slot = ConnectionSlot();
   }
 
-  void updatePeripheralMtu(uint16_t connectionHandle, uint16_t mtu)
+  // Role-agnostic MTU tracker. Both the server's onMtuChanged callback and the
+  // global GAP listener's BLE_GAP_EVENT_MTU feed this; the value dedup makes the
+  // redundant peripheral-side call (both fire for one exchange) a no-op, and it
+  // lets a central observe the post-connect MTU exchange it would otherwise miss.
+  void updateMtu(uint16_t connectionHandle, uint16_t mtu)
   {
     std::lock_guard<std::mutex> lock(mutex);
     for (ConnectionSlot &slot : connections)
     {
-      if (slot.used && slot.connection.handle == connectionHandle &&
-          slot.connection.localRole == EspBleRole::Peripheral)
+      if (slot.used && slot.connection.handle == connectionHandle)
       {
         if (slot.connection.mtu == mtu)
         {
