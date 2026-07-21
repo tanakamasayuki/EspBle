@@ -251,6 +251,11 @@ struct EspBleImpl
       owner_->queuePasskeyDisplayed(passkey);
     }
 
+    uint32_t onPassKeyRequest() override
+    {
+      return owner_->requestPasskey();
+    }
+
   private:
     EspBleImpl *owner_;
   };
@@ -357,6 +362,12 @@ struct EspBleImpl
       {
         slot.connection.txPhy = txPhy;
         slot.connection.rxPhy = rxPhy;
+      }
+      {
+        // Start each connection's Passkey Entry state clean so a value left over
+        // from an earlier aborted pairing is never consumed by a new one.
+        std::lock_guard<std::mutex> passkeyLock(passkeyMutex);
+        passkeyProvided = false;
       }
 
       Event event;
@@ -583,6 +594,37 @@ struct EspBleImpl
       pushEvent(event);
       return;
     }
+  }
+
+  // Called on the backend host task when the peer requires a passkey to be
+  // entered. With a static passkey it returns immediately; otherwise it blocks
+  // (yielding) until the loop task supplies one via providePasskey(), or a
+  // timeout elapses and pairing is rejected with 0.
+  uint32_t requestPasskey()
+  {
+    {
+      std::lock_guard<std::mutex> lock(passkeyMutex);
+      if (staticPasskeyEnabled)
+      {
+        return staticPasskey;
+      }
+    }
+    // Bounded wait so a never-answered request cannot stall the host forever.
+    // The provided flag is not cleared up front: providePasskey() may run before
+    // or after this request, and either order must be honored.
+    for (int elapsed = 0; elapsed < 30000; ++elapsed)
+    {
+      {
+        std::lock_guard<std::mutex> lock(passkeyMutex);
+        if (passkeyProvided)
+        {
+          passkeyProvided = false;
+          return providedPasskey;
+        }
+      }
+      vTaskDelay(pdMS_TO_TICKS(1));
+    }
+    return 0;
   }
 
   void queuePasskeyDisplayed(uint32_t passkey)
@@ -1147,6 +1189,15 @@ struct EspBleImpl
   SecurityCallbacks securityCallbacks;
   BLESecurity *securityBackend = nullptr;
   bool securityEnabled = false;
+  // Passkey Entry (input side). When no static passkey is configured, the
+  // backend's synchronous onPassKeyRequest() blocks here until the application
+  // supplies one via providePasskey() from the loop task, enabling interactive
+  // runtime passkey entry.
+  std::mutex passkeyMutex;
+  bool staticPasskeyEnabled = false;
+  uint32_t staticPasskey = 0;
+  bool passkeyProvided = false;
+  uint32_t providedPasskey = 0;
   bool gattOperating = false;
   TaskHandle_t gattTask = nullptr;
   EspBleGattOperation gattOperation = EspBleGattOperation::Discover;
@@ -5202,12 +5253,11 @@ bool EspBle::begin(const EspBleConfig &config)
     return false;
   }
   if (config.security.mitm &&
-      (!config.security.staticPasskeyEnabled ||
-       config.security.ioCapability == EspBleSecurityIoCapability::None))
+      config.security.ioCapability == EspBleSecurityIoCapability::None)
   {
     setError(
       EspBleError::InvalidArgument,
-      "MITM currently requires a static passkey and DisplayOnly or KeyboardOnly capability");
+      "MITM requires DisplayOnly or KeyboardOnly capability");
     return false;
   }
   if (!config.security.mitm &&
@@ -5243,6 +5293,12 @@ bool EspBle::begin(const EspBleConfig &config)
   }
 
   impl_->securityEnabled = config.security.enabled;
+  {
+    std::lock_guard<std::mutex> lock(impl_->passkeyMutex);
+    impl_->staticPasskeyEnabled = config.security.staticPasskeyEnabled;
+    impl_->staticPasskey = config.security.staticPasskey;
+    impl_->passkeyProvided = false;
+  }
   if (config.security.enabled)
   {
     impl_->securityBackend = new BLESecurity();
@@ -6002,6 +6058,27 @@ void EspBle::onSecurityChanged(SecurityChangedCallback callback)
 void EspBle::onPasskeyDisplayed(PasskeyDisplayedCallback callback)
 {
   passkeyDisplayedCallback_ = std::move(callback);
+}
+
+bool EspBle::providePasskey(uint32_t passkey)
+{
+  if (!initialized_ || impl_ == nullptr)
+  {
+    setError(EspBleError::InvalidState, "BLE stack is not initialized");
+    return false;
+  }
+  if (passkey > 999999)
+  {
+    setError(EspBleError::InvalidArgument, "BLE passkey must be between 000000 and 999999");
+    return false;
+  }
+  {
+    std::lock_guard<std::mutex> lock(impl_->passkeyMutex);
+    impl_->providedPasskey = passkey;
+    impl_->passkeyProvided = true;
+  }
+  clearError();
+  return true;
 }
 
 bool EspBle::discoverCharacteristic(

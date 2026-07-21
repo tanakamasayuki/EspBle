@@ -1011,6 +1011,11 @@ public:
   size_t connectionCount() const;
   bool connection(EspBleConnectionId connectionId, EspBleConnection &connection) const;
   bool requestSecurity(EspBleConnectionId connectionId);
+  // Supply the passkey for an in-progress Passkey Entry when this device is the
+  // input side (KeyboardOnly, MITM, no static passkey). Call it after initiating
+  // the secured connection; the pairing blocks until it arrives (or times out).
+  // Not needed when a static passkey is configured.
+  bool providePasskey(uint32_t passkey);
   size_t bondCount() const;
   bool bond(size_t index, EspBleBond &bond) const;
   bool deleteBond(const EspBleBond &bond);
