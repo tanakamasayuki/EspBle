@@ -93,6 +93,8 @@ arduino-cli compile --profile esp32s3 examples/<path>
 | [Gatt/HealthThermometerClient](Gatt/HealthThermometerClient/) | Central | Temperature Type read and FLOAT measurement indication decoding |
 | [Gatt/BloodPressureServer](Gatt/BloodPressureServer/) | Peripheral | IEEE-11073 SFLOAT systolic/diastolic/mean Measurement indications and Feature |
 | [Gatt/BloodPressureClient](Gatt/BloodPressureClient/) | Central | Feature read and SFLOAT measurement indication decoding |
+| [Gatt/WeightScaleServer](Gatt/WeightScaleServer/) | Peripheral | uint16 Weight Measurement indications (0.005 kg resolution) and Feature |
+| [Gatt/WeightScaleClient](Gatt/WeightScaleClient/) | Central | Feature read and Weight Measurement indication decoding |
 | [Gatt/NusServer](Gatt/NusServer/) | Peripheral | NUS-compatible RX writes and TX notification echo |
 | [Gatt/NusClient](Gatt/NusClient/) | Central | NUS-compatible TX subscription and RX Write Without Response |
 | [Security/JustWorksServer](Security/JustWorksServer/) | Peripheral | Encrypted characteristic with Just Works pairing + bonding |
@@ -123,6 +125,7 @@ Suggested pairings on two boards:
 - Gatt/EnvironmentalServer ↔ Gatt/EnvironmentalClient
 - Gatt/HealthThermometerServer ↔ Gatt/HealthThermometerClient
 - Gatt/BloodPressureServer ↔ Gatt/BloodPressureClient
+- Gatt/WeightScaleServer ↔ Gatt/WeightScaleClient
 - Gatt/NusServer ↔ Gatt/NusClient
 - Security/StaticPasskeyServer ↔ Security/StaticPasskeyClient
 - Hid/KeyboardDevice / Hid/CompositeKeyboardMouse ↔ Hid/KeyboardHost

@@ -35,4 +35,5 @@ The profile names do not describe BLE roles. Sketches are flashed to and run on 
 - `midi_host`: a bundled-NimBLE peripheral notifies a running-status BLE MIDI packet and `EspBleMidiHost` decodes it into two messages with correct timestamps; the host's outgoing Note On and a multi-packet SysEx reach the peripheral.
 - `health_thermometer`: the standard Health Thermometer server indicates an IEEE-11073 32-bit FLOAT Temperature Measurement; the client reads Temperature Type, subscribes to indications, and decodes 37.5 °C exactly.
 - `blood_pressure`: the standard Blood Pressure server indicates a Measurement with systolic/diastolic/mean as IEEE-11073 16-bit SFLOATs; the client reads the Feature field and decodes 120/80/93 mmHg exactly.
+- `weight_scale`: the standard Weight Scale server indicates a Measurement carrying a uint16 weight at 0.005 kg resolution; the client reads the Feature field and decodes 70.000 kg exactly.
 - `connect_disconnect`, `gatt_read_write`, `notify_indicate`, `mtu`, `security_bond`, `security_passkey`, `hid_keyboard_device`, `hid_keyboard_host`, `ble_keybridge_keyboard`: the per-feature suites listed in the [test plan](../TEST_PLAN.ja.md).

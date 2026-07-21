@@ -145,6 +145,7 @@
 2. 標準Sensor Serviceは、Heart Rate / Environmental Sensing / Current Timeと同じく公開GATT API上のexample＋Peerテストで対応する（ライブラリ本体へprofile helperは追加しない）。wire形式の妥当性はcodec unit testで固定し、Peerテストはindicate購読・配送・decodeのend-to-endを検証する。
 3. Health ThermometerのTemperature Measurement（0x2A1C）はIndication、Temperature Type（0x2A1D）はReadとする。`health_thermometer` PeerテストでType Read、Indication購読、37.5℃のFLOAT decodeを検証済み。
 4. Blood PressureのBlood Pressure Measurement（0x2A35）はIndication、Blood Pressure Feature（0x2A49）はReadとする。systolic/diastolic/meanは16-bit SFLOATで、`blood_pressure` PeerテストでFeature Read、Indication購読、120/80/93 mmHgのSFLOAT decodeを検証済み。SFLOATは`EspBleMedicalFloat.h`をFLOATと共有する。
+5. Weight ScaleのWeight Measurement（0x2A9D）はIndication、Weight Scale Feature（0x2A9E）はReadとする。weightはIEEE floatではなく固定分解能uint16（SI 0.005 kg/LSB、Imperial 0.01 lb/LSB）で、medical float codecは使わず素のuint16として扱う。`weight_scale` PeerテストでFeature Read、Indication購読、70.000 kg decodeを検証済み。
 
 ## 優先順位候補
 
