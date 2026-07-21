@@ -79,6 +79,33 @@ bool isValidAddressType(EspBleAddressType type)
 }
 } // namespace
 
+// Resolve a remote characteristic by its attribute handle across all discovered
+// services on a client. Used by the handle-based GATT client operations to
+// target one of several characteristics that share a UUID. Returns nullptr if no
+// service has been discovered yet or no characteristic has the handle.
+static BLERemoteCharacteristic *espBleFindCharacteristicByHandle(
+  BLEClient *client, uint16_t handle, String &serviceUuidOut)
+{
+  if (client == nullptr || handle == 0) return nullptr;
+  std::map<std::string, BLERemoteService *> *services = client->getServices();
+  if (services == nullptr) return nullptr;
+  for (const auto &serviceItem : *services)
+  {
+    BLERemoteService *service = serviceItem.second;
+    if (service == nullptr) continue;
+    std::map<uint16_t, BLERemoteCharacteristic *> *byHandle =
+      service->getCharacteristicsByHandle();
+    if (byHandle == nullptr) continue;
+    auto found = byHandle->find(handle);
+    if (found != byHandle->end() && found->second != nullptr)
+    {
+      serviceUuidOut = service->getUUID().toString();
+      return found->second;
+    }
+  }
+  return nullptr;
+}
+
 struct EspBleImpl
 {
   enum class EventType : uint8_t
@@ -797,6 +824,7 @@ struct EspBleImpl
     EspBleConnectionId connectionId,
     const String &serviceUuid,
     const String &characteristicUuid,
+    uint16_t characteristicHandle,
     const uint8_t *data,
     size_t length,
     bool indication)
@@ -807,6 +835,7 @@ struct EspBleImpl
     event.notification.connectionId = connectionId;
     event.notification.serviceUuid = serviceUuid;
     event.notification.characteristicUuid = characteristicUuid;
+    event.notification.handle = characteristicHandle;
     event.notification.value = length == 0
       ? String()
       : String(reinterpret_cast<const char *>(data), length);
@@ -900,6 +929,7 @@ struct EspBleImpl
       result.serviceUuid = impl->gattServiceUuid;
       result.characteristicUuid = impl->gattCharacteristicUuid;
       result.descriptorUuid = impl->gattDescriptorUuid;
+      result.handle = impl->gattCharacteristicHandle;
       writeValue = impl->gattWriteValue;
       response = impl->gattWriteResponse;
       result.response = response;
@@ -967,8 +997,11 @@ struct EspBleImpl
           }
           if (!result.success) break;
 
-          std::map<std::string, BLERemoteCharacteristic *> *characteristics =
-            service->getCharacteristics();
+          // Enumerate by handle, not by UUID: several characteristics in one
+          // service can share a UUID (e.g. HID Report), and a UUID-keyed map
+          // would collapse them into a single entry.
+          std::map<uint16_t, BLERemoteCharacteristic *> *characteristics =
+            service->getCharacteristicsByHandle();
           if (characteristics == nullptr)
           {
             result.success = false;
@@ -1035,23 +1068,45 @@ struct EspBleImpl
     }
     else
     {
-      BLERemoteService *service = client->getService(result.serviceUuid.c_str());
-      if (service == nullptr)
+      BLERemoteCharacteristic *characteristic = nullptr;
+      if (result.handle != 0)
       {
-        result.error = EspBleError::NotFound;
-        result.detail = "GATT service was not found";
-      }
-      else
-      {
-        BLERemoteCharacteristic *characteristic =
-          service->getCharacteristic(result.characteristicUuid.c_str());
+        // Handle-based target: search every discovered service by handle so a
+        // characteristic that shares a UUID with others can be addressed.
+        characteristic =
+          espBleFindCharacteristicByHandle(client, result.handle, result.serviceUuid);
         if (characteristic == nullptr)
         {
           result.error = EspBleError::NotFound;
-          result.detail = "GATT characteristic was not found";
+          result.detail = "GATT characteristic handle was not found (discover services first)";
         }
         else
         {
+          result.characteristicUuid = characteristic->getUUID().toString();
+        }
+      }
+      else
+      {
+        BLERemoteService *service = client->getService(result.serviceUuid.c_str());
+        if (service == nullptr)
+        {
+          result.error = EspBleError::NotFound;
+          result.detail = "GATT service was not found";
+        }
+        else
+        {
+          characteristic = service->getCharacteristic(result.characteristicUuid.c_str());
+          if (characteristic == nullptr)
+          {
+            result.error = EspBleError::NotFound;
+            result.detail = "GATT characteristic was not found";
+          }
+        }
+      }
+      {
+        if (characteristic != nullptr)
+        {
+          result.handle = characteristic->getHandle();
           result.readable = characteristic->canRead();
           result.writable = characteristic->canWrite();
           result.writableWithoutResponse = characteristic->canWriteNoResponse();
@@ -1141,9 +1196,10 @@ struct EspBleImpl
               const EspBleConnectionId connectionId = result.connectionId;
               const String serviceUuid = result.serviceUuid;
               const String characteristicUuid = result.characteristicUuid;
+              const uint16_t characteristicHandle = characteristic->getHandle();
               result.success = characteristic->subscribe(
                 notifications,
-                [impl, connectionId, serviceUuid, characteristicUuid](
+                [impl, connectionId, serviceUuid, characteristicUuid, characteristicHandle](
                   BLERemoteCharacteristic *,
                   uint8_t *data,
                   size_t length,
@@ -1152,6 +1208,7 @@ struct EspBleImpl
                     connectionId,
                     serviceUuid,
                     characteristicUuid,
+                    characteristicHandle,
                     data,
                     length,
                     !isNotification);
@@ -1262,6 +1319,7 @@ struct EspBleImpl
   String gattServiceUuid;
   String gattCharacteristicUuid;
   String gattDescriptorUuid;
+  uint16_t gattCharacteristicHandle = 0; // when non-zero, target by handle
   String gattWriteValue;
   bool gattWriteResponse = true;
   uint32_t gattStartMilliseconds = 0;
@@ -6247,6 +6305,7 @@ void EspBle::expireGattOperation()
   event.gattResult.serviceUuid = impl_->gattServiceUuid;
   event.gattResult.characteristicUuid = impl_->gattCharacteristicUuid;
   event.gattResult.descriptorUuid = impl_->gattDescriptorUuid;
+  event.gattResult.handle = impl_->gattCharacteristicHandle;
   event.gattResult.response = impl_->gattWriteResponse;
   event.gattResult.error = EspBleError::Timeout;
   event.gattResult.detail = "GATT operation timed out";
@@ -7115,6 +7174,86 @@ bool EspBle::writeDescriptor(
     timeoutMilliseconds);
 }
 
+bool EspBle::readCharacteristic(
+  EspBleConnectionId connectionId,
+  uint16_t characteristicHandle,
+  uint32_t timeoutMilliseconds)
+{
+  if (characteristicHandle == 0)
+  {
+    setError(EspBleError::InvalidArgument, "characteristic handle must be non-zero");
+    return false;
+  }
+  return startGattOperation(
+    EspBleGattOperation::Read, connectionId, nullptr, nullptr,
+    nullptr, 0, true, nullptr, timeoutMilliseconds, characteristicHandle);
+}
+
+bool EspBle::writeCharacteristic(
+  EspBleConnectionId connectionId,
+  uint16_t characteristicHandle,
+  const uint8_t *data,
+  size_t length,
+  bool response,
+  uint32_t timeoutMilliseconds)
+{
+  if (characteristicHandle == 0)
+  {
+    setError(EspBleError::InvalidArgument, "characteristic handle must be non-zero");
+    return false;
+  }
+  return startGattOperation(
+    EspBleGattOperation::Write, connectionId, nullptr, nullptr,
+    data, length, response, nullptr, timeoutMilliseconds, characteristicHandle);
+}
+
+bool EspBle::writeCharacteristic(
+  EspBleConnectionId connectionId,
+  uint16_t characteristicHandle,
+  const String &value,
+  bool response,
+  uint32_t timeoutMilliseconds)
+{
+  return writeCharacteristic(
+    connectionId,
+    characteristicHandle,
+    reinterpret_cast<const uint8_t *>(value.c_str()),
+    value.length(),
+    response,
+    timeoutMilliseconds);
+}
+
+bool EspBle::subscribe(
+  EspBleConnectionId connectionId,
+  uint16_t characteristicHandle,
+  bool notifications,
+  uint32_t timeoutMilliseconds)
+{
+  if (characteristicHandle == 0)
+  {
+    setError(EspBleError::InvalidArgument, "characteristic handle must be non-zero");
+    return false;
+  }
+  return startGattOperation(
+    EspBleGattOperation::Subscribe, connectionId, nullptr, nullptr,
+    nullptr, 0, notifications, nullptr, timeoutMilliseconds, characteristicHandle);
+}
+
+bool EspBle::unsubscribe(
+  EspBleConnectionId connectionId,
+  uint16_t characteristicHandle,
+  uint32_t timeoutMilliseconds)
+{
+  if (characteristicHandle == 0)
+  {
+    setError(EspBleError::InvalidArgument, "characteristic handle must be non-zero");
+    return false;
+  }
+  return startGattOperation(
+    EspBleGattOperation::Unsubscribe, connectionId, nullptr, nullptr,
+    nullptr, 0, true, nullptr, timeoutMilliseconds, characteristicHandle);
+}
+
 void EspBle::onCharacteristicDiscovered(GattResultCallback callback)
 {
   characteristicDiscoveredCallback_ = std::move(callback);
@@ -7170,7 +7309,8 @@ bool EspBle::startGattOperation(
   size_t length,
   bool response,
   const char *descriptorUuid,
-  uint32_t timeoutMilliseconds)
+  uint32_t timeoutMilliseconds,
+  uint16_t characteristicHandle)
 {
   if (!initialized_)
   {
@@ -7180,7 +7320,10 @@ bool EspBle::startGattOperation(
   const bool databaseDiscovery = operation == EspBleGattOperation::DiscoverServices;
   const bool descriptorOperation = operation == EspBleGattOperation::ReadDescriptor ||
     operation == EspBleGattOperation::WriteDescriptor;
-  if ((!databaseDiscovery &&
+  // A handle-based operation identifies the characteristic by handle, so the
+  // service/characteristic UUID arguments are not required.
+  const bool handleBased = characteristicHandle != 0;
+  if ((!databaseDiscovery && !handleBased &&
        (serviceUuid == nullptr || serviceUuid[0] == '\0' ||
         characteristicUuid == nullptr || characteristicUuid[0] == '\0')) ||
       (descriptorOperation && (descriptorUuid == nullptr || descriptorUuid[0] == '\0')) ||
@@ -7217,6 +7360,7 @@ bool EspBle::startGattOperation(
     impl_->gattServiceUuid = serviceUuid == nullptr ? "" : serviceUuid;
     impl_->gattCharacteristicUuid = characteristicUuid == nullptr ? "" : characteristicUuid;
     impl_->gattDescriptorUuid = descriptorUuid == nullptr ? "" : descriptorUuid;
+    impl_->gattCharacteristicHandle = characteristicHandle;
     impl_->gattWriteValue = length == 0
       ? String()
       : String(reinterpret_cast<const char *>(data), length);

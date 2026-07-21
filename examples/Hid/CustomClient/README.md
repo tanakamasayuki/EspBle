@@ -2,9 +2,9 @@
 
 > 日本語版: [README.ja.md](README.ja.md)
 
-Reads a Custom HID device's arbitrary Report Descriptor and receives its input reports using the **generic GATT client**. Pairs with the [Hid/CustomDevice](../CustomDevice/) example.
+Reads a Custom HID device's arbitrary Report Descriptor and drives its reports using the **generic GATT client**. Pairs with the [Hid/CustomDevice](../CustomDevice/) example.
 
-A HID device exposes several Report characteristics that all share UUID `0x2A4D`. The generic GATT client addresses characteristics by UUID, so this example subscribes to the first Report characteristic — the CustomDevice example registers its input report first. (For full control over individual reports by handle, use `ble.hidHost()` instead.)
+A HID device exposes several Report characteristics that all share UUID `0x2A4D`. To target a specific one, this example discovers the service, resolves each report to its distinct **attribute handle** with `discoveredCharacteristic()`, then subscribes to the input report and writes the output report **by handle** (`subscribe(connectionId, handle, …)` / `writeCharacteristic(connectionId, handle, …)`). Incoming notifications carry the source `handle`, so the input report is matched unambiguously.
 
 ## Hardware
 
@@ -14,8 +14,9 @@ A HID device exposes several Report characteristics that all share UUID `0x2A4D`
 ## What it does
 
 - Scans for and connects to a device advertising the HID service (`0x1812`)
-- Reads the Report Map (`0x2A4B`) and prints its length
-- Subscribes to the input Report (`0x2A4D`) and decodes the 2-byte report (dial delta + buttons)
+- Discovers services and resolves the input and output Report characteristics to their handles
+- Subscribes to the input report by handle and decodes the 2-byte report (dial delta + buttons)
+- Writes the 1-byte output report by handle when you send `o` over Serial
 
 ## Notes
 

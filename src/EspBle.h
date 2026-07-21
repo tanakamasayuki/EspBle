@@ -246,6 +246,10 @@ struct EspBleGattResult
   String serviceUuid;
   String characteristicUuid;
   String descriptorUuid;
+  // Attribute handle of the target characteristic. Populated for every
+  // characteristic operation; the way to tell apart characteristics that share
+  // a UUID (e.g. several HID Report characteristics).
+  uint16_t handle = 0;
   bool success = false;
   EspBleError error = EspBleError::None;
   String detail;
@@ -307,6 +311,9 @@ struct EspBleGattNotification
   EspBleConnectionId connectionId = 0;
   String serviceUuid;
   String characteristicUuid;
+  // Attribute handle of the notifying characteristic; disambiguates characteristics
+  // that share a UUID.
+  uint16_t handle = 0;
   String value;
   bool indication = false;
 };
@@ -1173,6 +1180,39 @@ public:
     const char *serviceUuid,
     const char *characteristicUuid,
     uint32_t timeoutMilliseconds = 10000);
+
+  // Handle-based characteristic operations. Use these to target a specific
+  // characteristic when several share a UUID (e.g. HID Report characteristics):
+  // obtain the attribute handle from discoveredCharacteristic() after
+  // discoverServices(), then read/write/subscribe by that handle. The
+  // EspBleGattResult / EspBleGattNotification `handle` field echoes it back.
+  bool readCharacteristic(
+    EspBleConnectionId connectionId,
+    uint16_t characteristicHandle,
+    uint32_t timeoutMilliseconds = 10000);
+  bool writeCharacteristic(
+    EspBleConnectionId connectionId,
+    uint16_t characteristicHandle,
+    const uint8_t *data,
+    size_t length,
+    bool response = true,
+    uint32_t timeoutMilliseconds = 10000);
+  bool writeCharacteristic(
+    EspBleConnectionId connectionId,
+    uint16_t characteristicHandle,
+    const String &value,
+    bool response = true,
+    uint32_t timeoutMilliseconds = 10000);
+  bool subscribe(
+    EspBleConnectionId connectionId,
+    uint16_t characteristicHandle,
+    bool notifications = true,
+    uint32_t timeoutMilliseconds = 10000);
+  bool unsubscribe(
+    EspBleConnectionId connectionId,
+    uint16_t characteristicHandle,
+    uint32_t timeoutMilliseconds = 10000);
+
   void onCharacteristicDiscovered(GattResultCallback callback);
   void onCharacteristicRead(GattResultCallback callback);
   void onCharacteristicWritten(GattResultCallback callback);
@@ -1234,7 +1274,8 @@ private:
     size_t length = 0,
     bool response = true,
     const char *descriptorUuid = nullptr,
-    uint32_t timeoutMilliseconds = 10000);
+    uint32_t timeoutMilliseconds = 10000,
+    uint16_t characteristicHandle = 0);
 
   bool initialized_ = false;
   String activeDeviceName_;

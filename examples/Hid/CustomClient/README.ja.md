@@ -2,9 +2,9 @@
 
 > English: [README.md](README.md)
 
-**汎用GATTクライアント**でCustom HIDデバイスの任意Report Descriptorを読み、入力Reportを受け取ります。[Hid/CustomDevice](../CustomDevice/) とペアです。
+**汎用GATTクライアント**でCustom HIDデバイスの任意Report Descriptorを読み、Reportを駆動します。[Hid/CustomDevice](../CustomDevice/) とペアです。
 
-HIDデバイスは同一UUID `0x2A4D` のReport characteristicを複数公開します。汎用GATTクライアントはUUIDでcharacteristicを指定するため、この例は最初のReport characteristic（CustomDeviceが最初に登録する入力Report）を購読します。（個々のReportをhandle単位で細かく扱うには `ble.hidHost()` を使ってください。）
+HIDデバイスは同一UUID `0x2A4D` のReport characteristicを複数公開します。特定の1つを指定するため、この例はserviceをdiscoverし、`discoveredCharacteristic()` で各Reportを個別の **attribute handle** へ解決してから、入力Reportの購読と出力Reportの書き込みを **handleで** 行います（`subscribe(connectionId, handle, …)` / `writeCharacteristic(connectionId, handle, …)`）。通知は送信元の `handle` を持つため、入力Reportを一意に判別できます。
 
 ## ハードウェア
 
@@ -14,8 +14,9 @@ HIDデバイスは同一UUID `0x2A4D` のReport characteristicを複数公開し
 ## 動作
 
 - HID Service（`0x1812`）をadvertiseするデバイスを探して接続
-- Report Map（`0x2A4B`）を読み、byte数を表示
-- 入力Report（`0x2A4D`）を購読し、2byteのReport（ダイヤル差分＋ボタン）をデコード
+- serviceをdiscoverし、入力・出力Report characteristicをhandleへ解決
+- 入力Reportをhandleで購読し、2byteのReport（ダイヤル差分＋ボタン）をデコード
+- Serialで `o` を送ると1byteの出力Reportをhandleで書き込む
 
 ## 補足
 
