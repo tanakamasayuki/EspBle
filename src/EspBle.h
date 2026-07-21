@@ -149,6 +149,11 @@ struct EspBleConnection
   bool authenticated = false;
   bool bonded = false;
   uint8_t encryptionKeySize = 0;
+  // Only meaningful in the onDisconnected() callback: the backend/HCI reason
+  // code for the disconnection, or 0 when the reason is unknown. A locally
+  // requested disconnect, a remote termination, and a supervision timeout
+  // report distinct codes. 0 in the onConnected()/onMtuChanged() events.
+  int disconnectReason = 0;
 
   size_t maximumNotificationPayload() const;
 };

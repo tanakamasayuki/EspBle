@@ -420,6 +420,29 @@ struct EspBleImpl
     }
   }
 
+  static int disconnectListenerEntry(ble_gap_event *event, void *argument)
+  {
+    if (event->type == BLE_GAP_EVENT_DISCONNECT)
+    {
+      static_cast<EspBleImpl *>(argument)->stampDisconnectReason(
+        event->disconnect.conn.conn_handle, event->disconnect.reason);
+    }
+    return 0;
+  }
+
+  void stampDisconnectReason(uint16_t handle, int reason)
+  {
+    std::lock_guard<std::mutex> lock(mutex);
+    for (ConnectionSlot &slot : connections)
+    {
+      if (slot.used && slot.connection.handle == handle)
+      {
+        slot.connection.disconnectReason = reason;
+        return;
+      }
+    }
+  }
+
   void removeConnection(ConnectionSlot &slot)
   {
     Event event;
@@ -1018,6 +1041,13 @@ struct EspBleImpl
 
   EspBle *owner;
   mutable std::mutex mutex;
+  // Global GAP event listener used only to capture each disconnection's reason
+  // code, which the backend's onDisconnect callbacks do not surface. NimBLE
+  // invokes global listeners before the connection-specific callback, so the
+  // reason is stamped onto the connection slot before removeConnection() reads
+  // it while building the Disconnected event.
+  ble_gap_event_listener disconnectListener = {};
+  bool disconnectListenerRegistered = false;
   ConnectionSlot connections[ConnectionCapacity];
   RetiredClient retiredClients[RetiredClientCapacity];
   size_t retiredClientCount = 0;
@@ -5200,6 +5230,15 @@ bool EspBle::begin(const EspBleConfig &config)
     return false;
   }
 
+  if (!impl_->disconnectListenerRegistered &&
+      ble_gap_event_listener_register(
+        &impl_->disconnectListener,
+        EspBleImpl::disconnectListenerEntry,
+        impl_) == 0)
+  {
+    impl_->disconnectListenerRegistered = true;
+  }
+
   activeDeviceName_ = deviceName;
   activePreferredMtu_ = config.preferredMtu;
   activeSecurity_ = config.security;
@@ -5296,6 +5335,11 @@ void EspBle::end()
     {
       delete clients[index];
     }
+  }
+  if (impl_ != nullptr && impl_->disconnectListenerRegistered)
+  {
+    ble_gap_event_listener_unregister(&impl_->disconnectListener);
+    impl_->disconnectListenerRegistered = false;
   }
   BLEDevice::deinit(false);
   initialized_ = false;

@@ -122,6 +122,7 @@ espBleReadMedicalSFloatLE	KEYWORD2
 espBleCgmCrc	KEYWORD2
 espBleCgmAppendCrc	KEYWORD2
 espBleCgmVerifyCrc	KEYWORD2
+disconnectReason	KEYWORD2
 connect	KEYWORD2
 disconnect	KEYWORD2
 connectionCount	KEYWORD2
