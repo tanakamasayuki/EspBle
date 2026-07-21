@@ -128,6 +128,10 @@ peripheralLatency	KEYWORD2
 supervisionTimeout	KEYWORD2
 updateConnectionParameters	KEYWORD2
 onConnectionParametersUpdated	KEYWORD2
+txPhy	KEYWORD2
+rxPhy	KEYWORD2
+updatePhy	KEYWORD2
+onPhyUpdated	KEYWORD2
 connect	KEYWORD2
 disconnect	KEYWORD2
 connectionCount	KEYWORD2

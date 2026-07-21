@@ -93,6 +93,7 @@ struct EspBleImpl
     ServerSendResult,
     MtuChanged,
     ConnParamsUpdated,
+    PhyUpdated,
     SecurityChanged,
     PasskeyDisplayed,
   };
@@ -349,6 +350,13 @@ struct EspBleImpl
         slot.connection.peripheralLatency = paramsDesc.conn_latency;
         slot.connection.supervisionTimeout = paramsDesc.supervision_timeout;
       }
+      uint8_t txPhy = 0;
+      uint8_t rxPhy = 0;
+      if (ble_gap_read_le_phy(handle, &txPhy, &rxPhy) == 0)
+      {
+        slot.connection.txPhy = txPhy;
+        slot.connection.rxPhy = rxPhy;
+      }
 
       Event event;
       event.type = EventType::Connected;
@@ -440,6 +448,11 @@ struct EspBleImpl
     {
       impl->handleConnParamsUpdate(event->conn_update.conn_handle);
     }
+    else if (event->type == BLE_GAP_EVENT_PHY_UPDATE_COMPLETE)
+    {
+      impl->handlePhyUpdate(
+        event->phy_updated.conn_handle, event->phy_updated.tx_phy, event->phy_updated.rx_phy);
+    }
     return 0;
   }
 
@@ -472,6 +485,24 @@ struct EspBleImpl
         }
         Event event;
         event.type = EventType::ConnParamsUpdated;
+        event.connection = slot.connection;
+        pushEvent(event);
+        return;
+      }
+    }
+  }
+
+  void handlePhyUpdate(uint16_t handle, uint8_t txPhy, uint8_t rxPhy)
+  {
+    std::lock_guard<std::mutex> lock(mutex);
+    for (ConnectionSlot &slot : connections)
+    {
+      if (slot.used && slot.connection.handle == handle)
+      {
+        slot.connection.txPhy = txPhy;
+        slot.connection.rxPhy = rxPhy;
+        Event event;
+        event.type = EventType::PhyUpdated;
         event.connection = slot.connection;
         pushEvent(event);
         return;
@@ -5668,6 +5699,49 @@ bool EspBle::updateConnectionParameters(
   return true;
 }
 
+bool EspBle::updatePhy(EspBleConnectionId connectionId, uint8_t txPhyMask, uint8_t rxPhyMask)
+{
+  if (!initialized_)
+  {
+    setError(EspBleError::InvalidState, "BLE stack is not initialized");
+    return false;
+  }
+  if (txPhyMask == 0 || rxPhyMask == 0)
+  {
+    setError(EspBleError::InvalidArgument, "PHY masks must select at least one PHY");
+    return false;
+  }
+
+  uint16_t handle = 0xffff;
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    for (const EspBleImpl::ConnectionSlot &slot : impl_->connections)
+    {
+      if (slot.used && slot.connection.id == connectionId)
+      {
+        handle = slot.connection.handle;
+        break;
+      }
+    }
+  }
+
+  if (handle == 0xffff)
+  {
+    setError(EspBleError::InvalidArgument, "connection ID was not found");
+    return false;
+  }
+
+  // The PHY preference is a link-layer setting, independent of GATT role.
+  if (ble_gap_set_prefered_le_phy(handle, txPhyMask, rxPhyMask, 0) != 0)
+  {
+    setError(EspBleError::BackendFailure, "failed to request PHY update");
+    return false;
+  }
+
+  clearError();
+  return true;
+}
+
 size_t EspBle::droppedEventCount() const
 {
   if (impl_ == nullptr)
@@ -5883,6 +5957,11 @@ void EspBle::onMtuChanged(MtuChangedCallback callback)
 void EspBle::onConnectionParametersUpdated(ConnectionCallback callback)
 {
   connectionParametersUpdatedCallback_ = std::move(callback);
+}
+
+void EspBle::onPhyUpdated(ConnectionCallback callback)
+{
+  phyUpdatedCallback_ = std::move(callback);
 }
 
 void EspBle::onSecurityChanged(SecurityChangedCallback callback)
@@ -6474,6 +6553,12 @@ void EspBle::dispatchConnectionEvents()
       if (connectionParametersUpdatedCallback_)
       {
         connectionParametersUpdatedCallback_(event.connection);
+      }
+      break;
+    case EspBleImpl::EventType::PhyUpdated:
+      if (phyUpdatedCallback_)
+      {
+        phyUpdatedCallback_(event.connection);
       }
       break;
     case EspBleImpl::EventType::SecurityChanged:

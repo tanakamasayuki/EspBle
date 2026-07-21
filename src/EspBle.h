@@ -161,6 +161,10 @@ struct EspBleConnection
   uint16_t connectionInterval = 0;
   uint16_t peripheralLatency = 0;
   uint16_t supervisionTimeout = 0;
+  // Current LE PHY per direction: 1 = 1M, 2 = 2M, 3 = Coded (0 if unknown).
+  // Populated at connect and refreshed on each update delivered to onPhyUpdated().
+  uint8_t txPhy = 0;
+  uint8_t rxPhy = 0;
 
   size_t maximumNotificationPayload() const;
 };
@@ -988,6 +992,15 @@ public:
     uint16_t maxInterval,
     uint16_t latency,
     uint16_t supervisionTimeout);
+  // PHY preference masks for updatePhy(), matching the LE PHY bit masks.
+  static constexpr uint8_t Phy1MMask = 0x01;
+  static constexpr uint8_t Phy2MMask = 0x02;
+  static constexpr uint8_t PhyCodedMask = 0x04;
+  // Request a preferred LE PHY on an active connection. txPhyMask and rxPhyMask
+  // are OR-ed combinations of Phy1MMask / Phy2MMask / PhyCodedMask. The
+  // negotiated result is delivered to onPhyUpdated(). 2M and Coded depend on
+  // radio support and the peer.
+  bool updatePhy(EspBleConnectionId connectionId, uint8_t txPhyMask, uint8_t rxPhyMask);
   size_t droppedEventCount() const;
   size_t connectionCount() const;
   bool connection(EspBleConnectionId connectionId, EspBleConnection &connection) const;
@@ -1002,6 +1015,7 @@ public:
   void onConnectionFailed(ConnectionFailureCallback callback);
   void onMtuChanged(MtuChangedCallback callback);
   void onConnectionParametersUpdated(ConnectionCallback callback);
+  void onPhyUpdated(ConnectionCallback callback);
   void onSecurityChanged(SecurityChangedCallback callback);
   void onPasskeyDisplayed(PasskeyDisplayedCallback callback);
 
@@ -1173,6 +1187,7 @@ private:
   ConnectionFailureCallback connectionFailedCallback_;
   MtuChangedCallback mtuChangedCallback_;
   ConnectionCallback connectionParametersUpdatedCallback_;
+  ConnectionCallback phyUpdatedCallback_;
   SecurityChangedCallback securityChangedCallback_;
   PasskeyDisplayedCallback passkeyDisplayedCallback_;
   GattResultCallback characteristicDiscoveredCallback_;
