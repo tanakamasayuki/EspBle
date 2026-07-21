@@ -99,6 +99,8 @@ arduino-cli compile --profile esp32s3 examples/<path>
 | [Gatt/CyclingSpeedCadenceClient](Gatt/CyclingSpeedCadenceClient/) | Central | Sensor Location read and CSC Measurement notification decoding |
 | [Gatt/RunningSpeedCadenceServer](Gatt/RunningSpeedCadenceServer/) | Peripheral | Speed/cadence/stride/distance RSC Measurement notifications, Feature, Sensor Location |
 | [Gatt/RunningSpeedCadenceClient](Gatt/RunningSpeedCadenceClient/) | Central | Sensor Location read and RSC Measurement notification decoding |
+| [Gatt/GlucoseServer](Gatt/GlucoseServer/) | Peripheral | Record Access Control Point: RACP write → Measurement notify → RACP indicate |
+| [Gatt/GlucoseClient](Gatt/GlucoseClient/) | Central | RACP report-records request and measurement/response decoding |
 | [Gatt/NusServer](Gatt/NusServer/) | Peripheral | NUS-compatible RX writes and TX notification echo |
 | [Gatt/NusClient](Gatt/NusClient/) | Central | NUS-compatible TX subscription and RX Write Without Response |
 | [Security/JustWorksServer](Security/JustWorksServer/) | Peripheral | Encrypted characteristic with Just Works pairing + bonding |
@@ -132,6 +134,7 @@ Suggested pairings on two boards:
 - Gatt/WeightScaleServer ↔ Gatt/WeightScaleClient
 - Gatt/CyclingSpeedCadenceServer ↔ Gatt/CyclingSpeedCadenceClient
 - Gatt/RunningSpeedCadenceServer ↔ Gatt/RunningSpeedCadenceClient
+- Gatt/GlucoseServer ↔ Gatt/GlucoseClient
 - Gatt/NusServer ↔ Gatt/NusClient
 - Security/StaticPasskeyServer ↔ Security/StaticPasskeyClient
 - Hid/KeyboardDevice / Hid/CompositeKeyboardMouse ↔ Hid/KeyboardHost
