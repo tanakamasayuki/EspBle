@@ -95,6 +95,8 @@ arduino-cli compile --profile esp32s3 examples/<path>
 | [Gatt/BloodPressureClient](Gatt/BloodPressureClient/) | Central | Feature ReadとSFLOAT測定値のIndication decode |
 | [Gatt/WeightScaleServer](Gatt/WeightScaleServer/) | Peripheral | uint16 Weight Measurement（0.005 kg分解能）のIndicateとFeature |
 | [Gatt/WeightScaleClient](Gatt/WeightScaleClient/) | Central | Feature ReadとWeight MeasurementのIndication decode |
+| [Gatt/BodyCompositionServer](Gatt/BodyCompositionServer/) | Peripheral | Body Fat Percentage＋任意Weight MeasurementのIndicateとFeature |
+| [Gatt/BodyCompositionClient](Gatt/BodyCompositionClient/) | Central | Feature ReadとBody Fat Percentage / Weight測定値のdecode |
 | [Gatt/CyclingSpeedCadenceServer](Gatt/CyclingSpeedCadenceServer/) | Peripheral | 多フィールドwheel/crank CSC MeasurementのNotify、Feature、Sensor Location |
 | [Gatt/CyclingSpeedCadenceClient](Gatt/CyclingSpeedCadenceClient/) | Central | Sensor location ReadとCSC MeasurementのNotification decode |
 | [Gatt/RunningSpeedCadenceServer](Gatt/RunningSpeedCadenceServer/) | Peripheral | speed/cadence/stride/distance RSC MeasurementのNotify、Feature、Sensor Location |
@@ -136,6 +138,7 @@ arduino-cli compile --profile esp32s3 examples/<path>
 - Gatt/HealthThermometerServer ↔ Gatt/HealthThermometerClient
 - Gatt/BloodPressureServer ↔ Gatt/BloodPressureClient
 - Gatt/WeightScaleServer ↔ Gatt/WeightScaleClient
+- Gatt/BodyCompositionServer ↔ Gatt/BodyCompositionClient
 - Gatt/CyclingSpeedCadenceServer ↔ Gatt/CyclingSpeedCadenceClient
 - Gatt/RunningSpeedCadenceServer ↔ Gatt/RunningSpeedCadenceClient
 - Gatt/GlucoseServer ↔ Gatt/GlucoseClient

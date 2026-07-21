@@ -95,6 +95,8 @@ arduino-cli compile --profile esp32s3 examples/<path>
 | [Gatt/BloodPressureClient](Gatt/BloodPressureClient/) | Central | Feature read and SFLOAT measurement indication decoding |
 | [Gatt/WeightScaleServer](Gatt/WeightScaleServer/) | Peripheral | uint16 Weight Measurement indications (0.005 kg resolution) and Feature |
 | [Gatt/WeightScaleClient](Gatt/WeightScaleClient/) | Central | Feature read and Weight Measurement indication decoding |
+| [Gatt/BodyCompositionServer](Gatt/BodyCompositionServer/) | Peripheral | Body Fat Percentage + optional Weight Measurement indications and Feature |
+| [Gatt/BodyCompositionClient](Gatt/BodyCompositionClient/) | Central | Feature read and Body Fat Percentage / Weight measurement decoding |
 | [Gatt/CyclingSpeedCadenceServer](Gatt/CyclingSpeedCadenceServer/) | Peripheral | Multi-field wheel/crank CSC Measurement notifications, Feature, Sensor Location |
 | [Gatt/CyclingSpeedCadenceClient](Gatt/CyclingSpeedCadenceClient/) | Central | Sensor Location read and CSC Measurement notification decoding |
 | [Gatt/RunningSpeedCadenceServer](Gatt/RunningSpeedCadenceServer/) | Peripheral | Speed/cadence/stride/distance RSC Measurement notifications, Feature, Sensor Location |
@@ -136,6 +138,7 @@ Suggested pairings on two boards:
 - Gatt/HealthThermometerServer ↔ Gatt/HealthThermometerClient
 - Gatt/BloodPressureServer ↔ Gatt/BloodPressureClient
 - Gatt/WeightScaleServer ↔ Gatt/WeightScaleClient
+- Gatt/BodyCompositionServer ↔ Gatt/BodyCompositionClient
 - Gatt/CyclingSpeedCadenceServer ↔ Gatt/CyclingSpeedCadenceClient
 - Gatt/RunningSpeedCadenceServer ↔ Gatt/RunningSpeedCadenceClient
 - Gatt/GlucoseServer ↔ Gatt/GlucoseClient
