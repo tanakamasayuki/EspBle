@@ -132,6 +132,7 @@ txPhy	KEYWORD2
 rxPhy	KEYWORD2
 updatePhy	KEYWORD2
 onPhyUpdated	KEYWORD2
+notifyServicesChanged	KEYWORD2
 connect	KEYWORD2
 disconnect	KEYWORD2
 connectionCount	KEYWORD2

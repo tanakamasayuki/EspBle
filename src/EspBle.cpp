@@ -15,6 +15,7 @@
 #include <BLEUtils.h>
 #include <host/ble_gap.h>
 #include <host/ble_hs_mbuf.h>
+#include <services/gatt/ble_svc_gatt.h>
 #include <host/ble_store.h>
 #include <os/os_mbuf.h>
 #include <freertos/FreeRTOS.h>
@@ -5747,6 +5748,26 @@ bool EspBle::updatePhy(EspBleConnectionId connectionId, uint8_t txPhyMask, uint8
     return false;
   }
 
+  clearError();
+  return true;
+}
+
+bool EspBle::notifyServicesChanged(uint16_t startHandle, uint16_t endHandle)
+{
+  if (!initialized_)
+  {
+    setError(EspBleError::InvalidState, "BLE stack is not initialized");
+    return false;
+  }
+  if (startHandle > endHandle)
+  {
+    setError(EspBleError::InvalidArgument, "startHandle must not exceed endHandle");
+    return false;
+  }
+
+  // The backend registers the Generic Attribute service and its Service Changed
+  // characteristic; this indicates the changed range to subscribed clients.
+  ble_svc_gatt_changed(startHandle, endHandle);
   clearError();
   return true;
 }

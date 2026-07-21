@@ -1001,6 +1001,12 @@ public:
   // negotiated result is delivered to onPhyUpdated(). 2M and Coded depend on
   // radio support and the peer.
   bool updatePhy(EspBleConnectionId connectionId, uint8_t txPhyMask, uint8_t rxPhyMask);
+  // Send a GATT Service Changed indication (Generic Attribute service 0x1801,
+  // characteristic 0x2A05) covering the attribute-handle range [startHandle,
+  // endHandle], telling subscribed clients to rediscover that range. The
+  // Generic Attribute service is provided by the backend. Use 0x0001..0xFFFF to
+  // indicate the whole database.
+  bool notifyServicesChanged(uint16_t startHandle, uint16_t endHandle);
   size_t droppedEventCount() const;
   size_t connectionCount() const;
   bool connection(EspBleConnectionId connectionId, EspBleConnection &connection) const;
