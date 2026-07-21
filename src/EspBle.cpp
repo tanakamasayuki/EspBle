@@ -1555,6 +1555,7 @@ struct EspBleHidDeviceManagerImpl
     uint16_t connectionHandle = 0xffff;
     uint8_t inputNotifications = 0;
     bool batteryNotifications = false;
+    bool bootKeyboardInputNotifications = false;
   };
 
   explicit EspBleHidDeviceManagerImpl(EspBleHidKeyboard *device)
@@ -1575,6 +1576,9 @@ struct EspBleHidDeviceManagerImpl
     else if (event->type == BLE_GAP_EVENT_DISCONNECT)
     {
       impl->clearSubscriptions(event->disconnect.conn.conn_handle);
+      // Protocol Mode resets to Report Protocol Mode for the next connection.
+      std::lock_guard<std::mutex> lock(impl->mutex);
+      impl->protocolMode = EspBleHidKeyboard::ReportProtocolMode;
     }
     return 0;
   }
@@ -1590,7 +1594,10 @@ struct EspBleHidDeviceManagerImpl
         break;
       }
     }
-    if (reportId == 0 && (attributeHandle != batteryValueHandle || batteryValueHandle == 0))
+    const bool bootKeyboard =
+      bootKeyboardInputValueHandle != 0 && attributeHandle == bootKeyboardInputValueHandle;
+    if (reportId == 0 && !bootKeyboard &&
+        (attributeHandle != batteryValueHandle || batteryValueHandle == 0))
     {
       return;
     }
@@ -1629,6 +1636,10 @@ struct EspBleHidDeviceManagerImpl
       if (notifications) slot->inputNotifications |= mask;
       else slot->inputNotifications &= static_cast<uint8_t>(~mask);
     }
+    else if (bootKeyboard)
+    {
+      slot->bootKeyboardInputNotifications = notifications;
+    }
     else
     {
       slot->batteryNotifications = notifications;
@@ -1656,6 +1667,19 @@ struct EspBleHidDeviceManagerImpl
       {
         return battery ? slot.batteryNotifications :
           (slot.inputNotifications & static_cast<uint8_t>(1u << (reportId - 1))) != 0;
+      }
+    }
+    return false;
+  }
+
+  bool subscribedBootKeyboard(uint16_t connectionHandle) const
+  {
+    std::lock_guard<std::mutex> lock(mutex);
+    for (const SubscriptionSlot &slot : subscriptions)
+    {
+      if (slot.used && slot.connectionHandle == connectionHandle)
+      {
+        return slot.bootKeyboardInputNotifications;
       }
     }
     return false;
@@ -1715,6 +1739,18 @@ struct EspBleHidDeviceManagerImpl
       {
         return appendValue(context->om, vendorFeatureValue, vendorFeatureLength);
       }
+      if (context->chr == protocolModeCharacteristic)
+      {
+        return appendValue(context->om, &protocolMode, 1);
+      }
+      if (context->chr == bootKeyboardInputCharacteristic)
+      {
+        return appendValue(context->om, bootKeyboardInput, sizeof(bootKeyboardInput));
+      }
+      if (context->chr == bootKeyboardOutputCharacteristic)
+      {
+        return appendValue(context->om, &bootKeyboardOutput, 1);
+      }
       if (context->chr == &deviceInformationCharacteristics[0])
       {
         const char *manufacturer = config.manufacturer == nullptr ? "" : config.manufacturer;
@@ -1773,6 +1809,41 @@ struct EspBleHidDeviceManagerImpl
           destinationLength = length;
         }
         queueVendorReport(connectionHandle, reportType, value, length);
+        return 0;
+      }
+      if (context->chr == protocolModeCharacteristic)
+      {
+        uint16_t length = 0;
+        uint8_t value = 0;
+        if (ble_hs_mbuf_to_flat(context->om, &value, 1, &length) != 0 || length != 1)
+        {
+          return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
+        }
+        if (value != EspBleHidKeyboard::BootProtocolMode &&
+            value != EspBleHidKeyboard::ReportProtocolMode)
+        {
+          return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
+        }
+        {
+          std::lock_guard<std::mutex> lock(mutex);
+          protocolMode = value;
+        }
+        queueProtocolMode(connectionHandle, value);
+        return 0;
+      }
+      if (context->chr == bootKeyboardOutputCharacteristic)
+      {
+        uint16_t length = 0;
+        uint8_t value = 0;
+        if (ble_hs_mbuf_to_flat(context->om, &value, 1, &length) != 0 || length != 1)
+        {
+          return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
+        }
+        {
+          std::lock_guard<std::mutex> lock(mutex);
+          bootKeyboardOutput = value;
+        }
+        queueOutputReport(connectionHandle, value);
         return 0;
       }
     }
@@ -1863,6 +1934,21 @@ struct EspBleHidDeviceManagerImpl
     ++vendorReportCount;
   }
 
+  void queueProtocolMode(uint16_t connectionHandle, uint8_t mode)
+  {
+    EspBleConnectionId connectionId = 0;
+    if (device->owner_->impl_ != nullptr)
+    {
+      std::lock_guard<std::mutex> connectionLock(device->owner_->impl_->mutex);
+      connectionId = device->owner_->impl_->findPeripheralConnectionId(connectionHandle);
+    }
+    // Protocol Mode is latched state, not a stream: keep only the latest write.
+    std::lock_guard<std::mutex> lock(mutex);
+    protocolModeEventPending = true;
+    protocolModeEventValue = mode;
+    protocolModeEventConnectionId = connectionId;
+  }
+
   EspBleHidKeyboard *device;
   mutable std::mutex mutex;
   EspBleHidDeviceConfig config;
@@ -1875,9 +1961,16 @@ struct EspBleHidDeviceManagerImpl
   uint16_t inputValueHandles[ProfileCount] = {};
   uint16_t outputValueHandle = 0;
   uint16_t batteryValueHandle = 0;
+  uint16_t bootKeyboardInputValueHandle = 0;
   uint8_t inputValues[ProfileCount][MaxVendorReportSize] = {};
   uint8_t inputLengths[ProfileCount] = {8, 4, 11, 2, 1, 63};
   uint8_t outputValue = 0;
+  uint8_t protocolMode = EspBleHidKeyboard::ReportProtocolMode;
+  uint8_t bootKeyboardInput[8] = {};
+  uint8_t bootKeyboardOutput = 0;
+  bool protocolModeEventPending = false;
+  uint8_t protocolModeEventValue = EspBleHidKeyboard::ReportProtocolMode;
+  EspBleConnectionId protocolModeEventConnectionId = 0;
   uint8_t vendorOutputValue[MaxVendorReportSize] = {};
   size_t vendorOutputLength = 0;
   uint8_t vendorFeatureValue[MaxVendorReportSize] = {};
@@ -1893,6 +1986,9 @@ struct EspBleHidDeviceManagerImpl
   ble_uuid16_t hidInformationUuid = BLE_UUID16_INIT(0x2a4a);
   ble_uuid16_t reportMapUuid = BLE_UUID16_INIT(0x2a4b);
   ble_uuid16_t hidControlPointUuid = BLE_UUID16_INIT(0x2a4c);
+  ble_uuid16_t protocolModeUuid = BLE_UUID16_INIT(0x2a4e);
+  ble_uuid16_t bootKeyboardInputUuid = BLE_UUID16_INIT(0x2a22);
+  ble_uuid16_t bootKeyboardOutputUuid = BLE_UUID16_INIT(0x2a32);
   ble_uuid16_t reportUuid = BLE_UUID16_INIT(0x2a4d);
   ble_uuid16_t reportReferenceUuid = BLE_UUID16_INIT(0x2908);
   ble_uuid16_t manufacturerUuid = BLE_UUID16_INIT(0x2a29);
@@ -1902,11 +1998,14 @@ struct EspBleHidDeviceManagerImpl
   ble_gatt_dsc_def outputDescriptors[2] = {};
   ble_gatt_dsc_def vendorOutputDescriptors[2] = {};
   ble_gatt_dsc_def vendorFeatureDescriptors[2] = {};
-  ble_gatt_chr_def hidCharacteristics[14] = {};
+  ble_gatt_chr_def hidCharacteristics[17] = {};
   ble_gatt_chr_def *inputCharacteristics[ProfileCount] = {};
   ble_gatt_chr_def *outputCharacteristic = nullptr;
   ble_gatt_chr_def *vendorOutputCharacteristic = nullptr;
   ble_gatt_chr_def *vendorFeatureCharacteristic = nullptr;
+  ble_gatt_chr_def *protocolModeCharacteristic = nullptr;
+  ble_gatt_chr_def *bootKeyboardInputCharacteristic = nullptr;
+  ble_gatt_chr_def *bootKeyboardOutputCharacteristic = nullptr;
   ble_gatt_chr_def deviceInformationCharacteristics[3] = {};
   ble_gatt_chr_def batteryCharacteristics[2] = {};
   ble_gatt_svc_def services[4] = {};
@@ -3957,6 +4056,35 @@ bool EspBleHidKeyboard::realize()
       encryptedRead | encryptedWrite;
     impl_->vendorFeatureCharacteristic = &feature;
   }
+  // HID over GATT Boot Protocol support for the keyboard profile: a Protocol
+  // Mode characteristic plus dedicated 8-byte Boot Keyboard Input / Output
+  // reports the Host uses while in Boot Protocol Mode (e.g. a BIOS).
+  if ((impl_->profileMask & 0x01) != 0)
+  {
+    ble_gatt_chr_def &protocolModeChr = impl_->hidCharacteristics[characteristicIndex++];
+    protocolModeChr.uuid = &impl_->protocolModeUuid.u;
+    protocolModeChr.access_cb = EspBleHidDeviceManagerImpl::accessCallback;
+    protocolModeChr.arg = impl_;
+    protocolModeChr.flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_WRITE_NO_RSP |
+      encryptedRead | encryptedWrite;
+    impl_->protocolModeCharacteristic = &protocolModeChr;
+
+    ble_gatt_chr_def &bootInput = impl_->hidCharacteristics[characteristicIndex++];
+    bootInput.uuid = &impl_->bootKeyboardInputUuid.u;
+    bootInput.access_cb = EspBleHidDeviceManagerImpl::accessCallback;
+    bootInput.arg = impl_;
+    bootInput.flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY | encryptedRead;
+    bootInput.val_handle = &impl_->bootKeyboardInputValueHandle;
+    impl_->bootKeyboardInputCharacteristic = &bootInput;
+
+    ble_gatt_chr_def &bootOutput = impl_->hidCharacteristics[characteristicIndex++];
+    bootOutput.uuid = &impl_->bootKeyboardOutputUuid.u;
+    bootOutput.access_cb = EspBleHidDeviceManagerImpl::accessCallback;
+    bootOutput.arg = impl_;
+    bootOutput.flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_WRITE |
+      BLE_GATT_CHR_F_WRITE_NO_RSP | encryptedRead | encryptedWrite;
+    impl_->bootKeyboardOutputCharacteristic = &bootOutput;
+  }
 
   impl_->deviceInformationCharacteristics[0].uuid = &impl_->manufacturerUuid.u;
   impl_->deviceInformationCharacteristics[0].access_cb =
@@ -4004,7 +4132,8 @@ bool EspBleHidKeyboard::realize()
     if ((impl_->profileMask & static_cast<uint8_t>(1u << index)) != 0 &&
         impl_->inputValueHandles[index] == 0) handlesRegistered = false;
   }
-  if ((impl_->profileMask & 0x01) != 0 && impl_->outputValueHandle == 0)
+  if ((impl_->profileMask & 0x01) != 0 &&
+      (impl_->outputValueHandle == 0 || impl_->bootKeyboardInputValueHandle == 0))
     handlesRegistered = false;
   if (!handlesRegistered)
   {
@@ -4052,6 +4181,15 @@ bool EspBleHidKeyboard::sendRawReport(
     return false;
   }
 
+  // In Boot Protocol Mode the keyboard report travels over the dedicated 8-byte
+  // Boot Keyboard Input Report instead of the Report-protocol characteristic.
+  bool useBoot = false;
+  if (reportId == ESP_BLE_HID_REPORT_ID_KEYBOARD && impl_->bootKeyboardInputValueHandle != 0)
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    useBoot = impl_->protocolMode == EspBleHidKeyboard::BootProtocolMode;
+  }
+
   uint16_t connectionHandles[ConnectionCapacity] = {};
   size_t connectionCount = 0;
   bool anyPeripheral = false;
@@ -4076,7 +4214,10 @@ bool EspBleHidKeyboard::sendRawReport(
   size_t eligibleCount = 0;
   for (size_t index = 0; index < connectionCount; ++index)
   {
-    if (impl_->subscribed(connectionHandles[index], reportId))
+    const bool eligible = useBoot
+      ? impl_->subscribedBootKeyboard(connectionHandles[index])
+      : impl_->subscribed(connectionHandles[index], reportId);
+    if (eligible)
     {
       connectionHandles[eligibleCount++] = connectionHandles[index];
     }
@@ -4097,30 +4238,68 @@ bool EspBleHidKeyboard::sendRawReport(
     return false;
   }
   uint8_t inputValue[sizeof(impl_->inputValues[reportIndex])] = {};
+  size_t notifyLength = length;
+  uint16_t notifyHandle = impl_->inputValueHandles[reportIndex];
   {
     std::lock_guard<std::mutex> lock(impl_->mutex);
-    memcpy(impl_->inputValues[reportIndex], data, length);
-    impl_->inputLengths[reportIndex] = static_cast<uint8_t>(length);
-    if (length < sizeof(impl_->inputValues[reportIndex]))
+    if (useBoot)
     {
-      memset(impl_->inputValues[reportIndex] + length, 0,
-             sizeof(impl_->inputValues[reportIndex]) - length);
+      // The Boot Keyboard Input Report is always the fixed 8-byte layout
+      // [modifiers, reserved, keycode1..6]. A Report-protocol 6KRO report
+      // already matches; an NKRO bitmap is down-converted to keycodes.
+      uint8_t boot[8] = {};
+      if (length == 8)
+      {
+        memcpy(boot, data, 8);
+      }
+      else
+      {
+        boot[0] = data[0]; // modifiers
+        size_t keyIndex = 2;
+        for (size_t byte = 1; byte < length && keyIndex < 8; ++byte)
+        {
+          for (uint8_t bit = 0; bit < 8; ++bit)
+          {
+            if ((data[byte] & static_cast<uint8_t>(1u << bit)) == 0) continue;
+            if (keyIndex >= 8)
+            {
+              memset(boot + 2, 0x01, 6); // rollover: too many keys
+              break;
+            }
+            boot[keyIndex++] = static_cast<uint8_t>(((byte - 1) << 3) + bit);
+          }
+        }
+      }
+      memcpy(impl_->bootKeyboardInput, boot, sizeof(boot));
+      memcpy(inputValue, boot, sizeof(boot));
+      notifyLength = sizeof(boot);
+      notifyHandle = impl_->bootKeyboardInputValueHandle;
     }
-    memcpy(inputValue, impl_->inputValues[reportIndex], length);
+    else
+    {
+      memcpy(impl_->inputValues[reportIndex], data, length);
+      impl_->inputLengths[reportIndex] = static_cast<uint8_t>(length);
+      if (length < sizeof(impl_->inputValues[reportIndex]))
+      {
+        memset(impl_->inputValues[reportIndex] + length, 0,
+               sizeof(impl_->inputValues[reportIndex]) - length);
+      }
+      memcpy(inputValue, impl_->inputValues[reportIndex], length);
+    }
   }
 
   bool sent = false;
   int lastBackendCode = 0;
   for (size_t index = 0; index < connectionCount; ++index)
   {
-    os_mbuf *value = ble_hs_mbuf_from_flat(inputValue, length);
+    os_mbuf *value = ble_hs_mbuf_from_flat(inputValue, notifyLength);
     if (value == nullptr)
     {
       lastBackendCode = BLE_HS_ENOMEM;
       continue;
     }
     const int backendCode = ble_gatts_notify_custom(
-      connectionHandles[index], impl_->inputValueHandles[reportIndex], value);
+      connectionHandles[index], notifyHandle, value);
     if (backendCode == 0)
     {
       sent = true;
@@ -4304,6 +4483,18 @@ void EspBleHidKeyboard::onOutputReport(OutputReportCallback callback)
   outputReportCallback_ = std::move(callback);
 }
 
+uint8_t EspBleHidKeyboard::protocolMode() const
+{
+  if (impl_ == nullptr) return ReportProtocolMode;
+  std::lock_guard<std::mutex> lock(impl_->mutex);
+  return impl_->protocolMode;
+}
+
+void EspBleHidKeyboard::onProtocolMode(ProtocolModeCallback callback)
+{
+  protocolModeCallback_ = std::move(callback);
+}
+
 bool EspBleHidKeyboard::configured() const
 {
   return impl_ != nullptr && impl_->configured;
@@ -4326,9 +4517,17 @@ void EspBleHidKeyboard::resetBackend()
   memset(impl_->inputValueHandles, 0, sizeof(impl_->inputValueHandles));
   impl_->outputValueHandle = 0;
   impl_->batteryValueHandle = 0;
+  impl_->bootKeyboardInputValueHandle = 0;
   memset(impl_->inputValues, 0, sizeof(impl_->inputValues));
   impl_->outputValue = 0;
+  impl_->protocolMode = ReportProtocolMode;
+  memset(impl_->bootKeyboardInput, 0, sizeof(impl_->bootKeyboardInput));
+  impl_->bootKeyboardOutput = 0;
+  impl_->protocolModeCharacteristic = nullptr;
+  impl_->bootKeyboardInputCharacteristic = nullptr;
+  impl_->bootKeyboardOutputCharacteristic = nullptr;
   std::lock_guard<std::mutex> lock(impl_->mutex);
+  impl_->protocolModeEventPending = false;
   impl_->outputHead = 0;
   impl_->outputCount = 0;
   impl_->vendorReportHead = 0;
@@ -4362,6 +4561,27 @@ void EspBleHidKeyboard::dispatchPendingOutputReports()
     }
     outputReportCallback_(report);
   }
+}
+
+void EspBleHidKeyboard::dispatchPendingProtocolMode()
+{
+  if (impl_ == nullptr || !protocolModeCallback_)
+  {
+    return;
+  }
+  uint8_t mode = ReportProtocolMode;
+  EspBleConnectionId connectionId = 0;
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    if (!impl_->protocolModeEventPending)
+    {
+      return;
+    }
+    impl_->protocolModeEventPending = false;
+    mode = impl_->protocolModeEventValue;
+    connectionId = impl_->protocolModeEventConnectionId;
+  }
+  protocolModeCallback_(mode, connectionId);
 }
 
 bool EspBleHidMouse::configure(const EspBleHidMouseConfig &config)
@@ -5553,6 +5773,7 @@ void EspBle::update()
   dispatchConnectionEvents();
   reapRetiredClients();
   hidKeyboardDevice_.dispatchPendingOutputReports();
+  hidKeyboardDevice_.dispatchPendingProtocolMode();
   hidVendor_.dispatchPendingReports();
   hidKeyboardHost_.dispatchPendingEvents();
 }

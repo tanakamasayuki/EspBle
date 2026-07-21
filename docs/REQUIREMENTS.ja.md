@@ -126,7 +126,7 @@ HID HostはReport MapとReport ReferenceをDiscoveryし、固定された特定d
 
 初期基盤の完成後、需要、実装量、Peerテスト可能性を確認して1機能ずつ追加します。
 
-1. 任意DescriptorのCustom HID、Boot Protocol切替
+1. 任意DescriptorのCustom HID（Boot Protocol切替は実装済み）
 2. Device Information Service、Nordic UART Service互換
 3. BLE MIDI
 4. 複数接続、自動再接続/再購読、Discovery cache、Service Changed対応

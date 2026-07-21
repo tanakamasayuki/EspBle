@@ -30,6 +30,15 @@ void setup()
       report.capsLock() ? 1 : 0,
       report.scrollLock() ? 1 : 0);
   });
+  // en: Notified when the host switches Protocol Mode. Boot Protocol Mode (0) is used
+  //     by e.g. a BIOS; input is then sent over the 8-byte Boot Keyboard Input Report
+  //     automatically. No application change is needed to support boot hosts.
+  // ja: HostがProtocol Modeを切り替えると通知される。Boot Protocol Mode（0）はBIOS等が使い、
+  //     入力は自動的に8-byteのBoot Keyboard Input Reportで送られる。boot host対応にアプリ変更は不要。
+  keyboard.onProtocolMode([](uint8_t mode, EspBleConnectionId) {
+    Serial.printf("Protocol Mode: %s\n",
+      mode == EspBleHidKeyboard::BootProtocolMode ? "Boot" : "Report");
+  });
 
   EspBleConfig config;
   config.deviceName = "EspBle Keyboard";

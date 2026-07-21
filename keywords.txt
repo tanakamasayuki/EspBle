@@ -136,6 +136,8 @@ notifyServicesChanged	KEYWORD2
 providePasskey	KEYWORD2
 onNumericComparison	KEYWORD2
 confirmNumericComparison	KEYWORD2
+protocolMode	KEYWORD2
+onProtocolMode	KEYWORD2
 connect	KEYWORD2
 disconnect	KEYWORD2
 connectionCount	KEYWORD2
@@ -258,6 +260,8 @@ wasReleased	KEYWORD2
 
 ESPBLE_VERSION_STR	LITERAL1
 EspBleInvalidListenerId	LITERAL1
+BootProtocolMode	LITERAL1
+ReportProtocolMode	LITERAL1
 ESP_BLE_HID_REPORT_ID_VENDOR	LITERAL1
 ESP_BLE_HID_REPORT_TYPE_INPUT	LITERAL1
 ESP_BLE_HID_REPORT_TYPE_OUTPUT	LITERAL1

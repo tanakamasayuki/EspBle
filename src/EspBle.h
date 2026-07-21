@@ -700,6 +700,12 @@ class EspBleHidKeyboard
 public:
   using OutputReportCallback =
     std::function<void(const EspBleHidKeyboardOutputReport &report)>;
+  using ProtocolModeCallback =
+    std::function<void(uint8_t mode, EspBleConnectionId connectionId)>;
+
+  // HID over GATT Protocol Mode values (Protocol Mode characteristic 0x2A4E).
+  static constexpr uint8_t BootProtocolMode = 0;
+  static constexpr uint8_t ReportProtocolMode = 1;
 
   bool configure(
     const EspBleHidKeyboardConfig &config = EspBleHidKeyboardConfig());
@@ -717,6 +723,11 @@ public:
   EspBleKeyboardLayout layout() const;
   bool setBatteryLevel(uint8_t level);
   void onOutputReport(OutputReportCallback callback);
+  // Current HID Protocol Mode (BootProtocolMode / ReportProtocolMode). The Host
+  // selects it by writing the Protocol Mode characteristic; the default after a
+  // connection is ReportProtocolMode.
+  uint8_t protocolMode() const;
+  void onProtocolMode(ProtocolModeCallback callback);
   bool configured() const;
 
 private:
@@ -735,10 +746,12 @@ private:
   bool sendRawReport(uint8_t reportId, const uint8_t *data, size_t length);
   void resetBackend();
   void dispatchPendingOutputReports();
+  void dispatchPendingProtocolMode();
 
   EspBle *owner_;
   EspBleHidDeviceManagerImpl *impl_ = nullptr;
   OutputReportCallback outputReportCallback_;
+  ProtocolModeCallback protocolModeCallback_;
   EspBleKeyboardLayout layout_ = EspBleKeyboardLayout::EnUs;
   bool nkroEnabled_ = false;
   uint8_t nkroModifiers_ = 0;

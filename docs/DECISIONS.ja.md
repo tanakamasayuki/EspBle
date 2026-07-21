@@ -178,4 +178,4 @@
 - HID Keyboard Hostで追加対応するReport Mapの優先順位
 - 実行時Passkey入力とNumeric Comparisonの応答context
 - public object handleの表現（値型、index+generation、参照class）
-- Protocol Mode / Boot Keyboard不在のHost互換性と、暗号化必須keyboardへのDiscovery retry経路（市販機器とのmanual interoperabilityで確認）
+- 暗号化必須keyboardへのDiscovery retry経路と、Keyboard Boot Protocol実装（Protocol Mode 0x2A4E＋Boot Keyboard Input/Output）の市販Host（BIOS等）との互換性、Mouse Boot Report 0x2A33対応要否（manual interoperabilityで確認）

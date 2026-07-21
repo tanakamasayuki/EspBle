@@ -14,7 +14,7 @@ BLE MIDIはbackend非依存のpacket codec（timestamp・running status・複数
 
 ## 検証状況
 
-- Peer test: 48 suite、59 test。接続、GATT、Security、標準Service、複合HID、NKRO、BLE MIDI、Health Thermometer、Blood Pressure、Weight Scale、Body Composition、Cycling / Running Speed and Cadence、Cycling Power、Pulse Oximeter、Glucose（RACP手続き）、Location and Navigation、User Data（書き込み→onWritten→notify）、Alert Notification（Control Point→notify）、Immediate Alert（Write Without Response）、Phone Alert Status（Control Point→状態変更notify）、Proximity（Link Loss + Tx Power、2 Service同居）、Reference Time Update（Control Point→state遷移）、Bond Management（Feature Read + Control Point）、Continuous Glucose Monitoring（E2E-CRC）、切断理由コード、接続パラメータ更新、PHY更新（2M）、Service Changed、実行時passkey入力、Numeric Comparison、異常系、再接続を実機検証
+- Peer test: 49 suite、60 test。接続、GATT、Security、標準Service、複合HID、NKRO、BLE MIDI、Health Thermometer、Blood Pressure、Weight Scale、Body Composition、Cycling / Running Speed and Cadence、Cycling Power、Pulse Oximeter、Glucose（RACP手続き）、Location and Navigation、User Data（書き込み→onWritten→notify）、Alert Notification（Control Point→notify）、Immediate Alert（Write Without Response）、Phone Alert Status（Control Point→状態変更notify）、Proximity（Link Loss + Tx Power、2 Service同居）、Reference Time Update（Control Point→state遷移）、Bond Management（Feature Read + Control Point）、Continuous Glucose Monitoring（E2E-CRC）、切断理由コード、接続パラメータ更新、PHY更新（2M）、Service Changed、実行時passkey入力、Numeric Comparison、HID Boot Protocol切替、異常系、再接続を実機検証
 - Unit test: keymap変換、HID Report Map parser、BLE MIDI codec、IEEE-11073 medical float codec、CGM E2E-CRC codec
 - Example compile: ESP32-S3向け74 example
 - ESP32KeyBridge試作adapter: raw usage、remap、modifier、切断release、LED返送、Bond再接続をPeer検証
@@ -24,11 +24,11 @@ BLE MIDIはbackend非依存のpacket codec（timestamp・running status・複数
 ## 既知の制限
 
 - 1.0.0リリース前のため、公開APIは互換性を保証しません。
-- HID KeyboardのBoot Protocol characteristic / Protocol Mode切替は未対応です。
 - Custom HIDは固定Vendor Report以外の任意Report Descriptorをまだ登録できません。
 - BLE MIDIのSysEx送信は1メッセージ320 byteまでです（送受信ともに複数BLEパケットへ分割・再構成します）。同時に進行できるSysEx送信は1件です。
 - Gamepad Hostはvariable input fieldを解析しますが、vendor固有array inputの意味解釈は行いません。
 - HID Hostは接続ごとに明示的な`discover(connectionId)`が必要です。Security有効時はSecurity完了後に呼びます。
+- HID KeyboardはBoot Protocol（Protocol Mode characteristic 0x2A4E、Boot Keyboard Input/Output Report 0x2A22/0x2A32）に対応します。HostがBoot Protocol Modeへ切り替えるとKeyboard入力は自動的に8 byteのBoot Keyboard Input Reportへ切り替わり、`onProtocolMode()` / `protocolMode()`でモードを確認できます。Boot Protocolは現状Keyboardのみで、Mouse Boot Report（0x2A33）は未対応です。
 - Central側GATT operationは同時1件です。operation queueと強制cancelはありません。
 - GATT Client Discovery snapshotは最新1接続分で、永続cacheはありません。Service Changed indicationはServer側`notifyServicesChanged()`で送出、Client側は0x1801/0x2A05を購読して受信・decodeできますが、受信時の自動再Discoveryは行いません（アプリが再discoverを判断します）。
 - 切断理由は`EspBleConnection::disconnectReason`、接続パラメータは`EspBleConnection`のinterval/latency/timeoutと`updateConnectionParameters()` / `onConnectionParametersUpdated()`、LE PHYは`EspBleConnection`のtx/rxPhyと`updatePhy()` / `onPhyUpdated()`、実行時passkey入力は`providePasskey()`（動的passkey表示は静的passkeyなしのDisplayOnly）、Numeric Comparisonは両側DisplayYesNo + MITMで`onNumericComparison()` / `confirmNumericComparison()`で扱えます。
@@ -52,9 +52,8 @@ BLE MIDIはbackend非依存のpacket codec（timestamp・running status・複数
 ## 次の機能候補
 
 1. Custom HID Report Descriptor
-2. HID Boot Protocol切替
-3. reconnect cache / resubscribe / multiple connections
-4. Extended / Periodic Advertising、Privacy、Beacon
+2. reconnect cache / resubscribe / multiple connections
+3. Extended / Periodic Advertising、Privacy、Beacon
 
 ## 更新ルール
 
