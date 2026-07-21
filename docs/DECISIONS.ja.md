@@ -150,6 +150,7 @@
 7. Running Speed and CadenceのRSC Measurement（0x2A53）はNotification、RSC Feature（0x2A54）とSensor Location（0x2A5D、CSCと共有UUID）はReadとする。Measurementはflags駆動の混在幅（uint16 speed 1/256 m/s＋uint8 cadence＋任意のuint16 stride length＋uint32 total distance）で、`running_speed_cadence` PeerテストでLocation Read、Notification購読、全フィールドdecodeを検証済み。
 8. Cycling PowerのCP Measurement（0x2A63）はNotification、CP Feature（0x2A65、uint32）とSensor Location（0x2A5D）はReadとする。Measurementは16bit flags＋符号付き16bit instantaneous power（ワット）で始まり、`cycling_power` PeerテストでLocation Read、Notification購読、負値powerのsint16 decodeを検証済み。符号付きフィールドのdecodeを扱う。
 9. GlucoseのRecord Access Control Point（0x2A52）手続きは、Client write→Server Measurement（0x2A18）notify→Server RACP応答indicateの順に進める。BLE送信は同時1件のため、Server側はMeasurement notifyとRACP応答indicateを`onSent`で順次実行する（SysEx送信と同じ完了イベント駆動）。ライブラリ本体は変更せず既存のwrite event / notify / indicate primitiveの合成で実現し、`glucose` Peerテストで一連の振る舞いを検証済み。この手続き型パターンは独自profileのControl Pointにも応用できる。
+10. Pulse Oximeter（PLX）のPLX Spot-Check Measurement（0x2A5E）はIndication、PLX Features（0x2A60）はReadとする。SpO2とpulse rateは16-bit SFLOATで、`pulse_oximeter` PeerテストでFeatures Read、Indication購読、98 % / 60 bpmのSFLOAT decodeを検証済み。SFLOATは`EspBleMedicalFloat.h`を共有する。
 
 ## 優先順位候補
 

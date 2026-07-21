@@ -103,6 +103,8 @@ arduino-cli compile --profile esp32s3 examples/<path>
 | [Gatt/GlucoseClient](Gatt/GlucoseClient/) | Central | RACP report-records request and measurement/response decoding |
 | [Gatt/CyclingPowerServer](Gatt/CyclingPowerServer/) | Peripheral | Signed 16-bit power Cycling Power Measurement notifications, Feature, Sensor Location |
 | [Gatt/CyclingPowerClient](Gatt/CyclingPowerClient/) | Central | Sensor Location read and signed power measurement decoding |
+| [Gatt/PulseOximeterServer](Gatt/PulseOximeterServer/) | Peripheral | SFLOAT SpO2/pulse-rate Spot-Check Measurement indications and Features |
+| [Gatt/PulseOximeterClient](Gatt/PulseOximeterClient/) | Central | Features read and SpO2/pulse-rate measurement decoding |
 | [Gatt/NusServer](Gatt/NusServer/) | Peripheral | NUS-compatible RX writes and TX notification echo |
 | [Gatt/NusClient](Gatt/NusClient/) | Central | NUS-compatible TX subscription and RX Write Without Response |
 | [Security/JustWorksServer](Security/JustWorksServer/) | Peripheral | Encrypted characteristic with Just Works pairing + bonding |
@@ -138,6 +140,7 @@ Suggested pairings on two boards:
 - Gatt/RunningSpeedCadenceServer ↔ Gatt/RunningSpeedCadenceClient
 - Gatt/GlucoseServer ↔ Gatt/GlucoseClient
 - Gatt/CyclingPowerServer ↔ Gatt/CyclingPowerClient
+- Gatt/PulseOximeterServer ↔ Gatt/PulseOximeterClient
 - Gatt/NusServer ↔ Gatt/NusClient
 - Security/StaticPasskeyServer ↔ Security/StaticPasskeyClient
 - Hid/KeyboardDevice / Hid/CompositeKeyboardMouse ↔ Hid/KeyboardHost
