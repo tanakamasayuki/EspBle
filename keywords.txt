@@ -134,6 +134,8 @@ updatePhy	KEYWORD2
 onPhyUpdated	KEYWORD2
 notifyServicesChanged	KEYWORD2
 providePasskey	KEYWORD2
+onNumericComparison	KEYWORD2
+confirmNumericComparison	KEYWORD2
 connect	KEYWORD2
 disconnect	KEYWORD2
 connectionCount	KEYWORD2

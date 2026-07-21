@@ -97,6 +97,7 @@ struct EspBleImpl
     PhyUpdated,
     SecurityChanged,
     PasskeyDisplayed,
+    NumericComparison,
   };
 
   struct ConnectionSlot
@@ -256,6 +257,11 @@ struct EspBleImpl
       return owner_->requestPasskey();
     }
 
+    bool onConfirmPIN(uint32_t pin) override
+    {
+      return owner_->confirmNumericComparison(pin);
+    }
+
   private:
     EspBleImpl *owner_;
   };
@@ -368,6 +374,7 @@ struct EspBleImpl
         // from an earlier aborted pairing is never consumed by a new one.
         std::lock_guard<std::mutex> passkeyLock(passkeyMutex);
         passkeyProvided = false;
+        numericComparisonConfirmed = false;
       }
 
       Event event;
@@ -625,6 +632,53 @@ struct EspBleImpl
       vTaskDelay(pdMS_TO_TICKS(1));
     }
     return 0;
+  }
+
+  // Called on the backend host task for Numeric Comparison. Surfaces the value
+  // both devices display, then blocks (yielding) until the loop task confirms
+  // via confirmNumericComparison(), or a timeout rejects the pairing.
+  bool confirmNumericComparison(uint32_t pin)
+  {
+    queueNumericComparison(pin);
+    for (int elapsed = 0; elapsed < 30000; ++elapsed)
+    {
+      {
+        std::lock_guard<std::mutex> lock(passkeyMutex);
+        if (numericComparisonConfirmed)
+        {
+          numericComparisonConfirmed = false;
+          return numericComparisonAccept;
+        }
+      }
+      vTaskDelay(pdMS_TO_TICKS(1));
+    }
+    return false;
+  }
+
+  void queueNumericComparison(uint32_t pin)
+  {
+    std::lock_guard<std::mutex> lock(mutex);
+    const ConnectionSlot *selected = nullptr;
+    for (const ConnectionSlot &slot : connections)
+    {
+      if (!slot.used)
+      {
+        continue;
+      }
+      if (selected == nullptr || !slot.connection.encrypted)
+      {
+        selected = &slot;
+      }
+    }
+    if (selected == nullptr)
+    {
+      return;
+    }
+    Event event;
+    event.type = EventType::NumericComparison;
+    event.passkeyDisplayed.connection = selected->connection;
+    event.passkeyDisplayed.passkey = pin;
+    pushEvent(event);
   }
 
   void queuePasskeyDisplayed(uint32_t passkey)
@@ -1198,6 +1252,9 @@ struct EspBleImpl
   uint32_t staticPasskey = 0;
   bool passkeyProvided = false;
   uint32_t providedPasskey = 0;
+  // Numeric Comparison response (also guarded by passkeyMutex).
+  bool numericComparisonConfirmed = false;
+  bool numericComparisonAccept = false;
   bool gattOperating = false;
   TaskHandle_t gattTask = nullptr;
   EspBleGattOperation gattOperation = EspBleGattOperation::Discover;
@@ -5242,7 +5299,8 @@ bool EspBle::begin(const EspBleConfig &config)
   }
   if (config.security.ioCapability != EspBleSecurityIoCapability::None &&
       config.security.ioCapability != EspBleSecurityIoCapability::DisplayOnly &&
-      config.security.ioCapability != EspBleSecurityIoCapability::KeyboardOnly)
+      config.security.ioCapability != EspBleSecurityIoCapability::KeyboardOnly &&
+      config.security.ioCapability != EspBleSecurityIoCapability::DisplayYesNo)
   {
     setError(EspBleError::InvalidArgument, "unsupported BLE Security I/O capability");
     return false;
@@ -5320,6 +5378,10 @@ bool EspBle::begin(const EspBleConfig &config)
     else if (config.security.ioCapability == EspBleSecurityIoCapability::KeyboardOnly)
     {
       ioCapability = ESP_IO_CAP_IN;
+    }
+    else if (config.security.ioCapability == EspBleSecurityIoCapability::DisplayYesNo)
+    {
+      ioCapability = ESP_IO_CAP_IO;
     }
     BLESecurity::setCapability(ioCapability);
     if (config.security.staticPasskeyEnabled)
@@ -6060,6 +6122,27 @@ void EspBle::onPasskeyDisplayed(PasskeyDisplayedCallback callback)
   passkeyDisplayedCallback_ = std::move(callback);
 }
 
+void EspBle::onNumericComparison(PasskeyDisplayedCallback callback)
+{
+  numericComparisonCallback_ = std::move(callback);
+}
+
+bool EspBle::confirmNumericComparison(bool accept)
+{
+  if (!initialized_ || impl_ == nullptr)
+  {
+    setError(EspBleError::InvalidState, "BLE stack is not initialized");
+    return false;
+  }
+  {
+    std::lock_guard<std::mutex> lock(impl_->passkeyMutex);
+    impl_->numericComparisonAccept = accept;
+    impl_->numericComparisonConfirmed = true;
+  }
+  clearError();
+  return true;
+}
+
 bool EspBle::providePasskey(uint32_t passkey)
 {
   if (!initialized_ || impl_ == nullptr)
@@ -6678,6 +6761,12 @@ void EspBle::dispatchConnectionEvents()
       if (passkeyDisplayedCallback_)
       {
         passkeyDisplayedCallback_(event.passkeyDisplayed);
+      }
+      break;
+    case EspBleImpl::EventType::NumericComparison:
+      if (numericComparisonCallback_)
+      {
+        numericComparisonCallback_(event.passkeyDisplayed);
       }
       break;
     }

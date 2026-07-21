@@ -30,6 +30,7 @@ enum class EspBleSecurityIoCapability : uint8_t
   None = 0,
   DisplayOnly,
   KeyboardOnly,
+  DisplayYesNo, // display + yes/no, required for Numeric Comparison
 };
 
 struct EspBleSecurityConfig
@@ -1029,6 +1030,12 @@ public:
   void onPhyUpdated(ConnectionCallback callback);
   void onSecurityChanged(SecurityChangedCallback callback);
   void onPasskeyDisplayed(PasskeyDisplayedCallback callback);
+  // Numeric Comparison (LE Secure Connections, both sides DisplayYesNo + MITM):
+  // the callback delivers the 6-digit value both devices display (in the event's
+  // `passkey` field). Confirm the match with confirmNumericComparison(); the
+  // pairing blocks until then (or a timeout rejects it).
+  void onNumericComparison(PasskeyDisplayedCallback callback);
+  bool confirmNumericComparison(bool accept);
 
   bool discoverCharacteristic(
     EspBleConnectionId connectionId,
@@ -1201,6 +1208,7 @@ private:
   ConnectionCallback phyUpdatedCallback_;
   SecurityChangedCallback securityChangedCallback_;
   PasskeyDisplayedCallback passkeyDisplayedCallback_;
+  PasskeyDisplayedCallback numericComparisonCallback_;
   GattResultCallback characteristicDiscoveredCallback_;
   GattResultCallback characteristicReadCallback_;
   GattResultCallback characteristicWrittenCallback_;
