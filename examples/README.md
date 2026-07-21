@@ -99,6 +99,8 @@ arduino-cli compile --profile esp32s3 examples/<path>
 | [Gatt/BodyCompositionClient](Gatt/BodyCompositionClient/) | Central | Feature read and Body Fat Percentage / Weight measurement decoding |
 | [Gatt/LocationNavigationServer](Gatt/LocationNavigationServer/) | Peripheral | Location and Speed notifications (speed + sint32 lat/lon) and LN Feature |
 | [Gatt/LocationNavigationClient](Gatt/LocationNavigationClient/) | Central | LN Feature read and Location and Speed notification decoding |
+| [Gatt/UserDataServer](Gatt/UserDataServer/) | Peripheral | Read/write Age and First Name, notify Database Change Increment on writes |
+| [Gatt/UserDataClient](Gatt/UserDataClient/) | Central | Write Age/First Name and observe Database Change Increment notifications |
 | [Gatt/CyclingSpeedCadenceServer](Gatt/CyclingSpeedCadenceServer/) | Peripheral | Multi-field wheel/crank CSC Measurement notifications, Feature, Sensor Location |
 | [Gatt/CyclingSpeedCadenceClient](Gatt/CyclingSpeedCadenceClient/) | Central | Sensor Location read and CSC Measurement notification decoding |
 | [Gatt/RunningSpeedCadenceServer](Gatt/RunningSpeedCadenceServer/) | Peripheral | Speed/cadence/stride/distance RSC Measurement notifications, Feature, Sensor Location |
@@ -142,6 +144,7 @@ Suggested pairings on two boards:
 - Gatt/WeightScaleServer ↔ Gatt/WeightScaleClient
 - Gatt/BodyCompositionServer ↔ Gatt/BodyCompositionClient
 - Gatt/LocationNavigationServer ↔ Gatt/LocationNavigationClient
+- Gatt/UserDataServer ↔ Gatt/UserDataClient
 - Gatt/CyclingSpeedCadenceServer ↔ Gatt/CyclingSpeedCadenceClient
 - Gatt/RunningSpeedCadenceServer ↔ Gatt/RunningSpeedCadenceClient
 - Gatt/GlucoseServer ↔ Gatt/GlucoseClient
