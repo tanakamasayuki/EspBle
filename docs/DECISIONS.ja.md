@@ -148,7 +148,8 @@
 5. Weight ScaleのWeight Measurement（0x2A9D）はIndication、Weight Scale Feature（0x2A9E）はReadとする。weightはIEEE floatではなく固定分解能uint16（SI 0.005 kg/LSB、Imperial 0.01 lb/LSB）で、medical float codecは使わず素のuint16として扱う。`weight_scale` PeerテストでFeature Read、Indication購読、70.000 kg decodeを検証済み。
 6. Cycling Speed and CadenceのCSC Measurement（0x2A5B）はNotification、CSC Feature（0x2A5C）とSensor Location（0x2A5D）はReadとする。Measurementはflags駆動の多フィールド（uint32累積wheel回転数＋uint16イベント時刻、uint16累積crank回転数＋uint16イベント時刻）で、`cycling_speed_cadence` PeerテストでLocation Read、Notification購読、全フィールドdecodeを検証済み。indicateだけでなくnotifyの標準Serviceも同じexample+Peer方針で扱う。
 7. Running Speed and CadenceのRSC Measurement（0x2A53）はNotification、RSC Feature（0x2A54）とSensor Location（0x2A5D、CSCと共有UUID）はReadとする。Measurementはflags駆動の混在幅（uint16 speed 1/256 m/s＋uint8 cadence＋任意のuint16 stride length＋uint32 total distance）で、`running_speed_cadence` PeerテストでLocation Read、Notification購読、全フィールドdecodeを検証済み。
-8. GlucoseのRecord Access Control Point（0x2A52）手続きは、Client write→Server Measurement（0x2A18）notify→Server RACP応答indicateの順に進める。BLE送信は同時1件のため、Server側はMeasurement notifyとRACP応答indicateを`onSent`で順次実行する（SysEx送信と同じ完了イベント駆動）。ライブラリ本体は変更せず既存のwrite event / notify / indicate primitiveの合成で実現し、`glucose` Peerテストで一連の振る舞いを検証済み。この手続き型パターンは独自profileのControl Pointにも応用できる。
+8. Cycling PowerのCP Measurement（0x2A63）はNotification、CP Feature（0x2A65、uint32）とSensor Location（0x2A5D）はReadとする。Measurementは16bit flags＋符号付き16bit instantaneous power（ワット）で始まり、`cycling_power` PeerテストでLocation Read、Notification購読、負値powerのsint16 decodeを検証済み。符号付きフィールドのdecodeを扱う。
+9. GlucoseのRecord Access Control Point（0x2A52）手続きは、Client write→Server Measurement（0x2A18）notify→Server RACP応答indicateの順に進める。BLE送信は同時1件のため、Server側はMeasurement notifyとRACP応答indicateを`onSent`で順次実行する（SysEx送信と同じ完了イベント駆動）。ライブラリ本体は変更せず既存のwrite event / notify / indicate primitiveの合成で実現し、`glucose` Peerテストで一連の振る舞いを検証済み。この手続き型パターンは独自profileのControl Pointにも応用できる。
 
 ## 優先順位候補
 
