@@ -3100,6 +3100,12 @@ struct EspBleScannerImpl
       {
         result.manufacturerData = device.getManufacturerData();
       }
+      if (device.haveServiceData())
+      {
+        // The first service-data block (Eddystone and most beacons use one).
+        result.serviceData = device.getServiceData();
+        result.serviceDataUuid = device.getServiceDataUUID().toString();
+      }
 
       const int serviceCount = device.getServiceUUIDCount();
       for (int index = 0;
@@ -3149,6 +3155,11 @@ bool EspBleScanResult::hasManufacturerData() const
   return !manufacturerData.isEmpty();
 }
 
+bool EspBleScanResult::hasServiceData() const
+{
+  return !serviceData.isEmpty();
+}
+
 bool EspBleScanResult::advertisesService(const char *uuid) const
 {
   for (size_t index = 0; index < serviceUuidCount; ++index)
@@ -3172,6 +3183,8 @@ void EspBleAdvertising::clear()
 {
   name_ = "";
   manufacturerData_ = "";
+  serviceData_ = "";
+  serviceDataUuid_ = "";
   serviceUuidCount_ = 0;
   appearance_ = 0;
   scanResponseEnabled_ = true;
@@ -3219,6 +3232,26 @@ void EspBleAdvertising::setManufacturerData(const uint8_t *data, size_t length)
     return;
   }
   manufacturerData_ = String(reinterpret_cast<const char *>(data), length);
+}
+
+bool EspBleAdvertising::setServiceData(const char *uuid, const uint8_t *data, size_t length)
+{
+  if (uuid == nullptr)
+  {
+    owner_->setError(EspBleError::InvalidArgument, "service data UUID is required");
+    return false;
+  }
+  if (data == nullptr || length == 0)
+  {
+    serviceData_ = "";
+    serviceDataUuid_ = "";
+    owner_->clearError();
+    return true;
+  }
+  serviceDataUuid_ = uuid;
+  serviceData_ = String(reinterpret_cast<const char *>(data), length);
+  owner_->clearError();
+  return true;
 }
 
 void EspBleAdvertising::setAppearance(uint16_t appearance)
@@ -3345,6 +3378,16 @@ bool EspBleAdvertising::start(uint32_t durationSeconds)
     if (advertisingData.getPayload().length() == previousLength)
     {
       owner_->setError(EspBleError::InvalidArgument, "manufacturer data does not fit in legacy advertising payload");
+      return false;
+    }
+  }
+  if (!serviceData_.isEmpty())
+  {
+    previousLength = advertisingData.getPayload().length();
+    advertisingData.setServiceData(BLEUUID(serviceDataUuid_.c_str()), serviceData_);
+    if (advertisingData.getPayload().length() == previousLength)
+    {
+      owner_->setError(EspBleError::InvalidArgument, "service data does not fit in legacy advertising payload");
       return false;
     }
   }

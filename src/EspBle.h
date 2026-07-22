@@ -106,11 +106,17 @@ struct EspBleScanResult
   bool connectable = false;
   bool scannable = false;
   String manufacturerData;
+  // First Service Data block, if any (AD type 0x16/0x20/0x21). Eddystone and
+  // most beacon formats carry their payload here; serviceDataUuid is the
+  // associated service UUID (e.g. "0xfeaa" for Eddystone).
+  String serviceData;
+  String serviceDataUuid;
   String serviceUuids[MaxServiceUuids];
   size_t serviceUuidCount = 0;
 
   bool hasName() const;
   bool hasManufacturerData() const;
+  bool hasServiceData() const;
   bool advertisesService(const char *uuid) const;
 };
 
@@ -600,6 +606,10 @@ public:
   void setName(const char *name);
   bool addServiceUuid(const char *uuid);
   void setManufacturerData(const uint8_t *data, size_t length);
+  // Set a Service Data block (AD type 0x16 for a 16-bit UUID). Used by Eddystone
+  // and other service-data beacons. Add the same UUID with addServiceUuid() too
+  // if scanners should also discover it via the service-UUID list.
+  bool setServiceData(const char *uuid, const uint8_t *data, size_t length);
   void setAppearance(uint16_t appearance);
   void setScanResponseEnabled(bool enabled);
   // Beacon support. setConnectable(false) advertises in a non-connectable mode
@@ -621,6 +631,8 @@ private:
   EspBle *owner_;
   String name_;
   String manufacturerData_;
+  String serviceData_;
+  String serviceDataUuid_;
   String serviceUuids_[MaxServiceUuids];
   size_t serviceUuidCount_ = 0;
   uint16_t appearance_ = 0;

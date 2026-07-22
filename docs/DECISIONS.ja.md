@@ -166,11 +166,12 @@
 
 3. iBeaconはbackend非依存codec `EspBleIBeacon.h`（`espBleEncodeIBeacon`/`espBleDecodeIBeacon`/`espBleIsIBeacon`）で実装する。keymap/medical float/CGM CRC/MIDIと同じ「backend非依存ロジックはheader＋host unit test」方針に揃える。iBeaconはmanufacturer specific data（company ID 0x004C＋type 0x02＋length 0x15＋16 byte UUID＋big-endian major/minor＋int8 measured power、計25 byte）で、既存の`setManufacturerData`（送信）と`EspBleScanResult::manufacturerData`（受信）にそのまま載るため、advertising/scan APIの追加なしで完結する。unit testと`ibeacon` Peer（broadcast→decode）で検証。Eddystoneはservice data（0xFEAA）が必要でadvertising/scan両側へservice-data plumbingを足す必要があるため、別途候補とする。
 
+4. Eddystone-URLはbackend非依存codec `EspBleEddystone.h`で実装する（iBeaconと同じheader＋unit test方針）。Eddystoneはmanufacturer dataではなくService Data（AD 0x16、UUID 0xFEAA）で運ぶため、`EspBleAdvertising::setServiceData(uuid, data, length)`（送信、backendの`BLEAdvertisementData::setServiceData`）と`EspBleScanResult::serviceData`/`serviceDataUuid`/`hasServiceData()`（受信、backendの`getServiceData`/`getServiceDataUUID`）を汎用のService Data APIとして追加した。URL frame（frame 0x10、scheme prefix 0x00-0x03、ドメインサフィックス圧縮0x00-0x0d、TX power）のみ対応し、UID/TLM/EIDは未対応とする。scannerは`serviceData`を`espBleDecodeEddystoneUrl`へ通してdecode成功で判定し、UUID文字列表現の差異に依存しない。unit testと`eddystone` Peerで検証。
+
 ## 優先順位候補
 
 1. Sensor profile
-2. Eddystone（service data plumbingが必要）
-3. Beacon / Connectionless（その他の任意Advertisingデータ送受信）
+2. Eddystone UID / TLM frame、その他Connectionlessデータ
 
 候補は採用決定ではありません。ユースケース、実機、Peerテスト方法が揃った機能だけを正式スコープへ移します。
 
