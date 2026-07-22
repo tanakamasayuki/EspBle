@@ -18,9 +18,15 @@
 
 // Eddystone service UUID (16-bit), and the URL frame type.
 static const char *const EspBleEddystoneServiceUuid = "FEAA";
+static const uint8_t EspBleEddystoneUidFrameType = 0x00;
 static const uint8_t EspBleEddystoneUrlFrameType = 0x10;
+static const uint8_t EspBleEddystoneTlmFrameType = 0x20;
 // Max encoded URL frame body (frame + tx + scheme + up to 17 URL bytes).
 static const size_t EspBleEddystoneUrlMaxBodySize = 20;
+// UID frame body: frame + tx + 10-byte namespace + 6-byte instance (RFU omitted).
+static const size_t EspBleEddystoneUidBodySize = 18;
+// TLM frame body (unencrypted, version 0x00): 14 bytes.
+static const size_t EspBleEddystoneTlmBodySize = 14;
 
 // URL scheme prefixes, indexed by the scheme byte (0x00..0x03).
 static const char *const EspBleEddystoneUrlSchemes[] = {
@@ -153,6 +159,121 @@ inline bool espBleDecodeEddystoneUrl(
     }
   }
   urlOut[out] = '\0';
+  return true;
+}
+
+// ---- UID frame: a stable namespace (10 bytes) + instance (6 bytes) id. ----
+
+struct EspBleEddystoneUidData
+{
+  uint8_t namespaceId[10] = {};
+  uint8_t instanceId[6] = {};
+  int8_t txPower = 0; // calibrated power at 0 m (dBm)
+};
+
+// Encode uid into out (outCapacity must be >= EspBleEddystoneUidBodySize).
+// Sets outLength and returns true, or false if it does not fit.
+inline bool espBleEncodeEddystoneUid(
+  const EspBleEddystoneUidData &uid, uint8_t *out, size_t outCapacity, size_t &outLength)
+{
+  if (out == nullptr || outCapacity < EspBleEddystoneUidBodySize)
+    return false;
+  out[0] = EspBleEddystoneUidFrameType;
+  out[1] = static_cast<uint8_t>(uid.txPower);
+  for (size_t i = 0; i < 10; ++i)
+    out[2 + i] = uid.namespaceId[i];
+  for (size_t i = 0; i < 6; ++i)
+    out[12 + i] = uid.instanceId[i];
+  outLength = EspBleEddystoneUidBodySize;
+  return true;
+}
+
+inline bool espBleIsEddystoneUid(const uint8_t *serviceData, size_t length)
+{
+  return serviceData != nullptr && length >= EspBleEddystoneUidBodySize &&
+    serviceData[0] == EspBleEddystoneUidFrameType;
+}
+
+inline bool espBleDecodeEddystoneUid(
+  const uint8_t *serviceData, size_t length, EspBleEddystoneUidData &uid)
+{
+  if (!espBleIsEddystoneUid(serviceData, length))
+    return false;
+  uid.txPower = static_cast<int8_t>(serviceData[1]);
+  for (size_t i = 0; i < 10; ++i)
+    uid.namespaceId[i] = serviceData[2 + i];
+  for (size_t i = 0; i < 6; ++i)
+    uid.instanceId[i] = serviceData[12 + i];
+  return true;
+}
+
+// ---- TLM frame (unencrypted, version 0x00): beacon telemetry. ----
+
+struct EspBleEddystoneTlmData
+{
+  uint16_t batteryMilliVolts = 0;
+  float temperatureCelsius = 0.0f;   // 8.8 fixed-point on the wire
+  uint32_t advertisingCount = 0;
+  uint32_t uptimeDeciseconds = 0;    // time since power-on in 0.1 s units
+};
+
+// Encode tlm into out (outCapacity must be >= EspBleEddystoneTlmBodySize), all
+// multi-byte fields big-endian. Sets outLength and returns true, or false if it
+// does not fit.
+inline bool espBleEncodeEddystoneTlm(
+  const EspBleEddystoneTlmData &tlm, uint8_t *out, size_t outCapacity, size_t &outLength)
+{
+  if (out == nullptr || outCapacity < EspBleEddystoneTlmBodySize)
+    return false;
+  // Round-to-nearest 8.8 fixed-point temperature.
+  const float scaled = tlm.temperatureCelsius * 256.0f;
+  const int32_t fixed = static_cast<int32_t>(scaled >= 0 ? scaled + 0.5f : scaled - 0.5f);
+  const int16_t temperature = static_cast<int16_t>(fixed);
+
+  out[0] = EspBleEddystoneTlmFrameType;
+  out[1] = 0x00; // version
+  out[2] = static_cast<uint8_t>((tlm.batteryMilliVolts >> 8) & 0xFF);
+  out[3] = static_cast<uint8_t>(tlm.batteryMilliVolts & 0xFF);
+  out[4] = static_cast<uint8_t>((temperature >> 8) & 0xFF);
+  out[5] = static_cast<uint8_t>(temperature & 0xFF);
+  out[6] = static_cast<uint8_t>((tlm.advertisingCount >> 24) & 0xFF);
+  out[7] = static_cast<uint8_t>((tlm.advertisingCount >> 16) & 0xFF);
+  out[8] = static_cast<uint8_t>((tlm.advertisingCount >> 8) & 0xFF);
+  out[9] = static_cast<uint8_t>(tlm.advertisingCount & 0xFF);
+  out[10] = static_cast<uint8_t>((tlm.uptimeDeciseconds >> 24) & 0xFF);
+  out[11] = static_cast<uint8_t>((tlm.uptimeDeciseconds >> 16) & 0xFF);
+  out[12] = static_cast<uint8_t>((tlm.uptimeDeciseconds >> 8) & 0xFF);
+  out[13] = static_cast<uint8_t>(tlm.uptimeDeciseconds & 0xFF);
+  outLength = EspBleEddystoneTlmBodySize;
+  return true;
+}
+
+inline bool espBleIsEddystoneTlm(const uint8_t *serviceData, size_t length)
+{
+  return serviceData != nullptr && length >= EspBleEddystoneTlmBodySize &&
+    serviceData[0] == EspBleEddystoneTlmFrameType && serviceData[1] == 0x00;
+}
+
+inline bool espBleDecodeEddystoneTlm(
+  const uint8_t *serviceData, size_t length, EspBleEddystoneTlmData &tlm)
+{
+  if (!espBleIsEddystoneTlm(serviceData, length))
+    return false;
+  tlm.batteryMilliVolts = static_cast<uint16_t>(
+    (static_cast<uint16_t>(serviceData[2]) << 8) | serviceData[3]);
+  const int16_t temperature = static_cast<int16_t>(
+    (static_cast<uint16_t>(serviceData[4]) << 8) | serviceData[5]);
+  tlm.temperatureCelsius = static_cast<float>(temperature) / 256.0f;
+  tlm.advertisingCount =
+    (static_cast<uint32_t>(serviceData[6]) << 24) |
+    (static_cast<uint32_t>(serviceData[7]) << 16) |
+    (static_cast<uint32_t>(serviceData[8]) << 8) |
+    static_cast<uint32_t>(serviceData[9]);
+  tlm.uptimeDeciseconds =
+    (static_cast<uint32_t>(serviceData[10]) << 24) |
+    (static_cast<uint32_t>(serviceData[11]) << 16) |
+    (static_cast<uint32_t>(serviceData[12]) << 8) |
+    static_cast<uint32_t>(serviceData[13]);
   return true;
 }
 

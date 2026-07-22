@@ -26,4 +26,4 @@
 
 - URL schemeは`http://` / `https://` / `http://www.` / `https://www.`のいずれか。よく使うサフィックス（`.com/`、`.org`など）は1バイトへ圧縮されます。legacy advertising budgetに収まらないURLはencoderが拒否します。
 - `txPower`は0 m時の校正RSSI（dBm）で、受信側が距離推定に使います。
-- URL frameのみ対応です（UID / TLM / EIDは未実装）。
+- このexampleはURL frameをbroadcastします。`EspBleEddystone.h` codecはUID（`espBleEncodeEddystoneUid`）とTLM（`espBleEncodeEddystoneTlm`）frameも提供します。EID frameは未実装です。

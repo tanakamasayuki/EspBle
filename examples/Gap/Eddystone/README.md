@@ -26,4 +26,4 @@ Broadcasts an **Eddystone-URL** beacon: a non-connectable, non-scannable adverti
 
 - The URL scheme must be `http://`, `https://`, `http://www.`, or `https://www.`; common suffixes (`.com/`, `.org`, …) compress to one byte. A URL that does not fit the legacy advertising budget is rejected by the encoder.
 - `txPower` is the calibrated RSSI at 0 m (dBm), used by receivers to estimate distance.
-- Only the URL frame is provided; UID / TLM / EID frames are not implemented.
+- This example broadcasts the URL frame; the `EspBleEddystone.h` codec also provides UID (`espBleEncodeEddystoneUid`) and TLM (`espBleEncodeEddystoneTlm`) frames. EID frames are not implemented.

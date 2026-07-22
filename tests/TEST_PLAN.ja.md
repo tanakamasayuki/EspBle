@@ -68,7 +68,7 @@ pytest-embedded-cliの既存規約に従います。
 | 複数同時接続 / 接続分離 | | | | `manual/multi_connection`（2 Peripheral同時、notify routing、一方切断が他方に非影響） |
 | Address privacy（own address type） | | ✅ | ✅ `address_privacy`（random static advertising） | RPA回転（900秒周期のため自動試験対象外）はbonded peer解決を手動確認 |
 | iBeacon（broadcast / decode） | ✅ `unit/ibeacon` | ✅ | ✅ `ibeacon`（broadcast→decode、全フィールド） | iBeaconアプリ |
-| Eddystone-URL（broadcast / decode） | ✅ `unit/eddystone` | ✅ | ✅ `eddystone`（Service Data 0xFEAA、URL＋TX power） | Eddystoneアプリ |
+| Eddystone URL / UID / TLM | ✅ `unit/eddystone` | ✅ | ✅ `eddystone`（Service Data 0xFEAA、3 frame切替） | Eddystoneアプリ |
 | Advertising Service Data（AD 0x16） | | ✅ | ✅ `eddystone`（`setServiceData` / `EspBleScanResult::serviceData`） | generic scanner |
 | HID Keyboard Device | report codec（予定） | ✅ | ✅ `hid_keyboard_device` / `hid_robustness`（購読gate、queue満杯） | OS、市販HID Host |
 | HID NKRO Device / Host | ✅ `unit/report_map` | ✅ | ✅ `hid_keyboard_nkro`（8キー、高usage、個別release、LED） | OS、市販HID Host |
@@ -159,7 +159,7 @@ pytest-embedded-cliの既存規約に従います。
 53. ✅ `persistent_subscribe`: persistent subscription（再接続時の自動再購読）の検証。Centralが初回接続でnotify characteristicを購読し1件受信、切断（非bondなのでPeripheral側は購読を忘れ再advertise）、Centralが再接続する。再接続では`subscribe()`を呼ばないが`EspBleConfig::persistentSubscriptions`（既定on）が購読を自動復元するため`onSubscribed`がconnect=2で自発的に発火し、Peripheralからのnotifyをcount=2で受信することを確認。
 54. ✅ `address_privacy`: address privacyの検証。Peripheralを`EspBleConfig::ownAddressType = RandomStatic`で構成しmarker Serviceをadvertiseし、Central ScannerがそのpeerをaddressType=Random（=1）かつ先頭octetの上位2bit=0b11（static random）で観測することを確認（public addressではないこと）。
 55. ✅ `ibeacon`: iBeaconのbroadcast/decodeの検証。Peripheralが`EspBleIBeacon.h` codecで組んだiBeacon（UUID 0102..10、major 0x1234、minor 0xABCD、measured power -59）をnon-connectable・non-scannable manufacturer dataとしてbroadcastし、Central Scannerが`espBleDecodeIBeacon`で全フィールドをdecode（connectable=0・scannable=0）することを確認。
-56. ✅ `eddystone`: Eddystone-URLのbroadcast/decodeの検証。Peripheralが`EspBleEddystone.h` codecで組んだURL frame（"https://www.example.com/"、TX power -20）をService Data（0xFEAA）としてnon-connectable・non-scannable broadcastし、Central Scannerが`EspBleScanResult::serviceData`を`espBleDecodeEddystoneUrl`でdecodeしてURLとTX powerを復元することを確認。
+56. ✅ `eddystone`: Eddystone URL/UID/TLMのbroadcast/decodeの検証。Peripheralが`EspBleEddystone.h` codecで組んだ各frameをService Data（0xFEAA）としてnon-connectable・non-scannable broadcastし、コマンドで実行時に切替える。Central Scannerが`serviceData`のframe typeで分岐してdecodeし、URL（"https://www.example.com/"／TX -20）、UID（namespace a0..a9／instance 1015／TX -18）、TLM（3300 mV／25.5℃／adv count 66051／uptime 168496141）の各フィールドを復元することを確認。
 
 ## 合格条件
 
