@@ -189,16 +189,18 @@ def test_connect_timeout_reports_async_failure(dut, peers):
     device.expect_exact("DEVICE_READVERTISING 1", timeout=20)
 
 
-def test_concurrent_gatt_operation_is_rejected(dut, peers):
-    """Central GATT operations are exclusive: a second operation issued while
-    one is in flight must be rejected synchronously and the first must still
-    complete."""
+def test_concurrent_gatt_operations_are_queued(dut, peers):
+    """Central GATT operations are auto-queued: a second operation issued while
+    one is in flight is accepted (not rejected) and runs after the first, so
+    both reads complete."""
     device = peers["device"]
     _reset(dut, device)
 
     _connect(dut, device)
     dut.write("g")
-    dut.expect_exact("HOST_GATT_BUSY first=1 second=0", timeout=10)
+    dut.expect_exact("HOST_GATT_QUEUED first=1 second=1", timeout=10)
+    # Both queued reads complete in order.
+    dut.expect_exact("HOST_READ_RESULT success=1", timeout=20)
     dut.expect_exact("HOST_READ_RESULT success=1", timeout=20)
 
     dut.write("d")

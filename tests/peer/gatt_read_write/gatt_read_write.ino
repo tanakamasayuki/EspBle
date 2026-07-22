@@ -13,9 +13,7 @@ TaskHandle_t loopTask = nullptr;
 bool connectionRequested = false;
 unsigned writePhase = 0;
 EspBleConnectionId connectionId = 0;
-bool timeoutRecoveryPending = false;
 bool timeoutRecoveryInFlight = false;
-uint32_t timeoutObservedAt = 0;
 unsigned timeoutResultCount = 0;
 
 static const char *callbackContext()
@@ -117,11 +115,12 @@ void setup()
         result.error == EspBleError::Timeout ? "TIMEOUT" : "OTHER",
         timeoutResultCount,
         callbackContext());
-      const bool accepted = ble.readCharacteristic(
+      // The recovery read is issued while the timed-out slow read's worker is
+      // still blocked. It is accepted and queued (not rejected), and runs once
+      // the slow backend read returns and frees the ATT channel.
+      timeoutRecoveryInFlight = ble.readCharacteristic(
         result.connectionId, TEST_SERVICE_UUID, TEST_CHARACTERISTIC_UUID);
-      Serial.printf("TIMEOUT_BUSY next=%u\n", accepted ? 1 : 0);
-      timeoutRecoveryPending = true;
-      timeoutObservedAt = millis();
+      Serial.printf("TIMEOUT_BUSY next=%u\n", timeoutRecoveryInFlight ? 1 : 0);
       return;
     }
     if (timeoutRecoveryInFlight)
@@ -248,16 +247,6 @@ void loop()
         connectionId, SLOW_SERVICE_UUID, SLOW_CHARACTERISTIC_UUID, 100);
       Serial.println(accepted ? "TIMEOUT_REQUESTED" : "TIMEOUT_REQUEST_FAILED");
     }
-  }
-
-  if (timeoutRecoveryPending && (millis() - timeoutObservedAt) >= 1500)
-  {
-    timeoutRecoveryPending = false;
-    timeoutRecoveryInFlight = ble.readCharacteristic(
-      connectionId, TEST_SERVICE_UUID, TEST_CHARACTERISTIC_UUID);
-    Serial.println(timeoutRecoveryInFlight
-      ? "TIMEOUT_RECOVERY_REQUESTED"
-      : "TIMEOUT_RECOVERY_REQUEST_FAILED");
   }
 
   ble.update();

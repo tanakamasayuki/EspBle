@@ -28,6 +28,7 @@ void setup()
   keyboardConfig.productId = 0x4002;
   keyboardConfig.productVersion = 0x0100;
   keyboardConfig.initialBatteryLevel = 90;
+  keyboardConfig.bootProtocol = true; // expose Protocol Mode + Boot Keyboard reports
   if (!keyboard.configure(keyboardConfig))
   {
     Serial.printf("HID_CONFIG_FAILED %s %s\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());

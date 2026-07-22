@@ -170,12 +170,12 @@ void loop()
     }
     else if (command == 'g')
     {
-      // Central GATT operations are exclusive: a second operation while one
-      // is in flight must be rejected cleanly and the first must complete.
+      // Central GATT operations are auto-queued: a second operation issued while
+      // one is in flight is accepted and runs after the first, so both complete.
       readResultCount = 0;
       const bool first = ble.readCharacteristic(connectionId, "180a", "2a29");
       const bool second = ble.readCharacteristic(connectionId, "180a", "2a29");
-      Serial.printf("HOST_GATT_BUSY first=%u second=%u\n", first ? 1 : 0, second ? 1 : 0);
+      Serial.printf("HOST_GATT_QUEUED first=%u second=%u\n", first ? 1 : 0, second ? 1 : 0);
     }
     else if (command == 'Z')
     {

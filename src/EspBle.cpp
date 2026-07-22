@@ -1326,6 +1326,27 @@ struct EspBleImpl
   uint32_t gattTimeoutMilliseconds = 10000;
   bool gattTimedOut = false;
   GattDatabaseSnapshot *gattDatabase = nullptr;
+
+  // Pending GATT client operations. Callers enqueue and the loop task pumps the
+  // queue one at a time (a single ATT transaction runs at once, shared with HID
+  // Host discovery via gattOperating). This makes read/write/subscribe/discover
+  // "call any time" — they queue instead of failing when one is in flight.
+  static constexpr size_t GattQueueCapacity = 8;
+  struct PendingGattOp
+  {
+    EspBleGattOperation operation = EspBleGattOperation::Discover;
+    EspBleConnectionId connectionId = 0;
+    String serviceUuid;
+    String characteristicUuid;
+    String descriptorUuid;
+    uint16_t characteristicHandle = 0;
+    String writeValue;
+    bool response = true;
+    uint32_t timeoutMilliseconds = 10000;
+  };
+  PendingGattOp gattQueue[GattQueueCapacity];
+  size_t gattQueueHead = 0;
+  size_t gattQueueCount = 0;
 };
 
 struct EspBleGattServerImpl
@@ -2139,6 +2160,7 @@ struct EspBleHidDeviceManagerImpl
   uint8_t inputValues[ProfileCount][MaxVendorReportSize] = {};
   uint8_t inputLengths[ProfileCount] = {8, 4, 11, 2, 1, 63};
   uint8_t outputValue = 0;
+  bool bootProtocolEnabled = false;
   uint8_t protocolMode = EspBleHidKeyboard::ReportProtocolMode;
   uint8_t bootKeyboardInput[8] = {};
   uint8_t bootKeyboardOutput = 0;
@@ -4008,6 +4030,7 @@ bool EspBleHidKeyboard::configure(const EspBleHidKeyboardConfig &config)
   layout_ = config.layout;
   impl_->keyboardNkro = nkroEnabled_;
   impl_->inputLengths[ESP_BLE_HID_REPORT_ID_KEYBOARD - 1] = nkroEnabled_ ? 29 : 8;
+  impl_->bootProtocolEnabled = config.bootProtocol;
   return true;
 }
 
@@ -4322,8 +4345,9 @@ bool EspBleHidKeyboard::realize()
   }
   // HID over GATT Boot Protocol support for the keyboard profile: a Protocol
   // Mode characteristic plus dedicated 8-byte Boot Keyboard Input / Output
-  // reports the Host uses while in Boot Protocol Mode (e.g. a BIOS).
-  if ((impl_->profileMask & 0x01) != 0)
+  // reports the Host uses while in Boot Protocol Mode (e.g. a BIOS). Opt-in, so
+  // ordinary keyboards do not enlarge every host's discovery.
+  if ((impl_->profileMask & 0x01) != 0 && impl_->bootProtocolEnabled)
   {
     ble_gatt_chr_def &protocolModeChr = impl_->hidCharacteristics[characteristicIndex++];
     protocolModeChr.uuid = &impl_->protocolModeUuid.u;
@@ -4428,8 +4452,10 @@ bool EspBleHidKeyboard::realize()
     if ((impl_->profileMask & static_cast<uint8_t>(1u << index)) != 0 &&
         impl_->inputValueHandles[index] == 0) handlesRegistered = false;
   }
-  if ((impl_->profileMask & 0x01) != 0 &&
-      (impl_->outputValueHandle == 0 || impl_->bootKeyboardInputValueHandle == 0))
+  if ((impl_->profileMask & 0x01) != 0 && impl_->outputValueHandle == 0)
+    handlesRegistered = false;
+  if ((impl_->profileMask & 0x01) != 0 && impl_->bootProtocolEnabled &&
+      impl_->bootKeyboardInputValueHandle == 0)
     handlesRegistered = false;
   for (size_t index = 0; index < impl_->customReportCount; ++index)
   {
@@ -6311,6 +6337,7 @@ void EspBle::update()
 {
   cancelExpiredConnectAttempt();
   expireGattOperation();
+  pumpGattQueue();
   scanner_.dispatchPendingResults();
   dispatchConnectionEvents();
   reapRetiredClients();
@@ -7370,11 +7397,6 @@ bool EspBle::startGattOperation(
 
   {
     std::lock_guard<std::mutex> lock(impl_->mutex);
-    if (impl_->gattOperating)
-    {
-      setError(EspBleError::InvalidState, "a GATT operation is already in progress");
-      return false;
-    }
     bool centralConnectionFound = false;
     for (const EspBleImpl::ConnectionSlot &slot : impl_->connections)
     {
@@ -7389,24 +7411,65 @@ bool EspBle::startGattOperation(
       setError(EspBleError::InvalidArgument, "Central connection ID was not found");
       return false;
     }
+    if (impl_->gattQueueCount == EspBleImpl::GattQueueCapacity)
+    {
+      setError(EspBleError::ResourceExhausted, "too many queued GATT operations");
+      return false;
+    }
 
-    impl_->gattOperation = operation;
-    impl_->gattConnectionId = connectionId;
-    impl_->gattServiceUuid = serviceUuid == nullptr ? "" : serviceUuid;
-    impl_->gattCharacteristicUuid = characteristicUuid == nullptr ? "" : characteristicUuid;
-    impl_->gattDescriptorUuid = descriptorUuid == nullptr ? "" : descriptorUuid;
-    impl_->gattCharacteristicHandle = characteristicHandle;
-    impl_->gattWriteValue = length == 0
+    // Enqueue; the loop task pumps the queue once the ATT channel is free.
+    const size_t tail =
+      (impl_->gattQueueHead + impl_->gattQueueCount) % EspBleImpl::GattQueueCapacity;
+    EspBleImpl::PendingGattOp &op = impl_->gattQueue[tail];
+    op.operation = operation;
+    op.connectionId = connectionId;
+    op.serviceUuid = serviceUuid == nullptr ? "" : serviceUuid;
+    op.characteristicUuid = characteristicUuid == nullptr ? "" : characteristicUuid;
+    op.descriptorUuid = descriptorUuid == nullptr ? "" : descriptorUuid;
+    op.characteristicHandle = characteristicHandle;
+    op.writeValue = length == 0
       ? String()
       : String(reinterpret_cast<const char *>(data), length);
-    impl_->gattWriteResponse = response;
+    op.response = response;
+    op.timeoutMilliseconds = timeoutMilliseconds;
+    ++impl_->gattQueueCount;
+  }
+
+  pumpGattQueue();
+  clearError();
+  return true;
+}
+
+void EspBle::pumpGattQueue()
+{
+  if (impl_ == nullptr) return;
+
+  EspBleGattOperation operation = EspBleGattOperation::Discover;
+  EspBleConnectionId connectionId = 0;
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    if (impl_->gattOperating || impl_->gattQueueCount == 0) return;
+
+    const EspBleImpl::PendingGattOp &op = impl_->gattQueue[impl_->gattQueueHead];
+    operation = op.operation;
+    connectionId = op.connectionId;
+    impl_->gattOperation = op.operation;
+    impl_->gattConnectionId = op.connectionId;
+    impl_->gattServiceUuid = op.serviceUuid;
+    impl_->gattCharacteristicUuid = op.characteristicUuid;
+    impl_->gattDescriptorUuid = op.descriptorUuid;
+    impl_->gattCharacteristicHandle = op.characteristicHandle;
+    impl_->gattWriteValue = op.writeValue;
+    impl_->gattWriteResponse = op.response;
     impl_->gattStartMilliseconds = millis();
-    impl_->gattTimeoutMilliseconds = timeoutMilliseconds;
+    impl_->gattTimeoutMilliseconds = op.timeoutMilliseconds;
     impl_->gattTimedOut = false;
-    if (databaseDiscovery && impl_->gattDatabase != nullptr)
+    if (operation == EspBleGattOperation::DiscoverServices && impl_->gattDatabase != nullptr)
     {
       impl_->gattDatabase->reset(connectionId);
     }
+    impl_->gattQueueHead = (impl_->gattQueueHead + 1) % EspBleImpl::GattQueueCapacity;
+    --impl_->gattQueueCount;
     impl_->gattOperating = true;
   }
 
@@ -7420,20 +7483,24 @@ bool EspBle::startGattOperation(
     &task);
   if (result != pdPASS)
   {
+    // Could not start the worker: surface a failure result for this operation so
+    // the caller's callback still fires, then let the next pump try the rest.
+    EspBleImpl::Event event;
+    event.type = EspBleImpl::EventType::GattResult;
+    event.gattResult.operation = operation;
+    event.gattResult.connectionId = connectionId;
+    event.gattResult.error = EspBleError::ResourceExhausted;
+    event.gattResult.detail = "failed to create GATT operation task";
     std::lock_guard<std::mutex> lock(impl_->mutex);
     impl_->gattOperating = false;
-    setError(EspBleError::ResourceExhausted, "failed to create GATT operation task");
-    return false;
+    impl_->pushEvent(event);
+    return;
   }
+  std::lock_guard<std::mutex> lock(impl_->mutex);
+  if (impl_->gattOperating)
   {
-    std::lock_guard<std::mutex> lock(impl_->mutex);
-    if (impl_->gattOperating)
-    {
-      impl_->gattTask = task;
-    }
+    impl_->gattTask = task;
   }
-  clearError();
-  return true;
 }
 
 bool EspBle::preparePeripheral()

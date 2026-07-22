@@ -351,6 +351,11 @@ struct EspBleHidDeviceConfig
 struct EspBleHidKeyboardConfig : EspBleHidDeviceConfig
 {
   EspBleKeyboardLayout layout = EspBleKeyboardLayout::EnUs;
+  // Expose HID over GATT Boot Protocol (Protocol Mode 0x2A4E + Boot Keyboard
+  // Input/Output Reports 0x2A22/0x2A32). Off by default: most HOGP hosts use
+  // Report Protocol Mode, and the extra characteristics enlarge every host's
+  // discovery. Enable only for hosts that need Boot Protocol (e.g. a BIOS).
+  bool bootProtocol = false;
 };
 
 struct EspBleHidMouseConfig : EspBleHidDeviceConfig
@@ -1286,6 +1291,9 @@ private:
     const char *descriptorUuid = nullptr,
     uint32_t timeoutMilliseconds = 10000,
     uint16_t characteristicHandle = 0);
+  // Start the next queued GATT operation if the ATT channel is free. Pumped from
+  // update() so operations serialize behind whatever is currently running.
+  void pumpGattQueue();
 
   bool initialized_ = false;
   String activeDeviceName_;

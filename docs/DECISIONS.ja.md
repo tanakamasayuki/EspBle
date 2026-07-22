@@ -51,7 +51,7 @@
 3. GATT ServerのService/Characteristicは`begin()`前に登録し、Security permissionを後から定義へ追加できる順序にする。
 4. GATT Server書込みイベントとCentral側のDiscovery/Read/Write結果は、現在は`ble.update()`からloop task contextで配送する。
 5. 最小Discoveryは既知Service/Characteristic UUIDを指定して存在とpropertyを確認する。全Service/Characteristic列挙は別途設計する。
-6. 初期実装はCentral側GATT operationを同時に1件へ制限し、callbackから次のoperationを連鎖できる。queue、operation id、cancelは未確定とする。
+6. Central側GATT operationは実際のATT送受信を同時1件に保つ（HID Host discoveryとも`gattOperating`で共有排他）が、呼び出しは**自動でFIFOキューへ積み**loop taskがpumpして順に実行する。「operation already in progress」で拒否せず、利用側は直列化を意識しない。callbackから次のoperationを連鎖する使い方も引き続き可能。operation id / 強制cancelは未導入。（当初の「同時1件へ制限しqueueは未確定」を上書き）
 7. GATT値はpointer+lengthを基本に扱える一方、公開値containerは`String`で試行する。HID実装後に最終型を決める。
 8. Notification/Indicationの購読、解除、受信payloadとServer側CCCD変更は値イベントへcopyし、`ble.update()`から配送できる。
 9. Server側Notification/Indication送信は内部taskで実行し、Indication確認待ちでloopをblockしない。送信結果は別イベントで通知する。

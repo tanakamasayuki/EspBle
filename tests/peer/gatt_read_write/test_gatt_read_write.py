@@ -57,8 +57,9 @@ def test_gatt_read_write(dut, peers):
     dut.expect_exact(
         "TIMEOUT_RESULT success=0 error=TIMEOUT count=1 context=loop", timeout=10
     )
-    dut.expect_exact("TIMEOUT_BUSY next=0", timeout=10)
-    dut.expect_exact("TIMEOUT_RECOVERY_REQUESTED", timeout=10)
+    # The recovery read issued during the still-in-flight (timed-out) slow read
+    # is accepted and queued, then completes once the slow backend read returns.
+    dut.expect_exact("TIMEOUT_BUSY next=1", timeout=10)
     dut.expect_exact(
         "TIMEOUT_RECOVERY success=1 value=central-no-response timeout_count=1 context=loop",
         timeout=20,

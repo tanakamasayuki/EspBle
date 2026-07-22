@@ -20,6 +20,11 @@ void setup()
   auto &keyboard = ble.hidKeyboard();
   EspBleHidKeyboardConfig keyboardConfig;
   keyboardConfig.manufacturer = "EspBle";
+  // en: Expose HID Boot Protocol (opt-in) so onProtocolMode() below is meaningful;
+  //     leave it off (default) if you only need Report Protocol Mode.
+  // ja: onProtocolMode() を意味あるものにするため Boot Protocol を有効化（opt-in）。
+  //     Report Protocol Modeだけでよければ既定のoffのままにする。
+  keyboardConfig.bootProtocol = true;
   keyboard.configure(keyboardConfig);
   // en: Notified when the host writes LED state (Num/Caps/Scroll Lock, etc.).
   // ja: HostがLED状態（Num/Caps/Scroll Lock等）を書き込むと通知される。
