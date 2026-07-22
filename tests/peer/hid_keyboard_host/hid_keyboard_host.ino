@@ -155,21 +155,25 @@ void loop()
     }
     else if (command == 'L')
     {
+      // setKeyboardLeds() enqueues the write on the shared GATT queue and returns
+      // without blocking on the ATT write. Sum only the call durations (the
+      // enqueue), excluding update()/delay, to prove the calls do not block;
+      // update() drains the queue between iterations.
       unsigned success = 0;
-      const uint32_t startMs = millis();
+      uint32_t callMs = 0;
       for (int i = 0; i < 10; ++i)
       {
+        const uint32_t startMs = millis();
         if (ble.hidHost().setKeyboardLeds(
               keyboardConnectionId, true, true, false))
         {
           ++success;
         }
+        callMs += millis() - startMs;
+        ble.update();
         delay(5);
       }
-      Serial.printf(
-        "HOST_LEDS_TIMED success=%u ms=%u\n",
-        success,
-        static_cast<unsigned>(millis() - startMs));
+      Serial.printf("HOST_LEDS_TIMED success=%u ms=%u\n", success, static_cast<unsigned>(callMs));
     }
     else if (command == 'e')
     {
