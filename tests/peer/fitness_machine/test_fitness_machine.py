@@ -69,11 +69,11 @@ def test_fitness_machine_service(dut, peers):
     device.write("g")
     device.expect_exact("STATUS_SENT notified=1 power=250", timeout=10)
     dut.expect_exact("FTMS_STATUS type=08 power=250 context=loop", timeout=20)
-    # NOTE: this test ends here deliberately. After this exact sequence — three
-    # subscriptions (Indoor Bike Data notify, Control Point indicate, Status
-    # notify), a write-with-response to the Control Point, its response
-    # indication, and the Status notification — the central stops responding to
-    # further serial commands (a settle delay does not help). The glucose RACP
-    # test (two subscriptions) does not exhibit this. Left as a known issue to
-    # investigate rather than masked; unsubscribe/disconnect are covered by
-    # other peer tests (e.g. cycling_power).
+
+    dut.write("u")
+    dut.expect_exact("FTMS_UNSUBSCRIBE_REQUESTED", timeout=10)
+    dut.expect_exact("FTMS_UNSUBSCRIBED success=1", timeout=20)
+
+    dut.write("d")
+    dut.expect_exact("DISCONNECT_REQUESTED", timeout=10)
+    dut.expect(re.compile(rb"DISCONNECTED id=(\d+)"), timeout=20)

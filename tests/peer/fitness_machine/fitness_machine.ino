@@ -168,6 +168,11 @@ void loop()
         connectionId, FTMS_SERVICE_UUID, CONTROL_POINT_UUID, String(reinterpret_cast<const char *>(command3), 3), true);
       Serial.println(accepted ? "SET_TARGET_POWER_REQUESTED" : "SET_TARGET_POWER_FAILED");
     }
+    else if (command == 'u' && connectionId != 0)
+    {
+      const bool accepted = ble.unsubscribe(connectionId, FTMS_SERVICE_UUID, INDOOR_BIKE_DATA_UUID);
+      Serial.println(accepted ? "FTMS_UNSUBSCRIBE_REQUESTED" : "FTMS_UNSUBSCRIBE_REQUEST_FAILED");
+    }
     else if (command == 'd' && connectionId != 0)
     {
       Serial.println(ble.disconnect(connectionId) ? "DISCONNECT_REQUESTED" : "DISCONNECT_REQUEST_FAILED");
