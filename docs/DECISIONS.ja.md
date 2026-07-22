@@ -151,7 +151,7 @@
 8. Cycling PowerのCP Measurement（0x2A63）はNotification、CP Feature（0x2A65、uint32）とSensor Location（0x2A5D）はReadとする。Measurementは16bit flags＋符号付き16bit instantaneous power（ワット）で始まり、`cycling_power` PeerテストでLocation Read、Notification購読、負値powerのsint16 decodeを検証済み。符号付きフィールドのdecodeを扱う。
 9. GlucoseのRecord Access Control Point（0x2A52）手続きは、Client write→Server Measurement（0x2A18）notify→Server RACP応答indicateの順に進める。BLE送信は同時1件のため、Server側はMeasurement notifyとRACP応答indicateを`onSent`で順次実行する（SysEx送信と同じ完了イベント駆動）。ライブラリ本体は変更せず既存のwrite event / notify / indicate primitiveの合成で実現し、`glucose` Peerテストで一連の振る舞いを検証済み。この手続き型パターンは独自profileのControl Pointにも応用できる。
 10. Pulse Oximeter（PLX）のPLX Spot-Check Measurement（0x2A5E）はIndication、PLX Features（0x2A60）はReadとする。SpO2とpulse rateは16-bit SFLOATで、`pulse_oximeter` PeerテストでFeatures Read、Indication購読、98 % / 60 bpmのSFLOAT decodeを検証済み。SFLOATは`EspBleMedicalFloat.h`を共有する。
-11. Fitness Machine Service（FTMS、0x1826、スマートトレーナー等で現役）はIndoor Bike Data（0x2AD2）Notify＋Fitness Machine Feature（0x2ACC）Readのデータ配信パスに対応する。Indoor Bike Dataはbit0が*More Data*（0でInstantaneous Speed存在）の反転論理で、以降のフィールドはflag順（average speed、cadence、distance、resistance、power…）に並ぶため、clientはflag順にoffsetを進めてdecodeする。`fitness_machine` Peerでspeed 30.00 km/h・cadence 90 rpm・power 250 Wを検証。対話制御のFitness Machine Control Pointは、他標準ServiceのControl Point同様に必要になった時点で追加する（現状は未対応）。
+11. Fitness Machine Service（FTMS、0x1826、スマートトレーナー等で現役）はIndoor Bike Data（0x2AD2）Notify＋Fitness Machine Feature（0x2ACC）Readのデータ配信パスに対応する。Indoor Bike Dataはbit0が*More Data*（0でInstantaneous Speed存在）の反転論理で、以降のフィールドはflag順（average speed、cadence、distance、resistance、power…）に並ぶため、clientはflag順にoffsetを進めてdecodeする。`fitness_machine` Peerでspeed 30.00 km/h・cadence 90 rpm・power 250 Wを検証。対話制御のFitness Machine Control Point（0x2AD9、write+indicate）とFitness Machine Status（0x2ADA、notify）にも対応する。Control Point write→応答indication（Response Code 0x80＋request op＋result）を返し、Serverは設定値を"Target Power Changed"（0x08）statusとしてnotifyできる。indicationは同時1件のみ在中可能なため、Peerテストは単一のControl Point indication（Set Target Power 0x05、250 W）を検証する（Request Control 0x00とSet Target Powerを連続indicateするには各応答のconfirmを待つ必要がある）。**既知の問題**: 上記の3購読（Indoor Bike Data notify＋Control Point indicate＋Status notify）＋Control Point write-with-response＋応答indication＋status notifyの一連の後、Central側が以降のserialコマンドに無応答になる現象を観測（settle待ちでも再現）。Glucose RACP（2購読）では再現せず。Peerテストはこの手前（status受信）まで検証し、unsubscribe/disconnectのcleanupは他Peerテストに委ねる。要根本原因調査。
 
 ## 再接続・接続状態で確定（2026-07-22）
 
@@ -171,7 +171,7 @@
 
 ## 優先順位候補
 
-1. FTMS Control Point（対話制御）、その他の現役標準Service
+1. その他の現役標準Service（必要になった時点で）
 2. その他Connectionlessデータ（現役かつ検証容易なものに限る）
 
 候補は採用決定ではありません。ユースケース、実機、Peerテスト方法が揃った機能だけを正式スコープへ移します。

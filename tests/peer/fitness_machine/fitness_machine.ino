@@ -1,7 +1,9 @@
 // fitness_machine DUT: EspBle GATT client for the standard Fitness Machine
-// Service (0x1826). It reads Fitness Machine Feature (0x2ACC, uint32 pair),
-// subscribes to Indoor Bike Data (0x2AD2) notifications, and decodes the
-// flags-driven fields (instantaneous speed, cadence, power).
+// Service (0x1826). It reads Fitness Machine Feature (0x2ACC), subscribes to
+// Indoor Bike Data (0x2AD2) and decodes the flags-driven fields, then exercises
+// the Fitness Machine Control Point (0x2AD9): Request Control and Set Target
+// Power, each answered by a Control Point response indication, with Set Target
+// Power also driving a Fitness Machine Status (0x2ADA) notification.
 #include <EspBle.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -9,6 +11,8 @@
 static constexpr const char *FTMS_SERVICE_UUID = "1826";
 static constexpr const char *INDOOR_BIKE_DATA_UUID = "2ad2";
 static constexpr const char *FITNESS_MACHINE_FEATURE_UUID = "2acc";
+static constexpr const char *CONTROL_POINT_UUID = "2ad9";
+static constexpr const char *STATUS_UUID = "2ada";
 
 EspBle ble;
 TaskHandle_t loopTask = nullptr;
@@ -62,34 +66,54 @@ void setup()
     }
   });
   ble.onSubscribed([](const EspBleGattResult &result) {
-    Serial.printf("FTMS_SUBSCRIBED success=%u context=%s\n", result.success ? 1 : 0, contextName());
+    if (result.characteristicUuid.equalsIgnoreCase(INDOOR_BIKE_DATA_UUID))
+      Serial.printf("FTMS_SUBSCRIBED success=%u context=%s\n", result.success ? 1 : 0, contextName());
+    else if (result.characteristicUuid.equalsIgnoreCase(CONTROL_POINT_UUID))
+      Serial.printf("CP_SUBSCRIBED success=%u context=%s\n", result.success ? 1 : 0, contextName());
+    else if (result.characteristicUuid.equalsIgnoreCase(STATUS_UUID))
+      Serial.printf("STATUS_SUBSCRIBED success=%u context=%s\n", result.success ? 1 : 0, contextName());
   });
   ble.onUnsubscribed([](const EspBleGattResult &result) {
     Serial.printf("FTMS_UNSUBSCRIBED success=%u context=%s\n", result.success ? 1 : 0, contextName());
   });
   ble.onNotification([](const EspBleGattNotification &notification) {
-    if (!notification.characteristicUuid.equalsIgnoreCase(INDOOR_BIKE_DATA_UUID))
-      return;
     const String &value = notification.value;
-    const bool valid = value.length() >= 2;
-    unsigned flags = 0;
-    unsigned speed = 0;   // 0.01 km/h units
-    unsigned cadence = 0; // rpm (raw is 0.5/min units)
-    int power = 0;        // watts
-    if (valid)
+    if (notification.characteristicUuid.equalsIgnoreCase(INDOOR_BIKE_DATA_UUID))
     {
-      flags = u16(value, 0);
-      size_t offset = 2;
-      if (!(flags & 0x0001)) { speed = u16(value, offset); offset += 2; } // Instantaneous Speed
-      if (flags & 0x0002) offset += 2;                                    // Average Speed
-      if (flags & 0x0004) { cadence = u16(value, offset) / 2; offset += 2; } // Instantaneous Cadence
-      if (flags & 0x0008) offset += 2;                                    // Average Cadence
-      if (flags & 0x0010) offset += 3;                                    // Total Distance
-      if (flags & 0x0020) offset += 2;                                    // Resistance Level
-      if (flags & 0x0040) { power = static_cast<int16_t>(u16(value, offset)); offset += 2; } // Instantaneous Power
+      const bool valid = value.length() >= 2;
+      unsigned flags = 0, speed = 0, cadence = 0;
+      int power = 0;
+      if (valid)
+      {
+        flags = u16(value, 0);
+        size_t offset = 2;
+        if (!(flags & 0x0001)) { speed = u16(value, offset); offset += 2; }
+        if (flags & 0x0002) offset += 2;
+        if (flags & 0x0004) { cadence = u16(value, offset) / 2; offset += 2; }
+        if (flags & 0x0008) offset += 2;
+        if (flags & 0x0010) offset += 3;
+        if (flags & 0x0020) offset += 2;
+        if (flags & 0x0040) { power = static_cast<int16_t>(u16(value, offset)); offset += 2; }
+      }
+      Serial.printf("FTMS_BIKE valid=%u flags=%04x speed=%u cadence=%u power=%d context=%s\n",
+        valid ? 1 : 0, flags, speed, cadence, power, contextName());
     }
-    Serial.printf("FTMS_BIKE valid=%u flags=%04x speed=%u cadence=%u power=%d context=%s\n",
-      valid ? 1 : 0, flags, speed, cadence, power, contextName());
+    else if (notification.characteristicUuid.equalsIgnoreCase(CONTROL_POINT_UUID))
+    {
+      const bool valid = value.length() == 3 && static_cast<uint8_t>(value[0]) == 0x80;
+      Serial.printf("CP_RESPONSE valid=%u op=%02x result=%u indication=%u context=%s\n",
+        valid ? 1 : 0,
+        valid ? static_cast<uint8_t>(value[1]) : 0,
+        valid ? static_cast<uint8_t>(value[2]) : 0,
+        notification.indication ? 1 : 0, contextName());
+    }
+    else if (notification.characteristicUuid.equalsIgnoreCase(STATUS_UUID))
+    {
+      const bool valid = value.length() >= 1;
+      const uint8_t type = valid ? static_cast<uint8_t>(value[0]) : 0;
+      int power = (value.length() >= 3) ? static_cast<int16_t>(u16(value, 1)) : 0;
+      Serial.printf("FTMS_STATUS type=%02x power=%d context=%s\n", type, power, contextName());
+    }
   });
   ble.onDisconnected([](const EspBleConnection &connection) {
     connectionId = 0;
@@ -117,10 +141,32 @@ void loop()
       scan.active = true;
       Serial.println(ble.scanner().start(scan) ? "SCAN_STARTED" : "SCAN_START_FAILED");
     }
-    else if (command == 'u' && connectionId != 0)
+    else if (command == 'c' && connectionId != 0)
     {
-      const bool accepted = ble.unsubscribe(connectionId, FTMS_SERVICE_UUID, INDOOR_BIKE_DATA_UUID);
-      Serial.println(accepted ? "FTMS_UNSUBSCRIBE_REQUESTED" : "FTMS_UNSUBSCRIBE_REQUEST_FAILED");
+      // Subscribe the Control Point (indications) and Status (notifications).
+      const bool cp = ble.subscribe(connectionId, FTMS_SERVICE_UUID, CONTROL_POINT_UUID, false);
+      const bool st = ble.subscribe(connectionId, FTMS_SERVICE_UUID, STATUS_UUID, true);
+      Serial.printf("CONTROL_SUBSCRIBE_REQUESTED cp=%u status=%u\n", cp ? 1 : 0, st ? 1 : 0);
+    }
+    else if (command == 'r' && connectionId != 0)
+    {
+      // Request Control (op 0x00).
+      const uint8_t request[1] = {0x00};
+      const bool accepted = ble.writeCharacteristic(
+        connectionId, FTMS_SERVICE_UUID, CONTROL_POINT_UUID, String(reinterpret_cast<const char *>(request), 1), true);
+      Serial.println(accepted ? "REQUEST_CONTROL_REQUESTED" : "REQUEST_CONTROL_FAILED");
+    }
+    else if (command == 'p' && connectionId != 0)
+    {
+      // Set Target Power (op 0x05) to 250 W (sint16 LE).
+      const int16_t power = 250;
+      const uint8_t command3[3] = {
+        0x05,
+        static_cast<uint8_t>(static_cast<uint16_t>(power) & 0xFF),
+        static_cast<uint8_t>((static_cast<uint16_t>(power) >> 8) & 0xFF)};
+      const bool accepted = ble.writeCharacteristic(
+        connectionId, FTMS_SERVICE_UUID, CONTROL_POINT_UUID, String(reinterpret_cast<const char *>(command3), 3), true);
+      Serial.println(accepted ? "SET_TARGET_POWER_REQUESTED" : "SET_TARGET_POWER_FAILED");
     }
     else if (command == 'd' && connectionId != 0)
     {
