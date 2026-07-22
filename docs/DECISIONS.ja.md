@@ -164,14 +164,14 @@
 1. Address privacyは`EspBleConfig::ownAddressType`（`Public`（既定） / `RandomStatic` / `ResolvablePrivate`）で選ぶ。`begin()`で`ble_hs_id_gen_rnd`（static random）→`BLEDevice::setOwnAddr`（`ble_hs_id_set_rnd`）→`BLEDevice::setOwnAddrType`の順に適用する。RandomStaticは`BLE_OWN_ADDR_RANDOM`、ResolvablePrivateは`BLE_OWN_ADDR_RPA_RANDOM_DEFAULT`（esp32s3のcontrollerがRPAを回転生成、`CONFIG_BT_NIMBLE_RPA_TIMEOUT`＝900秒）。RPAはpeerがbonding時のIRKで解決するためsecurity/bonding併用時のみ有用で、回転周期が900秒とテスト実時間に合わないため、Peerテストはrandom static advertising（addressType=Random、先頭octetの上位2bit=0b11）の検証に留める。
 2. Extended / Periodic Advertisingは対応不可とする。同梱NimBLEが`CONFIG_BT_NIMBLE_EXT_ADV`無効でビルドされており（`MYNEWT_VAL_BLE_EXT_ADV=0`）、Arduinoライブラリ側から有効化できない。ext-adv APIはbackendでコンパイル除外されている。
 
-3. iBeaconはbackend非依存codec `EspBleIBeacon.h`（`espBleEncodeIBeacon`/`espBleDecodeIBeacon`/`espBleIsIBeacon`）で実装する。keymap/medical float/CGM CRC/MIDIと同じ「backend非依存ロジックはheader＋host unit test」方針に揃える。iBeaconはmanufacturer specific data（company ID 0x004C＋type 0x02＋length 0x15＋16 byte UUID＋big-endian major/minor＋int8 measured power、計25 byte）で、既存の`setManufacturerData`（送信）と`EspBleScanResult::manufacturerData`（受信）にそのまま載るため、advertising/scan APIの追加なしで完結する。unit testと`ibeacon` Peer（broadcast→decode）で検証。Eddystoneはservice data（0xFEAA）が必要でadvertising/scan両側へservice-data plumbingを足す必要があるため、別途候補とする。
+3. iBeaconはbackend非依存codec `EspBleIBeacon.h`（`espBleEncodeIBeacon`/`espBleDecodeIBeacon`/`espBleIsIBeacon`）で実装する。keymap/medical float/CGM CRC/MIDIと同じ「backend非依存ロジックはheader＋host unit test」方針に揃える。iBeaconはmanufacturer specific data（company ID 0x004C＋type 0x02＋length 0x15＋16 byte UUID＋big-endian major/minor＋int8 measured power、計25 byte）で、既存の`setManufacturerData`（送信）と`EspBleScanResult::manufacturerData`（受信）にそのまま載るため、advertising/scan APIの追加なしで完結する。unit testと`ibeacon` Peer（broadcast→decode）で検証。
 
-4. Eddystone-URLはbackend非依存codec `EspBleEddystone.h`で実装する（iBeaconと同じheader＋unit test方針）。Eddystoneはmanufacturer dataではなくService Data（AD 0x16、UUID 0xFEAA）で運ぶため、`EspBleAdvertising::setServiceData(uuid, data, length)`（送信、backendの`BLEAdvertisementData::setServiceData`）と`EspBleScanResult::serviceData`/`serviceDataUuid`/`hasServiceData()`（受信、backendの`getServiceData`/`getServiceDataUUID`）を汎用のService Data APIとして追加した。URL frame（frame 0x10、scheme prefix 0x00-0x03、ドメインサフィックス圧縮0x00-0x0d、TX power）に加えUID（frame 0x00、namespace 10B＋instance 6B＋TX power）とTLM（frame 0x20 version 0x00、battery mV・8.8固定小数点温度・adv count・0.1s uptime、すべてbig-endian）に対応する。EIDは暗号鍵管理が必要なため未対応。scannerは`serviceData[0]`のframe typeで分岐する（`serviceData`をURL/UID/TLM decoderへ順に通す）ためUUID文字列表現の差異に依存しない。unit testと`eddystone` Peer（3 frameを実行時に切替えて検証）で確認。
+4. 汎用のService Data API（`EspBleAdvertising::setServiceData(uuid, data, length)`送信＝backendの`BLEAdvertisementData::setServiceData`、`EspBleScanResult::serviceData`/`serviceDataUuid`/`hasServiceData()`受信＝backendの`getServiceData`/`getServiceDataUUID`）を追加する。標準16-bitサービスのService Data（AD 0x16）やservice-dataビーコン一般で使える汎用機能。`service_data` Peerで送受信を検証。なお当初Eddystone対応（URL/UID/TLM）を実装したが、Eddystone/Physical Webは事実上終息したプロトコルのため、デッドプロトコルの保守面を避けてEddystone固有部分（codec・example・test）は削除した（判断: 現実の利用価値でスコープを決める）。iBeaconは現役のため維持し、汎用Service Data APIも独立して有用なため残した。
 
 ## 優先順位候補
 
 1. Sensor profile
-2. Eddystone EID frame（暗号鍵管理）、その他Connectionlessデータ
+2. その他Connectionlessデータ（現役かつ検証容易なものに限る）
 
 候補は採用決定ではありません。ユースケース、実機、Peerテスト方法が揃った機能だけを正式スコープへ移します。
 

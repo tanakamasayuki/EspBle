@@ -73,7 +73,6 @@ arduino-cli compile --profile esp32s3 examples/<path>
 | [Gap/Beacon](Gap/Beacon/) | Broadcaster | Non-connectable, non-scannable beacon with manufacturer data and interval control |
 | [Gap/PrivateAddress](Gap/PrivateAddress/) | Peripheral | Advertise with a random static / resolvable private address |
 | [Gap/IBeacon](Gap/IBeacon/) | Broadcaster | Broadcast an Apple iBeacon (UUID / major / minor / measured power) |
-| [Gap/Eddystone](Gap/Eddystone/) | Broadcaster | Broadcast an Eddystone-URL beacon (Service Data 0xFEAA) |
 | [Gap/Scan](Gap/Scan/) | Central | Continuous active scan printing address / RSSI / name |
 | [Gap/Connect](Gap/Connect/) | Central | Scan for a service UUID and connect; async connect/disconnect/failure events |
 | [Gap/Mtu](Gap/Mtu/) | Central | Preferred-MTU exchange and notification payload limits |
