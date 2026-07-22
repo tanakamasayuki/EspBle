@@ -38,6 +38,6 @@ The design documents are written in Japanese. This guide lists them and shows th
 - **Status tracking**: [STATUS.ja.md](STATUS.ja.md) — progress, limitations, TODO; updated per work batch.
 - **CI-generated (do not hand-edit)**: `BOARDS.<version>.md`, `COMPATIBILITY.<version>.md`, produced by `.github/workflows/board-matrix.yml` and `core-matrix.yml`.
 
-## One-line status (as of 2026-07-19)
+## One-line status
 
 The **BLE foundation and composite HID Device / Host are implemented and covered by peer/unit tests**. Further practical HID extensions and interoperability checks are in progress, with 1.0.0 planned as the first public release.

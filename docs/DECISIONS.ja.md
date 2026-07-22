@@ -13,7 +13,7 @@
 9. Peerでは両方のsketchを転送・実行でき、両方のSerialを観測・操作できる。初期構成は親側sketchをCentral、`peer_device/`側sketchをPeripheralに固定し、役割を交換しない。EspBle PeripheralはPeer側の結果を主にassertして検証する。
 10. Peerの一方は可能な範囲でArduino-ESP32同梱BLE低レベルAPIを直接使い、EspBle同士だけの自己整合テストにしない。
 11. 初期プロファイルはHID KeyboardとBattery Serviceに絞る。
-12. `memo.ja.md`は正式文書への移行確認後に削除する（2026-07-18に移行確認のうえ削除済み。Beacon/Connectionlessは優先順位候補へ、Semantic Versioningポリシーと非機能要件はREQUIREMENTSへ、初期リリース範囲は確定#11で上書き）。
+12. 旧`memo.ja.md`（scratch）は内容を正式文書へ移行のうえ削除済み。Beacon/Connectionlessは優先順位候補へ、Semantic Versioningポリシーと非機能要件はREQUIREMENTSへ、初期リリース範囲は確定#11へ移した。
 13. 初期自動Peer環境は常設ESP32-S3 2台とする。3台必要な複数接続またはBLE-to-BLE bridge testは、manual用ESP32-S3を追加Peerとして利用し、Peerディレクトリを増やして拡張する。
 14. 対象可否はBLE内蔵SoCかどうかではなく、Arduino-ESP32がNimBLEを提供する構成かで判断する。ESP32-P4 + ESP32-C6などのHosted BLEも対象候補に含め、専用build/実機試験後に対応済みとする。
 15. 公開APIと文書はBluetooth LEの標準用語を基本とし、Central/Peripheral、GATT Client/Server、HID Host/Deviceを同一視しない。stack ownerは役割中立の`EspBle`とする。
@@ -118,7 +118,7 @@
 18. `onKeyboard()`は同一report内の変化をpress（usage昇順）→release（usage昇順）の順で配送する仕様とする。一般的なOS Hostのchord処理（release先行）とは順序が異なるが、bridge用途の主境界はusage snapshot（`EspBleHidKeyboardState`）であり影響しない。順序に依存する用途はraw usage境界を使う。
 19. HID Host listener registryは、EspUsbHostが先行実装した方式（実機peer test 56件PASS）に倣う。(1) 配送時に`std::function`をコピーせずshared ownershipをsnapshotし、解除との競合を防ぎつつmutable callback状態を保持する。(2) IDはHostインスタンス内でイベント種別をまたいで一意。(3) registryはmutexで保護するがcallback実行中はロックしない。(4) 単一`on*`→listener登録順で配送。(5) callback内の追加・解除は次イベントから反映する。
 
-## 複合HID再設計で確定（2026-07-19）
+## 複合HID再設計で確定
 
 1. Device入口は`hidKeyboard()` / `hidMouse()` / `hidConsumerControl()` / `hidSystemControl()` / `hidGamepad()` / `hidVendor()`とし、構成したprofileを1つのHID Serviceへ合成する。
 2. Report IDはEspUsbDevice/EspUsbHostと同じ固定値（keyboard=1、mouse=2、gamepad=3、consumer=4、system=5、vendor=6）とし、利用者configから除く。
@@ -153,14 +153,14 @@
 10. Pulse Oximeter（PLX）のPLX Spot-Check Measurement（0x2A5E）はIndication、PLX Features（0x2A60）はReadとする。SpO2とpulse rateは16-bit SFLOATで、`pulse_oximeter` PeerテストでFeatures Read、Indication購読、98 % / 60 bpmのSFLOAT decodeを検証済み。SFLOATは`EspBleMedicalFloat.h`を共有する。
 11. Fitness Machine Service（FTMS、0x1826、スマートトレーナー等で現役）はIndoor Bike Data（0x2AD2）Notify＋Fitness Machine Feature（0x2ACC）Readのデータ配信パスに対応する。Indoor Bike Dataはbit0が*More Data*（0でInstantaneous Speed存在）の反転論理で、以降のフィールドはflag順（average speed、cadence、distance、resistance、power…）に並ぶため、clientはflag順にoffsetを進めてdecodeする。`fitness_machine` Peerでspeed 30.00 km/h・cadence 90 rpm・power 250 Wを検証。対話制御のFitness Machine Control Point（0x2AD9、write+indicate）とFitness Machine Status（0x2ADA、notify）にも対応する。Control Point write→応答indication（Response Code 0x80＋request op＋result）を返し、Serverは設定値を"Target Power Changed"（0x08）statusとしてnotifyできる。indicationは1接続あたり同時1件のみ在中可能（confirm待ち）なため、Peerテストは単一のControl Point indication（Set Target Power 0x05、250 W）を検証する（Request Control 0x00とSet Target Powerを連続indicateするには各応答のconfirmを待つ必要があるため、テストでは連続させない）。statusは応答indicationのsend完了後にServer側コマンドで送出し検証する。テストはIndoor Bike Data購読解除・切断のcleanupまで通す。
 
-## 再接続・接続状態で確定（2026-07-22）
+## 再接続・接続状態で確定
 
 1. discovery snapshotは接続ごとに保持する。`GattDatabaseSnapshot`を`connectionId`で識別する最大`ConnectionCapacity`個の配列とし、初回discoveryで確保、切断で解放する。ある接続のdiscoveryが他接続のsnapshotを追い出さず、`discoveredService()`等は問い合わせた`connectionId`のsnapshotを参照する。容量は接続容量と一致するため能動接続は必ず空きslotを得る。
 2. persistent subscriptionは既定onとし、利用者の追加operationなしで再接続時に購読を復元する。`subscribe()`成功時にpeer address＋service UUID＋characteristic UUIDで記録し（`unsubscribe()`成功で削除）、同一peer addressへ再接続した`Connected`イベント処理時に記録済み購読を自動で再`subscribe()`する。復元はUUID指定で行う（handleは再接続ごとに変わるため）。「利用者がシンプルに使える」方針を優先し、`EspBleConfig::persistentSubscriptions=false`で手動管理へ切り替えられる。安定したpeer address（bond済みidentity、public、static random）を前提とする。
 3. 記録はaddress単位で切断をまたいで保持する（それがpersistentの意味）。registryは固定容量（16件）で、満杯時は既存記録を保持して新規のみ無視する。同一key再登録はdedupで上書きするため、自動再購読自体が重複記録を生むことはない。
 4. 複数同時接続に公式対応する（接続ごとのdiscovery cache・subscription・GATT操作routingで実現）。同時接続数の上限は同梱NimBLE controllerの`CONFIG_BT_NIMBLE_MAX_CONNECTIONS`（precompiled esp32s3で3）で決まり、これを超える接続要求はslotが空いていてもbackendで失敗する。ライブラリの`ConnectionCapacity`（4）はslot数であり同時接続保証数ではない。auto-reconnectは`setAutoReconnect(bool)`（既定off）とし、connect済みCentral peerをaddressで記憶して想定外の切断時に同一addressへ自動再接続（`update()`から2秒間隔でretry）、`disconnect()`は意図的切断として再接続対象から除外、無効化で保留中の再接続を破棄する。persistent subscriptionと組み合わせるとアプリコードなしでnotifyが復旧する。3台目board前提のため`tests/manual/multi_connection/`（`peer_device2/`＝profile `s3_peer_device2`、port未設定時は自動skip）で複数同時接続・routing・auto-reconnect・購読復元を実機検証済み。
 
-## Privacy / Advertisingで確定（2026-07-22）
+## Privacy / Advertisingで確定
 
 1. Address privacyは`EspBleConfig::ownAddressType`（`Public`（既定） / `RandomStatic` / `ResolvablePrivate`）で選ぶ。`begin()`で`ble_hs_id_gen_rnd`（static random）→`BLEDevice::setOwnAddr`（`ble_hs_id_set_rnd`）→`BLEDevice::setOwnAddrType`の順に適用する。RandomStaticは`BLE_OWN_ADDR_RANDOM`、ResolvablePrivateは`BLE_OWN_ADDR_RPA_RANDOM_DEFAULT`（esp32s3のcontrollerがRPAを回転生成、`CONFIG_BT_NIMBLE_RPA_TIMEOUT`＝900秒）。RPAはpeerがbonding時のIRKで解決するためsecurity/bonding併用時のみ有用で、回転周期が900秒とテスト実時間に合わないため、Peerテストはrandom static advertising（addressType=Random、先頭octetの上位2bit=0b11）の検証に留める。
 2. Extended / Periodic Advertisingは対応不可とする。同梱NimBLEが`CONFIG_BT_NIMBLE_EXT_ADV`無効でビルドされており（`MYNEWT_VAL_BLE_EXT_ADV=0`）、Arduinoライブラリ側から有効化できない。ext-adv APIはbackendでコンパイル除外されている。
