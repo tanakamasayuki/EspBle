@@ -164,10 +164,13 @@
 1. Address privacyは`EspBleConfig::ownAddressType`（`Public`（既定） / `RandomStatic` / `ResolvablePrivate`）で選ぶ。`begin()`で`ble_hs_id_gen_rnd`（static random）→`BLEDevice::setOwnAddr`（`ble_hs_id_set_rnd`）→`BLEDevice::setOwnAddrType`の順に適用する。RandomStaticは`BLE_OWN_ADDR_RANDOM`、ResolvablePrivateは`BLE_OWN_ADDR_RPA_RANDOM_DEFAULT`（esp32s3のcontrollerがRPAを回転生成、`CONFIG_BT_NIMBLE_RPA_TIMEOUT`＝900秒）。RPAはpeerがbonding時のIRKで解決するためsecurity/bonding併用時のみ有用で、回転周期が900秒とテスト実時間に合わないため、Peerテストはrandom static advertising（addressType=Random、先頭octetの上位2bit=0b11）の検証に留める。
 2. Extended / Periodic Advertisingは対応不可とする。同梱NimBLEが`CONFIG_BT_NIMBLE_EXT_ADV`無効でビルドされており（`MYNEWT_VAL_BLE_EXT_ADV=0`）、Arduinoライブラリ側から有効化できない。ext-adv APIはbackendでコンパイル除外されている。
 
+3. iBeaconはbackend非依存codec `EspBleIBeacon.h`（`espBleEncodeIBeacon`/`espBleDecodeIBeacon`/`espBleIsIBeacon`）で実装する。keymap/medical float/CGM CRC/MIDIと同じ「backend非依存ロジックはheader＋host unit test」方針に揃える。iBeaconはmanufacturer specific data（company ID 0x004C＋type 0x02＋length 0x15＋16 byte UUID＋big-endian major/minor＋int8 measured power、計25 byte）で、既存の`setManufacturerData`（送信）と`EspBleScanResult::manufacturerData`（受信）にそのまま載るため、advertising/scan APIの追加なしで完結する。unit testと`ibeacon` Peer（broadcast→decode）で検証。Eddystoneはservice data（0xFEAA）が必要でadvertising/scan両側へservice-data plumbingを足す必要があるため、別途候補とする。
+
 ## 優先順位候補
 
 1. Sensor profile
-2. Beacon / Connectionless（任意Advertisingデータ送受信、iBeacon、Eddystone）
+2. Eddystone（service data plumbingが必要）
+3. Beacon / Connectionless（その他の任意Advertisingデータ送受信）
 
 候補は採用決定ではありません。ユースケース、実機、Peerテスト方法が揃った機能だけを正式スコープへ移します。
 

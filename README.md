@@ -11,7 +11,7 @@ The public API is not stable yet: this is the trial stage ahead of the first rel
 
 ## Features
 
-- Legacy advertising and scanning with value-type scan results
+- Legacy advertising and scanning with value-type scan results, non-connectable beacons, and iBeacon (`EspBleIBeacon.h` codec)
 - Central and peripheral connections by scan result or address, with stable library connection IDs; multiple simultaneous connections and auto-reconnect (`setAutoReconnect`, off by default) that recovers unexpected drops
 - Generic GATT server/client: per-connection database and known-UUID discovery, characteristic/descriptor read and write, operation timeouts with auto-queueing, notify/indicate, subscriptions (persistent subscriptions, on by default, auto-restore on reconnect)
 - MTU exchange, connection snapshots, payload-limit validation

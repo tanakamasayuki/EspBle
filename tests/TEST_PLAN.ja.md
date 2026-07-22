@@ -67,6 +67,7 @@ pytest-embedded-cliの既存規約に従います。
 | reconnect / peer loss | state | ✅ | ✅ Bond再接続 / `lifecycle_stress`（radio消失をsupervision timeoutで検出） / `persistent_subscribe`（再購読） | `manual/multi_connection`（auto-reconnect） |
 | 複数同時接続 / 接続分離 | | | | `manual/multi_connection`（2 Peripheral同時、notify routing、一方切断が他方に非影響） |
 | Address privacy（own address type） | | ✅ | ✅ `address_privacy`（random static advertising） | RPA回転（900秒周期のため自動試験対象外）はbonded peer解決を手動確認 |
+| iBeacon（broadcast / decode） | ✅ `unit/ibeacon` | ✅ | ✅ `ibeacon`（broadcast→decode、全フィールド） | iBeaconアプリ |
 | HID Keyboard Device | report codec（予定） | ✅ | ✅ `hid_keyboard_device` / `hid_robustness`（購読gate、queue満杯） | OS、市販HID Host |
 | HID NKRO Device / Host | ✅ `unit/report_map` | ✅ | ✅ `hid_keyboard_nkro`（8キー、高usage、個別release、LED） | OS、市販HID Host |
 | HID LED output | report codec（予定） | ✅ | ✅ `hid_keyboard_device` / `hid_keyboard_host`（WWR非block） | OS |
@@ -155,6 +156,7 @@ pytest-embedded-cliの既存規約に従います。
 52. ✅ `beacon`: non-connectable Beaconの検証。Peer側が`setConnectable(false)`＋`setScanResponseEnabled(false)`＋`setInterval(100, 150)`でmarker Service UUIDとmanufacturer dataをbroadcastし、親側Scannerがconnectable=0・scannable=0・manufacturer payload（`ffff01020304`）を捕捉することを確認。
 53. ✅ `persistent_subscribe`: persistent subscription（再接続時の自動再購読）の検証。Centralが初回接続でnotify characteristicを購読し1件受信、切断（非bondなのでPeripheral側は購読を忘れ再advertise）、Centralが再接続する。再接続では`subscribe()`を呼ばないが`EspBleConfig::persistentSubscriptions`（既定on）が購読を自動復元するため`onSubscribed`がconnect=2で自発的に発火し、Peripheralからのnotifyをcount=2で受信することを確認。
 54. ✅ `address_privacy`: address privacyの検証。Peripheralを`EspBleConfig::ownAddressType = RandomStatic`で構成しmarker Serviceをadvertiseし、Central ScannerがそのpeerをaddressType=Random（=1）かつ先頭octetの上位2bit=0b11（static random）で観測することを確認（public addressではないこと）。
+55. ✅ `ibeacon`: iBeaconのbroadcast/decodeの検証。Peripheralが`EspBleIBeacon.h` codecで組んだiBeacon（UUID 0102..10、major 0x1234、minor 0xABCD、measured power -59）をnon-connectable・non-scannable manufacturer dataとしてbroadcastし、Central Scannerが`espBleDecodeIBeacon`で全フィールドをdecode（connectable=0・scannable=0）することを確認。
 
 ## 合格条件
 
