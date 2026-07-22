@@ -300,7 +300,7 @@ struct EspBleImpl
 
   ~EspBleImpl()
   {
-    delete gattDatabase;
+    for (GattDatabaseSnapshot *database : gattDatabases) delete database;
     delete securityBackend;
   }
 
@@ -568,10 +568,7 @@ struct EspBleImpl
     event.type = EventType::Disconnected;
     event.connection = slot.connection;
     pushEvent(event);
-    if (gattDatabase != nullptr && gattDatabase->connectionId == slot.connection.id)
-    {
-      gattDatabase->reset();
-    }
+    releaseDatabaseLocked(slot.connection.id);
     slot = ConnectionSlot();
   }
 
@@ -953,11 +950,7 @@ struct EspBleImpl
       GattDatabaseSnapshot *database = nullptr;
       {
         std::lock_guard<std::mutex> lock(impl->mutex);
-        if (impl->gattDatabase == nullptr)
-        {
-          impl->gattDatabase = new (std::nothrow) GattDatabaseSnapshot();
-        }
-        database = impl->gattDatabase;
+        database = impl->acquireDatabaseLocked(result.connectionId);
         if (database != nullptr) database->reset(result.connectionId);
       }
       if (database == nullptr)
@@ -1246,22 +1239,37 @@ struct EspBleImpl
       // a timeout is deliberately suppressed.
       if (!impl->gattTimedOut)
       {
-        if (result.operation == EspBleGattOperation::DiscoverServices &&
-            impl->gattDatabase != nullptr &&
-            impl->gattDatabase->connectionId == result.connectionId)
+        if (result.operation == EspBleGattOperation::DiscoverServices)
         {
-          impl->gattDatabase->valid = result.success;
+          GattDatabaseSnapshot *database =
+            impl->findDatabaseLocked(result.connectionId);
+          if (database != nullptr) database->valid = result.success;
+        }
+        // Remember/forget the subscription so it can be auto-restored on the
+        // next connection to this peer (keyed by peer address, not connection).
+        if (result.success && result.operation == EspBleGattOperation::Subscribe)
+        {
+          impl->recordSubscriptionLocked(
+            impl->connectionAddressLocked(result.connectionId),
+            result.serviceUuid, result.characteristicUuid,
+            result.subscribedToNotifications);
+        }
+        else if (result.success && result.operation == EspBleGattOperation::Unsubscribe)
+        {
+          impl->forgetSubscriptionLocked(
+            impl->connectionAddressLocked(result.connectionId),
+            result.serviceUuid, result.characteristicUuid);
         }
         Event event;
         event.type = EventType::GattResult;
         event.gattResult = result;
         impl->pushEvent(event);
       }
-      else if (result.operation == EspBleGattOperation::DiscoverServices &&
-               impl->gattDatabase != nullptr &&
-               impl->gattDatabase->connectionId == result.connectionId)
+      else if (result.operation == EspBleGattOperation::DiscoverServices)
       {
-        impl->gattDatabase->reset();
+        GattDatabaseSnapshot *database =
+          impl->findDatabaseLocked(result.connectionId);
+        if (database != nullptr) database->reset(result.connectionId);
       }
       impl->gattOperating = false;
       impl->gattTask = nullptr;
@@ -1325,7 +1333,144 @@ struct EspBleImpl
   uint32_t gattStartMilliseconds = 0;
   uint32_t gattTimeoutMilliseconds = 10000;
   bool gattTimedOut = false;
-  GattDatabaseSnapshot *gattDatabase = nullptr;
+  // Per-connection discovery cache. Each connection keeps its own snapshot so a
+  // discovery on one connection does not evict another's, and query methods
+  // (discoveredService/Characteristic/Descriptor) resolve against the caller's
+  // connectionId. Snapshots are allocated lazily on first discovery and freed
+  // when the connection drops. Capacity matches the connection capacity, so an
+  // active connection always finds a free slot.
+  GattDatabaseSnapshot *gattDatabases[ConnectionCapacity] = {};
+
+  GattDatabaseSnapshot *findDatabaseLocked(EspBleConnectionId connectionId)
+  {
+    if (connectionId == 0) return nullptr;
+    for (GattDatabaseSnapshot *database : gattDatabases)
+    {
+      if (database != nullptr && database->connectionId == connectionId) return database;
+    }
+    return nullptr;
+  }
+
+  // Return the snapshot for connectionId, allocating one in a free slot if none
+  // exists yet. Returns nullptr only when allocation fails or no slot is free.
+  GattDatabaseSnapshot *acquireDatabaseLocked(EspBleConnectionId connectionId)
+  {
+    GattDatabaseSnapshot *existing = findDatabaseLocked(connectionId);
+    if (existing != nullptr) return existing;
+    for (GattDatabaseSnapshot *&database : gattDatabases)
+    {
+      if (database == nullptr)
+      {
+        database = new (std::nothrow) GattDatabaseSnapshot();
+        if (database != nullptr) database->reset(connectionId);
+        return database;
+      }
+    }
+    return nullptr;
+  }
+
+  void releaseDatabaseLocked(EspBleConnectionId connectionId)
+  {
+    for (GattDatabaseSnapshot *&database : gattDatabases)
+    {
+      if (database != nullptr && database->connectionId == connectionId)
+      {
+        delete database;
+        database = nullptr;
+      }
+    }
+  }
+
+  // Persistent (auto-restored) client subscriptions. A successful subscribe is
+  // recorded keyed by peer address so it can be re-issued the next time this
+  // central connects to the same peer; a successful unsubscribe forgets it.
+  // Records survive disconnects by design (that is what "persistent" means).
+  static constexpr size_t PersistentSubscriptionCapacity = 16;
+  struct PersistentSubscription
+  {
+    bool used = false;
+    String peerAddress;
+    String serviceUuid;
+    String characteristicUuid;
+    bool notifications = true;
+  };
+  PersistentSubscription persistentSubscriptions[PersistentSubscriptionCapacity];
+  bool persistentSubscriptionsEnabled = true;
+
+  String connectionAddressLocked(EspBleConnectionId connectionId)
+  {
+    for (const ConnectionSlot &slot : connections)
+    {
+      if (slot.used && slot.connection.id == connectionId) return slot.connection.peerAddress;
+    }
+    return String();
+  }
+
+  void recordSubscriptionLocked(
+    const String &peerAddress,
+    const String &serviceUuid,
+    const String &characteristicUuid,
+    bool notifications)
+  {
+    if (!persistentSubscriptionsEnabled || peerAddress.length() == 0) return;
+    PersistentSubscription *free = nullptr;
+    for (PersistentSubscription &entry : persistentSubscriptions)
+    {
+      if (!entry.used)
+      {
+        if (free == nullptr) free = &entry;
+        continue;
+      }
+      if (entry.peerAddress.equalsIgnoreCase(peerAddress) &&
+          entry.serviceUuid.equalsIgnoreCase(serviceUuid) &&
+          entry.characteristicUuid.equalsIgnoreCase(characteristicUuid))
+      {
+        entry.notifications = notifications; // refresh (dedup by peer+service+char)
+        return;
+      }
+    }
+    if (free == nullptr) return; // registry full: leave existing records intact
+    free->used = true;
+    free->peerAddress = peerAddress;
+    free->serviceUuid = serviceUuid;
+    free->characteristicUuid = characteristicUuid;
+    free->notifications = notifications;
+  }
+
+  void forgetSubscriptionLocked(
+    const String &peerAddress,
+    const String &serviceUuid,
+    const String &characteristicUuid)
+  {
+    for (PersistentSubscription &entry : persistentSubscriptions)
+    {
+      if (entry.used && entry.peerAddress.equalsIgnoreCase(peerAddress) &&
+          entry.serviceUuid.equalsIgnoreCase(serviceUuid) &&
+          entry.characteristicUuid.equalsIgnoreCase(characteristicUuid))
+      {
+        entry = PersistentSubscription();
+        return;
+      }
+    }
+  }
+
+  // Copy the persistent subscriptions recorded for connectionId's peer into out
+  // (up to max), returning the count. Used to auto-restore them on connect.
+  size_t collectPersistentSubscriptionsLocked(
+    EspBleConnectionId connectionId, PersistentSubscription *out, size_t max)
+  {
+    if (!persistentSubscriptionsEnabled) return 0;
+    const String peerAddress = connectionAddressLocked(connectionId);
+    if (peerAddress.length() == 0) return 0;
+    size_t count = 0;
+    for (const PersistentSubscription &entry : persistentSubscriptions)
+    {
+      if (!entry.used || !entry.peerAddress.equalsIgnoreCase(peerAddress)) continue;
+      if (count >= max) break;
+      out[count++] = entry;
+    }
+    return count;
+  }
 
   // Pending GATT client operations. Callers enqueue and the loop task pumps the
   // queue one at a time (a single ATT transaction runs at once, shared with HID
@@ -6139,6 +6284,7 @@ bool EspBle::begin(const EspBleConfig &config)
   }
 
   impl_->securityEnabled = config.security.enabled;
+  impl_->persistentSubscriptionsEnabled = config.persistentSubscriptions;
   {
     std::lock_guard<std::mutex> lock(impl_->passkeyMutex);
     impl_->staticPasskeyEnabled = config.security.staticPasskeyEnabled;
@@ -6980,9 +7126,8 @@ size_t EspBle::discoveredServiceCount(EspBleConnectionId connectionId) const
 {
   if (impl_ == nullptr) return 0;
   std::lock_guard<std::mutex> lock(impl_->mutex);
-  const auto *database = impl_->gattDatabase;
-  return database != nullptr && database->valid && database->connectionId == connectionId
-    ? database->serviceCount : 0;
+  const auto *database = impl_->findDatabaseLocked(connectionId);
+  return database != nullptr && database->valid ? database->serviceCount : 0;
 }
 
 bool EspBle::discoveredService(
@@ -6992,8 +7137,8 @@ bool EspBle::discoveredService(
 {
   if (impl_ == nullptr) return false;
   std::lock_guard<std::mutex> lock(impl_->mutex);
-  const auto *database = impl_->gattDatabase;
-  if (database == nullptr || !database->valid || database->connectionId != connectionId ||
+  const auto *database = impl_->findDatabaseLocked(connectionId);
+  if (database == nullptr || !database->valid ||
       index >= database->serviceCount) return false;
   service = database->services[index];
   return true;
@@ -7005,8 +7150,8 @@ size_t EspBle::discoveredCharacteristicCount(
 {
   if (impl_ == nullptr) return 0;
   std::lock_guard<std::mutex> lock(impl_->mutex);
-  const auto *database = impl_->gattDatabase;
-  if (database == nullptr || !database->valid || database->connectionId != connectionId) return 0;
+  const auto *database = impl_->findDatabaseLocked(connectionId);
+  if (database == nullptr || !database->valid) return 0;
   size_t count = 0;
   for (size_t index = 0; index < database->characteristicCount; ++index)
   {
@@ -7024,8 +7169,8 @@ bool EspBle::discoveredCharacteristic(
 {
   if (impl_ == nullptr) return false;
   std::lock_guard<std::mutex> lock(impl_->mutex);
-  const auto *database = impl_->gattDatabase;
-  if (database == nullptr || !database->valid || database->connectionId != connectionId) return false;
+  const auto *database = impl_->findDatabaseLocked(connectionId);
+  if (database == nullptr || !database->valid) return false;
   size_t found = 0;
   for (size_t candidate = 0; candidate < database->characteristicCount; ++candidate)
   {
@@ -7047,8 +7192,8 @@ size_t EspBle::discoveredDescriptorCount(
 {
   if (impl_ == nullptr) return 0;
   std::lock_guard<std::mutex> lock(impl_->mutex);
-  const auto *database = impl_->gattDatabase;
-  if (database == nullptr || !database->valid || database->connectionId != connectionId) return 0;
+  const auto *database = impl_->findDatabaseLocked(connectionId);
+  if (database == nullptr || !database->valid) return 0;
   size_t count = 0;
   for (size_t index = 0; index < database->descriptorCount; ++index)
   {
@@ -7070,8 +7215,8 @@ bool EspBle::discoveredDescriptor(
 {
   if (impl_ == nullptr) return false;
   std::lock_guard<std::mutex> lock(impl_->mutex);
-  const auto *database = impl_->gattDatabase;
-  if (database == nullptr || !database->valid || database->connectionId != connectionId) return false;
+  const auto *database = impl_->findDatabaseLocked(connectionId);
+  if (database == nullptr || !database->valid) return false;
   size_t found = 0;
   for (size_t candidate = 0; candidate < database->descriptorCount; ++candidate)
   {
@@ -7464,9 +7609,11 @@ void EspBle::pumpGattQueue()
     impl_->gattStartMilliseconds = millis();
     impl_->gattTimeoutMilliseconds = op.timeoutMilliseconds;
     impl_->gattTimedOut = false;
-    if (operation == EspBleGattOperation::DiscoverServices && impl_->gattDatabase != nullptr)
+    if (operation == EspBleGattOperation::DiscoverServices)
     {
-      impl_->gattDatabase->reset(connectionId);
+      EspBleImpl::GattDatabaseSnapshot *database =
+        impl_->findDatabaseLocked(connectionId);
+      if (database != nullptr) database->reset(connectionId);
     }
     impl_->gattQueueHead = (impl_->gattQueueHead + 1) % EspBleImpl::GattQueueCapacity;
     --impl_->gattQueueCount;
@@ -7553,6 +7700,31 @@ void EspBle::dispatchConnectionEvents()
       if (connectedCallback_)
       {
         connectedCallback_(event.connection);
+      }
+      // Auto-restore any subscriptions recorded for this peer on a previous
+      // connection. On the first connection to a peer the registry is empty, so
+      // this is a no-op; on a reconnect the notifications resume without the
+      // application re-subscribing. Enqueued after the user's callback so the
+      // application's own operations keep their relative order.
+      if (event.connection.localRole == EspBleRole::Central)
+      {
+        EspBleImpl::PersistentSubscription
+          restore[EspBleImpl::PersistentSubscriptionCapacity];
+        size_t restoreCount = 0;
+        {
+          std::lock_guard<std::mutex> lock(impl_->mutex);
+          restoreCount = impl_->collectPersistentSubscriptionsLocked(
+            event.connection.id, restore,
+            EspBleImpl::PersistentSubscriptionCapacity);
+        }
+        for (size_t index = 0; index < restoreCount; ++index)
+        {
+          subscribe(
+            event.connection.id,
+            restore[index].serviceUuid.c_str(),
+            restore[index].characteristicUuid.c_str(),
+            restore[index].notifications);
+        }
       }
       break;
     case EspBleImpl::EventType::Disconnected:

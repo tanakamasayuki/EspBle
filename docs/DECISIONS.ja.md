@@ -152,9 +152,16 @@
 9. GlucoseのRecord Access Control Point（0x2A52）手続きは、Client write→Server Measurement（0x2A18）notify→Server RACP応答indicateの順に進める。BLE送信は同時1件のため、Server側はMeasurement notifyとRACP応答indicateを`onSent`で順次実行する（SysEx送信と同じ完了イベント駆動）。ライブラリ本体は変更せず既存のwrite event / notify / indicate primitiveの合成で実現し、`glucose` Peerテストで一連の振る舞いを検証済み。この手続き型パターンは独自profileのControl Pointにも応用できる。
 10. Pulse Oximeter（PLX）のPLX Spot-Check Measurement（0x2A5E）はIndication、PLX Features（0x2A60）はReadとする。SpO2とpulse rateは16-bit SFLOATで、`pulse_oximeter` PeerテストでFeatures Read、Indication購読、98 % / 60 bpmのSFLOAT decodeを検証済み。SFLOATは`EspBleMedicalFloat.h`を共有する。
 
+## 再接続・接続状態で確定（2026-07-22）
+
+1. discovery snapshotは接続ごとに保持する。`GattDatabaseSnapshot`を`connectionId`で識別する最大`ConnectionCapacity`個の配列とし、初回discoveryで確保、切断で解放する。ある接続のdiscoveryが他接続のsnapshotを追い出さず、`discoveredService()`等は問い合わせた`connectionId`のsnapshotを参照する。容量は接続容量と一致するため能動接続は必ず空きslotを得る。
+2. persistent subscriptionは既定onとし、利用者の追加operationなしで再接続時に購読を復元する。`subscribe()`成功時にpeer address＋service UUID＋characteristic UUIDで記録し（`unsubscribe()`成功で削除）、同一peer addressへ再接続した`Connected`イベント処理時に記録済み購読を自動で再`subscribe()`する。復元はUUID指定で行う（handleは再接続ごとに変わるため）。「利用者がシンプルに使える」方針を優先し、`EspBleConfig::persistentSubscriptions=false`で手動管理へ切り替えられる。安定したpeer address（bond済みidentity、public、static random）を前提とする。
+3. 記録はaddress単位で切断をまたいで保持する（それがpersistentの意味）。registryは固定容量（16件）で、満杯時は既存記録を保持して新規のみ無視する。同一key再登録はdedupで上書きするため、自動再購読自体が重複記録を生むことはない。
+4. 複数同時接続の公式保証と自動再接続（`setAutoReconnect`、既定off想定）は3台目board前提のため`tests/manual/`配下で扱う。接続ごとcache・persistent subscriptionは2台で検証済みなので先行して確定する。
+
 ## 優先順位候補
 
-1. reconnect / resubscribe / discovery cache / multiple connections
+1. multiple simultaneous connections / auto-reconnect（manual test配下）
 2. Sensor profile
 3. Extended/Periodic Advertising、PHY、Privacy
 4. Beacon / Connectionless（任意Advertisingデータ送受信、iBeacon、Eddystone）

@@ -13,7 +13,7 @@ The public API is not stable yet: this is the trial stage ahead of the first rel
 
 - Legacy advertising and scanning with value-type scan results
 - Central and peripheral connections by scan result or address, with stable library connection IDs
-- Generic GATT server/client: database and known-UUID discovery, characteristic/descriptor read and write, operation timeouts, notify/indicate, subscriptions
+- Generic GATT server/client: per-connection database and known-UUID discovery, characteristic/descriptor read and write, operation timeouts with auto-queueing, notify/indicate, subscriptions (persistent subscriptions, on by default, auto-restore on reconnect)
 - MTU exchange, connection snapshots, payload-limit validation
 - Security: Just Works and static-passkey pairing (LE Secure Connections), bonding, encrypted/authenticated characteristic permissions
 - Composite HID Device: 6KRO/NKRO keyboard, mouse, consumer/system control, gamepad, and Vendor Input / Output / Feature profiles in one HID / Device Information / Battery service set

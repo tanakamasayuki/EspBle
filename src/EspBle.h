@@ -49,6 +49,13 @@ struct EspBleConfig
   const char *deviceName = "EspBle";
   uint16_t preferredMtu = 23;
   EspBleSecurityConfig security;
+  // When true (the default), a successful GATT client subscribe() is remembered
+  // per peer address, and the subscription is restored automatically the next
+  // time this central connects to the same peer — the application does not have
+  // to re-subscribe after a reconnect. A successful unsubscribe() forgets it.
+  // Relies on a stable peer address (a bonded/identity address, or a public or
+  // static random address); set false to manage subscriptions manually.
+  bool persistentSubscriptions = true;
 };
 
 struct EspBleScanConfig
