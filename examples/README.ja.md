@@ -78,6 +78,7 @@ arduino-cli compile --profile esp32s3 examples/<path>
 | [Gatt/Client](Gatt/Client/) | Central | Gatt/Serverに対する既知UUID Discovery → Read → Writeの連鎖 |
 | [Gatt/NotifyServer](Gatt/NotifyServer/) | Peripheral | 購読状態でgateした周期Notification |
 | [Gatt/SubscribeClient](Gatt/SubscribeClient/) | Central | NotifyServerを購読してNotificationを表示 |
+| [Gatt/AutoReconnectClient](Gatt/AutoReconnectClient/) | Central | auto-reconnect + persistent subscription: 切断後にNotificationが自動再開 |
 | [Gatt/IndicateServer](Gatt/IndicateServer/) | Peripheral | 確認応答つきのIndication配信と`onSent()`での配信確認 |
 | [Gatt/IndicateClient](Gatt/IndicateClient/) | Central | IndicateServerのIndicationを購読 |
 | [Gatt/BatteryServer](Gatt/BatteryServer/) | Peripheral | 標準Battery LevelのReadとNotification |
@@ -149,7 +150,7 @@ arduino-cli compile --profile esp32s3 examples/<path>
 
 - Gap/Advertise ↔ Gap/Scan
 - Gatt/Server ↔ Gatt/Client
-- Gatt/NotifyServer ↔ Gatt/SubscribeClient（およびGap/Mtu）
+- Gatt/NotifyServer ↔ Gatt/SubscribeClient / Gatt/AutoReconnectClient（およびGap/Mtu）
 - Gatt/IndicateServer ↔ Gatt/IndicateClient
 - Gatt/BatteryServer ↔ Gatt/BatteryClient
 - Gatt/DeviceInfoServer ↔ Gatt/DeviceInfoClient

@@ -78,6 +78,7 @@ arduino-cli compile --profile esp32s3 examples/<path>
 | [Gatt/Client](Gatt/Client/) | Central | Known-UUID discovery → read → write chain against Gatt/Server |
 | [Gatt/NotifyServer](Gatt/NotifyServer/) | Peripheral | Subscription-gated periodic notifications |
 | [Gatt/SubscribeClient](Gatt/SubscribeClient/) | Central | Subscribe to NotifyServer and print notifications |
+| [Gatt/AutoReconnectClient](Gatt/AutoReconnectClient/) | Central | Auto-reconnect + persistent subscription: notifications resume after a drop |
 | [Gatt/IndicateServer](Gatt/IndicateServer/) | Peripheral | Acknowledged indications with `onSent()` delivery confirmation |
 | [Gatt/IndicateClient](Gatt/IndicateClient/) | Central | Subscribe to IndicateServer's indications |
 | [Gatt/BatteryServer](Gatt/BatteryServer/) | Peripheral | Standard Battery Level reads and notifications |
@@ -149,7 +150,7 @@ Suggested pairings on two boards:
 
 - Gap/Advertise ↔ Gap/Scan
 - Gatt/Server ↔ Gatt/Client
-- Gatt/NotifyServer ↔ Gatt/SubscribeClient (and Gap/Mtu)
+- Gatt/NotifyServer ↔ Gatt/SubscribeClient / Gatt/AutoReconnectClient (and Gap/Mtu)
 - Gatt/IndicateServer ↔ Gatt/IndicateClient
 - Gatt/BatteryServer ↔ Gatt/BatteryClient
 - Gatt/DeviceInfoServer ↔ Gatt/DeviceInfoClient

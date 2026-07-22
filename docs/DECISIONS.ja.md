@@ -157,12 +157,11 @@
 1. discovery snapshotは接続ごとに保持する。`GattDatabaseSnapshot`を`connectionId`で識別する最大`ConnectionCapacity`個の配列とし、初回discoveryで確保、切断で解放する。ある接続のdiscoveryが他接続のsnapshotを追い出さず、`discoveredService()`等は問い合わせた`connectionId`のsnapshotを参照する。容量は接続容量と一致するため能動接続は必ず空きslotを得る。
 2. persistent subscriptionは既定onとし、利用者の追加operationなしで再接続時に購読を復元する。`subscribe()`成功時にpeer address＋service UUID＋characteristic UUIDで記録し（`unsubscribe()`成功で削除）、同一peer addressへ再接続した`Connected`イベント処理時に記録済み購読を自動で再`subscribe()`する。復元はUUID指定で行う（handleは再接続ごとに変わるため）。「利用者がシンプルに使える」方針を優先し、`EspBleConfig::persistentSubscriptions=false`で手動管理へ切り替えられる。安定したpeer address（bond済みidentity、public、static random）を前提とする。
 3. 記録はaddress単位で切断をまたいで保持する（それがpersistentの意味）。registryは固定容量（16件）で、満杯時は既存記録を保持して新規のみ無視する。同一key再登録はdedupで上書きするため、自動再購読自体が重複記録を生むことはない。
-4. 複数同時接続の公式保証と自動再接続（`setAutoReconnect`、既定off想定）は3台目board前提のため`tests/manual/`配下で扱う。接続ごとcache・persistent subscriptionは2台で検証済みなので先行して確定する。
+4. 複数同時接続は接続容量まで公式に対応する（接続ごとのdiscovery cache・subscription・GATT操作routingで実現）。auto-reconnectは`setAutoReconnect(bool)`（既定off）とし、connect済みCentral peerをaddressで記憶して想定外の切断時に同一addressへ自動再接続（`update()`から2秒間隔でretry）、`disconnect()`は意図的切断として再接続対象から除外、無効化で保留中の再接続を破棄する。persistent subscriptionと組み合わせるとアプリコードなしでnotifyが復旧する。3台目board前提のため`tests/manual/multi_connection/`（`peer_device2/`＝profile `s3_peer_device2`、port未設定時は自動skip）で複数同時接続・routing・auto-reconnect・購読復元を実機検証済み。
 
 ## 優先順位候補
 
-1. multiple simultaneous connections / auto-reconnect（manual test配下）
-2. Sensor profile
+1. Sensor profile
 3. Extended/Periodic Advertising、PHY、Privacy
 4. Beacon / Connectionless（任意Advertisingデータ送受信、iBeacon、Eddystone）
 

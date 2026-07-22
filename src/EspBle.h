@@ -1063,6 +1063,16 @@ public:
     EspBleAddressType addressType,
     uint32_t timeoutMilliseconds = 10000);
   bool disconnect(EspBleConnectionId connectionId);
+  // Automatic reconnection for Central connections (default off). When enabled,
+  // every peer this central connects to is remembered, and if such a connection
+  // drops unexpectedly the library reconnects to the same peer address on its
+  // own (retried periodically until it succeeds). Combined with the default
+  // persistent subscriptions, notifications resume without any application code.
+  // A connection closed by disconnect() is intentional and is not reconnected.
+  // Enabling it adopts the currently connected central peers; disabling it stops
+  // and forgets all pending reconnects. Relies on a stable peer address.
+  void setAutoReconnect(bool enabled);
+  bool autoReconnect() const;
   // Request a connection parameter update on an active connection. Intervals are
   // in units of 1.25 ms, supervisionTimeout in units of 10 ms, and latency
   // counts skipped connection events. The negotiated result is delivered to
@@ -1286,6 +1296,7 @@ private:
   void dispatchConnectionEvents();
   void reapRetiredClients();
   void cancelExpiredConnectAttempt();
+  void driveAutoReconnect();
   void expireGattOperation();
   bool startGattOperation(
     EspBleGattOperation operation,
@@ -1303,6 +1314,7 @@ private:
   void pumpGattQueue();
 
   bool initialized_ = false;
+  bool autoReconnect_ = false;
   String activeDeviceName_;
   uint16_t activePreferredMtu_ = 0;
   EspBleSecurityConfig activeSecurity_;

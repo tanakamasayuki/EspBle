@@ -404,6 +404,12 @@ struct EspBleImpl
         numericComparisonConfirmed = false;
       }
 
+      if (localRole == EspBleRole::Central)
+      {
+        // Track this peer so auto-reconnect (if enabled) restores it on a drop.
+        rememberDesiredLocked(peerAddress, peerAddressType);
+      }
+
       Event event;
       event.type = EventType::Connected;
       event.connection = slot.connection;
@@ -1470,6 +1476,71 @@ struct EspBleImpl
       out[count++] = entry;
     }
     return count;
+  }
+
+  // Auto-reconnect state: the set of Central peers the library should keep
+  // connected. A peer is remembered when this central connects to it (while
+  // auto-reconnect is on) and forgotten when the application disconnect()s it.
+  // update() reconnects any remembered peer that is not currently connected.
+  static constexpr uint32_t ReconnectIntervalMilliseconds = 2000;
+  struct DesiredConnection
+  {
+    bool used = false;
+    String address;
+    EspBleAddressType addressType = EspBleAddressType::Public;
+    uint32_t nextAttemptMs = 0;
+  };
+  DesiredConnection desiredConnections[ConnectionCapacity];
+  bool autoReconnectEnabled = false;
+
+  bool isCentralConnectedToLocked(const String &address)
+  {
+    for (const ConnectionSlot &slot : connections)
+    {
+      if (slot.used && slot.connection.localRole == EspBleRole::Central &&
+          slot.connection.peerAddress.equalsIgnoreCase(address))
+      {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  void rememberDesiredLocked(const String &address, EspBleAddressType addressType)
+  {
+    if (!autoReconnectEnabled || address.length() == 0) return;
+    DesiredConnection *free = nullptr;
+    for (DesiredConnection &entry : desiredConnections)
+    {
+      if (!entry.used)
+      {
+        if (free == nullptr) free = &entry;
+        continue;
+      }
+      if (entry.address.equalsIgnoreCase(address)) return; // already tracked
+    }
+    if (free == nullptr) return;
+    free->used = true;
+    free->address = address;
+    free->addressType = addressType;
+    free->nextAttemptMs = 0;
+  }
+
+  void forgetDesiredLocked(const String &address)
+  {
+    for (DesiredConnection &entry : desiredConnections)
+    {
+      if (entry.used && entry.address.equalsIgnoreCase(address))
+      {
+        entry = DesiredConnection();
+        return;
+      }
+    }
+  }
+
+  void clearDesiredLocked()
+  {
+    for (DesiredConnection &entry : desiredConnections) entry = DesiredConnection();
   }
 
   // Pending GATT client operations. Callers enqueue and the loop task pumps the
@@ -6285,6 +6356,7 @@ bool EspBle::begin(const EspBleConfig &config)
 
   impl_->securityEnabled = config.security.enabled;
   impl_->persistentSubscriptionsEnabled = config.persistentSubscriptions;
+  impl_->autoReconnectEnabled = autoReconnect_;
   {
     std::lock_guard<std::mutex> lock(impl_->passkeyMutex);
     impl_->staticPasskeyEnabled = config.security.staticPasskeyEnabled;
@@ -6487,11 +6559,42 @@ void EspBle::update()
   scanner_.dispatchPendingResults();
   dispatchConnectionEvents();
   reapRetiredClients();
+  driveAutoReconnect();
   hidKeyboardDevice_.dispatchPendingOutputReports();
   hidKeyboardDevice_.dispatchPendingProtocolMode();
   hidVendor_.dispatchPendingReports();
   hidCustom_.dispatchPendingReports();
   hidKeyboardHost_.dispatchPendingEvents();
+}
+
+void EspBle::driveAutoReconnect()
+{
+  if (impl_ == nullptr) return;
+
+  String address;
+  EspBleAddressType addressType = EspBleAddressType::Public;
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    if (!impl_->autoReconnectEnabled || impl_->connecting) return;
+    const uint32_t now = millis();
+    // Pick one due target that is not already connected. connect() serializes
+    // attempts (the `connecting` flag), so the rest wait for a later tick.
+    for (EspBleImpl::DesiredConnection &entry : impl_->desiredConnections)
+    {
+      if (!entry.used || now < entry.nextAttemptMs) continue;
+      if (impl_->isCentralConnectedToLocked(entry.address)) continue;
+      address = entry.address;
+      addressType = entry.addressType;
+      entry.nextAttemptMs = now + EspBleImpl::ReconnectIntervalMilliseconds;
+      break;
+    }
+  }
+  if (address.length() != 0)
+  {
+    // connect() re-checks `connecting` atomically; a false return just means the
+    // attempt is retried on a later tick.
+    connect(address.c_str(), addressType);
+  }
 }
 
 void EspBle::expireGattOperation()
@@ -6685,6 +6788,11 @@ bool EspBle::disconnect(EspBleConnectionId connectionId)
         client = slot.client;
         server = impl_->server;
         handle = slot.connection.handle;
+        // A disconnect() is intentional: stop auto-reconnecting to this peer.
+        if (slot.connection.localRole == EspBleRole::Central)
+        {
+          impl_->forgetDesiredLocked(slot.connection.peerAddress);
+        }
         break;
       }
     }
@@ -6705,6 +6813,33 @@ bool EspBle::disconnect(EspBleConnectionId connectionId)
 
   clearError();
   return true;
+}
+
+void EspBle::setAutoReconnect(bool enabled)
+{
+  autoReconnect_ = enabled;
+  if (impl_ == nullptr) return;
+  std::lock_guard<std::mutex> lock(impl_->mutex);
+  impl_->autoReconnectEnabled = enabled;
+  if (!enabled)
+  {
+    impl_->clearDesiredLocked();
+    return;
+  }
+  // Adopt the peers this central is already connected to, so a drop after
+  // enabling is reconnected too.
+  for (const EspBleImpl::ConnectionSlot &slot : impl_->connections)
+  {
+    if (slot.used && slot.connection.localRole == EspBleRole::Central)
+    {
+      impl_->rememberDesiredLocked(slot.connection.peerAddress, slot.connection.peerAddressType);
+    }
+  }
+}
+
+bool EspBle::autoReconnect() const
+{
+  return autoReconnect_;
 }
 
 bool EspBle::updateConnectionParameters(

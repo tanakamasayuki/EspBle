@@ -15,8 +15,9 @@ BLE MIDIはbackend非依存のpacket codec（timestamp・running status・複数
 ## 検証状況
 
 - Peer test: 52 suite、63 test。接続、GATT、接続ごとdiscovery cache、persistent subscription（再接続時に自動で再購読）、Security、標準Service、複合HID、NKRO、任意Report DescriptorのCustom HID、non-connectable Beacon、BLE MIDI、Health Thermometer、Blood Pressure、Weight Scale、Body Composition、Cycling / Running Speed and Cadence、Cycling Power、Pulse Oximeter、Glucose（RACP手続き）、Location and Navigation、User Data（書き込み→onWritten→notify）、Alert Notification（Control Point→notify）、Immediate Alert（Write Without Response）、Phone Alert Status（Control Point→状態変更notify）、Proximity（Link Loss + Tx Power、2 Service同居）、Reference Time Update（Control Point→state遷移）、Bond Management（Feature Read + Control Point）、Continuous Glucose Monitoring（E2E-CRC）、切断理由コード、接続パラメータ更新、PHY更新（2M）、Service Changed、実行時passkey入力、Numeric Comparison、HID Boot Protocol切替、Custom HID Report Descriptor、non-connectable Beacon（送信間隔制御）、異常系、再接続を実機検証
+- Manual test（3台目board前提、未接続時は自動skip）: `multi_connection`で複数同時接続・接続ごとのnotify routing・auto-reconnect（`setAutoReconnect`）・再接続時のpersistent subscription復元を実機検証
 - Unit test: keymap変換、HID Report Map parser、BLE MIDI codec、IEEE-11073 medical float codec、CGM E2E-CRC codec
-- Example compile: ESP32-S3向け77 example
+- Example compile: ESP32-S3向け78 example
 - ESP32KeyBridge試作adapter: raw usage、remap、modifier、切断release、LED返送、Bond再接続をPeer検証
 
 実行方法は[tests/TEST_PLAN.ja.md](../tests/TEST_PLAN.ja.md)、リリース時の確認項目は[RELEASE_CHECKLIST.ja.md](RELEASE_CHECKLIST.ja.md)を参照してください。
@@ -54,8 +55,7 @@ BLE MIDIはbackend非依存のpacket codec（timestamp・running status・複数
 
 ## 次の機能候補
 
-1. multiple simultaneous connections / auto-reconnect（接続ごとdiscovery cacheとpersistent subscriptionは実装済み。複数同時接続の公式保証と自動再接続optionが残り、3台目board前提のmanual test配下で検証予定）
-2. Extended / Periodic Advertising、Privacy
+1. Extended / Periodic Advertising、Privacy
 
 ## 更新ルール
 
