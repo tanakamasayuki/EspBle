@@ -270,6 +270,9 @@ enum class EspBleGattOperation : uint8_t
   DiscoverServices,
   ReadDescriptor,
   WriteDescriptor,
+  // HID Host discovery runs as a queued operation on the shared GATT engine, so
+  // it serializes with the generic operations instead of racing them.
+  HidDiscover,
 };
 
 struct EspBleGattResult
@@ -1019,6 +1022,10 @@ private:
   void resetBackend();
   void handleDisconnected(EspBleConnectionId connectionId);
   void dispatchPendingEvents();
+  // Launches the discovery worker for a HidDiscover operation dequeued by
+  // EspBle::pumpGattQueue(). Returns false (and emits a failure discovery event)
+  // if the worker task could not be created.
+  bool runQueuedDiscovery(EspBleConnectionId connectionId);
   bool sendVendorReport(
     EspBleConnectionId connectionId,
     const uint8_t *data,

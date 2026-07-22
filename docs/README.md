@@ -24,6 +24,7 @@ The design documents are written in Japanese. This guide lists them and shows th
 | Public API design principles | [API_DESIGN.ja.md](API_DESIGN.ja.md) |
 | Terminology and naming rules | [TERMINOLOGY.ja.md](TERMINOLOGY.ja.md) |
 | Settled decisions and their rationale | [DECISIONS.ja.md](DECISIONS.ja.md) |
+| Pre-1.0.0 design-flaw audit and remediation plan | [DESIGN_DEBT.ja.md](DESIGN_DEBT.ja.md) |
 | HID spec (Device / Host) | [HID_DEVICE_SPEC.ja.md](HID_DEVICE_SPEC.ja.md) / [HID_HOST_SPEC.ja.md](HID_HOST_SPEC.ja.md) |
 | Scan-to-GATT beginner guide (Japanese) | [GUIDE_SCAN_TO_COMM.ja.md](GUIDE_SCAN_TO_COMM.ja.md) |
 | Test strategy and coverage | [../tests/TEST_PLAN.ja.md](../tests/TEST_PLAN.ja.md) |

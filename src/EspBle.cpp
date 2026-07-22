@@ -5611,42 +5611,23 @@ bool EspBleHidHost::discover(EspBleConnectionId connectionId)
     }
   }
 
-  {
-    std::lock_guard<std::mutex> ownerLock(owner_->impl_->mutex);
-    bool found = false;
-    for (const EspBleImpl::ConnectionSlot &slot : owner_->impl_->connections)
-    {
-      if (slot.used && slot.connection.id == connectionId && slot.client != nullptr)
-      {
-        found = true;
-        break;
-      }
-    }
-    if (!found)
-    {
-      owner_->setError(EspBleError::InvalidArgument, "Central connection ID was not found");
-      return false;
-    }
-    if (owner_->impl_->gattOperating)
-    {
-      owner_->setError(EspBleError::InvalidState, "a GATT operation is already in progress");
-      return false;
-    }
-    owner_->impl_->gattOperating = true;
-    // Lets disconnect() reject requests against this connection while the
-    // discovery worker is still using it.
-    owner_->impl_->gattConnectionId = connectionId;
-  }
+  // Queue the discovery on the shared GATT engine rather than racing it against
+  // in-flight generic operations (e.g. the persistent-subscription auto-resubscribe
+  // fired on Connected). The worker is launched from pumpGattQueue() via
+  // runQueuedDiscovery() once the ATT channel is free, and the connection is
+  // validated there. The generous timeout covers the multi-step blocking reads;
+  // HidDiscover is exempt from the generic timeout event since its worker bounds
+  // and completes it (see expireGattOperation()).
+  return owner_->startGattOperation(
+    EspBleGattOperation::HidDiscover, connectionId,
+    nullptr, nullptr, nullptr, 0, true, nullptr, 20000, 0);
+}
 
+bool EspBleHidHost::runQueuedDiscovery(EspBleConnectionId connectionId)
+{
+  if (impl_ == nullptr) return false;
   {
     std::lock_guard<std::mutex> lock(impl_->mutex);
-    if (impl_->discovering)
-    {
-      std::lock_guard<std::mutex> ownerLock(owner_->impl_->mutex);
-      owner_->impl_->gattOperating = false;
-      owner_->setError(EspBleError::InvalidState, "HID Keyboard discovery is already in progress");
-      return false;
-    }
     impl_->discovering = true;
     impl_->discoveryConnectionId = connectionId;
   }
@@ -5665,21 +5646,20 @@ bool EspBleHidHost::discover(EspBleConnectionId connectionId)
       std::lock_guard<std::mutex> lock(impl_->mutex);
       impl_->discovering = false;
     }
-    {
-      std::lock_guard<std::mutex> ownerLock(owner_->impl_->mutex);
-      owner_->impl_->gattOperating = false;
-    }
-    owner_->setError(EspBleError::ResourceExhausted, "failed to create HID discovery task");
+    // discover() already returned true (the op was accepted), so surface this
+    // late worker-creation failure through the normal discovery event.
+    EspBleHidKeyboardHostImpl::Event event;
+    event.type = EspBleHidKeyboardHostImpl::EventType::Discovery;
+    event.discovery.connectionId = connectionId;
+    event.discovery.error = EspBleError::ResourceExhausted;
+    event.discovery.detail = "failed to create HID discovery task";
+    impl_->pushEvent(event);
     return false;
   }
   {
     std::lock_guard<std::mutex> lock(impl_->mutex);
-    if (impl_->discovering)
-    {
-      impl_->discoveryTask = task;
-    }
+    impl_->discoveryTask = task;
   }
-  owner_->clearError();
   return true;
 }
 
@@ -6678,6 +6658,14 @@ void EspBle::expireGattOperation()
   std::lock_guard<std::mutex> lock(impl_->mutex);
   if (!impl_->gattOperating || impl_->gattTimedOut ||
       (millis() - impl_->gattStartMilliseconds) < impl_->gattTimeoutMilliseconds)
+  {
+    return;
+  }
+
+  // HID discovery is a queued operation whose own worker bounds and completes it
+  // (emitting a discovery event); it must not raise a generic GATT timeout
+  // GattResult here (which would carry stale UUIDs and the wrong event type).
+  if (impl_->gattOperation == EspBleGattOperation::HidDiscover)
   {
     return;
   }
@@ -7733,13 +7721,16 @@ bool EspBle::startGattOperation(
     setError(EspBleError::InvalidState, "BLE stack is not initialized");
     return false;
   }
-  const bool databaseDiscovery = operation == EspBleGattOperation::DiscoverServices;
+  // DiscoverServices enumerates the whole database and HidDiscover discovers the
+  // HID service on its own worker, so neither needs a service/characteristic UUID.
+  const bool noTargetOperation = operation == EspBleGattOperation::DiscoverServices ||
+    operation == EspBleGattOperation::HidDiscover;
   const bool descriptorOperation = operation == EspBleGattOperation::ReadDescriptor ||
     operation == EspBleGattOperation::WriteDescriptor;
   // A handle-based operation identifies the characteristic by handle, so the
   // service/characteristic UUID arguments are not required.
   const bool handleBased = characteristicHandle != 0;
-  if ((!databaseDiscovery && !handleBased &&
+  if ((!noTargetOperation && !handleBased &&
        (serviceUuid == nullptr || serviceUuid[0] == '\0' ||
         characteristicUuid == nullptr || characteristicUuid[0] == '\0')) ||
       (descriptorOperation && (descriptorUuid == nullptr || descriptorUuid[0] == '\0')) ||
@@ -7827,6 +7818,20 @@ void EspBle::pumpGattQueue()
     impl_->gattQueueHead = (impl_->gattQueueHead + 1) % EspBleImpl::GattQueueCapacity;
     --impl_->gattQueueCount;
     impl_->gattOperating = true;
+  }
+
+  // HID Host discovery runs on its own worker (a compound sequence of blocking
+  // reads + subscribes), launched here so it shares the single ATT slot and
+  // serializes with the generic operations. The worker clears gattOperating on
+  // completion; the next update() pumps the rest of the queue.
+  if (operation == EspBleGattOperation::HidDiscover)
+  {
+    if (!hidKeyboardHost_.runQueuedDiscovery(connectionId))
+    {
+      std::lock_guard<std::mutex> lock(impl_->mutex);
+      impl_->gattOperating = false;
+    }
+    return;
   }
 
   TaskHandle_t task = nullptr;
@@ -7998,6 +8003,10 @@ void EspBle::dispatchConnectionEvents()
         break;
       case EspBleGattOperation::WriteDescriptor:
         callback = &descriptorWrittenCallback_;
+        break;
+      case EspBleGattOperation::HidDiscover:
+        // HID discovery reports through its own discovery event, never a
+        // generic GattResult; nothing to dispatch here.
         break;
       }
       if (callback != nullptr && *callback)
