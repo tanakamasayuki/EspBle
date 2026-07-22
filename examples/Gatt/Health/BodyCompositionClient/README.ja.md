@@ -4,7 +4,7 @@
 
 Body Composition Service（0x181B）へ接続し、Body Composition FeatureをRead、Body Composition MeasurementのIndicationを購読して、Body Fat Percentage（0.1 %/LSB）と任意のWeightフィールドをデコードします。
 
-## ハードウェア
+## 必要なもの
 
 - 1 × ESP32-S3（このスケッチ。Central）
 - 1 × Body Composition Peripheral: [BodyCompositionServer](../BodyCompositionServer/) example または市販の体組成計

@@ -4,12 +4,12 @@
 
 特定のService UUIDをadvertiseするPeripheralを探し、Centralとして接続します。非同期の接続モデルを示すexampleです: `connect()`は要求の受理だけを返し、完了（または失敗）は後から`ble.update()`経由のイベントとして届きます。
 
-## ハードウェア
+## 必要なもの
 
 - このsketchを動かすESP32-S3 × 1（Central）
-- 対象Service UUIDをadvertiseするBLE Peripheral × 1 — 例えば2台目のボードで[Gatt/Server](../../Gatt/Server/) exampleを動かします（`TARGET_SERVICE_UUID`を合わせて変更してください）
+- 対象Service UUIDをadvertiseするBLE Peripheral × 1 — 例えば2台目のボードで[Gatt/Basics/Server](../../Gatt/Basics/Server/) exampleを動かします（`TARGET_SERVICE_UUID`を合わせて変更してください）
 
-## 動作内容
+## 動作
 
 - active scanを開始し、各resultから`TARGET_SERVICE_UUID`を探します
 - 最初に一致した相手へscanを停止して接続を要求します

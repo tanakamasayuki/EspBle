@@ -4,12 +4,12 @@
 
 [Gatt/Server](../Server/) exampleへ接続し、CentralのGATT Clientフローを一通り実行します: database一覧Discovery → 既知UUIDのDiscovery → Read → 応答あり/なしWrite → Descriptor Read/Write。各要求は直ちに`bool`を返し、完了は`ble.update()`からのイベントとして後から届きます。
 
-## ハードウェア
+## 必要なもの
 
 - このsketchを動かすESP32-S3 × 1（Central / GATT Client）
 - [Gatt/Server](../Server/) exampleを動かすESP32-S3 × 1
 
-## 動作内容
+## 動作
 
 - ServerのService UUIDをscanして接続します
 - Service、Characteristic、Descriptorを接続単位のsnapshotへ一覧Discoveryします

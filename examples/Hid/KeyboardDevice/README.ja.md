@@ -2,39 +2,39 @@
 
 > English: [README.md](README.md)
 
-ボードをBLE HID keyboard（HID over GATT、Report Protocol、固定6キーロールオーバー）にします。PCやスマートフォンからPairingすると実際のキーボードとして入力でき、キー入力はSerialコマンドで発生させます。Host側からのLED Output Report（Num/Caps/Scroll Lock）も受信します。
+ボードをBLE HID keyboard（HID over GATT / HOGP、固定6キーロールオーバー）にし、HID Service `0x1812` をadvertiseします。PCやスマートフォンからPairingすると実際のキーボードとして入力でき、キー入力はSerialコマンドで発生させます。Host側からのLED Output Reportも受信します。HID Boot Protocolを有効化しているためBIOS等のboot hostにも対応します。
 
-## ハードウェア
+## 必要なもの
 
 - このsketchを動かすESP32-S3 × 1（HID Device / Peripheral）
-- HID Host × 1: PC、スマートフォン、または[KeyboardHost](../KeyboardHost/) exampleを動かす2台目のボード
+- HID Host × 1: PCやスマートフォン、または[KeyboardHost](../KeyboardHost/)を動かす2台目のボード
 
-## 動作内容
+## 動作
 
-- `begin()`前にHID Keyboard Device profileを構成します（HID + Device Information + Battery Serviceが自動合成され、HID UUIDとkeyboard appearanceがadvertisingへ追加されます）
-- Bondingつきでsecurityを有効化します — HOGPは暗号化linkを要求するため、HID Serviceのattributeには暗号化permissionが付与され、Input Reportは暗号化済みかつ購読済みの接続にのみ送信されます
-- `a`でShift+Aを押し、`r`で全キーをreleaseします
-- Hostが書き込んだLED状態の変化を表示します
+- `begin()` 前にHID Keyboard profileを構成します（HID + Device Information + Battery Serviceが自動合成され、HID UUIDとkeyboard appearanceがadvertisingへ追加されます）
+- Boot Protocolを有効化（opt-in）し、`onProtocolMode()` を意味あるものにします。boot hostには8-byteのboot reportが自動送信されます
+- Bondingつきでsecurityを有効化します — HOGPは暗号化linkを要求します
+- HostのLED状態（Num/Caps/Scroll Lock）を `onOutputReport()` で、現在のProtocol Modeを `onProtocolMode()` で表示します
 - 切断のたびにadvertisingを再開します
-
-## Serialコマンド
-
-| コマンド | 動作 |
-|---------|------|
-| `a` | Shift+Aを押す（Input Reportを送信） |
-| `r` | 全キーをrelease |
+- `a` でShift+Aを押し、`r` で全キーをreleaseします
 
 ## 主なAPI
 
-- `ble.hidKeyboard().configure(config)` — `begin()`前に呼ぶ必要があります。`EspBleHidKeyboardConfig`でmanufacturer、PnP ID、country code、Report ID、初期Battery Levelを設定できます
-- `EspBleHidKeyboardInputReport` — `modifiers` bitmask（例: `LeftShift`）と最大6個のHID usageを持つ`keys[]`
+- `ble.hidKeyboard()` / `keyboard.configure(config)` — `begin()` 前に構成。`EspBleHidKeyboardConfig` で `manufacturer` を設定し、`bootProtocol` を有効化
+- `EspBleHidKeyboardInputReport` — `modifiers` bitmask（例: `LeftShift`）と最大6個のHID usageを持つ `keys[]`
 - `keyboard.sendReport(report)` / `keyboard.releaseAll()`
-- `keyboard.onOutputReport(callback)` — HostからのLED状態（`numLock()`、`capsLock()`、`scrollLock()`）
-- `keyboard.setBatteryLevel(0..100)` — Battery Serviceのlevel更新
+- `keyboard.onOutputReport(cb)` — LED状態（`numLock()`、`capsLock()`、`scrollLock()`）
+- `keyboard.onProtocolMode(cb)` — `EspBleHidKeyboard::BootProtocolMode` と比較
+
+## メモ
+
+- Input ReportのReport IDとreserved byteは内部で処理されます。
+- Output ReportとProtocol Modeのイベントは `ble.update()` から配送されます。
 
 ## 期待されるSerial出力
 
 ```
 Send 'a' to type Shift+A and 'r' to release all keys.
+Protocol Mode: Report
 Keyboard LEDs: num=0 caps=1 scroll=0
 ```

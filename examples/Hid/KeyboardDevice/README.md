@@ -2,39 +2,39 @@
 
 > 日本語版: [README.ja.md](README.ja.md)
 
-Turns the board into a BLE HID keyboard (HID over GATT, report protocol, fixed 6-key rollover). Pair it from a PC or smartphone and it types like a real keyboard; keystrokes are triggered by Serial commands. Also receives the host's LED output report (Num/Caps/Scroll Lock).
+Turns the board into a BLE HID keyboard over GATT (HOGP, fixed 6-key rollover) that advertises the HID service `0x1812`. Paired from a PC or phone it types like a real keyboard; keystrokes are triggered by Serial commands, and it also receives the host's LED output report. HID Boot Protocol is enabled so BIOS-class hosts are supported.
 
 ## Hardware
 
 - 1 × ESP32-S3 running this sketch (HID device / peripheral)
-- 1 × HID host: PC, smartphone, or a second board running the [KeyboardHost](../KeyboardHost/) example
+- 1 × HID host: a PC or phone, or a second board running [KeyboardHost](../KeyboardHost/)
 
 ## What it does
 
-- Configures the HID Keyboard Device profile before `begin()` (HID + Device Information + Battery services are composed automatically, and the HID UUID/keyboard appearance are added to advertising)
-- Enables security with bonding — HOGP requires an encrypted link, so the HID service attributes get encrypted permissions and input reports are only sent over encrypted, subscribed connections
-- Sends Shift+A on `a` and releases all keys on `r`
-- Prints LED state changes written by the host
-- Restarts advertising after each disconnect
-
-## Serial commands
-
-| Command | Action |
-|---------|--------|
-| `a` | Press Shift+A (send an input report) |
-| `r` | Release all keys |
+- Configures the HID Keyboard profile before `begin()` (HID + Device Information + Battery services are composed automatically, and the HID UUID / keyboard appearance are added to advertising)
+- Opts into Boot Protocol so `onProtocolMode()` is meaningful and boot hosts receive the 8-byte boot report automatically
+- Enables security with bonding — HOGP requires an encrypted link
+- Prints the host's LED state (Num/Caps/Scroll Lock) via `onOutputReport()`, and the current Protocol Mode via `onProtocolMode()`
+- Restarts advertising on each disconnect
+- Send `a` to press Shift+A, `r` to release all keys
 
 ## Key APIs
 
-- `ble.hidKeyboard().configure(config)` — must be called before `begin()`; `EspBleHidKeyboardConfig` covers manufacturer, PnP ID, country code, report ID, and initial battery level
-- `EspBleHidKeyboardInputReport` — `modifiers` bitmask (e.g. `LeftShift`) and up to 6 HID usages in `keys[]`
+- `ble.hidKeyboard()` / `keyboard.configure(config)` — configure before `begin()`; `EspBleHidKeyboardConfig` sets `manufacturer` and opts into `bootProtocol`
+- `EspBleHidKeyboardInputReport` — `modifiers` bitmask (e.g. `LeftShift`) plus up to 6 HID usages in `keys[]`
 - `keyboard.sendReport(report)` / `keyboard.releaseAll()`
-- `keyboard.onOutputReport(callback)` — LED state from the host (`numLock()`, `capsLock()`, `scrollLock()`)
-- `keyboard.setBatteryLevel(0..100)` — update the Battery Service level
+- `keyboard.onOutputReport(cb)` — LED state (`numLock()`, `capsLock()`, `scrollLock()`)
+- `keyboard.onProtocolMode(cb)` — compare against `EspBleHidKeyboard::BootProtocolMode`
+
+## Notes
+
+- The report ID and reserved byte in the input report are handled internally.
+- Output-report and protocol-mode events are delivered from `ble.update()`.
 
 ## Expected Serial output
 
 ```
 Send 'a' to type Shift+A and 'r' to release all keys.
+Protocol Mode: Report
 Keyboard LEDs: num=0 caps=1 scroll=0
 ```

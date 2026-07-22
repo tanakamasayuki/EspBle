@@ -4,7 +4,7 @@
 
 Find Meプロファイルの**locator**役。Immediate Alert Service（0x1802）へ接続し、Alert Level（0x2A06）へ**Write Without Response**で書き込んでターゲットを鳴動させます。
 
-## ハードウェア
+## 必要なもの
 
 - 1 × ESP32-S3（このスケッチ。Central / Find Me locator）
 - 1 × Immediate Alert Peripheral: [ImmediateAlertServer](../ImmediateAlertServer/) example

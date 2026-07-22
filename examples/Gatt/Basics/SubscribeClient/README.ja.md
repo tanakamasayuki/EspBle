@@ -4,12 +4,12 @@
 
 [Gatt/NotifyServer](../NotifyServer/) exampleへ接続し、Notification Characteristicを購読して受信値をすべて表示します。
 
-## ハードウェア
+## 必要なもの
 
 - このsketchを動かすESP32-S3 × 1（Central / GATT Client）
 - [Gatt/NotifyServer](../NotifyServer/) exampleを動かすESP32-S3 × 1
 
-## 動作内容
+## 動作
 
 - NotifyServerのService UUIDをscanして接続します
 - 接続完了直後にNotificationを購読します

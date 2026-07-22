@@ -9,7 +9,7 @@ Bluetooth Low Energy (BLE) is a radio standard for exchanging small amounts of d
 - **Bluetooth Classic**: always-connected stream transport for audio (A2DP/HFP) and serial (SPP). Comparatively power-hungry.
 - **BLE**: event-oriented, short bursts of communication — sensor values, key input, configuration data. Designed for battery-powered devices.
 
-EspBle is a **BLE-only library** built on the NimBLE backend bundled with Arduino-ESP32. Bluetooth Classic A2DP/HFP/**SPP are not available**. For a serial-like BLE link, use a GATT-based approach such as the NUS-compatible [server](Gatt/NusServer/) and [client](Gatt/NusClient/) examples.
+EspBle is a **BLE-only library** built on the NimBLE backend bundled with Arduino-ESP32. Bluetooth Classic A2DP/HFP/**SPP are not available**. For a serial-like BLE link, use a GATT-based approach such as the NUS-compatible [server](Gatt/Basics/NusServer/) and [client](Gatt/Basics/NusClient/) examples.
 
 ### GAP — discovering and connecting
 
@@ -66,78 +66,121 @@ arduino-cli compile --profile esp32s3 examples/<path>
 
 ## Index
 
+Examples are grouped by area. Each standard-service directory holds a matching
+`…Server` (peripheral) and `…Client` (central); pair the two on two boards.
+
+### Getting started
+
 | Example | Role | Description |
 |---|---|---|
 | [CompileSmoke](CompileSmoke/) | — | Minimal build check; prints the library version |
+
+### GAP — advertise, scan, connect
+
+| Example | Role | Description |
+|---|---|---|
 | [Gap/Advertise](Gap/Advertise/) | Peripheral | Connectable legacy advertising with name + service UUID |
-| [Gap/Beacon](Gap/Beacon/) | Broadcaster | Non-connectable, non-scannable beacon with manufacturer data and interval control |
-| [Gap/PrivateAddress](Gap/PrivateAddress/) | Peripheral | Advertise with a random static / resolvable private address |
-| [Gap/IBeacon](Gap/IBeacon/) | Broadcaster | Broadcast an Apple iBeacon (UUID / major / minor / measured power) |
 | [Gap/Scan](Gap/Scan/) | Central | Continuous active scan printing address / RSSI / name |
 | [Gap/Connect](Gap/Connect/) | Central | Scan for a service UUID and connect; async connect/disconnect/failure events |
 | [Gap/Mtu](Gap/Mtu/) | Central | Preferred-MTU exchange and notification payload limits |
-| [Gatt/Server](Gatt/Server/) | Peripheral | Custom service with a readable/writable characteristic |
-| [Gatt/Client](Gatt/Client/) | Central | Known-UUID discovery → read → write chain against Gatt/Server |
-| [Gatt/NotifyServer](Gatt/NotifyServer/) | Peripheral | Subscription-gated periodic notifications |
-| [Gatt/SubscribeClient](Gatt/SubscribeClient/) | Central | Subscribe to NotifyServer and print notifications |
-| [Gatt/AutoReconnectClient](Gatt/AutoReconnectClient/) | Central | Auto-reconnect + persistent subscription: notifications resume after a drop |
-| [Gatt/IndicateServer](Gatt/IndicateServer/) | Peripheral | Acknowledged indications with `onSent()` delivery confirmation |
-| [Gatt/IndicateClient](Gatt/IndicateClient/) | Central | Subscribe to IndicateServer's indications |
-| [Gatt/BatteryServer](Gatt/BatteryServer/) | Peripheral | Standard Battery Level reads and notifications |
-| [Gatt/BatteryClient](Gatt/BatteryClient/) | Central | Read and subscribe to Battery Level |
-| [Gatt/DeviceInfoServer](Gatt/DeviceInfoServer/) | Peripheral | Standard Device Information strings and PnP ID |
-| [Gatt/DeviceInfoClient](Gatt/DeviceInfoClient/) | Central | Sequential Device Information reads and PnP ID decoding |
-| [Gatt/CurrentTimeServer](Gatt/CurrentTimeServer/) | Peripheral | Standard 10-byte Current Time reads and notifications |
-| [Gatt/CurrentTimeClient](Gatt/CurrentTimeClient/) | Central | Current Time decoding and notification subscription |
-| [Gatt/HeartRateServer](Gatt/HeartRateServer/) | Peripheral | Standard Heart Rate Measurement and Body Sensor Location |
-| [Gatt/HeartRateClient](Gatt/HeartRateClient/) | Central | Flags-driven Heart Rate Measurement decoding and subscription |
-| [Gatt/EnvironmentalServer](Gatt/EnvironmentalServer/) | Peripheral | Standard Temperature, Humidity, and Pressure values |
-| [Gatt/EnvironmentalClient](Gatt/EnvironmentalClient/) | Central | Scaled sensor reads and Temperature notification subscription |
-| [Gatt/HealthThermometerServer](Gatt/HealthThermometerServer/) | Peripheral | IEEE-11073 FLOAT Temperature Measurement indications and Temperature Type |
-| [Gatt/HealthThermometerClient](Gatt/HealthThermometerClient/) | Central | Temperature Type read and FLOAT measurement indication decoding |
-| [Gatt/BloodPressureServer](Gatt/BloodPressureServer/) | Peripheral | IEEE-11073 SFLOAT systolic/diastolic/mean Measurement indications and Feature |
-| [Gatt/BloodPressureClient](Gatt/BloodPressureClient/) | Central | Feature read and SFLOAT measurement indication decoding |
-| [Gatt/WeightScaleServer](Gatt/WeightScaleServer/) | Peripheral | uint16 Weight Measurement indications (0.005 kg resolution) and Feature |
-| [Gatt/WeightScaleClient](Gatt/WeightScaleClient/) | Central | Feature read and Weight Measurement indication decoding |
-| [Gatt/BodyCompositionServer](Gatt/BodyCompositionServer/) | Peripheral | Body Fat Percentage + optional Weight Measurement indications and Feature |
-| [Gatt/BodyCompositionClient](Gatt/BodyCompositionClient/) | Central | Feature read and Body Fat Percentage / Weight measurement decoding |
-| [Gatt/LocationNavigationServer](Gatt/LocationNavigationServer/) | Peripheral | Location and Speed notifications (speed + sint32 lat/lon) and LN Feature |
-| [Gatt/LocationNavigationClient](Gatt/LocationNavigationClient/) | Central | LN Feature read and Location and Speed notification decoding |
-| [Gatt/UserDataServer](Gatt/UserDataServer/) | Peripheral | Read/write Age and First Name, notify Database Change Increment on writes |
-| [Gatt/UserDataClient](Gatt/UserDataClient/) | Central | Write Age/First Name and observe Database Change Increment notifications |
-| [Gatt/AlertNotificationServer](Gatt/AlertNotificationServer/) | Peripheral | Category bitmask read, Control Point writes, New Alert notifications |
-| [Gatt/AlertNotificationClient](Gatt/AlertNotificationClient/) | Central | Control Point "Notify New Alert Immediately" and New Alert decoding |
-| [Gatt/ImmediateAlertServer](Gatt/ImmediateAlertServer/) | Peripheral | Find Me target: Alert Level Write Without Response handling |
-| [Gatt/ImmediateAlertClient](Gatt/ImmediateAlertClient/) | Central | Find Me locator: raise/clear Alert Level via Write Without Response |
-| [Gatt/PhoneAlertStatusServer](Gatt/PhoneAlertStatusServer/) | Peripheral | Alert Status / Ringer Setting notify, Ringer Control Point silent-mode |
-| [Gatt/PhoneAlertStatusClient](Gatt/PhoneAlertStatusClient/) | Central | Read Alert Status, drive Ringer Control Point, decode Ringer Setting |
-| [Gatt/ProximityServer](Gatt/ProximityServer/) | Peripheral | Proximity Reporter: Link Loss Alert Level + Tx Power (two services) |
-| [Gatt/ProximityClient](Gatt/ProximityClient/) | Central | Proximity Monitor: read Tx Power, arm Link Loss Alert Level |
-| [Gatt/ReferenceTimeUpdateServer](Gatt/ReferenceTimeUpdateServer/) | Peripheral | Time Update Control Point drives a readable Time Update State |
-| [Gatt/ReferenceTimeUpdateClient](Gatt/ReferenceTimeUpdateClient/) | Central | Request/cancel a reference update and read the Time Update State |
-| [Gatt/BondManagementServer](Gatt/BondManagementServer/) | Peripheral | Bond Management Feature read, Control Point delete-bond op codes |
-| [Gatt/BondManagementClient](Gatt/BondManagementClient/) | Central | Read the Feature bit field and write a delete-bond op code |
-| [Gatt/ContinuousGlucoseMonitoringServer](Gatt/ContinuousGlucoseMonitoringServer/) | Peripheral | E2E-CRC-protected CGM Feature and CGM Measurement notifications |
-| [Gatt/ContinuousGlucoseMonitoringClient](Gatt/ContinuousGlucoseMonitoringClient/) | Central | E2E-CRC verification and SFLOAT glucose/time-offset decoding |
-| [Gatt/CyclingSpeedCadenceServer](Gatt/CyclingSpeedCadenceServer/) | Peripheral | Multi-field wheel/crank CSC Measurement notifications, Feature, Sensor Location |
-| [Gatt/CyclingSpeedCadenceClient](Gatt/CyclingSpeedCadenceClient/) | Central | Sensor Location read and CSC Measurement notification decoding |
-| [Gatt/RunningSpeedCadenceServer](Gatt/RunningSpeedCadenceServer/) | Peripheral | Speed/cadence/stride/distance RSC Measurement notifications, Feature, Sensor Location |
-| [Gatt/RunningSpeedCadenceClient](Gatt/RunningSpeedCadenceClient/) | Central | Sensor Location read and RSC Measurement notification decoding |
-| [Gatt/GlucoseServer](Gatt/GlucoseServer/) | Peripheral | Record Access Control Point: RACP write → Measurement notify → RACP indicate |
-| [Gatt/GlucoseClient](Gatt/GlucoseClient/) | Central | RACP report-records request and measurement/response decoding |
-| [Gatt/CyclingPowerServer](Gatt/CyclingPowerServer/) | Peripheral | Signed 16-bit power Cycling Power Measurement notifications, Feature, Sensor Location |
-| [Gatt/CyclingPowerClient](Gatt/CyclingPowerClient/) | Central | Sensor Location read and signed power measurement decoding |
-| [Gatt/FitnessMachineServer](Gatt/FitnessMachineServer/) | Peripheral | Fitness Machine (FTMS) Indoor Bike Data notifications and Feature |
-| [Gatt/FitnessMachineClient](Gatt/FitnessMachineClient/) | Central | Feature read and flags-driven Indoor Bike Data (speed/cadence/power) decoding |
-| [Gatt/PulseOximeterServer](Gatt/PulseOximeterServer/) | Peripheral | SFLOAT SpO2/pulse-rate Spot-Check Measurement indications and Features |
-| [Gatt/PulseOximeterClient](Gatt/PulseOximeterClient/) | Central | Features read and SpO2/pulse-rate measurement decoding |
-| [Gatt/NusServer](Gatt/NusServer/) | Peripheral | NUS-compatible RX writes and TX notification echo |
-| [Gatt/NusClient](Gatt/NusClient/) | Central | NUS-compatible TX subscription and RX Write Without Response |
-| [Security/JustWorksServer](Security/JustWorksServer/) | Peripheral | Encrypted characteristic with Just Works pairing + bonding |
-| [Security/StaticPasskeyServer](Security/StaticPasskeyServer/) | Peripheral | MITM-authenticated characteristic with a static passkey (display side) |
-| [Security/StaticPasskeyClient](Security/StaticPasskeyClient/) | Central | Passkey input side: `requestSecurity()` and authenticated reads |
+| [Gap/Beacon](Gap/Beacon/) | Broadcaster | Non-connectable, non-scannable beacon with manufacturer data and interval control |
+| [Gap/IBeacon](Gap/IBeacon/) | Broadcaster | Broadcast an Apple iBeacon (UUID / major / minor / measured power) |
+| [Gap/PrivateAddress](Gap/PrivateAddress/) | Peripheral | Advertise with a random static / resolvable private address |
+
+### GATT — Basics (generic mechanics + serial)
+
+| Example | Role | Description |
+|---|---|---|
+| [Gatt/Basics/Server](Gatt/Basics/Server/) | Peripheral | Custom service with a readable/writable characteristic |
+| [Gatt/Basics/Client](Gatt/Basics/Client/) | Central | Known-UUID discovery → read → write chain against the Server |
+| [Gatt/Basics/NotifyServer](Gatt/Basics/NotifyServer/) | Peripheral | Subscription-gated periodic notifications |
+| [Gatt/Basics/SubscribeClient](Gatt/Basics/SubscribeClient/) | Central | Subscribe to NotifyServer and print notifications |
+| [Gatt/Basics/AutoReconnectClient](Gatt/Basics/AutoReconnectClient/) | Central | Auto-reconnect + persistent subscription: notifications resume after a drop |
+| [Gatt/Basics/IndicateServer](Gatt/Basics/IndicateServer/) | Peripheral | Acknowledged indications with `onSent()` delivery confirmation |
+| [Gatt/Basics/IndicateClient](Gatt/Basics/IndicateClient/) | Central | Subscribe to IndicateServer's indications |
+| [Gatt/Basics/NusServer](Gatt/Basics/NusServer/) | Peripheral | NUS-compatible RX writes and TX notification echo |
+| [Gatt/Basics/NusClient](Gatt/Basics/NusClient/) | Central | NUS-compatible TX subscription and RX Write Without Response |
+
+### GATT — Device, time & management
+
+| Example | Role | Description |
+|---|---|---|
+| [Gatt/Device/BatteryServer](Gatt/Device/BatteryServer/) | Peripheral | Standard Battery Level reads and notifications |
+| [Gatt/Device/BatteryClient](Gatt/Device/BatteryClient/) | Central | Read and subscribe to Battery Level |
+| [Gatt/Device/DeviceInfoServer](Gatt/Device/DeviceInfoServer/) | Peripheral | Standard Device Information strings and PnP ID |
+| [Gatt/Device/DeviceInfoClient](Gatt/Device/DeviceInfoClient/) | Central | Sequential Device Information reads and PnP ID decoding |
+| [Gatt/Device/UserDataServer](Gatt/Device/UserDataServer/) | Peripheral | Read/write Age and First Name, notify Database Change Increment on writes |
+| [Gatt/Device/UserDataClient](Gatt/Device/UserDataClient/) | Central | Write Age/First Name and observe Database Change Increment notifications |
+| [Gatt/Device/BondManagementServer](Gatt/Device/BondManagementServer/) | Peripheral | Bond Management Feature read, Control Point delete-bond op codes |
+| [Gatt/Device/BondManagementClient](Gatt/Device/BondManagementClient/) | Central | Read the Feature bit field and write a delete-bond op code |
+| [Gatt/Time/CurrentTimeServer](Gatt/Time/CurrentTimeServer/) | Peripheral | Standard 10-byte Current Time reads and notifications |
+| [Gatt/Time/CurrentTimeClient](Gatt/Time/CurrentTimeClient/) | Central | Current Time decoding and notification subscription |
+| [Gatt/Time/ReferenceTimeUpdateServer](Gatt/Time/ReferenceTimeUpdateServer/) | Peripheral | Time Update Control Point drives a readable Time Update State |
+| [Gatt/Time/ReferenceTimeUpdateClient](Gatt/Time/ReferenceTimeUpdateClient/) | Central | Request/cancel a reference update and read the Time Update State |
+
+### GATT — Sensors
+
+| Example | Role | Description |
+|---|---|---|
+| [Gatt/Sensors/EnvironmentalServer](Gatt/Sensors/EnvironmentalServer/) | Peripheral | Standard Temperature, Humidity, and Pressure values |
+| [Gatt/Sensors/EnvironmentalClient](Gatt/Sensors/EnvironmentalClient/) | Central | Scaled sensor reads and Temperature notification subscription |
+
+### GATT — Health & body
+
+| Example | Role | Description |
+|---|---|---|
+| [Gatt/Health/HeartRateServer](Gatt/Health/HeartRateServer/) | Peripheral | Standard Heart Rate Measurement and Body Sensor Location |
+| [Gatt/Health/HeartRateClient](Gatt/Health/HeartRateClient/) | Central | Flags-driven Heart Rate Measurement decoding and subscription |
+| [Gatt/Health/HealthThermometerServer](Gatt/Health/HealthThermometerServer/) | Peripheral | IEEE-11073 FLOAT Temperature Measurement indications and Temperature Type |
+| [Gatt/Health/HealthThermometerClient](Gatt/Health/HealthThermometerClient/) | Central | Temperature Type read and FLOAT measurement indication decoding |
+| [Gatt/Health/BloodPressureServer](Gatt/Health/BloodPressureServer/) | Peripheral | IEEE-11073 SFLOAT systolic/diastolic/mean Measurement indications and Feature |
+| [Gatt/Health/BloodPressureClient](Gatt/Health/BloodPressureClient/) | Central | Feature read and SFLOAT measurement indication decoding |
+| [Gatt/Health/WeightScaleServer](Gatt/Health/WeightScaleServer/) | Peripheral | uint16 Weight Measurement indications (0.005 kg resolution) and Feature |
+| [Gatt/Health/WeightScaleClient](Gatt/Health/WeightScaleClient/) | Central | Feature read and Weight Measurement indication decoding |
+| [Gatt/Health/BodyCompositionServer](Gatt/Health/BodyCompositionServer/) | Peripheral | Body Fat Percentage + optional Weight Measurement indications and Feature |
+| [Gatt/Health/BodyCompositionClient](Gatt/Health/BodyCompositionClient/) | Central | Feature read and Body Fat Percentage / Weight measurement decoding |
+| [Gatt/Health/PulseOximeterServer](Gatt/Health/PulseOximeterServer/) | Peripheral | SFLOAT SpO2/pulse-rate Spot-Check Measurement indications and Features |
+| [Gatt/Health/PulseOximeterClient](Gatt/Health/PulseOximeterClient/) | Central | Features read and SpO2/pulse-rate measurement decoding |
+| [Gatt/Health/GlucoseServer](Gatt/Health/GlucoseServer/) | Peripheral | Record Access Control Point: RACP write → Measurement notify → RACP indicate |
+| [Gatt/Health/GlucoseClient](Gatt/Health/GlucoseClient/) | Central | RACP report-records request and measurement/response decoding |
+| [Gatt/Health/ContinuousGlucoseMonitoringServer](Gatt/Health/ContinuousGlucoseMonitoringServer/) | Peripheral | E2E-CRC-protected CGM Feature and CGM Measurement notifications |
+| [Gatt/Health/ContinuousGlucoseMonitoringClient](Gatt/Health/ContinuousGlucoseMonitoringClient/) | Central | E2E-CRC verification and SFLOAT glucose/time-offset decoding |
+
+### GATT — Fitness & cycling
+
+| Example | Role | Description |
+|---|---|---|
+| [Gatt/Fitness/CyclingSpeedCadenceServer](Gatt/Fitness/CyclingSpeedCadenceServer/) | Peripheral | Multi-field wheel/crank CSC Measurement notifications, Feature, Sensor Location |
+| [Gatt/Fitness/CyclingSpeedCadenceClient](Gatt/Fitness/CyclingSpeedCadenceClient/) | Central | Sensor Location read and CSC Measurement notification decoding |
+| [Gatt/Fitness/RunningSpeedCadenceServer](Gatt/Fitness/RunningSpeedCadenceServer/) | Peripheral | Speed/cadence/stride/distance RSC Measurement notifications, Feature, Sensor Location |
+| [Gatt/Fitness/RunningSpeedCadenceClient](Gatt/Fitness/RunningSpeedCadenceClient/) | Central | Sensor Location read and RSC Measurement notification decoding |
+| [Gatt/Fitness/CyclingPowerServer](Gatt/Fitness/CyclingPowerServer/) | Peripheral | Signed 16-bit power Cycling Power Measurement notifications, Feature, Sensor Location |
+| [Gatt/Fitness/CyclingPowerClient](Gatt/Fitness/CyclingPowerClient/) | Central | Sensor Location read and signed power measurement decoding |
+| [Gatt/Fitness/FitnessMachineServer](Gatt/Fitness/FitnessMachineServer/) | Peripheral | Fitness Machine (FTMS) Indoor Bike Data notifications and Feature |
+| [Gatt/Fitness/FitnessMachineClient](Gatt/Fitness/FitnessMachineClient/) | Central | Feature read and flags-driven Indoor Bike Data (speed/cadence/power) decoding |
+| [Gatt/Fitness/LocationNavigationServer](Gatt/Fitness/LocationNavigationServer/) | Peripheral | Location and Speed notifications (speed + sint32 lat/lon) and LN Feature |
+| [Gatt/Fitness/LocationNavigationClient](Gatt/Fitness/LocationNavigationClient/) | Central | LN Feature read and Location and Speed notification decoding |
+
+### GATT — Alerts & proximity
+
+| Example | Role | Description |
+|---|---|---|
+| [Gatt/Alerts/AlertNotificationServer](Gatt/Alerts/AlertNotificationServer/) | Peripheral | Category bitmask read, Control Point writes, New Alert notifications |
+| [Gatt/Alerts/AlertNotificationClient](Gatt/Alerts/AlertNotificationClient/) | Central | Control Point "Notify New Alert Immediately" and New Alert decoding |
+| [Gatt/Alerts/ImmediateAlertServer](Gatt/Alerts/ImmediateAlertServer/) | Peripheral | Find Me target: Alert Level Write Without Response handling |
+| [Gatt/Alerts/ImmediateAlertClient](Gatt/Alerts/ImmediateAlertClient/) | Central | Find Me locator: raise/clear Alert Level via Write Without Response |
+| [Gatt/Alerts/PhoneAlertStatusServer](Gatt/Alerts/PhoneAlertStatusServer/) | Peripheral | Alert Status / Ringer Setting notify, Ringer Control Point silent-mode |
+| [Gatt/Alerts/PhoneAlertStatusClient](Gatt/Alerts/PhoneAlertStatusClient/) | Central | Read Alert Status, drive Ringer Control Point, decode Ringer Setting |
+| [Gatt/Alerts/ProximityServer](Gatt/Alerts/ProximityServer/) | Peripheral | Proximity Reporter: Link Loss Alert Level + Tx Power (two services) |
+| [Gatt/Alerts/ProximityClient](Gatt/Alerts/ProximityClient/) | Central | Proximity Monitor: read Tx Power, arm Link Loss Alert Level |
+
+### HID over GATT
+
+| Example | Role | Description |
+|---|---|---|
 | [Hid/KeyboardDevice](Hid/KeyboardDevice/) | HID Device | BLE keyboard typing via Serial commands, LED report reception |
 | [Hid/KeyboardHost](Hid/KeyboardHost/) | HID Host | Connect to composite BLE HID, print every supported report type, write keyboard LEDs |
+| [Hid/KeyboardNkro](Hid/KeyboardNkro/) | HID Device | N-key rollover keyboard (29-byte bitmap report) |
 | [Hid/Mouse](Hid/Mouse/) | HID Device | Five-button relative mouse |
 | [Hid/ConsumerControl](Hid/ConsumerControl/) | HID Device | Volume and play/pause media keys |
 | [Hid/CompositeKeyboardMouse](Hid/CompositeKeyboardMouse/) | HID Device | One composite HID Service with keyboard and mouse reports |
@@ -145,44 +188,39 @@ arduino-cli compile --profile esp32s3 examples/<path>
 | [Hid/VendorHost](Hid/VendorHost/) | HID Host | Vendor Input reception and Output / Feature writes |
 | [Hid/CustomDevice](Hid/CustomDevice/) | HID Device | Arbitrary Report Descriptor via `ble.hidCustom()` (input + output reports) |
 | [Hid/CustomClient](Hid/CustomClient/) | GATT Client | Read a Custom HID's Report Map and decode its input report |
+
+### MIDI
+
+| Example | Role | Description |
+|---|---|---|
 | [Midi/MidiDevice](Midi/MidiDevice/) | MIDI Device | BLE MIDI peripheral: send Note On/Off, print received MIDI |
 | [Midi/MidiHost](Midi/MidiHost/) | MIDI Host | BLE MIDI central: discover/subscribe and print MIDI, send notes |
+
+### Security
+
+| Example | Role | Description |
+|---|---|---|
+| [Security/JustWorksServer](Security/JustWorksServer/) | Peripheral | Encrypted characteristic with Just Works pairing + bonding |
+| [Security/StaticPasskeyServer](Security/StaticPasskeyServer/) | Peripheral | MITM-authenticated characteristic with a static passkey (display side) |
+| [Security/StaticPasskeyClient](Security/StaticPasskeyClient/) | Central | Passkey input side: `requestSecurity()` and authenticated reads |
+
+### Diagnostics
+
+| Example | Role | Description |
+|---|---|---|
 | [Info/ScanDump](Info/ScanDump/) | Diagnostics | Dump every advertisement field (UUIDs, manufacturer data, …) |
 | [Info/ConnectionInspector](Info/ConnectionInspector/) | Diagnostics | Interactively connect and dump MTU, security state, bonds, counters |
 
-Suggested pairings on two boards:
+## Suggested pairings on two boards
 
 - Gap/Advertise ↔ Gap/Scan
-- Gatt/Server ↔ Gatt/Client
-- Gatt/NotifyServer ↔ Gatt/SubscribeClient / Gatt/AutoReconnectClient (and Gap/Mtu)
-- Gatt/IndicateServer ↔ Gatt/IndicateClient
-- Gatt/BatteryServer ↔ Gatt/BatteryClient
-- Gatt/DeviceInfoServer ↔ Gatt/DeviceInfoClient
-- Gatt/CurrentTimeServer ↔ Gatt/CurrentTimeClient
-- Gatt/HeartRateServer ↔ Gatt/HeartRateClient
-- Gatt/EnvironmentalServer ↔ Gatt/EnvironmentalClient
-- Gatt/HealthThermometerServer ↔ Gatt/HealthThermometerClient
-- Gatt/BloodPressureServer ↔ Gatt/BloodPressureClient
-- Gatt/WeightScaleServer ↔ Gatt/WeightScaleClient
-- Gatt/BodyCompositionServer ↔ Gatt/BodyCompositionClient
-- Gatt/LocationNavigationServer ↔ Gatt/LocationNavigationClient
-- Gatt/UserDataServer ↔ Gatt/UserDataClient
-- Gatt/AlertNotificationServer ↔ Gatt/AlertNotificationClient
-- Gatt/ImmediateAlertServer ↔ Gatt/ImmediateAlertClient
-- Gatt/PhoneAlertStatusServer ↔ Gatt/PhoneAlertStatusClient
-- Gatt/ProximityServer ↔ Gatt/ProximityClient
-- Gatt/ReferenceTimeUpdateServer ↔ Gatt/ReferenceTimeUpdateClient
-- Gatt/BondManagementServer ↔ Gatt/BondManagementClient
-- Gatt/ContinuousGlucoseMonitoringServer ↔ Gatt/ContinuousGlucoseMonitoringClient
-- Gatt/CyclingSpeedCadenceServer ↔ Gatt/CyclingSpeedCadenceClient
-- Gatt/RunningSpeedCadenceServer ↔ Gatt/RunningSpeedCadenceClient
-- Gatt/GlucoseServer ↔ Gatt/GlucoseClient
-- Gatt/CyclingPowerServer ↔ Gatt/CyclingPowerClient
-- Gatt/FitnessMachineServer ↔ Gatt/FitnessMachineClient
-- Gatt/PulseOximeterServer ↔ Gatt/PulseOximeterClient
-- Gatt/NusServer ↔ Gatt/NusClient
+- Gatt/Basics/Server ↔ Gatt/Basics/Client
+- Gatt/Basics/NotifyServer ↔ Gatt/Basics/SubscribeClient / Gatt/Basics/AutoReconnectClient (and Gap/Mtu)
+- Gatt/Basics/IndicateServer ↔ Gatt/Basics/IndicateClient
+- Gatt/Basics/NusServer ↔ Gatt/Basics/NusClient
+- Each `Gatt/<Category>/<Name>Server` ↔ its `…Client` (Device, Time, Sensors, Health, Fitness, Alerts)
 - Security/StaticPasskeyServer ↔ Security/StaticPasskeyClient
-- Hid/KeyboardDevice / Hid/CompositeKeyboardMouse ↔ Hid/KeyboardHost
+- Hid/KeyboardDevice / Hid/CompositeKeyboardMouse / Hid/KeyboardNkro ↔ Hid/KeyboardHost
 - Hid/VendorDevice ↔ Hid/VendorHost
 - Hid/CustomDevice ↔ Hid/CustomClient
 - Midi/MidiDevice ↔ Midi/MidiHost

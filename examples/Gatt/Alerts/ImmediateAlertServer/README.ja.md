@@ -4,7 +4,7 @@
 
 標準Immediate Alert Service（0x1802）のPeripheral — Find Meプロファイルの**ターゲット**役。Alert Level（0x2A06）は**Write Without Response**のuint8（0 = No Alert、1 = Mild、2 = High）1つだけです。
 
-## ハードウェア
+## 必要なもの
 
 - 1 × ESP32-S3（このスケッチ。Peripheral / Find Meターゲット）
 - 1 × Central: [ImmediateAlertClient](../ImmediateAlertClient/) example、または Find Me locator

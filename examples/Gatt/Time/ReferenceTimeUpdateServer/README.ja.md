@@ -4,7 +4,7 @@
 
 標準Reference Time Update Service（0x1806）のPeripheral。Time Update Control Point（0x2A16）は**Write Without Response**（1 = Get Reference Update、2 = Cancel Reference Update）、Time Update State（0x2A17）はread可能な2バイト値（Current State＋Result）です。
 
-## ハードウェア
+## 必要なもの
 
 - 1 × ESP32-S3（このスケッチ。Peripheral）
 - 1 × Central: [ReferenceTimeUpdateClient](../ReferenceTimeUpdateClient/) example、または Reference Time Update client

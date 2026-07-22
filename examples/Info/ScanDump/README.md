@@ -6,19 +6,14 @@ Diagnostic scanner that dumps every field EspBle extracts from each advertisemen
 
 ## Hardware
 
-- 1 × ESP32-S3 (or another board supported by EspBle)
+- 1 × ESP32-S3 running this sketch (central)
+- Any nearby BLE devices to inspect
 
 ## What it does
 
 - Runs a continuous active scan (scan responses included, so more devices show their name)
 - Prints one line per advertisement with all extracted fields
-- Prints the diagnostic counters (dropped scan results / dropped events) on `q`
-
-## Serial commands
-
-| Command | Action |
-|---------|--------|
-| `q` | Print `droppedScanResults` / `droppedEvents` counters |
+- Send `q` to print the diagnostic counters (`droppedScanResults` / `droppedEvents`)
 
 ## Key APIs
 

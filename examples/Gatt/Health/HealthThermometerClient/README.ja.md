@@ -4,7 +4,7 @@
 
 Health Thermometer Service（0x1809）へ接続し、Temperature TypeをRead、Temperature MeasurementのIndicationを購読して、IEEE-11073 32-bit FLOATの温度をデコードします。
 
-## ハードウェア
+## 必要なもの
 
 - 1 × ESP32-S3（このスケッチ。Central）
 - 1 × Health Thermometer Peripheral: [HealthThermometerServer](../HealthThermometerServer/) example または市販の体温計

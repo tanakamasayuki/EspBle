@@ -4,13 +4,14 @@
 
 最小のビルド確認用sketchです。`EspBle.h`をincludeしてライブラリのバージョンを表示するだけで、BLEスタックは初期化しません。機能系のexampleを試す前に、対象ボードでライブラリがコンパイル・リンクできることを確認する用途に使います。
 
-## ハードウェア
+## 必要なもの
 
-- Arduino-ESP32がNimBLE backendを提供するESP32ボード（初期ターゲットはESP32-S3）
+- 1 × ESP32-S3（またはArduino-ESP32のNimBLE backendを持つ任意のボード）。peerは不要
 
-## 動作内容
+## 動作
 
 - 起動時にEspBleのライブラリバージョンをSerialへ1回表示します
+- それ以外は何もしません（loopはidle）
 
 ## 主なAPI
 

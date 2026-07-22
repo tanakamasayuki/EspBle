@@ -7,7 +7,7 @@ Scans for a peripheral advertising a specific service UUID and connects to it as
 ## Hardware
 
 - 1 × ESP32-S3 running this sketch (central)
-- 1 × BLE peripheral advertising the target service UUID — e.g. a second board running the [Gatt/Server](../../Gatt/Server/) example (change `TARGET_SERVICE_UUID` to match)
+- 1 × BLE peripheral advertising the target service UUID — e.g. a second board running the [Gatt/Basics/Server](../../Gatt/Basics/Server/) example (change `TARGET_SERVICE_UUID` to match)
 
 ## What it does
 

@@ -2,32 +2,32 @@
 
 > English: [README.md](README.md)
 
-[StaticPasskeyServer](../StaticPasskeyServer/)のCentral側、つまりMITM認証Pairingでpasskeyを「入力する」側（`KeyboardOnly`）です。現在の試行APIは実行時入力を待つ代わりに事前設定したpasskeyをスタックへ渡すため、Serverが表示する値と一致させておく必要があります。Pairing成功後、認証済みlinkを要求するCharacteristicをReadします。
+[StaticPasskeyServer](../StaticPasskeyServer/)のCentral側、MITM認証Pairingでpasskeyを「入力する」側（`KeyboardOnly`）です。Pairing成功後、認証済みlinkを要求するCharacteristicをDiscovery→Readします。
 
-## ハードウェア
+## 必要なもの
 
-- このsketchを動かすESP32-S3 × 1（Central、passkey入力側）
-- [StaticPasskeyServer](../StaticPasskeyServer/) exampleを動かすESP32-S3 × 1
+- 1 × ESP32-S3（このsketch。Central、passkey入力側）
+- 1 × ESP32-S3（[StaticPasskeyServer](../StaticPasskeyServer/) exampleを動かす）
 
-## 動作内容
+## 動作
 
-- ServerのService UUIDをscanして接続します
+- ServerのService UUIDをactive scanし、最初の一致へ接続します
 - 接続時に`requestSecurity()`で明示的にPairingを開始します
-- Securityの結果（成功時`authenticated=1`）を表示し、MITM保護されたCharacteristicをDiscovery→Readします
-- `c`で全Bondを削除します（切断中のみ）
-
-## Serialコマンド
-
-| コマンド | 動作 |
-|---------|------|
-| `c` | 全Bondを削除して残数を表示 |
+- Security成功時にMITM保護されたCharacteristicをDiscoveryしてReadします
+- Securityの結果と保護された値を表示します
+- Serialコマンド`c`で全Bondを削除し（切断中のみ許可）、残数を表示します
 
 ## 主なAPI
 
 - `EspBleSecurityConfig::ioCapability = KeyboardOnly` — passkeyを「入力する」側
-- `config.security.staticPasskeyEnabled` / `staticPasskey` — 事前設定passkey（実行時のpasskey入力は未実装）
+- `config.security.staticPasskeyEnabled` / `staticPasskey` — スタックへ渡す事前設定passkey
 - `ble.requestSecurity(connectionId)` — 明示的なPairing開始。完了は`onSecurityChanged()`へ届きます
-- `authenticatedRead`のCharacteristicはMITM Pairing完了後にのみReadできます（それ以前のReadはATTのsecurityエラーで失敗します）
+- `ble.discoverCharacteristic(...)` / `ble.readCharacteristic(...)` — Pairing後にCharacteristicへアクセス
+
+## メモ
+
+- 現在の試行APIは実行時入力を待つ代わりに事前設定passkeyをスタックへ渡すため、ここの`STATIC_PASSKEY`はServerが表示する値と一致させる必要があります。
+- `authenticatedRead`のCharacteristicはMITM Pairing完了後にのみReadできます。それ以前のReadはATTのsecurityエラーで失敗します。
 
 ## 期待されるSerial出力
 

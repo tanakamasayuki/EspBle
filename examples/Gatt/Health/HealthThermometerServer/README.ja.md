@@ -4,7 +4,7 @@
 
 標準Health Thermometer Service（0x1809）のPeripheral。Temperature Measurement（0x2A1C）をIEEE-11073 32-bit FLOATで**Indicate**し、Temperature Type（0x2A1D）はReadできます。
 
-## ハードウェア
+## 必要なもの
 
 - 1 × ESP32-S3（このスケッチ。Peripheral）
 - 1 × Central: [HealthThermometerClient](../HealthThermometerClient/) example、または Health Thermometer collector

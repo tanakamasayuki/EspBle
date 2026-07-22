@@ -4,12 +4,12 @@
 
 [Gatt/NotifyServer](../NotifyServer/) exampleへ接続し、一度だけ購読します。auto-reconnectを有効にすると、persistent subscription（既定on）と併せて、想定外の切断後にリンクと購読が自動復元され、追加コードなしでNotificationが再開します。
 
-## ハードウェア
+## 必要なもの
 
 - このsketchを動かすESP32-S3 × 1（Central / GATT Client）
 - [Gatt/NotifyServer](../NotifyServer/) exampleを動かすESP32-S3 × 1
 
-## 動作内容
+## 動作
 
 - NotifyServerのService UUIDをscanして接続します
 - 一度だけ購読し、`setAutoReconnect(true)`を呼びます

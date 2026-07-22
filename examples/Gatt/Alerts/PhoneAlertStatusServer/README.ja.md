@@ -4,7 +4,7 @@
 
 標準Phone Alert Status Service（0x180E）のPeripheral。Alert Status（0x2A3F）とRinger Setting（0x2A41）はread/**notify**のuint8、Ringer Control Point（0x2A40）は**Write Without Response**です。
 
-## ハードウェア
+## 必要なもの
 
 - 1 × ESP32-S3（このスケッチ。Peripheral、例えば電話のproxy）
 - 1 × Central: [PhoneAlertStatusClient](../PhoneAlertStatusClient/) example、または Phone Alert Status client

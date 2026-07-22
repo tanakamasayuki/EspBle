@@ -2,7 +2,7 @@
 
 > 日本語版: [README.ja.md](README.ja.md)
 
-Turns the board into a BLE MIDI peripheral. Pair it from a phone/tablet DAW or the [MidiHost](../MidiHost/) example, then send notes from Serial and print any MIDI the host sends back.
+Advertises a BLE MIDI peripheral using the standard BLE MIDI service. Send Note On/Off from Serial and print any MIDI a connected host sends back. Pairs with the [MidiHost](../MidiHost/) example or any BLE MIDI host (phone/tablet DAW).
 
 ## Hardware
 
@@ -12,21 +12,14 @@ Turns the board into a BLE MIDI peripheral. Pair it from a phone/tablet DAW or t
 ## What it does
 
 - Registers the BLE MIDI service and its I/O characteristic before `begin()` (the service UUID is added to advertising)
-- Sends middle-C Note On then Note Off on `n`
-- Prints MIDI received from the host (host → device)
-
-## Serial commands
-
-| Command | Action |
-|---------|--------|
-| `n` | Send Note On (middle C) then Note Off |
+- Sends middle-C Note On then Note Off on Serial command `n` (only while a host is subscribed)
+- Prints MIDI received from the host (host → device), including SysEx chunks
 
 ## Key APIs
 
-- `EspBleMidiDevice midi(ble)` — construct with a reference (like `EspUsbDeviceMidi(device)`)
+- `EspBleMidiDevice midi(ble)` — construct with a reference to the `EspBle` instance
 - `midi.begin()` — register the service; call before `ble.begin()`
-- `midi.noteOn/noteOff/controlChange/programChange/polyPressure/channelPressure/pitchBend(...)`
-- `midi.sendSysEx(data, length)` — send a framed SysEx (`0xF0 .. 0xF7`); large messages are split across packets automatically
+- `midi.noteOn(channel, note, velocity)` / `midi.noteOff(...)` — send channel-voice messages
 - `midi.onMessage(callback)` — MIDI received from the host, decoded into `EspBleMidiMessage`
 - `midi.ready()` — true while a host is subscribed
 
@@ -34,4 +27,5 @@ Turns the board into a BLE MIDI peripheral. Pair it from a phone/tablet DAW or t
 
 ```
 MIDI in: status=0xb0 data1=7 data2=100 ts=1234
+SysEx chunk: start=1 end=0 length=16
 ```

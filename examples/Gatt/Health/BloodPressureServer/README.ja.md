@@ -4,7 +4,7 @@
 
 標準Blood Pressure Service（0x1810）のPeripheral。Blood Pressure Measurement（0x2A35）をsystolic/diastolic/meanのIEEE-11073 16-bit SFLOATで**Indicate**し、Blood Pressure Feature（0x2A49）はReadできます。
 
-## ハードウェア
+## 必要なもの
 
 - 1 × ESP32-S3（このスケッチ。Peripheral）
 - 1 × Central: [BloodPressureClient](../BloodPressureClient/) example、または Blood Pressure collector

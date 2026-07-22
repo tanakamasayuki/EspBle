@@ -2,12 +2,12 @@
 
 > 日本語版: [README.ja.md](README.ja.md)
 
-Requests a larger ATT MTU before connecting and observes the negotiated value. The preferred MTU must be set in the config passed to `begin()`; the bundled NimBLE backend exchanges the MTU during connection establishment.
+Requests a larger ATT MTU before connecting and observes the negotiated value. The preferred MTU is set in the config passed to `begin()`; the bundled NimBLE backend exchanges it during connection establishment.
 
 ## Hardware
 
 - 1 × ESP32-S3 running this sketch (central)
-- 1 × BLE peripheral — the sketch scans for the service UUID of the [Gatt/NotifyServer](../../Gatt/NotifyServer/) example, so run that on a second board
+- 1 × BLE peripheral — the sketch scans for the service UUID of the [Gatt/Basics/NotifyServer](../../Gatt/Basics/NotifyServer/) example, so run that on a second board
 
 ## What it does
 
@@ -23,7 +23,9 @@ Requests a larger ATT MTU before connecting and observes the negotiated value. T
 - `connection.maximumNotificationPayload()` — `mtu - 3` (ATT notification header)
 - `ble.onMtuChanged(callback)` — `event.previousMtu` and `event.connection.mtu`
 
-Note: on the central side the MTU is a connection-time snapshot; the backend has no client-side MTU-change callback for later updates (see `docs/DECISIONS.ja.md`, Connection/GATT #23).
+## Notes
+
+- On the central side the MTU is a connection-time snapshot; the backend has no client-side MTU-change callback for later updates (see `docs/DECISIONS.ja.md`, Connection/GATT #23).
 
 ## Expected Serial output
 

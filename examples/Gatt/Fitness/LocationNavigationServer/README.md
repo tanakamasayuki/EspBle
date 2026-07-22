@@ -2,7 +2,7 @@
 
 > 日本語版: [README.ja.md](README.ja.md)
 
-Standard Location and Navigation Service (0x1819) peripheral. Location and Speed (0x2A67) is **notified** with uint16 flags plus flags-selected fields; LN Feature (0x2A6A) is a readable uint32.
+Standard Location and Navigation Service (0x1819) peripheral. Location and Speed (0x2A67) is notified with a uint16 flags field plus the flags-selected data fields; LN Feature (0x2A6A) is a readable uint32.
 
 ## Hardware
 
@@ -11,15 +11,22 @@ Standard Location and Navigation Service (0x1819) peripheral. Location and Speed
 
 ## What it does
 
-- Registers the Location and Navigation service before `begin()` and advertises 0x1819
-- Every second, notifies a speed drifting near 5 m/s plus a fixed Tokyo location (flags 0x0005: Instantaneous Speed + Location)
-- Fields appear in flag-bit order: Instantaneous Speed (uint16, 1/100 m/s), then Location latitude/longitude (sint32, 1e-7 deg)
+- Registers the Location and Navigation service and advertises 0x1819
+- Publishes LN Feature = 0x00000005 (Instantaneous Speed + Location supported) as a readable value
+- Every second, notifies a 12-byte Location and Speed measurement (flags 0x0005) with a speed drifting near 5 m/s plus a fixed Tokyo location
 
 ## Key APIs
 
 - `ble.gattServer().addCharacteristic(..., { .notifiable = true })` — Location and Speed
-- `ble.gattServer().notify(...)` — unacknowledged notification
+- `ble.gattServer().setValue(...)` — seed the readable LN Feature
+- `ble.gattServer().notify(...)` — push each measurement to subscribers
+
+## Notes
+
+- Fields follow flag-bit order: Instantaneous Speed (uint16, 1/100 m/s), then Location latitude and longitude (sint32, 1e-7 degrees).
 
 ## Expected Serial output
 
-The server is silent; observe the values on the client.
+```
+The server is silent; observe values on the client.
+```

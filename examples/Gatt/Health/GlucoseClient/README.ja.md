@@ -4,7 +4,7 @@
 
 Glucose Service（0x1808）へ接続し、Glucose MeasurementのNotificationとRecord Access Control Point（RACP）のIndicationを購読し、「Report Stored Records（all）」を書き込んで、デコードしたレコードとRACP応答を表示します。
 
-## ハードウェア
+## 必要なもの
 
 - 1 × ESP32-S3（このスケッチ。Central）
 - 1 × Glucose Peripheral: [GlucoseServer](../GlucoseServer/) example または市販の血糖値計

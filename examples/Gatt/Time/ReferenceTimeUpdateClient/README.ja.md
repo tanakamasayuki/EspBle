@@ -4,7 +4,7 @@
 
 Reference Time Update Service（0x1806）へ接続し、Time Update StateをRead、Time Update Control Point（**Write Without Response**）でreference update要求→キャンセルを行い、毎回stateを再readします。
 
-## ハードウェア
+## 必要なもの
 
 - 1 × ESP32-S3（このスケッチ。Central）
 - 1 × Reference Time Update Peripheral: [ReferenceTimeUpdateServer](../ReferenceTimeUpdateServer/) example

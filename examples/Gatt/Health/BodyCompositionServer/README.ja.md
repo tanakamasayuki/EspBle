@@ -4,7 +4,7 @@
 
 標準Body Composition Service（0x181B）のPeripheral。Body Composition Measurement（0x2A9C）をuint16 flags、必須のBody Fat Percentage（0.1 %/LSB）、任意フィールド付きで**Indicate**し、Body Composition Feature（0x2A9B）はuint32としてReadできます。
 
-## ハードウェア
+## 必要なもの
 
 - 1 × ESP32-S3（このスケッチ。Peripheral）
 - 1 × Central: [BodyCompositionClient](../BodyCompositionClient/) example、または Body Composition collector

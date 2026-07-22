@@ -4,7 +4,7 @@
 
 標準User Data Service（0x181C）のPeripheral。Age（0x2A80）はread/writeのuint8、First Name（0x2A8A）はread/writeのutf8s、Database Change Increment（0x2A99）はread/write/**notify**のuint32です。AgeかFirst Nameが書かれるたびにincrementを増やしてNotifyします。
 
-## ハードウェア
+## 必要なもの
 
 - 1 × ESP32-S3（このスケッチ。Peripheral）
 - 1 × Central: [UserDataClient](../UserDataClient/) example、または User Data collector

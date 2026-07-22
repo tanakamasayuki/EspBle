@@ -4,7 +4,7 @@
 
 Continuous Glucose Monitoring Service（0x181F）へ接続し、CGM FeatureをReadしてE2E-CRC検証、CGM Measurementを購読、各測定値のE2E-CRCを検証し、SFLOAT血糖値とtime offsetをデコードします。
 
-## ハードウェア
+## 必要なもの
 
 - 1 × ESP32-S3（このスケッチ。Central）
 - 1 × CGM Peripheral: [ContinuousGlucoseMonitoringServer](../ContinuousGlucoseMonitoringServer/) example

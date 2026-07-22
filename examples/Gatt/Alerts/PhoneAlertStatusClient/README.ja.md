@@ -4,7 +4,7 @@
 
 Phone Alert Status Service（0x180E）へ接続し、Alert StatusをRead、Ringer Settingを購読、Ringer Control Point（**Write Without Response**）でSilent Mode設定→解除を行い、NotifyされたRinger Settingを毎回表示します。
 
-## ハードウェア
+## 必要なもの
 
 - 1 × ESP32-S3（このスケッチ。Central）
 - 1 × Phone Alert Status Peripheral: [PhoneAlertStatusServer](../PhoneAlertStatusServer/) example

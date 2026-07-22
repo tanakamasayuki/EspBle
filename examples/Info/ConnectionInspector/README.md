@@ -4,28 +4,17 @@
 
 Interactive diagnostic tool. It lists nearby connectable devices with index numbers, connects to the one you pick, and dumps the full connection snapshot: connection ID, backend handle, peer address and type, local role, negotiated MTU (and the resulting notification payload limit), and the security state (encrypted / authenticated / bonded / key size). It can also dump the bond store and the library's diagnostic counters.
 
-Security is disabled in this sketch, so peripherals that require encryption will still accept the connection and show their link info, but reject attribute access.
-
 ## Hardware
 
-- 1 × ESP32-S3 (or another board supported by EspBle)
+- 1 × ESP32-S3 running this sketch (central)
 - Nearby BLE peripherals to inspect (any advertising device)
 
 ## What it does
 
 - Scans and lists up to 10 unique connectable devices as `[index] address rssi name`
-- Connects to a listed device when you type its number and prints the connection snapshot
-- Prints connect failures with their detail, and disconnects on request
-
-## Serial commands
-
-| Command | Action |
-|---------|--------|
-| `0`–`9` | Connect to the listed device with that index |
-| `s` | Clear the list and rescan |
-| `d` | Disconnect the current connection |
-| `b` | Dump the bond store (`bondCount()` / `bond(index)`) |
-| `q` | Print diagnostic counters |
+- `0`–`9` connects to the listed device with that index and prints its connection snapshot
+- `s` clears the list and rescans; `d` disconnects the current connection; `b` dumps the bond store; `q` prints the diagnostic counters
+- Security is disabled here, so peripherals that require encryption still accept the connection and show their link info, but reject attribute access
 
 ## Key APIs
 
@@ -38,7 +27,7 @@ Security is disabled in this sketch, so peripherals that require encryption will
 
 ```
 Commands: 0-9 connect to listed device, s rescan, d disconnect, b bonds, q counters
-SCAN restart success=1 — send the list number to connect
+SCAN restart success=1 - send the list number to connect
 [0] 5a:b8:1e:0c:2f:71 rssi=-52 name=EspBle Keyboard
 CONNECT [0] 5a:b8:1e:0c:2f:71 accepted=1
 CONNECTION id=1 handle=0 peer=5a:b8:1e:0c:2f:71(type=0) role=Central

@@ -2,24 +2,32 @@
 
 > English: [README.md](README.md)
 
-標準Cycling Speed and Cadence Service（0x1816）のPeripheral。CSC Measurement（0x2A5B）を累積wheel/crank回転数とイベント時刻で**Notify**し、CSC Feature（0x2A5C）とSensor Location（0x2A5D）はReadできます。
+標準Cycling Speed and Cadence Service（0x1816）のPeripheralです。CSC Measurement（0x2A5B）を累積wheel/crank回転数と直近イベント時刻でNotifyし、CSC Feature（0x2A5C）とSensor Location（0x2A5D）はReadできます。
 
-## ハードウェア
+## 必要なもの
 
-- 1 × ESP32-S3（このスケッチ。Peripheral）
-- 1 × Central: [CyclingSpeedCadenceClient](../CyclingSpeedCadenceClient/) example、または CSC collector
+- このsketchを動かすESP32-S3 × 1（Peripheral）
+- Central × 1: [CyclingSpeedCadenceClient](../CyclingSpeedCadenceClient/) example、または任意のCSC collector
 
 ## 動作
 
-- `begin()`の前にCSC Serviceを登録し、0x1816をAdvertise
-- 1秒ごとにwheel/crankカウンタを進めてMeasurement（flags 0x03）をNotify
-- `notify()`は購読者にのみ届く
+- CSC serviceを登録し、0x1816をadvertise
+- CSC Feature = Wheel + Crank（0x0003）とSensor Location = Rear Hub（12）をReadable値として公開
+- 1秒ごとにカウンタを進め（wheel +2回転、crank +1回転、イベント時刻 +1.000 s）、flags 0x03（wheel + crank あり）の11byte CSC MeasurementをNotify
 
 ## 主なAPI
 
 - `ble.gattServer().addCharacteristic(..., { .notifiable = true })` — CSC Measurement
-- `ble.gattServer().notify(...)` — 購読者へのNotification
+- `ble.gattServer().setValue(...)` — Readable な Feature / Sensor Location を設定
+- `ble.gattServer().notify(...)` — 各measurementを購読者へ送信
+
+## メモ
+
+- イベント時刻は1/1024秒単位で、Notify 1回ごとに1024を加算します。
+- wheel回転数は32bit、crank回転数は16bitのフィールドです。
 
 ## 期待されるSerial出力
 
-Server側は出力しません。カウンタはClientで確認します。
+```
+The server is silent; observe values on the client.
+```

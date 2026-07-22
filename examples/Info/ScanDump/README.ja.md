@@ -4,21 +4,16 @@
 
 EspBleが各advertisementから取り出す全フィールドをダンプする診断用スキャナです: address・address種別、RSSI、connectable/scannableフラグ、name、全Service UUID、Manufacturer Dataのhex表示。scan filterを書く前に相手が実際に何をadvertiseしているかを確認したり、`advertisesService()`が一致しない原因を調べたりするのに使います。
 
-## ハードウェア
+## 必要なもの
 
-- ESP32-S3 × 1（またはEspBle対応ボード）
+- このsketchを動かすESP32-S3 × 1（Central）
+- 調べたい周囲の任意のBLE機器
 
-## 動作内容
+## 動作
 
 - 継続的なactive scanを実行します（scan responseも取得するため、nameが見える機器が増えます）
 - advertisementごとに全フィールドを1行で表示します
-- `q`で診断カウンタ（scan result / eventの取りこぼし数）を表示します
-
-## Serialコマンド
-
-| コマンド | 動作 |
-|---------|------|
-| `q` | `droppedScanResults` / `droppedEvents`カウンタを表示 |
+- `q`を送ると診断カウンタ（`droppedScanResults` / `droppedEvents`）を表示します
 
 ## 主なAPI
 

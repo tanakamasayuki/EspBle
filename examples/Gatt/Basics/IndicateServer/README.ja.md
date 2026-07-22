@@ -6,12 +6,12 @@
 
 値を取りこぼしてはいけない用途（状態遷移の通知など）にはIndicationを、確認応答の往復がスループットを律速するような高頻度ストリームにはNotificationを使います。
 
-## ハードウェア
+## 必要なもの
 
 - このsketchを動かすESP32-S3 × 1（Peripheral / GATT Server）
 - [Gatt/IndicateClient](../IndicateClient/) exampleを動かすESP32-S3 × 1
 
-## 動作内容
+## 動作
 
 - `begin()`前にRead + Indicate可能なCharacteristicを登録します
 - `onSubscriptionChanged()`でCCCDのIndication購読を追跡し、購読者がいる間だけ送信します

@@ -4,7 +4,7 @@
 
 Proximityプロファイルの**Reporter**役。2つの標準Serviceを同時にホストします: Link Loss Service（0x1803、read/writeのAlert Level 0x2A06）と、Tx Power Service（0x1804、read専用のsigned int8 Tx Power Level 0x2A07）。
 
-## ハードウェア
+## 必要なもの
 
 - 1 × ESP32-S3（このスケッチ。Peripheral / Proximity Reporter）
 - 1 × Central: [ProximityClient](../ProximityClient/) example、または Proximity Monitor

@@ -4,7 +4,7 @@
 
 Alert Notification Service（0x1811）へ接続し、Supported New Alert CategoryをRead、New Alertを購読、Control Pointへ「Notify New Alert Immediately」コマンドをWriteして、発火したNew Alert（category、count、text）をデコードします。
 
-## ハードウェア
+## 必要なもの
 
 - 1 × ESP32-S3（このスケッチ。Central）
 - 1 × Alert Notification Peripheral: [AlertNotificationServer](../AlertNotificationServer/) example

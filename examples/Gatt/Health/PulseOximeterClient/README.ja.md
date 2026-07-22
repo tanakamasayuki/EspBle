@@ -4,7 +4,7 @@
 
 Pulse Oximeter Service（0x1822）へ接続し、PLX FeaturesをRead、PLX Spot-Check MeasurementのIndicationを購読して、SpO2とpulse rateのSFLOATをデコードします。
 
-## ハードウェア
+## 必要なもの
 
 - 1 × ESP32-S3（このスケッチ。Central）
 - 1 × PLX Peripheral: [PulseOximeterServer](../PulseOximeterServer/) example または市販のパルスオキシメーター

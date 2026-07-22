@@ -4,7 +4,7 @@
 
 Bond Management Service（0x181E）へ接続し、Bond Management Feature bit fieldをRead、Bond Management Control Pointへ「Delete bond of requesting device（LE）」（0x03）を応答ありWriteします。
 
-## ハードウェア
+## 必要なもの
 
 - 1 × ESP32-S3（このスケッチ。Central）
 - 1 × Bond Management Peripheral: [BondManagementServer](../BondManagementServer/) example

@@ -2,7 +2,7 @@
 
 > 日本語版: [README.ja.md](README.ja.md)
 
-Connects to a BLE MIDI peripheral as a central: scan → connect → discover → subscribe → print decoded MIDI. Send a note from Serial. Works with the [MidiDevice](../MidiDevice/) example or a commercial BLE MIDI instrument.
+Connects to a BLE MIDI peripheral as a central: scan the BLE MIDI service → connect → discover → subscribe → print decoded MIDI. Send a note from Serial. Pairs with the [MidiDevice](../MidiDevice/) example or a commercial BLE MIDI instrument.
 
 ## Hardware
 
@@ -12,24 +12,18 @@ Connects to a BLE MIDI peripheral as a central: scan → connect → discover �
 ## What it does
 
 - Scans for the BLE MIDI service and connects to the first connectable match
-- Discovers and subscribes to the MIDI I/O characteristic on connect
-- Prints decoded MIDI (`onMidiMessage`, mirroring EspUsbHost)
-- Sends middle-C Note On/Off on `n`
-
-## Serial commands
-
-| Command | Action |
-|---------|--------|
-| `n` | Send Note On (middle C) then Note Off to the device |
+- Discovers and subscribes to the MIDI I/O characteristic immediately on connect (no security in this example)
+- Prints decoded MIDI, including SysEx chunks
+- Sends middle-C Note On then Note Off on Serial command `n` (only once connected and subscribed)
 
 ## Key APIs
 
-- `EspBleMidiHost midi(ble)` — construct with a reference
+- `EspBleMidiHost midi(ble)` — construct with a reference to the `EspBle` instance
 - `midi.begin()` — install host GATT callbacks; call after `ble.begin()`
 - `midi.discover(connectionId)` — discover and subscribe (call after connect / security)
-- `midi.onMidiMessage(callback)` — decoded `EspBleMidiMessage` (status/data1/data2/timestamp)
-- `midi.sendNoteOn/sendNoteOff/sendControlChange/sendProgramChange(connectionId, ...)`
-- `midi.sendSysEx(connectionId, data, length)` — send a framed SysEx; large messages are split across packets automatically
+- `midi.onMidiMessage(callback)` — decoded `EspBleMidiMessage` (status / data1 / data2 / timestamp)
+- `midi.sendNoteOn(connectionId, ...)` / `midi.sendNoteOff(connectionId, ...)` — send to the device
+- `midi.ready(connectionId)` — true once subscribed
 
 ## Expected Serial output
 

@@ -4,7 +4,7 @@
 
 標準Weight Scale Service（0x181D）のPeripheral。Weight Measurement（0x2A9D）を0.005 kg分解能のuint16で**Indicate**し、Weight Scale Feature（0x2A9E）はuint32としてReadできます。
 
-## ハードウェア
+## 必要なもの
 
 - 1 × ESP32-S3（このスケッチ。Peripheral）
 - 1 × Central: [WeightScaleClient](../WeightScaleClient/) example、または Weight Scale collector

@@ -4,7 +4,7 @@
 
 Blood Pressure Service（0x1810）へ接続し、Blood Pressure FeatureをRead、Blood Pressure MeasurementのIndicationを購読して、systolic/diastolic/meanのIEEE-11073 SFLOATをデコードします。
 
-## ハードウェア
+## 必要なもの
 
 - 1 × ESP32-S3（このスケッチ。Central）
 - 1 × Blood Pressure Peripheral: [BloodPressureServer](../BloodPressureServer/) example または市販の血圧計

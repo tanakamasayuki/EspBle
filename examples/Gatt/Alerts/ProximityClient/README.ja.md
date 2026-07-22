@@ -4,7 +4,7 @@
 
 Proximityプロファイルの**Monitor**役。Proximity Reporterへ接続し、Tx Power Level（0x2A07、signed int8）をRead、Link Loss Alert Level（0x2A06）をRead、そしてLink Loss Alert Levelを書き込んで、後でリンクが切れたときReporterが鳴動するようにします。
 
-## ハードウェア
+## 必要なもの
 
 - 1 × ESP32-S3（このスケッチ。Central / Proximity Monitor）
 - 1 × Proximity Reporter: [ProximityServer](../ProximityServer/) example

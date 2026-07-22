@@ -2,17 +2,18 @@
 
 > 日本語版: [README.ja.md](README.ja.md)
 
-Runs a continuous active scan and prints every advertisement it receives: address, RSSI, and the device name when present. Pair it with the [Advertise](../Advertise/) example on a second board, or just observe nearby BLE devices.
+Runs a continuous active scan and prints every advertisement it receives: address, RSSI, and the device name when present. A minimal central example; pair it with the [Advertise](../Advertise/) example on a second board, or just observe nearby BLE devices.
 
 ## Hardware
 
-- 1 × ESP32-S3 (or another board supported by EspBle)
+- 1 × ESP32-S3 running this sketch (central)
+- Optional peer — the [Advertise](../Advertise/) example on a second board, or any nearby BLE device
 
 ## What it does
 
 - Starts an active scan with no duration limit (`durationSeconds = 0`)
-- Delivers each scan result as a value-type copy from the `ble.update()` context — the callback does not run on the BLE stack task
-- Prints address, RSSI, and name for every result
+- Delivers each result as a value-type copy from the `ble.update()` context — the callback never runs on the BLE stack task
+- Prints address, RSSI, and name (when present) for every result
 
 ## Key APIs
 

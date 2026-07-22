@@ -4,7 +4,7 @@
 
 **Record Access Control Point（RACP）**手続きを持つ標準Glucose Service（0x1808）のPeripheral。Clientが「Report Stored Records（all）」を書き込むと、Glucose Measurementを1件Notifyし、続けてRACP応答をIndicateします。
 
-## ハードウェア
+## 必要なもの
 
 - 1 × ESP32-S3（このスケッチ。Peripheral）
 - 1 × Central: [GlucoseClient](../GlucoseClient/) example、または Glucose collector

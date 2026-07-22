@@ -4,7 +4,7 @@
 
 標準Pulse Oximeter Service / PLX（0x1822）のPeripheral。PLX Spot-Check Measurement（0x2A5E）をSpO2とpulse rateのIEEE-11073 16-bit SFLOATで**Indicate**し、PLX Features（0x2A60）はReadできます。
 
-## ハードウェア
+## 必要なもの
 
 - 1 × ESP32-S3（このスケッチ。Peripheral）
 - 1 × Central: [PulseOximeterClient](../PulseOximeterClient/) example、または PLX collector

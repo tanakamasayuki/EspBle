@@ -1,7 +1,5 @@
 # 開発状況
 
-最終更新: 2026-07-21
-
 この文書は現在の実装状況、既知の制限、1.0.0までの残作業だけを追跡します。対応機能の一覧は[FEATURE_MATRIX.ja.md](FEATURE_MATRIX.ja.md)、確定仕様は[REQUIREMENTS.ja.md](REQUIREMENTS.ja.md)・[DECISIONS.ja.md](DECISIONS.ja.md)・各仕様書を正とします。
 
 ## 現在地
@@ -51,12 +49,7 @@ BLE MIDIはbackend非依存のpacket codec（timestamp・running status・複数
 5. metadata、CHANGELOG、example、仕様書を最終APIと照合する。
 6. `library.properties`を含むrelease metadataを1.0.0へ更新し、release workflowを実行する。
 
-初回リリース範囲は固定せず、安全に実装・検証できる機能は1.0.0へ含めます。未実装候補は約束ではなく、採用時に仕様、example、unit/build/Peer testを同時に追加します。
-
-## 次の機能候補
-
-1. Privacy（own address type: Public / Random static / RPA）
-2. Extended / Periodic Advertising — 同梱NimBLE backendが`CONFIG_BT_NIMBLE_EXT_ADV`無効でコンパイルされており、Arduinoライブラリ側からは有効化できないため現構成では対応不可
+初回リリース範囲は固定せず、安全に実装・検証できる機能は1.0.0へ含めます。未実装候補は約束ではなく、採用時に仕様、example、unit/build/Peer testを同時に追加します。今後の機能候補は[DECISIONS.ja.md](DECISIONS.ja.md)の「優先順位候補」を正とします。
 
 ## 更新ルール
 

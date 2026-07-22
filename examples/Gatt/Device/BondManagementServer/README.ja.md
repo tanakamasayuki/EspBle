@@ -4,7 +4,7 @@
 
 標準Bond Management Service（0x181E）のPeripheral。Bond Management Feature（0x2AA5）は対応操作のread可能なuint24 bit field、Bond Management Control Point（0x2AA4）はwritableでop codeを`onWritten`で受け取ります。
 
-## ハードウェア
+## 必要なもの
 
 - 1 × ESP32-S3（このスケッチ。Peripheral）
 - 1 × Central: [BondManagementClient](../BondManagementClient/) example、または Bond Management client

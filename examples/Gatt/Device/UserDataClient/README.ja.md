@@ -4,7 +4,7 @@
 
 User Data Service（0x181C）へ接続し、Database Change IncrementのNotificationを購読、AgeをRead、新しいFirst NameとAgeをWriteします。書き込むたびにincrementが増え、Notificationとして届きます。
 
-## ハードウェア
+## 必要なもの
 
 - 1 × ESP32-S3（このスケッチ。Central）
 - 1 × User Data Peripheral: [UserDataServer](../UserDataServer/) example

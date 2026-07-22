@@ -6,12 +6,12 @@ Read/Write可能なCharacteristicとDescriptorを1つずつ持つ独自GATT Serv
 
 2台目のボードで[Gatt/Client](../Client/) example（同じUUIDを対象にしています）を動かすか、nRF Connectなどの汎用GATT Clientアプリから操作できます。
 
-## ハードウェア
+## 必要なもの
 
 - このsketchを動かすESP32-S3 × 1（Peripheral / GATT Server）
 - GATT Client × 1（Gatt/Clientを動かす2台目のボード、またはスマートフォンアプリ）
 
-## 動作内容
+## 動作
 
 - `begin()`前にService `10da4dd0-…`、Characteristic `10da4dd1-…`、Descriptor `10da4dd2-…`を登録します
 - 初期値を`ready`に設定します

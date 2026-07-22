@@ -2,24 +2,31 @@
 
 > English: [README.md](README.md)
 
-標準Location and Navigation Service（0x1819）のPeripheral。Location and Speed（0x2A67）をuint16 flags＋flagsで選ばれるフィールド付きで**Notify**し、LN Feature（0x2A6A）はuint32としてReadできます。
+標準Location and Navigation Service（0x1819）のPeripheralです。Location and Speed（0x2A67）をuint16 flagsフィールド＋flagsで選ばれるデータフィールドでNotifyし、LN Feature（0x2A6A）はuint32としてReadできます。
 
-## ハードウェア
+## 必要なもの
 
-- 1 × ESP32-S3（このスケッチ。Peripheral）
-- 1 × Central: [LocationNavigationClient](../LocationNavigationClient/) example、または LN collector
+- このsketchを動かすESP32-S3 × 1（Peripheral）
+- Central × 1: [LocationNavigationClient](../LocationNavigationClient/) example、または任意のLN collector
 
 ## 動作
 
-- `begin()`の前にLocation and Navigation Serviceを登録し、0x1819をAdvertise
-- 1秒ごとに 5 m/s付近で変化する速度と固定の東京の位置（flags 0x0005: 速度＋位置）をNotify
-- フィールドはflag bit順に並ぶ: Instantaneous Speed（uint16、1/100 m/s）に続いてLocationの緯度・経度（sint32、1e-7 度）
+- Location and Navigation serviceを登録し、0x1819をadvertise
+- LN Feature = 0x00000005（Instantaneous Speed + Location をサポート）をReadable値として公開
+- 1秒ごとに、5 m/s付近で変化する速度と固定の東京の位置を12byteのLocation and Speed measurement（flags 0x0005）としてNotify
 
 ## 主なAPI
 
 - `ble.gattServer().addCharacteristic(..., { .notifiable = true })` — Location and Speed
-- `ble.gattServer().notify(...)` — 確認応答なしNotification
+- `ble.gattServer().setValue(...)` — Readable な LN Feature を設定
+- `ble.gattServer().notify(...)` — 各measurementを購読者へ送信
+
+## メモ
+
+- フィールドはflag bit順に並びます: Instantaneous Speed（uint16、1/100 m/s）に続いてLocationの緯度・経度（sint32、1e-7 度）。
 
 ## 期待されるSerial出力
 
-Server側は出力しません。値はClientで確認します。
+```
+The server is silent; observe values on the client.
+```

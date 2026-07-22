@@ -2,71 +2,95 @@
 
 ## Unreleased
 
-- Add connection-scoped GATT database enumeration, descriptor server definitions and client read/write operations, descriptor write events, per-operation timeouts, and real-device Write Without Response coverage.
-- Add `EspBleAddressType` across scan, connection, and bond values plus direct asynchronous connection by address and type.
-- Add standalone Battery, Device Information, Current Time, Heart Rate, Environmental Sensing, and Nordic UART Service compatible Server/Client examples, plus real-device coverage of their standard wire formats and notifications.
-- Add BLE MIDI: an Arduino-independent packet codec (`EspBleMidi.h`: timestamp header/low-byte encoding, MIDI running status, System Real-Time interleaving, and multi-packet System Exclusive) with host unit tests, and `EspBleMidiDevice` / `EspBleMidiHost` profile helpers (`EspBleMidiProfile.h`) that follow the EspUsbDevice/EspUsbHost MIDI API. Includes Device/Host examples and two peer tests that validate the wire format and running-status decoding against a bundled-NimBLE peer.
-- Add the standard Health Thermometer Service: Temperature Type reads and IEEE-11073 32-bit FLOAT Temperature Measurement indications, backed by a reusable medical FLOAT/SFLOAT codec (`EspBleMedicalFloat.h`) with host unit tests. Includes Server/Client examples and a peer test.
-- Add the standard Blood Pressure Service: Blood Pressure Feature reads and IEEE-11073 16-bit SFLOAT systolic/diastolic/mean Measurement indications (reusing the medical-float codec). Includes Server/Client examples and a peer test.
-- Add the standard Weight Scale Service: Weight Scale Feature reads and Weight Measurement indications carrying a uint16 weight at 0.005 kg resolution. Includes Server/Client examples and a peer test.
-- Add the standard Body Composition Service: Body Composition Feature reads and Body Composition Measurement indications carrying uint16 flags, the mandatory Body Fat Percentage (0.1 %/LSB), and the optional Weight field. Includes Server/Client examples and a peer test.
-- Add the standard Location and Navigation Service: LN Feature reads and flags-driven Location and Speed notifications carrying Instantaneous Speed (1/100 m/s) and a sint32 latitude/longitude (1e-7 deg). Includes Server/Client examples and a peer test.
-- Add the standard User Data Service: read/write Age and First Name characteristics plus a read/write/notify Database Change Increment. Client writes are received in the server's `onWritten` (loop context), which bumps and notifies the increment. Exercises the client-write → onWritten → notify path end-to-end. Includes Server/Client examples and a peer test.
-- Add the standard Alert Notification Service: a readable Supported New Alert Category bitmask, a notifiable New Alert (Category ID + count + text), and a writable Alert Notification Control Point. A "Notify New Alert Immediately" command triggers a New Alert notification from the server's `onWritten`. Exercises the Control Point write → notify path. Includes Server/Client examples and a peer test.
-- Add the standard Immediate Alert Service (the Find Me profile target role): Alert Level (0x2A06) as a Write Without Response uint8, received in the server's `onWritten`. Exercises the write-without-response-only standard-service path. Includes Server/Client examples and a peer test.
-- Add the standard Phone Alert Status Service: read/notify Alert Status and Ringer Setting plus a Write Without Response Ringer Control Point. Set Silent Mode / Cancel Silent Mode commands change the server-side Ringer Setting and notify it. Exercises the Control Point write → server state change → notify path. Includes Server/Client examples and a peer test.
-- Add the Proximity profile (Link Loss Service 0x1803 + Tx Power Service 0x1804 on one server): a read/write Alert Level and a read-only signed-int8 Tx Power Level. Exercises hosting two standard services on one server plus signed-int8 reads and read/write/read-back. Includes Server/Client examples and a peer test.
-- Add the standard Reference Time Update Service: a Write Without Response Time Update Control Point and a readable 2-byte Time Update State (Current State + Result). Get/Cancel Reference Update commands transition the read-only state, verified by re-reading. Exercises the Control Point write → read-only state transition path. Includes Server/Client examples and a peer test.
-- Add the standard Bond Management Service: a readable Bond Management Feature bit field (uint24) and a writable Bond Management Control Point. The server example deletes the requesting peer's bond (via `bondCount()` / `bond()` / `deleteBond()`) after it disconnects on op code 0x03. Includes Server/Client examples and a peer test validating the feature read + control-point op code choreography.
-- Add `EspBleConnection::disconnectReason`, the backend/HCI reason code for a disconnection, surfaced in the `onDisconnected()` callback (0 in other events). Captured via a global NimBLE GAP event listener so it is available on both the server and client disconnection paths. Includes a peer test asserting the initiator and remote sides report distinct non-zero reason codes.
-- Add connection parameter support: `EspBleConnection` now exposes the current `connectionInterval`, `peripheralLatency`, and `supervisionTimeout` (populated at connect and refreshed on updates), `updateConnectionParameters()` requests an update from either role, and `onConnectionParametersUpdated()` delivers the negotiated result. The update is captured via the same global GAP event listener. Includes a peer test where the central requests interval 80 and both peers report it.
-- Add LE PHY support: `EspBleConnection` now exposes the current `txPhy`/`rxPhy` (1M/2M/Coded), `updatePhy()` requests a preferred PHY (with `Phy1MMask`/`Phy2MMask`/`PhyCodedMask`), and `onPhyUpdated()` delivers the negotiated result, captured via the same global GAP event listener. Includes a peer test where the central requests the 2M PHY and both peers report it (2M/Coded depend on radio support).
-- Track the ATT MTU exchange for both roles via the global GAP event listener (`BLE_GAP_EVENT_MTU`) instead of only the peripheral's server callback and the central's connect-time snapshot. A central MTU exchange that completes after `onConnected()` is now delivered as an `onMtuChanged()` event. The value dedup keeps a single event per exchange.
-- Add `notifyServicesChanged(startHandle, endHandle)` to send a GATT Service Changed indication (Generic Attribute service 0x1801, characteristic 0x2A05, provided by the backend) telling subscribed clients to rediscover the given handle range. A client can subscribe to 0x1801/0x2A05 and decode the range from `onNotification`. Includes a peer test.
-- Add beacon / broadcaster advertising: `EspBleAdvertising::setConnectable(false)` advertises in a non-connectable mode (pair with `setScanResponseEnabled(false)` for non-connectable non-scannable), and `setInterval(minMs, maxMs)` sets the advertising interval (20..10240 ms). A scanner sees such advertisements with `connectable`/`scannable` false. Includes a Gap/Beacon example and a peer test that captures the beacon's payload and asserts its non-connectable, non-scannable type.
-- Add handle-based GATT client operations: `readCharacteristic()`, `writeCharacteristic()`, `subscribe()`, and `unsubscribe()` overloads that take a characteristic attribute handle instead of a service/characteristic UUID pair. This targets a specific characteristic when several share a UUID (e.g. the multiple Report characteristics of a HID service, all `0x2A4D`). `EspBleGattResult` and `EspBleGattNotification` now carry the `handle` of the characteristic. Service discovery now enumerates characteristics by handle, so same-UUID characteristics no longer collapse into one entry in the discovered database. The `hid_custom` peer test now subscribes to the input report and writes the output report by handle.
-- Add Custom HID with an arbitrary Report Descriptor via `ble.hidCustom()`: `setReportMap()` supplies the raw HID Report Map and `addInputReport()` / `addOutputReport()` / `addFeatureReport()` declare each report (id + byte size). Custom reports are composed into the same HID service as the fixed profiles, so a custom report can coexist with `hidKeyboard()`/`hidMouse()`/etc.; `sendInput(reportId, ...)` notifies inputs and `onOutputReport()` / `onFeatureReport()` deliver host writes with the report id. Report IDs must be unique and avoid an enabled profile's reserved id (1..6), up to 4 custom reports per device. Includes CustomDevice/CustomClient examples and a peer test that reads the arbitrary Report Map and decodes a custom input report over a generic GATT client.
-- Add HID over GATT Boot Protocol support for the keyboard profile, opt-in via `EspBleHidKeyboardConfig::bootProtocol` (default off): a Protocol Mode characteristic (0x2A4E) plus dedicated Boot Keyboard Input (0x2A22) and Output (0x2A32) Reports. When enabled and the Host switches to Boot Protocol Mode, the keyboard's input is automatically routed to the 8-byte Boot Keyboard Input Report (an NKRO bitmap is down-converted to keycodes), Boot Keyboard Output LED writes arrive through the existing `onOutputReport()`, and `onProtocolMode()` / `protocolMode()` expose the current mode (reset to Report Protocol Mode on each new connection). It is off by default because most HOGP hosts use Report Protocol Mode and the extra characteristics enlarge every host's discovery. Includes a peer test driven by a generic GATT client. Mouse Boot Report (0x2A33) is not yet supported.
-- Auto-queue Central GATT client operations: `readCharacteristic()`, `writeCharacteristic()`, `subscribe()`, `unsubscribe()`, and `discoverServices()` no longer fail with "a GATT operation is already in progress" when one is in flight — they are queued and run in order (a single ATT transaction still runs at a time, shared with HID Host discovery). Callers can issue operations back-to-back without serializing them by hand; each completes via its normal callback.
-- Add the standard Fitness Machine Service (FTMS, 0x1826) used by smart trainers and indoor bikes: Fitness Machine Feature (0x2ACC) reads and flags-driven Indoor Bike Data (0x2AD2) notifications carrying instantaneous speed (0.01 km/h), cadence (0.5 /min), and signed power (W), plus the interactive Fitness Machine Control Point (0x2AD9, write + indicate) — Request Control and Set Target Power are answered by a Control Point response indication — and Fitness Machine Status (0x2ADA) "Target Power Changed" notifications. Includes Server/Client examples (the data path) and a peer test covering the data path and the Control Point Set Target Power response plus the status notification.
-- Add advertising/scan Service Data: `EspBleAdvertising::setServiceData(uuid, data, length)` attaches a Service Data block (AD type 0x16 for a 16-bit UUID), and `EspBleScanResult` now exposes `serviceData` / `serviceDataUuid` / `hasServiceData()` to read one back. Includes a peer test that broadcasts and reads a service-data block.
-- Add iBeacon support: a backend-independent `EspBleIBeacon.h` codec (`EspBleIBeaconData`, `espBleEncodeIBeacon` / `espBleDecodeIBeacon` / `espBleIsIBeacon`) that builds and parses the Apple iBeacon manufacturer-data layout (company ID `0x004C`, proximity UUID, big-endian major/minor, measured power). Broadcast it with the existing non-connectable advertising (`setManufacturerData`), and decode it from `EspBleScanResult::manufacturerData`. Includes host unit tests, a `Gap/IBeacon` example, and a peer test that broadcasts and decodes a beacon.
-- Add address privacy via `EspBleConfig::ownAddressType` (`EspBleOwnAddressType::Public` (default) / `RandomStatic` / `ResolvablePrivate`): the device can present a random static address, or a controller-rotated Resolvable Private Address (RPA), instead of its factory public address. Applied at `begin()`. RPA rotates on the controller's timer (`CONFIG_BT_NIMBLE_RPA_TIMEOUT`, 900 s on the bundled build) and is only useful with security/bonding, since a peer resolves it via the IRK exchanged at bonding. Includes a peer test that confirms the peripheral advertises with a random static address. (Extended/Periodic Advertising remains unavailable: the bundled NimBLE is built with `CONFIG_BT_NIMBLE_EXT_ADV` off.)
-- Make the discovered GATT database per connection: each Central connection keeps its own service/characteristic/descriptor snapshot, so a discovery on one connection no longer evicts another's, and `discoveredService()` / `discoveredCharacteristic()` / `discoveredDescriptor()` resolve against the queried connection. Snapshots are allocated on first discovery and freed when the connection drops.
-- Add persistent client subscriptions (`EspBleConfig::persistentSubscriptions`, default on): a successful `subscribe()` is remembered per peer address and restored automatically the next time this central connects to the same peer, so notifications resume across a reconnect without the application re-subscribing (a successful `unsubscribe()` forgets it). Relies on a stable peer address; set false to manage subscriptions manually. Includes a peer test that drops the link and confirms the subscription is restored unprompted on reconnect.
-- Add automatic reconnection for Central connections via `setAutoReconnect(bool)` (default off) and `autoReconnect()`: every peer this central connects to is remembered, and if such a connection drops unexpectedly the library reconnects to the same peer address on its own (retried periodically) — combined with the default persistent subscriptions, notifications resume with no application code. A connection closed by `disconnect()` is intentional and is not reconnected; disabling forgets all pending reconnects. Multiple simultaneous Central connections are supported, each with its own discovery cache and subscriptions; the concurrent-connection count is capped by the bundled NimBLE controller (`CONFIG_BT_NIMBLE_MAX_CONNECTIONS`, 3 on the precompiled esp32s3 build). Includes a `Gatt/AutoReconnectClient` example and a 3-board manual test (`tests/manual/multi_connection`) that holds two peripheral connections at once, drops one, and confirms it auto-reconnects and restores its subscription while the other stays connected.
-- Add LE Secure Connections Numeric Comparison: a new `EspBleSecurityIoCapability::DisplayYesNo`, `onNumericComparison()` delivering the 6-digit value both devices display, and `confirmNumericComparison(accept)` to confirm the match (the backend's synchronous confirm request blocks, yielding, until confirmed or a 30 s timeout). Includes a peer test where both boards display the same value and confirm.
-- Add interactive runtime Passkey Entry: MITM now works with DisplayOnly or KeyboardOnly without a static passkey. A DisplayOnly device generates a random passkey each pairing (surfaced via `onPasskeyDisplayed`), and a KeyboardOnly device supplies the peer's passkey at pairing time with the new `providePasskey()` (the backend's synchronous passkey request blocks, yielding, until it arrives or a 30 s timeout). A configured static passkey still returns immediately. Includes a peer test with a dynamic passkey relayed between two boards.
-- Add the standard Continuous Glucose Monitoring Service with an End-to-End CRC: an Arduino-independent CGM E2E-CRC codec (`EspBleCgmCrc.h`, CRC-16/MCRF4XX) with host unit tests (documented check value 0x6F91), plus an E2E-CRC-protected CGM Feature read and CGM Measurement notifications carrying an SFLOAT glucose concentration and time offset. Both boards produce and verify the CRC with the shared codec. Includes Server/Client examples and a peer test.
-- Add the standard Cycling Speed and Cadence Service: CSC Feature and Sensor Location reads and flags-driven CSC Measurement notifications with cumulative wheel/crank revolutions and event times. Includes Server/Client examples and a peer test.
-- Add the standard Running Speed and Cadence Service: RSC Feature and Sensor Location reads and flags-driven RSC Measurement notifications with instantaneous speed/cadence plus optional stride length and total distance. Includes Server/Client examples and a peer test.
-- Add the standard Pulse Oximeter Service (PLX): PLX Features reads and IEEE-11073 16-bit SFLOAT SpO2/pulse-rate Spot-Check Measurement indications (reusing the medical-float codec). Includes Server/Client examples and a peer test.
-- Add the standard Cycling Power Service: Cycling Power Feature and Sensor Location reads and Cycling Power Measurement notifications with 16-bit flags and a signed 16-bit instantaneous power. Includes Server/Client examples and a peer test.
-- Add the standard Glucose Service with its Record Access Control Point (RACP) procedure: a client RACP write triggers a Glucose Measurement notification (sequence number, base time, SFLOAT concentration) followed by an indicated RACP response, sequenced from send-completion events. Exercises the write → notify → indicate choreography end-to-end. Includes Server/Client examples and a peer test.
-- Add multi-packet SysEx sending on both MIDI sides: `sendSysEx()` splits a framed message across BLE packets (`EspBleMidiSysExEncoder`) and transmits them one at a time from the send-completion event (`onSent` / `onCharacteristicWritten`), since BLE MIDI sends are single-in-flight. Both peer tests reassemble a 300-byte SysEx with an independent reassembler.
-- Redesign HID around the EspUsbDevice/EspUsbHost API shape: `hidKeyboard()` / `hidMouse()` / `hidConsumerControl()` / `hidSystemControl()` / `hidGamepad()` / `hidVendor()` compose one HOGP service, while `hidHost()` discovers and dispatches all supported report types, including bidirectional Vendor Input / Output / Feature reports.
-- Add fixed cross-library Report IDs, keyboard layout-aware sending, configurable mouse buttons, mouse/consumer/system/gamepad helpers, per-report CCCD routing, descriptor-driven Report Map/input parsing, wrap-safe shared-ownership Host listeners, disconnect state reset, composite peer coverage, and new HID examples.
-- Add EspUsbDevice-compatible 29-byte NKRO Keyboard reports, `enableNkro()` / `releaseUsage()`, Host bitmap parsing, and real-device coverage for eight simultaneous keys, high usages, individual release, and LED output.
-- Establish the initial project, specification, and test structure.
-- Add the first EspBle stack, legacy advertising, scanning, deferred scan-result callback, examples, and two-board peer test.
-- Add central/peripheral connections with library connection IDs, disconnect, connection snapshots, and MTU exchange with `onMtuChanged()`.
-- Add generic GATT server/client: known-UUID discovery, read, write with response, notify/indicate, subscription, and CCCD events.
-- Add security: Just Works and static-passkey pairing with LE Secure Connections, bonding, encrypted/authenticated characteristic permissions, and bond management.
-- Add the HID Keyboard Device profile: fixed 6KRO report protocol keyboard with HID/Device Information/Battery services, LED output reports, and battery level updates.
-- Add the HID Keyboard Host profile: HID discovery, input report subscription, 256-bit usage snapshots, `onKeyboard()` press/release events, 19 EspUsbHost-compatible keyboard layouts, LED output writes, and battery reads.
-- Add fixed-capacity event listeners (`add*Listener()` / `removeListener()`) to the HID Keyboard Host for ESP32KeyBridge adapter coexistence.
-- Harden the connection lifecycle: lifecycle events evict droppable events instead of being lost, retired `BLEClient` objects are reaped without leaks or double frees, `end()` cancels in-flight connects and flushes stale scan results, and a second `begin()` with a different config fails instead of silently keeping the old one. Drop counters are exposed via `droppedEventCount()`.
-- Replace byte-exact report-map matching with a minimal HID report descriptor parser: order-independent 6KRO keyboard detection, report-ID based input/output selection, and boot keyboards without report IDs. Rollover (phantom) reports are ignored and invalid-length input reports are counted via `invalidInputReportCount()`.
-- Enforce HOGP security on the HID Keyboard Device: encrypted permissions on HID service attributes when security is enabled, and input reports are only notified to subscribed (and encrypted, when required) connections.
-- Merge advertised service UUIDs into one Complete List AD structure per UUID size (CSS Part A 1.1).
-- Switch keyboard layout conversion to EspUsbHost-compatible Unicode 4-plane tables with AltGr layers and character-pair Caps Lock handling; add a `unicode` field to keyboard events and fix the nl-NL and pt-BR tables.
-- Make `setKeyboardLeds()` a non-blocking fire-and-forget write using Write Without Response.
-- Add host unit tests (keymap conversion, report-map parser) and peer test suites for lifecycle stress, HID robustness, HID security, boot keyboards, and raw advertising payloads.
-- Enforce the `connect()` timeout from `update()` with `ble_gap_conn_cancel()`: the bundled NimBLE `BLEClient::connect()` ignores its timeout argument and always waits its internal 30-second default.
-- Add peer tests for asynchronous connect-timeout failure, exclusive central GATT operations, and silent peer loss detected via supervision timeout.
-- Add a GitHub Actions workflow that compiles every example with the esp32s3 profile.
-- Add bilingual (English/Japanese) READMEs for every example plus an examples index, expand the top-level and test READMEs with cross-links, and add `keywords.txt` for Arduino IDE syntax highlighting.
-- Add a BLE primer (Classic vs BLE, no SPP, GAP/GATT/HID/security concepts) to the examples index.
-- Add diagnostic examples: `Info/ScanDump` (full advertisement dump) and `Info/ConnectionInspector` (interactive connection/security/bond/counter inspector).
-- Add examples for acknowledged delivery (`Gatt/IndicateServer` / `Gatt/IndicateClient`) and the passkey-input side of MITM pairing (`Security/StaticPasskeyClient`).
-- Add `tools/version_matrix.py` and the manual `core-matrix.yml` / `board-matrix.yml` workflows that build the examples across arduino-esp32 core versions and boards in CI, generating `docs/COMPATIBILITY.<version>.md` / `docs/BOARDS.<version>.md`. Running these locally is discouraged because a sweep rewrites every sketch.yaml.
+Initial feature set for the first release. Everything below is implemented and
+verified with host unit tests and two-board (ESP32-S3) peer tests.
+
+### Core stack & lifecycle
+
+- Central / Peripheral and GATT client / server under one role-neutral `EspBle`
+  owner, with library connection IDs, value-type connection snapshots, and
+  explicit event delivery from `ble.update()` on the caller's loop task.
+- Resilient lifecycle: retired `BLEClient` objects are reaped without leaks or
+  double frees, event-queue overflow is bounded by drop counters
+  (`droppedEventCount()`) with lifecycle/completion events kept over
+  notifications, a second `begin()` with a different config fails instead of
+  silently keeping the old one, and `end()` cancels in-flight connects and
+  flushes stale scan results.
+
+### GAP — advertising, scanning, connections
+
+- Legacy advertising (name / service UUID / manufacturer data), connectable and
+  non-connectable (optionally non-scannable) beacon/broadcaster modes, and
+  advertising-interval control.
+- Active / passive scanning with value-type scan results; advertising/scan
+  Service Data (AD 0x16); Apple iBeacon build/parse via a backend-independent
+  codec (`EspBleIBeacon.h`).
+- Address privacy via `EspBleConfig::ownAddressType` (public / random static /
+  resolvable private address).
+- Connect by scan result or by address + type; multiple simultaneous Central
+  connections (capped by the bundled NimBLE controller — 3 on esp32s3) with
+  auto-reconnect (`setAutoReconnect`).
+- Connection-parameter and LE PHY (2M) updates, and MTU exchange tracked for
+  both roles via the global GAP event listener (`onMtuChanged()`).
+- `EspBleConnection::disconnectReason` (backend/HCI reason code) on
+  `onDisconnected()`.
+
+### GATT
+
+- Generic server: arbitrary services / characteristics / descriptors,
+  encrypted/authenticated permissions, binary-safe values, and descriptor write
+  events.
+- Generic client: connection-scoped database enumeration and known-UUID
+  discovery, read and write (with / without response), descriptor read/write,
+  per-operation timeouts, handle-based overloads to target same-UUID
+  characteristics, and automatic operation queuing (no "operation already in
+  progress" failures).
+- Notify / indicate with subscription management; persistent subscriptions
+  restored automatically on reconnect (`EspBleConfig::persistentSubscriptions`,
+  default on); GATT Service Changed indication (`notifyServicesChanged()`).
+
+### Standard GATT services (examples + peer tests)
+
+- Common: Battery, Device Information, Current Time, Heart Rate, Environmental
+  Sensing, Nordic UART Service (NUS).
+- Health & body: Health Thermometer, Blood Pressure, Weight Scale, Body
+  Composition, Pulse Oximeter, Glucose (Record Access Control Point), Continuous
+  Glucose Monitoring (End-to-End CRC).
+- Fitness: Cycling Speed and Cadence, Running Speed and Cadence, Cycling Power,
+  Fitness Machine (FTMS, including the interactive Control Point), Location and
+  Navigation.
+- Alerts & proximity: Alert Notification, Immediate Alert (Find Me target),
+  Phone Alert Status, Proximity (Link Loss + Tx Power).
+- Management: Reference Time Update, User Data, Bond Management.
+- Reusable backend-independent codecs with host unit tests: IEEE-11073 medical
+  FLOAT / SFLOAT (`EspBleMedicalFloat.h`) and CGM E2E-CRC (`EspBleCgmCrc.h`).
+
+### HID over GATT (HOGP)
+
+- Device: composable keyboard (6KRO / NKRO), mouse, consumer control, system
+  control, gamepad, and vendor (input / output / feature) profiles in one HID
+  service; arbitrary Report Descriptor via `ble.hidCustom()`; opt-in keyboard
+  Boot Protocol.
+- Host: one `hidHost()` discovers and dispatches every supported report type,
+  with layout-aware keyboard decoding to Unicode / ASCII (19 layouts) and
+  wrap-safe shared-ownership listeners.
+
+### BLE MIDI
+
+- Backend-independent packet codec (`EspBleMidi.h`: timestamps, running status,
+  System Real-Time interleaving, multi-packet System Exclusive) with host unit
+  tests, plus `EspBleMidiDevice` / `EspBleMidiHost` helpers that mirror the
+  EspUsbDevice / EspUsbHost MIDI API.
+
+### Security
+
+- Just Works and passkey pairing (static passkey plus interactive runtime entry
+  and Numeric Comparison) over LE Secure Connections, bonding, and
+  encrypted / authenticated characteristic permissions.
+
+### Tooling & docs
+
+- A GitHub Actions workflow that compiles every example for the esp32s3 profile,
+  manual core-/board-matrix workflows, bilingual (English / Japanese) example
+  READMEs with a categorized index, host unit tests, and two-board peer test
+  suites.

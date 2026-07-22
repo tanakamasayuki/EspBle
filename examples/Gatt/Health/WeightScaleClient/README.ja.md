@@ -4,7 +4,7 @@
 
 Weight Scale Service（0x181D）へ接続し、Weight Scale FeatureをRead、Weight MeasurementのIndicationを購読して、0.005 kg分解能のuint16体重をデコードします。
 
-## ハードウェア
+## 必要なもの
 
 - 1 × ESP32-S3（このスケッチ。Central）
 - 1 × Weight Scale Peripheral: [WeightScaleServer](../WeightScaleServer/) example または市販の体重計
