@@ -4,12 +4,12 @@
 
 Fitness Machine Service（0x1826）へ接続し、Fitness Machine Feature（0x2ACC）をRead、Indoor Bike Data（0x2AD2）を購読して、flagsに従うinstantaneous speed・cadence・powerをデコードします。
 
-## ハードウェア
+## 必要なもの
 
 - このsketchを動かすESP32-S3 × 1（Central / GATT Client）
 - Peripheral × 1: [FitnessMachineServer](../FitnessMachineServer/) example
 
-## 動作内容
+## 動作
 
 - Fitness Machine serviceのUUIDをscanして接続
 - 8byteのFitness Machine FeatureをReadし、Indoor Bike Dataを購読
