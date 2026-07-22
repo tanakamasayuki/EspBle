@@ -66,6 +66,7 @@ pytest-embedded-cliの既存規約に従います。
 | HID over GATT security | | ✅ | ✅ `hid_security`（未暗号化linkの拒否） | OS |
 | reconnect / peer loss | state | ✅ | ✅ Bond再接続 / `lifecycle_stress`（radio消失をsupervision timeoutで検出） / `persistent_subscribe`（再購読） | `manual/multi_connection`（auto-reconnect） |
 | 複数同時接続 / 接続分離 | | | | `manual/multi_connection`（2 Peripheral同時、notify routing、一方切断が他方に非影響） |
+| Address privacy（own address type） | | ✅ | ✅ `address_privacy`（random static advertising） | RPA回転（900秒周期のため自動試験対象外）はbonded peer解決を手動確認 |
 | HID Keyboard Device | report codec（予定） | ✅ | ✅ `hid_keyboard_device` / `hid_robustness`（購読gate、queue満杯） | OS、市販HID Host |
 | HID NKRO Device / Host | ✅ `unit/report_map` | ✅ | ✅ `hid_keyboard_nkro`（8キー、高usage、個別release、LED） | OS、市販HID Host |
 | HID LED output | report codec（予定） | ✅ | ✅ `hid_keyboard_device` / `hid_keyboard_host`（WWR非block） | OS |
@@ -153,6 +154,7 @@ pytest-embedded-cliの既存規約に従います。
 51. ✅ `hid_custom`: 任意Report DescriptorのCustom HID＋handle指定GATT操作の検証。`ble.hidCustom()`でvendor定義descriptor（Report ID 1に2byte入力＋1byte出力）をHID Serviceへ合成（2 Reportが同一UUID 0x2A4D）。generic GATT clientがdiscover後に各Reportを個別handleへ解決し、Report Map（0x2A4B）長を確認、入力Reportをhandleで購読して2byte（差分+5・ボタン0x01）をデコード、出力Reportをhandleで書き込みdeviceが`onOutputReport()`で受信することを確認。
 52. ✅ `beacon`: non-connectable Beaconの検証。Peer側が`setConnectable(false)`＋`setScanResponseEnabled(false)`＋`setInterval(100, 150)`でmarker Service UUIDとmanufacturer dataをbroadcastし、親側Scannerがconnectable=0・scannable=0・manufacturer payload（`ffff01020304`）を捕捉することを確認。
 53. ✅ `persistent_subscribe`: persistent subscription（再接続時の自動再購読）の検証。Centralが初回接続でnotify characteristicを購読し1件受信、切断（非bondなのでPeripheral側は購読を忘れ再advertise）、Centralが再接続する。再接続では`subscribe()`を呼ばないが`EspBleConfig::persistentSubscriptions`（既定on）が購読を自動復元するため`onSubscribed`がconnect=2で自発的に発火し、Peripheralからのnotifyをcount=2で受信することを確認。
+54. ✅ `address_privacy`: address privacyの検証。Peripheralを`EspBleConfig::ownAddressType = RandomStatic`で構成しmarker Serviceをadvertiseし、Central ScannerがそのpeerをaddressType=Random（=1）かつ先頭octetの上位2bit=0b11（static random）で観測することを確認（public addressではないこと）。
 
 ## 合格条件
 

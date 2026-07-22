@@ -16,6 +16,7 @@ The public API is not stable yet: this is the trial stage ahead of the first rel
 - Generic GATT server/client: per-connection database and known-UUID discovery, characteristic/descriptor read and write, operation timeouts with auto-queueing, notify/indicate, subscriptions (persistent subscriptions, on by default, auto-restore on reconnect)
 - MTU exchange, connection snapshots, payload-limit validation
 - Security: Just Works and static-passkey pairing (LE Secure Connections), bonding, encrypted/authenticated characteristic permissions
+- Address privacy: public / random static / Resolvable Private Address (RPA) selectable via `EspBleConfig::ownAddressType`
 - Composite HID Device: 6KRO/NKRO keyboard, mouse, consumer/system control, gamepad, and Vendor Input / Output / Feature profiles in one HID / Device Information / Battery service set
 - HID Host: cross-report discovery and events for all supported types; keyboard includes 6KRO/NKRO parsing, 256-bit usage snapshots, 19 layouts, and LED output, while Vendor reports are bidirectional
 - BLE MIDI Device and Host: timestamp/running-status/SysEx packet codec with `EspBleMidiDevice` / `EspBleMidiHost` helpers following the EspUsbDevice/EspUsbHost MIDI API

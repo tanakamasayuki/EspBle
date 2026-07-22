@@ -14,6 +14,7 @@
 #include <BLESecurity.h>
 #include <BLEUtils.h>
 #include <host/ble_gap.h>
+#include <host/ble_hs_id.h>
 #include <host/ble_hs_mbuf.h>
 #include <services/gatt/ble_svc_gatt.h>
 #include <host/ble_store.h>
@@ -33,6 +34,10 @@
 namespace
 {
 constexpr size_t ScanQueueCapacity = 16;
+// Number of connection slots the library tracks. The number of *simultaneous*
+// connections is ultimately capped by the bundled NimBLE controller
+// (CONFIG_BT_NIMBLE_MAX_CONNECTIONS, 3 on the precompiled esp32s3 build); a
+// request beyond that fails at the backend even though a slot is free.
 constexpr size_t ConnectionCapacity = 4;
 constexpr size_t ConnectionEventQueueCapacity = 8;
 constexpr uint16_t HidKeyboardAppearance = 0x03c1;
@@ -6341,6 +6346,32 @@ bool EspBle::begin(const EspBleConfig &config)
     BLEDevice::deinit(false);
     setError(EspBleError::BackendFailure, "failed to set preferred MTU");
     return false;
+  }
+
+  // Address privacy: present a random static address, or a rotating Resolvable
+  // Private Address, instead of the factory public address. Both need a random
+  // static identity set first; for RPA the controller then derives the rotating
+  // addresses from it. Applied before any advertising/scanning starts.
+  if (config.ownAddressType != EspBleOwnAddressType::Public)
+  {
+    ble_addr_t randomAddress{};
+    if (ble_hs_id_gen_rnd(0, &randomAddress) != 0 ||
+        !BLEDevice::setOwnAddr(randomAddress.val))
+    {
+      BLEDevice::deinit(false);
+      setError(EspBleError::BackendFailure, "failed to set a random device address");
+      return false;
+    }
+    const uint8_t ownType =
+      config.ownAddressType == EspBleOwnAddressType::RandomStatic
+        ? BLE_OWN_ADDR_RANDOM
+        : BLE_OWN_ADDR_RPA_RANDOM_DEFAULT;
+    if (!BLEDevice::setOwnAddrType(ownType))
+    {
+      BLEDevice::deinit(false);
+      setError(EspBleError::BackendFailure, "failed to set the own address type");
+      return false;
+    }
   }
 
   if (impl_ == nullptr)

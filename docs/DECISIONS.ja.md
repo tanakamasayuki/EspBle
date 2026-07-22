@@ -157,18 +157,23 @@
 1. discovery snapshotは接続ごとに保持する。`GattDatabaseSnapshot`を`connectionId`で識別する最大`ConnectionCapacity`個の配列とし、初回discoveryで確保、切断で解放する。ある接続のdiscoveryが他接続のsnapshotを追い出さず、`discoveredService()`等は問い合わせた`connectionId`のsnapshotを参照する。容量は接続容量と一致するため能動接続は必ず空きslotを得る。
 2. persistent subscriptionは既定onとし、利用者の追加operationなしで再接続時に購読を復元する。`subscribe()`成功時にpeer address＋service UUID＋characteristic UUIDで記録し（`unsubscribe()`成功で削除）、同一peer addressへ再接続した`Connected`イベント処理時に記録済み購読を自動で再`subscribe()`する。復元はUUID指定で行う（handleは再接続ごとに変わるため）。「利用者がシンプルに使える」方針を優先し、`EspBleConfig::persistentSubscriptions=false`で手動管理へ切り替えられる。安定したpeer address（bond済みidentity、public、static random）を前提とする。
 3. 記録はaddress単位で切断をまたいで保持する（それがpersistentの意味）。registryは固定容量（16件）で、満杯時は既存記録を保持して新規のみ無視する。同一key再登録はdedupで上書きするため、自動再購読自体が重複記録を生むことはない。
-4. 複数同時接続は接続容量まで公式に対応する（接続ごとのdiscovery cache・subscription・GATT操作routingで実現）。auto-reconnectは`setAutoReconnect(bool)`（既定off）とし、connect済みCentral peerをaddressで記憶して想定外の切断時に同一addressへ自動再接続（`update()`から2秒間隔でretry）、`disconnect()`は意図的切断として再接続対象から除外、無効化で保留中の再接続を破棄する。persistent subscriptionと組み合わせるとアプリコードなしでnotifyが復旧する。3台目board前提のため`tests/manual/multi_connection/`（`peer_device2/`＝profile `s3_peer_device2`、port未設定時は自動skip）で複数同時接続・routing・auto-reconnect・購読復元を実機検証済み。
+4. 複数同時接続に公式対応する（接続ごとのdiscovery cache・subscription・GATT操作routingで実現）。同時接続数の上限は同梱NimBLE controllerの`CONFIG_BT_NIMBLE_MAX_CONNECTIONS`（precompiled esp32s3で3）で決まり、これを超える接続要求はslotが空いていてもbackendで失敗する。ライブラリの`ConnectionCapacity`（4）はslot数であり同時接続保証数ではない。auto-reconnectは`setAutoReconnect(bool)`（既定off）とし、connect済みCentral peerをaddressで記憶して想定外の切断時に同一addressへ自動再接続（`update()`から2秒間隔でretry）、`disconnect()`は意図的切断として再接続対象から除外、無効化で保留中の再接続を破棄する。persistent subscriptionと組み合わせるとアプリコードなしでnotifyが復旧する。3台目board前提のため`tests/manual/multi_connection/`（`peer_device2/`＝profile `s3_peer_device2`、port未設定時は自動skip）で複数同時接続・routing・auto-reconnect・購読復元を実機検証済み。
+
+## Privacy / Advertisingで確定（2026-07-22）
+
+1. Address privacyは`EspBleConfig::ownAddressType`（`Public`（既定） / `RandomStatic` / `ResolvablePrivate`）で選ぶ。`begin()`で`ble_hs_id_gen_rnd`（static random）→`BLEDevice::setOwnAddr`（`ble_hs_id_set_rnd`）→`BLEDevice::setOwnAddrType`の順に適用する。RandomStaticは`BLE_OWN_ADDR_RANDOM`、ResolvablePrivateは`BLE_OWN_ADDR_RPA_RANDOM_DEFAULT`（esp32s3のcontrollerがRPAを回転生成、`CONFIG_BT_NIMBLE_RPA_TIMEOUT`＝900秒）。RPAはpeerがbonding時のIRKで解決するためsecurity/bonding併用時のみ有用で、回転周期が900秒とテスト実時間に合わないため、Peerテストはrandom static advertising（addressType=Random、先頭octetの上位2bit=0b11）の検証に留める。
+2. Extended / Periodic Advertisingは対応不可とする。同梱NimBLEが`CONFIG_BT_NIMBLE_EXT_ADV`無効でビルドされており（`MYNEWT_VAL_BLE_EXT_ADV=0`）、Arduinoライブラリ側から有効化できない。ext-adv APIはbackendでコンパイル除外されている。
 
 ## 優先順位候補
 
 1. Sensor profile
-3. Extended/Periodic Advertising、PHY、Privacy
-4. Beacon / Connectionless（任意Advertisingデータ送受信、iBeacon、Eddystone）
+2. Beacon / Connectionless（任意Advertisingデータ送受信、iBeacon、Eddystone）
 
 候補は採用決定ではありません。ユースケース、実機、Peerテスト方法が揃った機能だけを正式スコープへ移します。
 
 ## 対象外
 
+- Extended / Periodic Advertising（同梱NimBLEが`CONFIG_BT_NIMBLE_EXT_ADV`無効ビルド、Arduinoライブラリから有効化不可）
 - Bluetooth Classic
 - LE Audio
 - Mesh

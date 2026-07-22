@@ -33,6 +33,22 @@ enum class EspBleSecurityIoCapability : uint8_t
   DisplayYesNo, // display + yes/no, required for Numeric Comparison
 };
 
+// Which address this device presents to peers.
+// - Public: the factory public address (default).
+// - RandomStatic: a random static address generated at begin() (a fixed random
+//   identity that hides the public address but does not rotate).
+// - ResolvablePrivate: a Resolvable Private Address (RPA) that the controller
+//   rotates periodically (CONFIG_BT_NIMBLE_RPA_TIMEOUT, 900 s on the bundled
+//   build). A bonded peer resolves it via the IRK exchanged at bonding; an
+//   unbonded observer sees only a changing random address. Requires security
+//   (bonding) to be usable across the rotation by a peer.
+enum class EspBleOwnAddressType : uint8_t
+{
+  Public = 0,
+  RandomStatic,
+  ResolvablePrivate,
+};
+
 struct EspBleSecurityConfig
 {
   bool enabled = false;
@@ -56,6 +72,10 @@ struct EspBleConfig
   // Relies on a stable peer address (a bonded/identity address, or a public or
   // static random address); set false to manage subscriptions manually.
   bool persistentSubscriptions = true;
+  // Address privacy: the address type this device presents (default Public).
+  // See EspBleOwnAddressType. RandomStatic / ResolvablePrivate are applied at
+  // begin(); ResolvablePrivate is only useful together with security/bonding.
+  EspBleOwnAddressType ownAddressType = EspBleOwnAddressType::Public;
 };
 
 struct EspBleScanConfig

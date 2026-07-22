@@ -14,10 +14,10 @@ BLE MIDIはbackend非依存のpacket codec（timestamp・running status・複数
 
 ## 検証状況
 
-- Peer test: 52 suite、63 test。接続、GATT、接続ごとdiscovery cache、persistent subscription（再接続時に自動で再購読）、Security、標準Service、複合HID、NKRO、任意Report DescriptorのCustom HID、non-connectable Beacon、BLE MIDI、Health Thermometer、Blood Pressure、Weight Scale、Body Composition、Cycling / Running Speed and Cadence、Cycling Power、Pulse Oximeter、Glucose（RACP手続き）、Location and Navigation、User Data（書き込み→onWritten→notify）、Alert Notification（Control Point→notify）、Immediate Alert（Write Without Response）、Phone Alert Status（Control Point→状態変更notify）、Proximity（Link Loss + Tx Power、2 Service同居）、Reference Time Update（Control Point→state遷移）、Bond Management（Feature Read + Control Point）、Continuous Glucose Monitoring（E2E-CRC）、切断理由コード、接続パラメータ更新、PHY更新（2M）、Service Changed、実行時passkey入力、Numeric Comparison、HID Boot Protocol切替、Custom HID Report Descriptor、non-connectable Beacon（送信間隔制御）、異常系、再接続を実機検証
+- Peer test: 53 suite、64 test。接続、GATT、接続ごとdiscovery cache、persistent subscription（再接続時に自動で再購読）、address privacy（random static address）、Security、標準Service、複合HID、NKRO、任意Report DescriptorのCustom HID、non-connectable Beacon、BLE MIDI、Health Thermometer、Blood Pressure、Weight Scale、Body Composition、Cycling / Running Speed and Cadence、Cycling Power、Pulse Oximeter、Glucose（RACP手続き）、Location and Navigation、User Data（書き込み→onWritten→notify）、Alert Notification（Control Point→notify）、Immediate Alert（Write Without Response）、Phone Alert Status（Control Point→状態変更notify）、Proximity（Link Loss + Tx Power、2 Service同居）、Reference Time Update（Control Point→state遷移）、Bond Management（Feature Read + Control Point）、Continuous Glucose Monitoring（E2E-CRC）、切断理由コード、接続パラメータ更新、PHY更新（2M）、Service Changed、実行時passkey入力、Numeric Comparison、HID Boot Protocol切替、Custom HID Report Descriptor、non-connectable Beacon（送信間隔制御）、異常系、再接続を実機検証
 - Manual test（3台目board前提、未接続時は自動skip）: `multi_connection`で複数同時接続・接続ごとのnotify routing・auto-reconnect（`setAutoReconnect`）・再接続時のpersistent subscription復元を実機検証
 - Unit test: keymap変換、HID Report Map parser、BLE MIDI codec、IEEE-11073 medical float codec、CGM E2E-CRC codec
-- Example compile: ESP32-S3向け78 example
+- Example compile: ESP32-S3向け79 example
 - ESP32KeyBridge試作adapter: raw usage、remap、modifier、切断release、LED返送、Bond再接続をPeer検証
 
 実行方法は[tests/TEST_PLAN.ja.md](../tests/TEST_PLAN.ja.md)、リリース時の確認項目は[RELEASE_CHECKLIST.ja.md](RELEASE_CHECKLIST.ja.md)を参照してください。
@@ -33,12 +33,12 @@ BLE MIDIはbackend非依存のpacket codec（timestamp・running status・複数
 - Central側GATT operationは実際のATT送受信は同時1件ですが、`readCharacteristic()`等の呼び出しは**自動でキューへ積まれ順に実行**されます（「operation already in progress」で失敗しません）。operationごとの強制cancelはありません。
 - GATT ClientのRead/Write/Subscribe/UnsubscribeはUUID指定に加えて**attribute handle指定のオーバーロード**があります。UUIDが重複するcharacteristic（例: HID Serviceの複数Report 0x2A4D）は、`discoverServices()`後に`discoveredCharacteristic()`でhandleを取得しhandleで撃ち分けます。`EspBleGattResult` / `EspBleGattNotification` は対象の`handle`を保持します。Discoveryはhandle単位で列挙するため、同一UUIDのcharacteristicも個別に列挙されます。
 - 同梱NimBLE backendには、GATT client discoveryを反復すると解放されないヒープリーク（discoverしたcharacteristic数に比例、約2.6 KB/discovery）があります。多数peerへの順次接続や再接続の長時間反復で徐々にヒープが減少します。EspBle側では回避できず（backendが接続ごとに再discoveryを強制）、詳細と回避方針は[upstream報告案](UPSTREAM_REQUEST_ARDUINO_ESP32_GATTC_DISCOVERY_LEAK.ja.md)を参照してください。Boot Protocolを既定offにしたのはこのリークを不要に増幅しないためです。
-- GATT Client Discovery snapshotは最新1接続分で、永続cacheはありません。Service Changed indicationはServer側`notifyServicesChanged()`で送出、Client側は0x1801/0x2A05を購読して受信・decodeできますが、受信時の自動再Discoveryは行いません（アプリが再discoverを判断します）。
+- GATT Client Discovery snapshotは接続ごとに保持します（接続数上限まで、切断で解放）。購読は`EspBleConfig::persistentSubscriptions`（既定on）で同一peerへの再接続時に自動復元します。Service Changed indicationはServer側`notifyServicesChanged()`で送出、Client側は0x1801/0x2A05を購読して受信・decodeできますが、受信時の自動再Discoveryは行いません（アプリが再discoverを判断します）。
 - 切断理由は`EspBleConnection::disconnectReason`、接続パラメータは`EspBleConnection`のinterval/latency/timeoutと`updateConnectionParameters()` / `onConnectionParametersUpdated()`、LE PHYは`EspBleConnection`のtx/rxPhyと`updatePhy()` / `onPhyUpdated()`、実行時passkey入力は`providePasskey()`（動的passkey表示は静的passkeyなしのDisplayOnly）、Numeric Comparisonは両側DisplayYesNo + MITMで`onNumericComparison()` / `confirmNumericComparison()`で扱えます。
 - Descriptor Write eventはbackendがconnection contextを公開しないためConnection IDを持ちません。詳細は[upstream依頼案](UPSTREAM_REQUEST_ARDUINO_ESP32_DESCRIPTOR_CONTEXT.ja.md)を参照してください。
 - MTU交換はグローバルGAPイベント（`BLE_GAP_EVENT_MTU`）で両役割とも追跡し、`onMtuChanged`へ配送します。Central側で接続確立後に完了するMTU交換も反映されます。
-- Advertisingはconnectable（既定）とnon-connectable（`setConnectable(false)`。Beacon/broadcaster）を選べ、`setScanResponseEnabled(false)`でnon-scannable、`setInterval(minMs, maxMs)`で送信間隔（20〜10240 ms、non-connectableは100 ms以上）を制御できます。Extended / Periodic Advertising と Privacy（RPA）は未対応です。
-- 同時複数接続は接続単位APIを維持していますが、自動試験と公開動作保証の対象外です。
+- Advertisingはconnectable（既定）とnon-connectable（`setConnectable(false)`。Beacon/broadcaster）を選べ、`setScanResponseEnabled(false)`でnon-scannable、`setInterval(minMs, maxMs)`で送信間隔（20〜10240 ms、non-connectableは100 ms以上）を制御できます。Address privacyは`EspBleConfig::ownAddressType`（`Public`（既定） / `RandomStatic` / `ResolvablePrivate`）で選べます。RandomStaticはpublic addressを隠す固定random static address、ResolvablePrivateはcontrollerが周期回転するRPA（`CONFIG_BT_NIMBLE_RPA_TIMEOUT`＝900秒）で、RPAはpeerがbonding時のIRKで解決するためsecurity/bonding併用時のみ有用です。Extended / Periodic Advertisingは同梱NimBLEが`CONFIG_BT_NIMBLE_EXT_ADV`無効でビルドされているため現構成では対応不可です。
+- 同時複数接続に対応します（接続ごとのcache・購読・GATT routingで分離）。同時接続数の上限は同梱NimBLE controller（`CONFIG_BT_NIMBLE_MAX_CONNECTIONS`、esp32s3で3）で決まります。auto-reconnect（`setAutoReconnect`、既定off）と併せて3台manual test `multi_connection`で検証済みです。
 - 自動実機検証はESP32-S3中心です。市販機器およびAndroid / Linux / Windows / macOSとの相互運用確認は未完了です。
 - Bluedroid backend、Bluetooth Classic、外部NimBLE-Arduinoは対象外です。
 
@@ -55,7 +55,8 @@ BLE MIDIはbackend非依存のpacket codec（timestamp・running status・複数
 
 ## 次の機能候補
 
-1. Extended / Periodic Advertising、Privacy
+1. Privacy（own address type: Public / Random static / RPA）
+2. Extended / Periodic Advertising — 同梱NimBLE backendが`CONFIG_BT_NIMBLE_EXT_ADV`無効でコンパイルされており、Arduinoライブラリ側からは有効化できないため現構成では対応不可
 
 ## 更新ルール
 

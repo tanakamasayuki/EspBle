@@ -16,6 +16,7 @@ ESP32 Arduino向けの汎用Bluetooth Low Energyライブラリです。**Arduin
 - 汎用GATT Server / Client: 接続ごとのDatabase一覧・既知UUID Discovery、Characteristic/Descriptor Read・Write、操作timeoutと自動キュー、Notify / Indicate、購読（再接続時に自動再購読するpersistent subscription、既定on）
 - MTU交換、Connection snapshot、payload上限検証
 - Security: Just Worksと静的passkey Pairing（LE Secure Connections）、Bonding、暗号化/認証Characteristic permission
+- Address privacy: public / random static / Resolvable Private Address（RPA）を`EspBleConfig::ownAddressType`で選択
 - 複合HID Device: 6KRO/NKRO keyboard、mouse、consumer/system control、gamepad、Vendor Input / Output / Featureを1つのHID / Device Information / Battery Service群へ合成
 - HID Host: 全対応Reportを横断Discoveryして種別別eventへ配送。keyboardは6KRO/NKRO解析、256-bit usage snapshot、19 layout、LED出力、Vendorは双方向Reportに対応
 - BLE MIDI Device / Host: timestamp・running status・SysEx対応のpacket codecと、EspUsbDevice/EspUsbHostのMIDI APIに揃えた`EspBleMidiDevice` / `EspBleMidiHost` helper
