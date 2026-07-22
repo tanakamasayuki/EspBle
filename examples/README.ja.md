@@ -127,6 +127,8 @@ arduino-cli compile --profile esp32s3 examples/<path>
 | [Gatt/GlucoseClient](Gatt/GlucoseClient/) | Central | RACPレコード要求とMeasurement/応答のdecode |
 | [Gatt/CyclingPowerServer](Gatt/CyclingPowerServer/) | Peripheral | 符号付き16bit power Cycling Power MeasurementのNotify、Feature、Sensor Location |
 | [Gatt/CyclingPowerClient](Gatt/CyclingPowerClient/) | Central | Sensor location Readと符号付きpower測定値のdecode |
+| [Gatt/FitnessMachineServer](Gatt/FitnessMachineServer/) | Peripheral | Fitness Machine（FTMS）Indoor Bike DataのNotifyとFeature |
+| [Gatt/FitnessMachineClient](Gatt/FitnessMachineClient/) | Central | Feature Readとflags駆動Indoor Bike Data（speed/cadence/power）のdecode |
 | [Gatt/PulseOximeterServer](Gatt/PulseOximeterServer/) | Peripheral | SFLOAT SpO2/pulse-rate Spot-Check MeasurementのIndicateとFeatures |
 | [Gatt/PulseOximeterClient](Gatt/PulseOximeterClient/) | Central | Features ReadとSpO2/pulse-rate測定値のdecode |
 | [Gatt/NusServer](Gatt/NusServer/) | Peripheral | NUS互換RX Write / TX Notification echo |
@@ -176,6 +178,7 @@ arduino-cli compile --profile esp32s3 examples/<path>
 - Gatt/RunningSpeedCadenceServer ↔ Gatt/RunningSpeedCadenceClient
 - Gatt/GlucoseServer ↔ Gatt/GlucoseClient
 - Gatt/CyclingPowerServer ↔ Gatt/CyclingPowerClient
+- Gatt/FitnessMachineServer ↔ Gatt/FitnessMachineClient
 - Gatt/PulseOximeterServer ↔ Gatt/PulseOximeterClient
 - Gatt/NusServer ↔ Gatt/NusClient
 - Security/StaticPasskeyServer ↔ Security/StaticPasskeyClient

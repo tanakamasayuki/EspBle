@@ -85,6 +85,7 @@ pytest-embedded-cliの既存規約に従います。
 | Cycling Speed and Cadence Service | 多フィールド整数レイアウト | ✅ | ✅ `cycling_speed_cadence`（Location Read＋多フィールドMeasurement Notify/decode） | generic GATT app / 市販CSCセンサー |
 | Running Speed and Cadence Service | 混在幅整数レイアウト | ✅ | ✅ `running_speed_cadence`（Location Read＋混在幅Measurement Notify/decode） | generic GATT app / 市販RSCセンサー |
 | Cycling Power Service | 符号付き16bit + 16bit flags | ✅ | ✅ `cycling_power`（Location Read＋符号付きpower Measurement Notify/decode） | generic GATT app / 市販パワーメーター |
+| Fitness Machine Service（FTMS） | flags駆動offset walk | ✅ | ✅ `fitness_machine`（Feature Read＋Indoor Bike Data speed/cadence/power decode） | Zwift等 / 市販スマートトレーナー |
 | Pulse Oximeter Service（PLX） | SFLOAT | ✅ | ✅ `pulse_oximeter`（Features Read＋SFLOAT Spot-Check Indicate/decode） | generic GATT app / 市販パルスオキシメーター |
 | Glucose Service（RACP手続き） | SFLOAT / date_time | ✅ | ✅ `glucose`（RACP write→Measurement notify→RACP応答indicate） | generic GATT app / 市販血糖値計 |
 | Location and Navigation Service | flags駆動可変長 + sint32 | ✅ | ✅ `location_navigation`（LN Feature Read＋Location and Speed Notify/decode） | generic GATT app / 市販GPSセンサー |
@@ -159,6 +160,7 @@ pytest-embedded-cliの既存規約に従います。
 54. ✅ `address_privacy`: address privacyの検証。Peripheralを`EspBleConfig::ownAddressType = RandomStatic`で構成しmarker Serviceをadvertiseし、Central ScannerがそのpeerをaddressType=Random（=1）かつ先頭octetの上位2bit=0b11（static random）で観測することを確認（public addressではないこと）。
 55. ✅ `ibeacon`: iBeaconのbroadcast/decodeの検証。Peripheralが`EspBleIBeacon.h` codecで組んだiBeacon（UUID 0102..10、major 0x1234、minor 0xABCD、measured power -59）をnon-connectable・non-scannable manufacturer dataとしてbroadcastし、Central Scannerが`espBleDecodeIBeacon`で全フィールドをdecode（connectable=0・scannable=0）することを確認。
 56. ✅ `service_data`: Advertising Service Data（AD 0x16）の送受信の検証。Peripheralが`setServiceData("FEAB", {AB CD EF 12})`でnon-connectable・non-scannable broadcastし、Central Scannerが`EspBleScanResult::serviceData`（payload）と`serviceDataUuid`（0xFEAB）を読めることを確認。
+57. ✅ `fitness_machine`: 標準Fitness Machine Service（0x1826）の検証。ServerがFitness Machine Feature（0x2ACC、8byte＝0x00000006）をRead提供し、Indoor Bike Data（0x2AD2）をflags 0x0044（speed＋cadence＋power）でNotify。ClientがFeature Read（features=6）、購読、Indoor Bike Dataをflag順にdecodeしてspeed=3000（30.00 km/h）・cadence=90 rpm・power=250 Wを復元することを確認。
 
 ## 合格条件
 
