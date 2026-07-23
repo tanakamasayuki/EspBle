@@ -31,6 +31,7 @@ void setup()
 {
   Serial.begin(115200);
   delay(500);
+  Serial.printf("DEVICE_BOOT heap=%u\n", static_cast<unsigned>(ESP.getFreeHeap()));
 
   auto &server = ble.gattServer();
   EspBleGattCharacteristicConfig readable;
@@ -53,11 +54,13 @@ void setup()
 
   EspBleConfig config;
   config.deviceName = "EspBle Boot Keyboard Peer";
+  Serial.printf("DEVICE_PRE_BEGIN heap=%u\n", static_cast<unsigned>(ESP.getFreeHeap()));
   if (!ble.begin(config))
   {
     Serial.printf("DEVICE_INIT_FAILED %s %s\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
     return;
   }
+  Serial.printf("DEVICE_POST_BEGIN heap=%u\n", static_cast<unsigned>(ESP.getFreeHeap()));
   ble.onConnected([](const EspBleConnection &connection) {
     connectionId = connection.id;
     Serial.printf("DEVICE_CONNECTED id=%u\n", static_cast<unsigned>(connection.id));
