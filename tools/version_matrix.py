@@ -21,15 +21,15 @@ Examples:
   python tools/version_matrix.py --core-versions auto --targets esp32s3
 
   # board sweep on the verified core with every example
-  python tools/version_matrix.py --core-versions 3.3.10 \
+  python tools/version_matrix.py --core-versions 3.3.11 \
       --targets esp32s3,esp32,esp32c3,esp32c6,esp32h2,esp32p4 --examples all
 
   # CI decomposition: one core per job writes a JSON payload, then merge them
-  python tools/version_matrix.py --core-versions 3.3.10 --json-only --json out/3.3.10.json
+  python tools/version_matrix.py --core-versions 3.3.11 --json-only --json out/3.3.11.json
   python tools/version_matrix.py --render-from out --output docs/COMPATIBILITY.0.1.0.md
 
   # dry run: show what would build, no compiles
-  python tools/version_matrix.py --core-versions 3.3.10 --list
+  python tools/version_matrix.py --core-versions 3.3.11 --list
 
 All sketch.yaml files are restored to their committed content when the run ends.
 """

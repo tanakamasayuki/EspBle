@@ -4,7 +4,7 @@
 
 ## 現在地
 
-Arduino-ESP32 3.3.10のNimBLE backendを使い、Central / Peripheral、GATT Client / Server、Security、複合HID Device / Hostが動作しています。ESP32-S3 2台を使うPeerテスト環境とhost unit testがあり、公開exampleはESP32-S3でコンパイル検証されています。
+Arduino-ESP32 3.3.11のNimBLE backendを使い、Central / Peripheral、GATT Client / Server、Security、複合HID Device / Hostが動作しています。ESP32-S3 2台を使うPeerテスト環境とhost unit testがあり、公開exampleはESP32-S3でコンパイル検証されています。
 
 HIDはKeyboard（6KRO / NKRO）、Mouse、Consumer Control、System Control、Gamepad、Vendor Input / Output / Featureを1つのServiceへ合成できます。Hostは対応する全Input ReportをDiscoveryし、種別別eventへ配送します。
 
