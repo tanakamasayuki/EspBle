@@ -166,17 +166,16 @@ def test_hid_keyboard_host_discovery_state_and_leds(dut, peers):
         timeout=20,
     )
 
-    # setKeyboardLeds() はGATTキューへenqueueして即座に返り、ATT書き込みで
-    # 呼び出しtaskをblockしない。計測は10回のenqueue呼び出しの合計時間のみ
-    # (実送信を行うupdate()とdelayは除外)で、十分小さいこと。
+    # LED書き込みはWrite Without Responseによるfire-and-forgetで、
+    # ATT応答を待って呼び出しtaskをblockしない(10回+5ms間隔で200ms未満)。
     dut.write("L")
     match = dut.expect(
         re.compile(rb"HOST_LEDS_TIMED success=(\d+) ms=(\d+)"), timeout=20
     )
     led_success = int(match.group(1))
     led_ms = int(match.group(2))
-    assert led_success == 10, f"expected 10 LED writes to be accepted, got {led_success}"
-    assert led_ms < 100, f"setKeyboardLeds() blocked instead of enqueuing: {led_ms}ms for 10 calls"
+    assert led_success == 10, f"expected 10 LED writes to succeed, got {led_success}"
+    assert led_ms < 200, f"LED writes blocked on ATT responses: {led_ms}ms for 10 writes"
     keyboard_device.expect_exact(
         "DEVICE_OUTPUT leds=3 num=1 caps=1 context=loop", timeout=20
     )

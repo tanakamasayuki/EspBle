@@ -5677,19 +5677,63 @@ bool EspBleHidHost::setKeyboardLeds(
     return false;
   }
 
-  uint16_t handle = 0;
-  bool response = true;
-  bool found = false;
+  // Kept synchronous (Write Without Response, fire-and-forget) rather than
+  // routed through the queued GATT engine: on the bundled backend, a worker-task
+  // write to the output report concurrent with the HID input-report subscriptions
+  // on the same client breaks notification delivery (verified on hardware — HID
+  // input stops arriving right after a queued output write). The gattOperating
+  // gate serializes this inline write against the worker safely.
+  {
+    std::lock_guard<std::mutex> ownerLock(owner_->impl_->mutex);
+    if (owner_->impl_->gattOperating)
+    {
+      owner_->setError(EspBleError::InvalidState, "a GATT operation is already in progress");
+      return false;
+    }
+    owner_->impl_->gattOperating = true;
+    owner_->impl_->gattConnectionId = connectionId;
+  }
+
+  BLERemoteCharacteristic *outputReport = nullptr;
   {
     std::lock_guard<std::mutex> lock(impl_->mutex);
     EspBleHidKeyboardHostImpl::Connection *connection = impl_->findConnection(connectionId);
-    if (connection != nullptr && connection->outputReport != nullptr)
+    if (connection != nullptr)
     {
-      found = true;
-      handle = connection->outputReport->getHandle();
-      response = !connection->outputReport->canWriteNoResponse();
-      // Record the requested LED state now; the write is queued and delivered
-      // asynchronously (the return value reflects acceptance, not delivery).
+      outputReport = connection->outputReport;
+    }
+  }
+  if (outputReport == nullptr)
+  {
+    std::lock_guard<std::mutex> ownerLock(owner_->impl_->mutex);
+    owner_->impl_->gattOperating = false;
+    owner_->setError(EspBleError::NotFound, "HID Keyboard Output Report was not found");
+    return false;
+  }
+
+  uint8_t leds =
+    (numLock ? 0x01 : 0) |
+    (capsLock ? 0x02 : 0) |
+    (scrollLock ? 0x04 : 0) |
+    (compose ? 0x08 : 0) |
+    (kana ? 0x10 : 0);
+  const bool response = !outputReport->canWriteNoResponse();
+  const bool success = outputReport->writeValue(
+    &leds, 1, response);
+  {
+    std::lock_guard<std::mutex> ownerLock(owner_->impl_->mutex);
+    owner_->impl_->gattOperating = false;
+  }
+  if (!success)
+  {
+    owner_->setError(EspBleError::BackendFailure, "failed to write HID Keyboard LEDs");
+    return false;
+  }
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    EspBleHidKeyboardHostImpl::Connection *connection = impl_->findConnection(connectionId);
+    if (connection != nullptr)
+    {
       connection->numLock = numLock;
       connection->capsLock = capsLock;
       connection->scrollLock = scrollLock;
@@ -5697,24 +5741,8 @@ bool EspBleHidHost::setKeyboardLeds(
       connection->kana = kana;
     }
   }
-  if (!found)
-  {
-    owner_->setError(EspBleError::NotFound, "HID Keyboard Output Report was not found");
-    return false;
-  }
-
-  const uint8_t leds =
-    (numLock ? 0x01 : 0) |
-    (capsLock ? 0x02 : 0) |
-    (scrollLock ? 0x04 : 0) |
-    (compose ? 0x08 : 0) |
-    (kana ? 0x10 : 0);
-  // Queue on the shared GATT engine so LED writes serialize with other
-  // operations (never "already in progress") and never block the loop task.
-  // Write Without Response is preferred when the characteristic supports it.
-  return owner_->startGattOperation(
-    EspBleGattOperation::Write, connectionId,
-    nullptr, nullptr, &leds, 1, response, nullptr, 10000, handle);
+  owner_->clearError();
+  return true;
 }
 
 bool EspBleHidHost::sendVendorOutput(
@@ -5745,38 +5773,53 @@ bool EspBleHidHost::sendVendorReport(
     owner_->setError(EspBleError::InvalidArgument, "invalid vendor HID report");
     return false;
   }
+  // Kept synchronous for the same reason as setKeyboardLeds(): a queued
+  // worker-task write concurrent with the HID input subscriptions breaks the
+  // bundled backend's notification delivery.
+  {
+    std::lock_guard<std::mutex> ownerLock(owner_->impl_->mutex);
+    if (owner_->impl_->gattOperating)
+    {
+      owner_->setError(EspBleError::InvalidState, "a GATT operation is already in progress");
+      return false;
+    }
+    owner_->impl_->gattOperating = true;
+    owner_->impl_->gattConnectionId = connectionId;
+  }
 
-  uint16_t handle = 0;
-  bool response = true;
-  bool found = false;
+  BLERemoteCharacteristic *report = nullptr;
   {
     std::lock_guard<std::mutex> lock(impl_->mutex);
     EspBleHidKeyboardHostImpl::Connection *connection = impl_->findConnection(connectionId);
     if (connection != nullptr)
-    {
-      BLERemoteCharacteristic *report =
-        feature ? connection->vendorFeatureReport : connection->vendorOutputReport;
-      if (report != nullptr)
-      {
-        found = true;
-        handle = report->getHandle();
-        response = feature || !report->canWriteNoResponse();
-      }
-    }
+      report = feature ? connection->vendorFeatureReport : connection->vendorOutputReport;
   }
-  if (!found)
+  if (report == nullptr)
   {
+    std::lock_guard<std::mutex> ownerLock(owner_->impl_->mutex);
+    owner_->impl_->gattOperating = false;
     owner_->setError(EspBleError::NotFound,
       feature ? "HID Vendor Feature Report was not found"
               : "HID Vendor Output Report was not found");
     return false;
   }
 
-  // Queue on the shared GATT engine (serialized, non-blocking, never
-  // "already in progress"). Feature reports use Write With Response.
-  return owner_->startGattOperation(
-    EspBleGattOperation::Write, connectionId,
-    nullptr, nullptr, data, length, response, nullptr, 10000, handle);
+  const bool response = feature || !report->canWriteNoResponse();
+  const bool success = report->writeValue(
+    const_cast<uint8_t *>(data), length, response);
+  {
+    std::lock_guard<std::mutex> ownerLock(owner_->impl_->mutex);
+    owner_->impl_->gattOperating = false;
+  }
+  if (!success)
+  {
+    owner_->setError(EspBleError::BackendFailure,
+      feature ? "failed to write HID Vendor Feature Report"
+              : "failed to write HID Vendor Output Report");
+    return false;
+  }
+  owner_->clearError();
+  return true;
 }
 
 void EspBleHidHost::onDiscovered(DiscoveryCallback callback)
