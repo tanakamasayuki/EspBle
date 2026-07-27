@@ -193,6 +193,29 @@ def test_hid_keyboard_host_discovery_state_and_leds(dut, peers):
         "DEVICE_HID_STATE mouse=0 consumer=0 system=0", timeout=10
     )
 
+    # App-driven reconnect exercising setAutoRediscover(true): the device
+    # re-advertises on disconnect, so reconnecting (still bonded) re-establishes
+    # security. The sketch does NOT call discover() on the second security
+    # (HOST_RECONNECT_SECURITY), so discovery must run automatically.
+    keyboard_device.write("?")
+    keyboard_device.expect_exact("DEVICE_ADVERTISING 1", timeout=10)
+    dut.write("s")
+    dut.expect_exact("HOST_SCAN_STARTED success=1", timeout=10)
+    dut.expect_exact("HOST_CONNECT_STARTED success=1", timeout=20)
+    dut.expect_exact("HOST_CONNECTED id=2", timeout=20)
+    keyboard_device.expect_exact("DEVICE_CONNECTED id=2", timeout=20)
+    dut.expect_exact("HOST_SECURITY encrypted=1 bonded=1 context=loop", timeout=20)
+    dut.expect_exact("HOST_RECONNECT_SECURITY", timeout=10)
+    dut.expect_exact(
+        "HOST_DISCOVERED success=1 report=1 country_present=1 country=33 output=1 battery_present=1 battery=73 context=loop detail=",
+        timeout=20,
+    )
+
+    dut.write("d")
+    dut.expect_exact("HOST_DISCONNECT_STARTED success=1", timeout=10)
+    dut.expect_exact("HOST_DISCONNECTED id=2 context=loop", timeout=20)
+    keyboard_device.expect_exact("DEVICE_DISCONNECTED id=2 context=loop", timeout=20)
+
     dut.write("x")
     keyboard_device.write("x")
     dut.expect_exact("HOST_BONDS_CLEARED success=1 count=0", timeout=10)

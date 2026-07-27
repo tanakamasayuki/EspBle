@@ -5,6 +5,7 @@
 EspBle ble;
 TaskHandle_t loopTask = nullptr;
 EspBleConnectionId keyboardConnectionId = 0;
+bool initialDiscoverDone = false;
 
 static const char *callbackContext()
 {
@@ -18,6 +19,9 @@ void setup()
   loopTask = xTaskGetCurrentTaskHandle();
 
   auto &keyboard = ble.hidHost();
+  // Re-discover automatically after a known HID peer reconnects and re-encrypts,
+  // without the sketch calling discover() again.
+  keyboard.setAutoRediscover(true);
   keyboard.onDiscovered([](const EspBleHidKeyboardHostDiscovery &result) {
     Serial.printf(
       "HOST_DISCOVERED success=%u report=%u country_present=%u country=%u output=%u battery_present=%u battery=%u context=%s detail=%s\n",
@@ -98,9 +102,18 @@ void setup()
       callbackContext());
     if (event.success)
     {
-      Serial.printf(
-        "HOST_DISCOVERY_STARTED success=%u\n",
-        ble.hidHost().discover(event.connection.id) ? 1 : 0);
+      if (!initialDiscoverDone)
+      {
+        initialDiscoverDone = true;
+        Serial.printf(
+          "HOST_DISCOVERY_STARTED success=%u\n",
+          ble.hidHost().discover(event.connection.id) ? 1 : 0);
+      }
+      else
+      {
+        // Reconnect: do NOT discover here; setAutoRediscover(true) must do it.
+        Serial.println("HOST_RECONNECT_SECURITY");
+      }
     }
   });
   ble.onDisconnected([](const EspBleConnection &connection) {

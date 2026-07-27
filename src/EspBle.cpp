@@ -6350,6 +6350,57 @@ EspBleKeyboardLayout EspBleHidHost::keyboardLayout() const
   return keyboardLayout_;
 }
 
+void EspBleHidHost::setAutoRediscover(bool enable)
+{
+  autoRediscover_ = enable;
+}
+
+bool EspBleHidHost::autoRediscover() const
+{
+  return autoRediscover_;
+}
+
+void EspBleHidHost::rememberRediscoverPeer(const String &address)
+{
+  if (address.length() == 0) return;
+  for (const String &entry : rediscoverPeers_)
+  {
+    if (entry.equalsIgnoreCase(address)) return; // already known
+  }
+  for (String &entry : rediscoverPeers_)
+  {
+    if (entry.length() == 0)
+    {
+      entry = address;
+      return;
+    }
+  }
+  // Full: drop silently. The set is bounded by the max simultaneous HID peers,
+  // so this only happens if more distinct peers were discovered than can be
+  // connected at once; the oldest simply will not auto-rediscover.
+}
+
+void EspBleHidHost::handleSecurityEstablished(const EspBleSecurityChanged &event)
+{
+  if (!autoRediscover_ || !event.success) return;
+  // HID Host connections are Central; ignore Peripheral security events.
+  if (event.connection.localRole != EspBleRole::Central) return;
+  bool known = false;
+  for (const String &entry : rediscoverPeers_)
+  {
+    if (entry.length() != 0 && entry.equalsIgnoreCase(event.connection.peerAddress))
+    {
+      known = true;
+      break;
+    }
+  }
+  if (!known) return;
+  // Skip when a discovery is already queued or running for this connection so a
+  // manual discover() from the app's onSecurityChanged is not duplicated.
+  if (owner_->hasPendingHidDiscover(event.connection.id)) return;
+  discover(event.connection.id);
+}
+
 size_t EspBleHidHost::droppedEventCount() const
 {
   if (impl_ == nullptr)
@@ -6431,6 +6482,7 @@ void EspBleHidHost::resetBackend()
   impl_->eventCount = 0;
   impl_->discovering = false;
   impl_->discoveryTask = nullptr;
+  for (String &entry : rediscoverPeers_) entry = String();
 }
 
 void EspBleHidHost::dispatchPendingEvents()
@@ -6455,6 +6507,18 @@ void EspBleHidHost::dispatchPendingEvents()
     }
     if (event.type == EspBleHidKeyboardHostImpl::EventType::Discovery)
     {
+      // Remember a successfully discovered HID peer so auto-rediscover can act on
+      // its next reconnection. Both this and handleSecurityEstablished() run on
+      // the loop task, so rediscoverPeers_ needs no lock.
+      if (autoRediscover_ && event.discovery.success)
+      {
+        String address;
+        {
+          std::lock_guard<std::mutex> lock(owner_->impl_->mutex);
+          address = owner_->impl_->connectionAddressLocked(event.discovery.connectionId);
+        }
+        rememberRediscoverPeer(address);
+      }
       std::shared_ptr<DiscoveryCallback> callbacks[MaxListenersPerEvent + 1];
       { std::lock_guard<std::mutex> lock(listenerMutex_); callbacks[0] = discoveryCallback_;
         for (size_t i = 0; i < MaxListenersPerEvent; ++i) callbacks[i + 1] = discoveryListeners_[i].callback; }
@@ -8307,6 +8371,28 @@ bool EspBle::startGattOperation(
   return true;
 }
 
+bool EspBle::hasPendingHidDiscover(EspBleConnectionId connectionId) const
+{
+  if (impl_ == nullptr) return false;
+  std::lock_guard<std::mutex> lock(impl_->mutex);
+  if (impl_->gattOperating &&
+      impl_->gattOperation == EspBleGattOperation::HidDiscover &&
+      impl_->gattConnectionId == connectionId)
+  {
+    return true;
+  }
+  for (size_t i = 0; i < impl_->gattQueueCount; ++i)
+  {
+    const size_t idx = (impl_->gattQueueHead + i) % EspBleImpl::GattQueueCapacity;
+    const EspBleImpl::PendingGattOp &op = impl_->gattQueue[idx];
+    if (op.operation == EspBleGattOperation::HidDiscover && op.connectionId == connectionId)
+    {
+      return true;
+    }
+  }
+  return false;
+}
+
 void EspBle::pumpGattQueue()
 {
   if (impl_ == nullptr) return;
@@ -8596,6 +8682,10 @@ void EspBle::dispatchConnectionEvents()
       {
         securityChangedCallback_(event.securityChanged);
       }
+      // After the app's handler (which may itself call discover()), give the HID
+      // Host a chance to auto-rediscover a reconnected peer, de-duped against a
+      // discovery the app just queued.
+      hidKeyboardHost_.handleSecurityEstablished(event.securityChanged);
       break;
     case EspBleImpl::EventType::PasskeyDisplayed:
       if (passkeyDisplayedCallback_)

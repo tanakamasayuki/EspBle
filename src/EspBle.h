@@ -1142,15 +1142,31 @@ public:
   bool ready(EspBleConnectionId connectionId) const;
   size_t droppedEventCount() const;
   size_t invalidInputReportCount() const;
+  // Opt-in: after a HID peer that was discovered once reconnects and re-encrypts,
+  // re-run discover() automatically (the HID Host does not use the generic
+  // subscription registry, so it is not covered by persistentSubscriptions). Off
+  // by default. Composes with a manual discover(): if the app still calls
+  // discover() from onSecurityChanged, the automatic one is skipped for that
+  // connection (no double discovery). Pair with setAutoReconnect() +
+  // persistentSubscriptions for hands-off HID reconnection.
+  void setAutoRediscover(bool enable);
+  bool autoRediscover() const;
 
 private:
   friend class EspBle;
   friend struct EspBleHidKeyboardHostImpl;
 
+  static constexpr size_t MaxRediscoverPeers = 4;
+
   explicit EspBleHidHost(EspBle *owner);
   ~EspBleHidHost();
   void resetBackend();
   void handleDisconnected(EspBleConnectionId connectionId);
+  // Called from EspBle's event dispatch on every SecurityChanged. When
+  // auto-rediscover is on and the (Central) peer was discovered before, queues a
+  // fresh discover() unless one is already pending for the connection.
+  void handleSecurityEstablished(const EspBleSecurityChanged &event);
+  void rememberRediscoverPeer(const String &address);
   void dispatchPendingEvents();
   // Launches the discovery worker for a HidDiscover operation dequeued by
   // EspBle::pumpGattQueue(). Returns false (and emits a failure discovery event)
@@ -1201,6 +1217,10 @@ private:
   EspBleListenerId nextListenerId_ = 1;
   mutable std::mutex listenerMutex_;
   EspBleKeyboardLayout keyboardLayout_ = EspBleKeyboardLayout::EnUs;
+  // Auto-rediscover state. Touched only on the loop task (record at discovery
+  // dispatch, read at security dispatch), so no lock is needed.
+  bool autoRediscover_ = false;
+  String rediscoverPeers_[MaxRediscoverPeers];
 };
 
 class EspBle
@@ -1502,6 +1522,9 @@ private:
   void pumpGattQueue();
   void pumpSendQueue();
   void drainPendingDisconnects();
+  // True when a HID discovery for connectionId is already queued or in flight.
+  // Lets HID auto-rediscover avoid a second discovery when the app also asked.
+  bool hasPendingHidDiscover(EspBleConnectionId connectionId) const;
   EspBleListenerId allocateGattListenerIdLocked();
 
   bool initialized_ = false;

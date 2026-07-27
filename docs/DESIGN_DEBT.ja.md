@@ -85,8 +85,8 @@ HID Host の `discover()` が汎用queueエンジンに乗らず、別経路に�
 
 ### より大きめ（任意・クラスタA完了が前提）
 
-- **HID Host の再接続時auto-rediscover**: HID Host は汎用subscription registryを使わないため `persistentSubscriptions`＋`setAutoReconnect` の恩恵を受けず、再接続時にアプリが手動で `discover()` 再実行（かつsecurity完了後）を要する。→ persistent-subscription相当のopt-in auto-discover（address記憶→再接続後にsecurity安定を待って再discovery）。**状況: 未着手**
-- **op毎のタスク生成をやめ、エンジン毎の常駐workerへ**: `pumpGattQueue`（[EspBle.cpp:7833](../src/EspBle.cpp#L7833)、op毎6144B）、HID discovery（16384B）、server send がop毎に `xTaskCreate`。メモリ逼迫時にResourceExhausted。→ エンジン毎に常駐worker 1本でqueue消費。**状況: 未着手**
+- **HID Host の再接続時auto-rediscover**: HID Host は汎用subscription registryを使わないため `persistentSubscriptions`＋`setAutoReconnect` の恩恵を受けず、再接続時にアプリが手動で `discover()` 再実行（かつsecurity完了後）を要した。→ **完了（opt-in）**: `EspBleHidHost::setAutoRediscover(bool)`（既定off）。discovery成功したCentral peerのaddressを記憶し、再接続後のsecurity確立イベントで自動的に `discover()` を再発行する。アプリが `onSecurityChanged` で従来どおり手動 `discover()` を呼んでいても、その接続に既にHID discoveryがqueue/実行中なら自動側はskipして二重discoveryを防ぐ（`EspBle::hasPendingHidDiscover()` で判定）。記憶集合は最大 `MaxRediscoverPeers`(4)、`resetBackend()` でクリア、loop task専用で無lock。`setAutoReconnect`＋`persistentSubscriptions` と併用でHID再接続がハンズオフになる。**状況: 完了（要実機再確認）**
+- **op毎のタスク生成をやめ、エンジン毎の常駐workerへ**: `pumpGattQueue`（op毎6144B）、HID discovery（16384B）、server send がop毎に `xTaskCreate`。メモリ逼迫時にResourceExhausted。→ **見送り（意図的）**: 常駐worker化は「メモリ逼迫時の `xTaskCreate` 失敗回避」（全実機テストで未観測の理論上事象）と引き換えに、idle時・未使用機能でも常駐task分（HIDは16KB級）のメモリを**常時確保**する。ライブラリとしては現行の「都度生成・都度解放（idleコスト0・未使用機能は未確保）」の方が一般ケースで有利なため、常駐化は行わない。**状況: 見送り（意図的トレードオフ、[意図的]節参照）**
 
 ---
 

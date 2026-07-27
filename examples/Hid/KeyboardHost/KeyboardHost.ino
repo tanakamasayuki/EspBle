@@ -85,6 +85,12 @@ void setup()
   //     (commercial keyboards reject HID-attribute access before encryption).
   // ja: security有効構成では、暗号化完了後にHID Discoveryを開始する
   //     （市販keyboardは暗号化前のHID属性アクセスを拒否するため）。
+  // en: For hands-off reconnection, call ble.hidHost().setAutoRediscover(true)
+  //     once (with setAutoReconnect(true) + persistentSubscriptions): a known
+  //     HID peer is re-discovered automatically after it reconnects.
+  // ja: 再接続を自動化するなら ble.hidHost().setAutoRediscover(true) を一度呼ぶ
+  //     （setAutoReconnect(true)＋persistentSubscriptionsと併用）。既知のHID
+  //     peerは再接続後に自動で再Discoveryされる。
   ble.onSecurityChanged([](const EspBleSecurityChanged &event) {
     if (event.success)
     {
