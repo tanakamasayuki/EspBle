@@ -26,7 +26,7 @@ EspBleの開発ドキュメント一覧と、初見の人が状況を把握す�
 | 確定した設計決定とその理由 | [DECISIONS.ja.md](DECISIONS.ja.md) |
 | pre-1.0.0の設計負債監査と是正計画 | [DESIGN_DEBT.ja.md](DESIGN_DEBT.ja.md) |
 | HIDの仕様（Device / Host） | [HID_DEVICE_SPEC.ja.md](HID_DEVICE_SPEC.ja.md) / [HID_HOST_SPEC.ja.md](HID_HOST_SPEC.ja.md) |
-| スキャンからGATT通信までの入門 | [GUIDE_SCAN_TO_COMM.ja.md](GUIDE_SCAN_TO_COMM.ja.md) |
+| BLE通信の入門ガイド（GAP / GATT） | [GUIDE_BLE_BASICS.ja.md](GUIDE_BLE_BASICS.ja.md) |
 | テスト方針・カバレッジ | [../tests/TEST_PLAN.ja.md](../tests/TEST_PLAN.ja.md) |
 | リリース前の確認手順 | [RELEASE_CHECKLIST.ja.md](RELEASE_CHECKLIST.ja.md) |
 | Arduino-ESP32への修正依頼案 | [UPSTREAM_REQUEST_ARDUINO_ESP32_DESCRIPTOR_CONTEXT.ja.md](UPSTREAM_REQUEST_ARDUINO_ESP32_DESCRIPTOR_CONTEXT.ja.md) |

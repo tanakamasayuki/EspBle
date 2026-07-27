@@ -1,6 +1,6 @@
 # BLE通信ガイド拡充計画
 
-[GUIDE_SCAN_TO_COMM.ja.md](GUIDE_SCAN_TO_COMM.ja.md) を「BLE通信を理解するための資料」へ拡充するための計画です。発端は[memo.ja.md](memo.ja.md)。ドキュメント作業だけでは埋まらない穴（exampleの不足・ライブラリAPIの設計不備）が同時に見つかったため、それらを含めた実行順序として整理します。
+[GUIDE_BLE_BASICS.ja.md](GUIDE_BLE_BASICS.ja.md)（旧 `GUIDE_SCAN_TO_COMM.ja.md`）を「BLE通信を理解するための資料」へ拡充するための計画です。発端は[memo.ja.md](memo.ja.md)。ドキュメント作業だけでは埋まらない穴（exampleの不足・ライブラリAPIの設計不備）が同時に見つかったため、それらを含めた実行順序として整理します。
 
 進捗は各項目の**状況**欄で追跡します（未着手 / 進行中 / 完了）。確定した設計判断は[DECISIONS.ja.md](DECISIONS.ja.md)へ、ライブラリ側の是正は[DESIGN_DEBT.ja.md](DESIGN_DEBT.ja.md)へ移送します。
 
