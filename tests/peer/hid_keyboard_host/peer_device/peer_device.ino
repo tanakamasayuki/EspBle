@@ -93,6 +93,8 @@ void setup()
   ble.onDisconnected([](const EspBleConnection &connection) {
     Serial.printf("DEVICE_DISCONNECTED id=%u context=%s\n",
       static_cast<unsigned>(connection.id), callbackContext());
+    // Re-advertise so the host can reconnect (exercises HID auto-rediscover).
+    ble.advertising().start();
   });
   ble.advertising().setName("EspBle HID Host Peer");
   ble.advertising().start();
