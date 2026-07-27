@@ -66,11 +66,16 @@ HID Host の `discover()` が汎用queueエンジンに乗らず、別経路に�
 - HID Host は多listener registry（`add*Listener`/`removeListener`、[EspBle.h:998](../src/EspBle.h#L998) 付近）を持つ。
 - 結果、MIDI helperが単一スロットを独占し（headerに「MIDI利用時は自分でこれらcallbackを使うな」と明記）、2つのprofile helperや「app観測＋profile」の併用ができない。
 
-**あるべき姿**: HID Host のlistener-registryパターン（配送時snapshot・mutexはcallback中保持しない・単一`on*`→登録順）をコアGATT client/server callbackへ昇格し、profile helperとappが競合せず合成できるようにする。
+**是正内容（実装済み）**: 再利用可能な `EspBleCallbackList<Callback>`（primary 1 + listener 4、配送時snapshot・invokeはlock外・登録順、ownerがmutex提供）を導入し、コアGATT callbackを全て置換。
 
-**破壊的変更**: callback登録モデル（`on*` 単一→`add*Listener` 併存）。
-**テスト影響**: MIDI helper（独占前提の撤廃）、通知/購読系の広範なPeer。
-**状況: 未着手**
+- **client（9）**: `onCharacteristicDiscovered`/`Read`/`Written`、`onServicesDiscovered`、`onDescriptorRead`/`Written`、`onSubscribed`/`onUnsubscribed`、`onNotification`。`add*Listener`（`addNotificationListener` 等）＋ `removeGattListener(id)`。
+- **server（4）**: `onWritten`/`onDescriptorWritten`/`onSubscriptionChanged`/`onSent`。`add*Listener`＋ `EspBleGattServer::removeListener(id)`。
+- listener idはowner単位で単調発番（実質衝突なし）。dispatchはprimary→listener登録順。
+- **MIDI helper は `on*` 独占をやめ全て `add*Listener` へ移行**（device: written/subscriptionChanged/sent、host: notification/discovered/subscribed/written）。primaryスロットと残りlistener枠がappに開放され、「app観測＋MIDI」が併用可能に。`add*Listener` は非idempotentなので `begin()` はremove-before-addで重複登録を防止。
+
+**破壊的変更なし（追加API）**: `on*` は「primaryスロット」として従来どおり動作（単一observerのsketchは無改修）。`add*Listener`/`removeGattListener`/`removeListener` を追加しただけ。
+**テスト影響**: `notify_indicate`（client `addNotificationListener` と server `addSentListener` の第2observerがprimaryと同時発火することを検証）。`midi_device`/`midi_host` はhelperがlistener経由になっても挙動不変（コンパイル確認済み）。
+**状況: 完了（要実機再確認）**
 
 ### 小粒（自己完結）
 

@@ -55,6 +55,11 @@ void setup()
       notification.value.c_str(),
       callbackContext());
   });
+  // Second observer of the same event: proves the primary on*() and an
+  // add*Listener() listener both fire (multi-listener core, Cluster C).
+  ble.addNotificationListener([](const EspBleGattNotification &notification) {
+    Serial.printf("RECEIVED2 value=%s\n", notification.value.c_str());
+  });
   ble.scanner().onResult([](const EspBleScanResult &scanResult) {
     if (connectionRequested || !scanResult.advertisesService(TEST_SERVICE_UUID))
     {

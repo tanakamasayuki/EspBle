@@ -4318,22 +4318,99 @@ void EspBle::pumpSendQueue()
 
 void EspBleGattServer::onWritten(WriteCallback callback)
 {
-  writeCallback_ = std::move(callback);
+  std::lock_guard<std::mutex> lock(listenerMutex_);
+  writtenListeners_.setPrimary(std::move(callback));
 }
 
 void EspBleGattServer::onDescriptorWritten(DescriptorWriteCallback callback)
 {
-  descriptorWriteCallback_ = std::move(callback);
+  std::lock_guard<std::mutex> lock(listenerMutex_);
+  descriptorWrittenListeners_.setPrimary(std::move(callback));
 }
 
 void EspBleGattServer::onSubscriptionChanged(SubscriptionCallback callback)
 {
-  subscriptionCallback_ = std::move(callback);
+  std::lock_guard<std::mutex> lock(listenerMutex_);
+  subscriptionListeners_.setPrimary(std::move(callback));
 }
 
 void EspBleGattServer::onSent(SendCallback callback)
 {
-  sendCallback_ = std::move(callback);
+  std::lock_guard<std::mutex> lock(listenerMutex_);
+  sentListeners_.setPrimary(std::move(callback));
+}
+
+EspBleListenerId EspBleGattServer::allocateListenerIdLocked()
+{
+  const EspBleListenerId id = nextListenerId_;
+  nextListenerId_ = (id == 0xffffffffu) ? 1 : id + 1;
+  return id;
+}
+
+EspBleListenerId EspBleGattServer::addWrittenListener(WriteCallback callback)
+{
+  std::lock_guard<std::mutex> lock(listenerMutex_);
+  const EspBleListenerId id = writtenListeners_.add(std::move(callback), allocateListenerIdLocked());
+  if (id == EspBleInvalidListenerId)
+    owner_->setError(EspBleError::ResourceExhausted, "too many GATT Server listeners");
+  else
+    owner_->clearError();
+  return id;
+}
+
+EspBleListenerId EspBleGattServer::addDescriptorWrittenListener(DescriptorWriteCallback callback)
+{
+  std::lock_guard<std::mutex> lock(listenerMutex_);
+  const EspBleListenerId id = descriptorWrittenListeners_.add(std::move(callback), allocateListenerIdLocked());
+  if (id == EspBleInvalidListenerId)
+    owner_->setError(EspBleError::ResourceExhausted, "too many GATT Server listeners");
+  else
+    owner_->clearError();
+  return id;
+}
+
+EspBleListenerId EspBleGattServer::addSubscriptionChangedListener(SubscriptionCallback callback)
+{
+  std::lock_guard<std::mutex> lock(listenerMutex_);
+  const EspBleListenerId id = subscriptionListeners_.add(std::move(callback), allocateListenerIdLocked());
+  if (id == EspBleInvalidListenerId)
+    owner_->setError(EspBleError::ResourceExhausted, "too many GATT Server listeners");
+  else
+    owner_->clearError();
+  return id;
+}
+
+EspBleListenerId EspBleGattServer::addSentListener(SendCallback callback)
+{
+  std::lock_guard<std::mutex> lock(listenerMutex_);
+  const EspBleListenerId id = sentListeners_.add(std::move(callback), allocateListenerIdLocked());
+  if (id == EspBleInvalidListenerId)
+    owner_->setError(EspBleError::ResourceExhausted, "too many GATT Server listeners");
+  else
+    owner_->clearError();
+  return id;
+}
+
+bool EspBleGattServer::removeListener(EspBleListenerId listenerId)
+{
+  if (listenerId == EspBleInvalidListenerId)
+  {
+    owner_->setError(EspBleError::InvalidArgument, "listener ID is invalid");
+    return false;
+  }
+  std::lock_guard<std::mutex> lock(listenerMutex_);
+  const bool removed =
+    writtenListeners_.remove(listenerId) ||
+    descriptorWrittenListeners_.remove(listenerId) ||
+    subscriptionListeners_.remove(listenerId) ||
+    sentListeners_.remove(listenerId);
+  if (!removed)
+  {
+    owner_->setError(EspBleError::NotFound, "listener ID was not found");
+    return false;
+  }
+  owner_->clearError();
+  return true;
 }
 
 bool EspBleGattServer::realize()
@@ -4464,34 +4541,46 @@ void EspBleGattServer::resetBackend()
 
 void EspBleGattServer::dispatchWrite(const EspBleGattWrite &write)
 {
-  if (writeCallback_)
+  std::shared_ptr<WriteCallback> callbacks[decltype(writtenListeners_)::Capacity];
+  size_t count = 0;
   {
-    writeCallback_(write);
+    std::lock_guard<std::mutex> lock(listenerMutex_);
+    count = writtenListeners_.snapshot(callbacks);
   }
+  for (size_t i = 0; i < count; ++i) (*callbacks[i])(write);
 }
 
 void EspBleGattServer::dispatchDescriptorWrite(const EspBleGattDescriptorWrite &write)
 {
-  if (descriptorWriteCallback_)
+  std::shared_ptr<DescriptorWriteCallback> callbacks[decltype(descriptorWrittenListeners_)::Capacity];
+  size_t count = 0;
   {
-    descriptorWriteCallback_(write);
+    std::lock_guard<std::mutex> lock(listenerMutex_);
+    count = descriptorWrittenListeners_.snapshot(callbacks);
   }
+  for (size_t i = 0; i < count; ++i) (*callbacks[i])(write);
 }
 
 void EspBleGattServer::dispatchSubscription(const EspBleGattSubscription &subscription)
 {
-  if (subscriptionCallback_)
+  std::shared_ptr<SubscriptionCallback> callbacks[decltype(subscriptionListeners_)::Capacity];
+  size_t count = 0;
   {
-    subscriptionCallback_(subscription);
+    std::lock_guard<std::mutex> lock(listenerMutex_);
+    count = subscriptionListeners_.snapshot(callbacks);
   }
+  for (size_t i = 0; i < count; ++i) (*callbacks[i])(subscription);
 }
 
 void EspBleGattServer::dispatchSendResult(const EspBleGattSendResult &result)
 {
-  if (sendCallback_)
+  std::shared_ptr<SendCallback> callbacks[decltype(sentListeners_)::Capacity];
+  size_t count = 0;
   {
-    sendCallback_(result);
+    std::lock_guard<std::mutex> lock(listenerMutex_);
+    count = sentListeners_.snapshot(callbacks);
   }
+  for (size_t i = 0; i < count; ++i) (*callbacks[i])(result);
 }
 
 EspBleHidKeyboard::EspBleHidKeyboard(EspBle *owner) : owner_(owner) {}
@@ -7889,48 +7978,131 @@ bool EspBle::unsubscribe(
 
 void EspBle::onCharacteristicDiscovered(GattResultCallback callback)
 {
-  characteristicDiscoveredCallback_ = std::move(callback);
+  std::lock_guard<std::mutex> lock(gattListenerMutex_);
+  characteristicDiscoveredListeners_.setPrimary(std::move(callback));
 }
 
 void EspBle::onCharacteristicRead(GattResultCallback callback)
 {
-  characteristicReadCallback_ = std::move(callback);
+  std::lock_guard<std::mutex> lock(gattListenerMutex_);
+  characteristicReadListeners_.setPrimary(std::move(callback));
 }
 
 void EspBle::onCharacteristicWritten(GattResultCallback callback)
 {
-  characteristicWrittenCallback_ = std::move(callback);
+  std::lock_guard<std::mutex> lock(gattListenerMutex_);
+  characteristicWrittenListeners_.setPrimary(std::move(callback));
 }
 
 void EspBle::onServicesDiscovered(GattResultCallback callback)
 {
-  servicesDiscoveredCallback_ = std::move(callback);
+  std::lock_guard<std::mutex> lock(gattListenerMutex_);
+  servicesDiscoveredListeners_.setPrimary(std::move(callback));
 }
 
 void EspBle::onDescriptorRead(GattResultCallback callback)
 {
-  descriptorReadCallback_ = std::move(callback);
+  std::lock_guard<std::mutex> lock(gattListenerMutex_);
+  descriptorReadListeners_.setPrimary(std::move(callback));
 }
 
 void EspBle::onDescriptorWritten(GattResultCallback callback)
 {
-  descriptorWrittenCallback_ = std::move(callback);
+  std::lock_guard<std::mutex> lock(gattListenerMutex_);
+  descriptorWrittenListeners_.setPrimary(std::move(callback));
 }
 
 void EspBle::onSubscribed(GattResultCallback callback)
 {
-  subscribedCallback_ = std::move(callback);
+  std::lock_guard<std::mutex> lock(gattListenerMutex_);
+  subscribedListeners_.setPrimary(std::move(callback));
 }
 
 void EspBle::onUnsubscribed(GattResultCallback callback)
 {
-  unsubscribedCallback_ = std::move(callback);
+  std::lock_guard<std::mutex> lock(gattListenerMutex_);
+  unsubscribedListeners_.setPrimary(std::move(callback));
 }
 
-void EspBle::onNotification(
-  std::function<void(const EspBleGattNotification &notification)> callback)
+void EspBle::onNotification(NotificationCallback callback)
 {
-  notificationCallback_ = std::move(callback);
+  std::lock_guard<std::mutex> lock(gattListenerMutex_);
+  notificationListeners_.setPrimary(std::move(callback));
+}
+
+EspBleListenerId EspBle::allocateGattListenerIdLocked()
+{
+  // Monotonic and owner-unique; wraps past ~4 billion adds, skipping the invalid
+  // sentinel. Never reuses a live id in practice, so removeGattListener() by id
+  // is unambiguous across every client list.
+  const EspBleListenerId id = nextGattListenerId_;
+  nextGattListenerId_ = (id == 0xffffffffu) ? 1 : id + 1;
+  return id;
+}
+
+// Allocate an id and store callback in `list`, reporting a full list. Serialized
+// by gattListenerMutex_.
+#define ESPBLE_ADD_GATT_LISTENER(list, cbType)                                   \
+  do                                                                             \
+  {                                                                              \
+    std::lock_guard<std::mutex> lock(gattListenerMutex_);                        \
+    const EspBleListenerId id = (list).add(std::move(callback),                  \
+                                           allocateGattListenerIdLocked());      \
+    if (id == EspBleInvalidListenerId)                                           \
+    {                                                                            \
+      setError(EspBleError::ResourceExhausted, "too many GATT client listeners");\
+      return EspBleInvalidListenerId;                                            \
+    }                                                                            \
+    clearError();                                                                \
+    return id;                                                                   \
+  } while (0)
+
+EspBleListenerId EspBle::addCharacteristicDiscoveredListener(GattResultCallback callback)
+{ ESPBLE_ADD_GATT_LISTENER(characteristicDiscoveredListeners_, GattResultCallback); }
+EspBleListenerId EspBle::addCharacteristicReadListener(GattResultCallback callback)
+{ ESPBLE_ADD_GATT_LISTENER(characteristicReadListeners_, GattResultCallback); }
+EspBleListenerId EspBle::addCharacteristicWrittenListener(GattResultCallback callback)
+{ ESPBLE_ADD_GATT_LISTENER(characteristicWrittenListeners_, GattResultCallback); }
+EspBleListenerId EspBle::addServicesDiscoveredListener(GattResultCallback callback)
+{ ESPBLE_ADD_GATT_LISTENER(servicesDiscoveredListeners_, GattResultCallback); }
+EspBleListenerId EspBle::addDescriptorReadListener(GattResultCallback callback)
+{ ESPBLE_ADD_GATT_LISTENER(descriptorReadListeners_, GattResultCallback); }
+EspBleListenerId EspBle::addDescriptorWrittenListener(GattResultCallback callback)
+{ ESPBLE_ADD_GATT_LISTENER(descriptorWrittenListeners_, GattResultCallback); }
+EspBleListenerId EspBle::addSubscribedListener(GattResultCallback callback)
+{ ESPBLE_ADD_GATT_LISTENER(subscribedListeners_, GattResultCallback); }
+EspBleListenerId EspBle::addUnsubscribedListener(GattResultCallback callback)
+{ ESPBLE_ADD_GATT_LISTENER(unsubscribedListeners_, GattResultCallback); }
+EspBleListenerId EspBle::addNotificationListener(NotificationCallback callback)
+{ ESPBLE_ADD_GATT_LISTENER(notificationListeners_, NotificationCallback); }
+
+#undef ESPBLE_ADD_GATT_LISTENER
+
+bool EspBle::removeGattListener(EspBleListenerId listenerId)
+{
+  if (listenerId == EspBleInvalidListenerId)
+  {
+    setError(EspBleError::InvalidArgument, "listener ID is invalid");
+    return false;
+  }
+  std::lock_guard<std::mutex> lock(gattListenerMutex_);
+  const bool removed =
+    characteristicDiscoveredListeners_.remove(listenerId) ||
+    characteristicReadListeners_.remove(listenerId) ||
+    characteristicWrittenListeners_.remove(listenerId) ||
+    servicesDiscoveredListeners_.remove(listenerId) ||
+    descriptorReadListeners_.remove(listenerId) ||
+    descriptorWrittenListeners_.remove(listenerId) ||
+    subscribedListeners_.remove(listenerId) ||
+    unsubscribedListeners_.remove(listenerId) ||
+    notificationListeners_.remove(listenerId);
+  if (!removed)
+  {
+    setError(EspBleError::NotFound, "listener ID was not found");
+    return false;
+  }
+  clearError();
+  return true;
 }
 
 bool EspBle::startGattOperation(
@@ -8206,41 +8378,47 @@ void EspBle::dispatchConnectionEvents()
       break;
     case EspBleImpl::EventType::GattResult:
     {
-      GattResultCallback *callback = nullptr;
+      EspBleCallbackList<GattResultCallback> *list = nullptr;
       switch (event.gattResult.operation)
       {
       case EspBleGattOperation::Discover:
-        callback = &characteristicDiscoveredCallback_;
+        list = &characteristicDiscoveredListeners_;
         break;
       case EspBleGattOperation::Read:
-        callback = &characteristicReadCallback_;
+        list = &characteristicReadListeners_;
         break;
       case EspBleGattOperation::Write:
-        callback = &characteristicWrittenCallback_;
+        list = &characteristicWrittenListeners_;
         break;
       case EspBleGattOperation::Subscribe:
-        callback = &subscribedCallback_;
+        list = &subscribedListeners_;
         break;
       case EspBleGattOperation::Unsubscribe:
-        callback = &unsubscribedCallback_;
+        list = &unsubscribedListeners_;
         break;
       case EspBleGattOperation::DiscoverServices:
-        callback = &servicesDiscoveredCallback_;
+        list = &servicesDiscoveredListeners_;
         break;
       case EspBleGattOperation::ReadDescriptor:
-        callback = &descriptorReadCallback_;
+        list = &descriptorReadListeners_;
         break;
       case EspBleGattOperation::WriteDescriptor:
-        callback = &descriptorWrittenCallback_;
+        list = &descriptorWrittenListeners_;
         break;
       case EspBleGattOperation::HidDiscover:
         // HID discovery reports through its own discovery event, never a
         // generic GattResult; nothing to dispatch here.
         break;
       }
-      if (callback != nullptr && *callback)
+      if (list != nullptr)
       {
-        (*callback)(event.gattResult);
+        std::shared_ptr<GattResultCallback> callbacks[decltype(characteristicDiscoveredListeners_)::Capacity];
+        size_t count = 0;
+        {
+          std::lock_guard<std::mutex> lock(gattListenerMutex_);
+          count = list->snapshot(callbacks);
+        }
+        for (size_t i = 0; i < count; ++i) (*callbacks[i])(event.gattResult);
       }
       break;
     }
@@ -8258,11 +8436,16 @@ void EspBle::dispatchConnectionEvents()
       break;
     }
     case EspBleImpl::EventType::Notification:
-      if (notificationCallback_)
+    {
+      std::shared_ptr<NotificationCallback> callbacks[decltype(notificationListeners_)::Capacity];
+      size_t count = 0;
       {
-        notificationCallback_(event.notification);
+        std::lock_guard<std::mutex> lock(gattListenerMutex_);
+        count = notificationListeners_.snapshot(callbacks);
       }
+      for (size_t i = 0; i < count; ++i) (*callbacks[i])(event.notification);
       break;
+    }
     case EspBleImpl::EventType::ServerSubscription:
       gattServer_.dispatchSubscription(event.serverSubscription);
       break;

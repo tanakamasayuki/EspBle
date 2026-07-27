@@ -50,6 +50,11 @@ void setup()
       result.detail.c_str(),
       callbackContext());
   });
+  // Second observer of the same event: proves the primary on*() and an
+  // add*Listener() listener both fire (multi-listener core, Cluster C).
+  gattServer.addSentListener([](const EspBleGattSendResult &result) {
+    Serial.printf("SENT2 value=%s\n", result.value.c_str());
+  });
 
   EspBleConfig config;
   config.deviceName = "EspBle Subscription Peer";

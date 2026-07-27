@@ -118,6 +118,8 @@ ble.begin();
 
 Central側のDiscovery、Read、Writeは要求の受理と完了を分離します。同梱backendの待機型操作は内部taskで実行し、結果は`update()` contextのcallbackへ配送します。各要求の末尾ではtimeoutをミリ秒単位（既定10000、0は無効）で指定できます。
 
+コアGATT client/server callbackは多observerモデルです。`on*()`（`onNotification`/`onCharacteristicDiscovered`/… server `onWritten`/`onSent`等）は単一のprimary observerを設定し、`add*Listener()`（`addNotificationListener`等）は追加のlistenerを登録して`EspBleListenerId`を返します（`removeGattListener(id)` / GATT Serverは`removeListener(id)`で解除）。配送はprimary→登録順で、profile helper（MIDI等）とアプリが同じイベントを競合せず観測できます。`on*()`は従来の単一observer用途をそのまま満たします（primaryを差し替えるだけ）。
+
 一覧Discoveryは1件ずつevent queueへ流さず、完了後に接続単位の固定容量snapshotを照会します。これにより大きなGATT databaseでも完了eventがqueue容量に依存しません。
 
 ```cpp

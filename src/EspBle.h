@@ -130,6 +130,90 @@ using EspBleConnectionId = uint32_t;
 using EspBleListenerId = uint32_t;
 constexpr EspBleListenerId EspBleInvalidListenerId = 0;
 
+// Multi-observer slot for one event: a single "primary" callback (set via the
+// on*() setters, kept for the common single-observer case and backward
+// compatibility) plus up to MaxListeners additional listeners (add*Listener()).
+// The owner serializes every call with its own mutex; this type does no locking
+// itself. Dispatch takes a snapshot under the lock and invokes it unlocked, so a
+// callback may add/remove listeners without deadlocking or being invoked in the
+// same dispatch. Removal shifts later slots down; listener ids are owner-unique.
+template <typename Callback, size_t MaxListeners = 4>
+class EspBleCallbackList
+{
+public:
+  static constexpr size_t Capacity = MaxListeners + 1; // + primary
+
+  void setPrimary(Callback callback)
+  {
+    primary_ = callback ? std::make_shared<Callback>(std::move(callback)) : nullptr;
+  }
+
+  // Store callback under listenerId (allocated by the owner). Returns listenerId
+  // on success or EspBleInvalidListenerId if the list is full / callback empty.
+  EspBleListenerId add(Callback callback, EspBleListenerId listenerId)
+  {
+    if (!callback || listenerId == EspBleInvalidListenerId) return EspBleInvalidListenerId;
+    for (size_t i = 0; i < MaxListeners; ++i)
+    {
+      if (listeners_[i].id == EspBleInvalidListenerId)
+      {
+        listeners_[i].id = listenerId;
+        listeners_[i].callback = std::make_shared<Callback>(std::move(callback));
+        return listenerId;
+      }
+    }
+    return EspBleInvalidListenerId;
+  }
+
+  bool remove(EspBleListenerId listenerId)
+  {
+    for (size_t i = 0; i < MaxListeners; ++i)
+    {
+      if (listeners_[i].id == listenerId)
+      {
+        for (size_t next = i + 1; next < MaxListeners; ++next)
+        {
+          listeners_[next - 1] = std::move(listeners_[next]);
+        }
+        listeners_[MaxListeners - 1] = Slot();
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool contains(EspBleListenerId listenerId) const
+  {
+    for (const Slot &slot : listeners_)
+    {
+      if (slot.id == listenerId) return true;
+    }
+    return false;
+  }
+
+  // Copy the primary (first) then each listener into out[], returning the count.
+  // out must hold at least Capacity entries.
+  size_t snapshot(std::shared_ptr<Callback> *out) const
+  {
+    size_t count = 0;
+    if (primary_) out[count++] = primary_;
+    for (const Slot &slot : listeners_)
+    {
+      if (slot.callback) out[count++] = slot.callback;
+    }
+    return count;
+  }
+
+private:
+  struct Slot
+  {
+    EspBleListenerId id = EspBleInvalidListenerId;
+    std::shared_ptr<Callback> callback;
+  };
+  std::shared_ptr<Callback> primary_;
+  Slot listeners_[MaxListeners];
+};
+
 static constexpr uint8_t ESP_BLE_HID_REPORT_ID_KEYBOARD = 0x01;
 static constexpr uint8_t ESP_BLE_HID_REPORT_ID_MOUSE = 0x02;
 static constexpr uint8_t ESP_BLE_HID_REPORT_ID_GAMEPAD = 0x03;
@@ -758,10 +842,20 @@ public:
     const char *serviceUuid,
     const char *characteristicUuid,
     const String &value);
+  // Primary observer (one per event; a second call replaces it).
   void onWritten(WriteCallback callback);
   void onDescriptorWritten(DescriptorWriteCallback callback);
   void onSubscriptionChanged(SubscriptionCallback callback);
   void onSent(SendCallback callback);
+  // Additional observers that coexist with the primary and with each other, so
+  // a profile helper and application code can both watch the same event. Returns
+  // a listener id (EspBleInvalidListenerId if the list is full or callback is
+  // empty); removeListener() drops one by id.
+  EspBleListenerId addWrittenListener(WriteCallback callback);
+  EspBleListenerId addDescriptorWrittenListener(DescriptorWriteCallback callback);
+  EspBleListenerId addSubscriptionChangedListener(SubscriptionCallback callback);
+  EspBleListenerId addSentListener(SendCallback callback);
+  bool removeListener(EspBleListenerId listenerId);
 
 private:
   friend class EspBle;
@@ -784,12 +878,16 @@ private:
     size_t length,
     bool indication);
 
+  EspBleListenerId allocateListenerIdLocked();
+
   EspBle *owner_;
   EspBleGattServerImpl *impl_ = nullptr;
-  WriteCallback writeCallback_;
-  DescriptorWriteCallback descriptorWriteCallback_;
-  SubscriptionCallback subscriptionCallback_;
-  SendCallback sendCallback_;
+  mutable std::mutex listenerMutex_;
+  EspBleListenerId nextListenerId_ = 1;
+  EspBleCallbackList<WriteCallback> writtenListeners_;
+  EspBleCallbackList<DescriptorWriteCallback> descriptorWrittenListeners_;
+  EspBleCallbackList<SubscriptionCallback> subscriptionListeners_;
+  EspBleCallbackList<SendCallback> sentListeners_;
 };
 
 class EspBleHidKeyboard
@@ -1117,6 +1215,7 @@ public:
   using SecurityChangedCallback = std::function<void(const EspBleSecurityChanged &event)>;
   using PasskeyDisplayedCallback = std::function<void(const EspBlePasskeyDisplayed &event)>;
   using GattResultCallback = std::function<void(const EspBleGattResult &result)>;
+  using NotificationCallback = std::function<void(const EspBleGattNotification &notification)>;
 
   EspBle();
   ~EspBle();
@@ -1316,6 +1415,7 @@ public:
     uint16_t characteristicHandle,
     uint32_t timeoutMilliseconds = 10000);
 
+  // Primary observer (one per event; a second call replaces it).
   void onCharacteristicDiscovered(GattResultCallback callback);
   void onCharacteristicRead(GattResultCallback callback);
   void onCharacteristicWritten(GattResultCallback callback);
@@ -1324,7 +1424,21 @@ public:
   void onDescriptorWritten(GattResultCallback callback);
   void onSubscribed(GattResultCallback callback);
   void onUnsubscribed(GattResultCallback callback);
-  void onNotification(std::function<void(const EspBleGattNotification &notification)> callback);
+  void onNotification(NotificationCallback callback);
+  // Additional GATT-client observers that coexist with the primary and each
+  // other, so a profile helper (e.g. the MIDI host) and application code can
+  // both watch the same event. Returns a listener id (EspBleInvalidListenerId
+  // if the list is full or callback is empty); removeGattListener() drops one.
+  EspBleListenerId addCharacteristicDiscoveredListener(GattResultCallback callback);
+  EspBleListenerId addCharacteristicReadListener(GattResultCallback callback);
+  EspBleListenerId addCharacteristicWrittenListener(GattResultCallback callback);
+  EspBleListenerId addServicesDiscoveredListener(GattResultCallback callback);
+  EspBleListenerId addDescriptorReadListener(GattResultCallback callback);
+  EspBleListenerId addDescriptorWrittenListener(GattResultCallback callback);
+  EspBleListenerId addSubscribedListener(GattResultCallback callback);
+  EspBleListenerId addUnsubscribedListener(GattResultCallback callback);
+  EspBleListenerId addNotificationListener(NotificationCallback callback);
+  bool removeGattListener(EspBleListenerId listenerId);
 
   bool initialized() const;
   EspBleAdvertising &advertising();
@@ -1384,6 +1498,7 @@ private:
   // update() so operations serialize behind whatever is currently running.
   void pumpGattQueue();
   void pumpSendQueue();
+  EspBleListenerId allocateGattListenerIdLocked();
 
   bool initialized_ = false;
   bool autoReconnect_ = false;
@@ -1413,15 +1528,17 @@ private:
   SecurityChangedCallback securityChangedCallback_;
   PasskeyDisplayedCallback passkeyDisplayedCallback_;
   PasskeyDisplayedCallback numericComparisonCallback_;
-  GattResultCallback characteristicDiscoveredCallback_;
-  GattResultCallback characteristicReadCallback_;
-  GattResultCallback characteristicWrittenCallback_;
-  GattResultCallback servicesDiscoveredCallback_;
-  GattResultCallback descriptorReadCallback_;
-  GattResultCallback descriptorWrittenCallback_;
-  GattResultCallback subscribedCallback_;
-  GattResultCallback unsubscribedCallback_;
-  std::function<void(const EspBleGattNotification &notification)> notificationCallback_;
+  EspBleCallbackList<GattResultCallback> characteristicDiscoveredListeners_;
+  EspBleCallbackList<GattResultCallback> characteristicReadListeners_;
+  EspBleCallbackList<GattResultCallback> characteristicWrittenListeners_;
+  EspBleCallbackList<GattResultCallback> servicesDiscoveredListeners_;
+  EspBleCallbackList<GattResultCallback> descriptorReadListeners_;
+  EspBleCallbackList<GattResultCallback> descriptorWrittenListeners_;
+  EspBleCallbackList<GattResultCallback> subscribedListeners_;
+  EspBleCallbackList<GattResultCallback> unsubscribedListeners_;
+  EspBleCallbackList<NotificationCallback> notificationListeners_;
+  mutable std::mutex gattListenerMutex_;
+  EspBleListenerId nextGattListenerId_ = 1;
 };
 
 #endif // ESP_BLE_H

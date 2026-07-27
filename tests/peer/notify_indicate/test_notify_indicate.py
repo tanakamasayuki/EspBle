@@ -27,11 +27,15 @@ def test_notify_indicate(dut, peers):
         "RECEIVED id=1 indication=0 value=notify-value context=loop",
         timeout=20,
     )
+    # Multi-listener core: the second client listener also receives the value.
+    dut.expect_exact("RECEIVED2 value=notify-value", timeout=20)
     # Broadcast send reports connectionId 0.
     peripheral.expect_exact(
         "SENT id=0 indication=0 success=1 value=notify-value detail= context=loop",
         timeout=20,
     )
+    # ...and the second server sent-listener fires alongside the primary onSent.
+    peripheral.expect_exact("SENT2 value=notify-value", timeout=20)
 
     # Send FIFO: three notifies queued in one loop iteration all succeed and are
     # delivered in order (before the queue, only the first would have been sent).

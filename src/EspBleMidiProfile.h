@@ -9,11 +9,13 @@
 // EspUsbHost's MIDI surface (onMidiMessage + send helpers, EspBleMidiMessage
 // mirrors EspUsbHostMidiMessage).
 //
-// Both helpers install the single generic GATT callbacks they need (the device
-// takes gattServer().onWritten/onSubscriptionChanged; the host takes
-// onNotification/onCharacteristicDiscovered/onSubscribed), so a sketch that
-// uses a MIDI helper should not also drive those callbacks itself. Timestamps
-// are derived from millis() (the BLE MIDI 13-bit millisecond clock).
+// Both helpers register the generic GATT callbacks they need as add*Listener()
+// listeners (the device takes gattServer() written/subscriptionChanged/sent; the
+// host takes notification/characteristicDiscovered/subscribed/characteristicWritten),
+// not the single on*() primary. A sketch can therefore still install its own
+// on*() primary and/or additional add*Listener() observers for the same events
+// alongside a MIDI helper. Timestamps are derived from millis() (the BLE MIDI
+// 13-bit millisecond clock).
 
 #include <Arduino.h>
 
@@ -46,21 +48,29 @@ public:
       return false;
     ble_.advertising().addServiceUuid(ESP_BLE_MIDI_SERVICE_UUID);
 
-    ble_.gattServer().onWritten([this](const EspBleGattWrite &write) {
+    // Register as additional listeners (not the single on* primary) so a sketch
+    // can still observe these GATT Server events itself. Remove-before-add keeps
+    // a repeated begin() from stacking duplicate listeners.
+    auto &server = ble_.gattServer();
+    if (writtenListener_ != EspBleInvalidListenerId) server.removeListener(writtenListener_);
+    if (subscriptionListener_ != EspBleInvalidListenerId) server.removeListener(subscriptionListener_);
+    if (sentListener_ != EspBleInvalidListenerId) server.removeListener(sentListener_);
+    writtenListener_ = server.addWrittenListener([this](const EspBleGattWrite &write) {
       if (!uuidEquals(write.characteristicUuid, ESP_BLE_MIDI_IO_CHARACTERISTIC_UUID))
         return;
       deliverWrite(write.connectionId,
                    reinterpret_cast<const uint8_t *>(write.value.c_str()),
                    write.value.length());
     });
-    ble_.gattServer().onSubscriptionChanged([this](const EspBleGattSubscription &subscription) {
-      if (!uuidEquals(subscription.characteristicUuid, ESP_BLE_MIDI_IO_CHARACTERISTIC_UUID))
-        return;
-      setSubscribed(subscription.connectionId, subscription.notifications);
-    });
-    // A BLE MIDI send is single-in-flight, so a multi-packet SysEx is sent one
-    // packet per send completion, driven from update() via onSent.
-    ble_.gattServer().onSent([this](const EspBleGattSendResult &result) {
+    subscriptionListener_ = server.addSubscriptionChangedListener(
+      [this](const EspBleGattSubscription &subscription) {
+        if (!uuidEquals(subscription.characteristicUuid, ESP_BLE_MIDI_IO_CHARACTERISTIC_UUID))
+          return;
+        setSubscribed(subscription.connectionId, subscription.notifications);
+      });
+    // A multi-packet SysEx is sent one packet per send completion, driven from
+    // update() via onSent (the send FIFO preserves order across packets).
+    sentListener_ = server.addSentListener([this](const EspBleGattSendResult &result) {
       if (!uuidEquals(result.characteristicUuid, ESP_BLE_MIDI_IO_CHARACTERISTIC_UUID))
         return;
       if (sysExActive_)
@@ -283,6 +293,9 @@ private:
   };
 
   EspBle &ble_;
+  EspBleListenerId writtenListener_ = EspBleInvalidListenerId;
+  EspBleListenerId subscriptionListener_ = EspBleInvalidListenerId;
+  EspBleListenerId sentListener_ = EspBleInvalidListenerId;
   MessageCallback messageCallback_;
   EspBleMidiParser parser_;
   Subscriber subscribers_[MaxSubscribers];
@@ -309,29 +322,38 @@ public:
   // EspBle::begin().
   bool begin()
   {
-    ble_.onNotification([this](const EspBleGattNotification &notification) {
-      if (!uuidEquals(notification.characteristicUuid, ESP_BLE_MIDI_IO_CHARACTERISTIC_UUID))
-        return;
-      deliverNotification(notification.connectionId,
-                          reinterpret_cast<const uint8_t *>(notification.value.c_str()),
-                          notification.value.length());
-    });
-    ble_.onCharacteristicDiscovered([this](const EspBleGattResult &result) {
-      if (!uuidEquals(result.characteristicUuid, ESP_BLE_MIDI_IO_CHARACTERISTIC_UUID))
-        return;
-      if (!result.success)
-        return;
-      ble_.subscribe(result.connectionId, ESP_BLE_MIDI_SERVICE_UUID,
-                     ESP_BLE_MIDI_IO_CHARACTERISTIC_UUID);
-    });
-    ble_.onSubscribed([this](const EspBleGattResult &result) {
+    // Register as additional GATT-client listeners (not the single on* primary)
+    // so a sketch can still observe these events itself. Remove-before-add keeps
+    // a repeated begin() from stacking duplicate listeners.
+    if (notificationListener_ != EspBleInvalidListenerId) ble_.removeGattListener(notificationListener_);
+    if (discoveredListener_ != EspBleInvalidListenerId) ble_.removeGattListener(discoveredListener_);
+    if (subscribedListener_ != EspBleInvalidListenerId) ble_.removeGattListener(subscribedListener_);
+    if (writtenListener_ != EspBleInvalidListenerId) ble_.removeGattListener(writtenListener_);
+    notificationListener_ = ble_.addNotificationListener(
+      [this](const EspBleGattNotification &notification) {
+        if (!uuidEquals(notification.characteristicUuid, ESP_BLE_MIDI_IO_CHARACTERISTIC_UUID))
+          return;
+        deliverNotification(notification.connectionId,
+                            reinterpret_cast<const uint8_t *>(notification.value.c_str()),
+                            notification.value.length());
+      });
+    discoveredListener_ = ble_.addCharacteristicDiscoveredListener(
+      [this](const EspBleGattResult &result) {
+        if (!uuidEquals(result.characteristicUuid, ESP_BLE_MIDI_IO_CHARACTERISTIC_UUID))
+          return;
+        if (!result.success)
+          return;
+        ble_.subscribe(result.connectionId, ESP_BLE_MIDI_SERVICE_UUID,
+                       ESP_BLE_MIDI_IO_CHARACTERISTIC_UUID);
+      });
+    subscribedListener_ = ble_.addSubscribedListener([this](const EspBleGattResult &result) {
       if (!uuidEquals(result.characteristicUuid, ESP_BLE_MIDI_IO_CHARACTERISTIC_UUID))
         return;
       if (result.success)
         markReady(result.connectionId);
     });
-    // Drive the next SysEx packet from each write completion (single-in-flight).
-    ble_.onCharacteristicWritten([this](const EspBleGattResult &result) {
+    // Drive the next SysEx packet from each write completion.
+    writtenListener_ = ble_.addCharacteristicWrittenListener([this](const EspBleGattResult &result) {
       if (!uuidEquals(result.characteristicUuid, ESP_BLE_MIDI_IO_CHARACTERISTIC_UUID))
         return;
       if (sysExActive_ && result.connectionId == sysExConnectionId_)
@@ -522,6 +544,10 @@ private:
   }
 
   EspBle &ble_;
+  EspBleListenerId notificationListener_ = EspBleInvalidListenerId;
+  EspBleListenerId discoveredListener_ = EspBleInvalidListenerId;
+  EspBleListenerId subscribedListener_ = EspBleInvalidListenerId;
+  EspBleListenerId writtenListener_ = EspBleInvalidListenerId;
   MessageCallback messageCallback_;
   Slot slots_[MaxConnections];
 
