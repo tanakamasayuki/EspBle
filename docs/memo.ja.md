@@ -1,4 +1,4 @@
-GUIDE_BLE_BASICS.ja.md（旧 GUIDE_SCAN_TO_COMM.ja.md）
+GUIDE_BLE_BASICS.ja.md
 を充実させたい
 
 もう少し対象範囲を広げてBLE通信を理解するための資料にしたい。
