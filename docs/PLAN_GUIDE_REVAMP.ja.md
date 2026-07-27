@@ -55,20 +55,79 @@ Phase 4（GATT Server API再設計）を Phase 5/6 の前に置くのが要点�
 
 | # | 種別 | 項目 | 状況 |
 |---|---|---|---|
-| 0-1 | 調査 | Directed Advertising が同梱NimBLEで可能か。Legacy directedは `CONFIG_BT_NIMBLE_EXT_ADV` に依存しないため可能性がある。`NimBLEAdvertising` の該当API有無を確認 | 未着手 |
-| 0-2 | 調査 | Filter Accept List（whitelist）が `NimBLEDevice` 経由で使えるか。Peripheral側の接続拒否として唯一の正攻法 | 未着手 |
-| 0-3 | 設計決定 | **同一UUID複数インスタンスのGATT Server API形**。推奨案: `addService()` が不透明ハンドルを返し `addCharacteristic(serviceHandle, uuid, cfg)` を取る形（Client側のハンドルベースAPIと対称になる） | 未着手 |
-| 0-4 | 設計決定 | `preferredMtu` のデフォルト値（23 → 247 など）。NKROの32下限チェックとの整合も併せて判断 | 未着手 |
-| 0-5 | 設計決定 | ガイドの章立て確定（GAP / GATT の2部構成、各章内でCentral・Peripheral並記） | 未着手 |
+| 0-1 | 調査 | Directed Advertising が同梱NimBLEで可能か | **完了（結論: wrapper経由では不可）** |
+| 0-2 | 調査 | Filter Accept List（whitelist）が使えるか | **完了（結論: 可能）** |
+| 0-3 | 設計決定 | 同一UUID複数インスタンスのGATT Server API形 | **完了（ハンドル返却型）** |
+| 0-4 | 設計決定 | `preferredMtu` のデフォルト値 | **完了（247）** |
+| 0-5 | 設計決定 | ガイドの章立て | **完了（GAP章 / GATT章の2部構成）** |
+
+#### 0-1 / 0-2 の調査結果
+
+調査対象は Arduino-ESP32 同梱の `libraries/BLE`（NimBLE wrapper）。**ローカル実機環境は3.3.10で、examplesのpinは3.3.11**のため、実装時に3.3.11で再確認する。
+
+| 確認項目 | backend API | 結論 |
+|---|---|---|
+| Directed Advertising | `BLEAdvertising::setAdvertisementType()` で `conn_mode` は設定できるが、`BLEAdvertising::start()` が `ble_gap_adv_start(ownAddrType, **NULL**, …)` と **direct_addr をNULL固定**で呼ぶ（`BLEAdvertising.cpp:1775`） | **wrapper経由では不可**。`ble_gap_adv_start()` の直呼びなら理論上可能だが、advertising状態とGAPイベント配線をwrapperと二重管理することになる。[DESIGN_DEBT.ja.md](DESIGN_DEBT.ja.md) のクラスタA/Bで実機退行した「wrapper machinery自前化」と同型のリスク |
+| Filter Accept List | `BLEDevice::whiteListAdd()` / `whiteListRemove()` / `onWhiteList()` ＋ `BLEAdvertising::setScanFilter(scanRequestWhitelistOnly, connectWhitelistOnly)`（NimBLEでは `filter_policy` = `BLE_HCI_ADV_FILT_NONE/SCAN/CONN/BOTH`） | **可能**。コントローラ側で接続要求とスキャン要求を許可リストに限定できる。memoの「Peripheral側で接続許可の機能はないの？」への正攻法 |
+| Scan Responseの任意ペイロード | `BLEAdvertising::setScanResponseData(BLEAdvertisementData&)`。`BLEAdvertisementData` は name / shortName / appearance / flags / manufacturerData / serviceData / complete・partial services / preferredParams / txPower / 任意addData に対応 | **可能**。EspBleが name のみを載せている（[EspBle.cpp:3552](../src/EspBle.cpp#L3552)）のは自前の制限にすぎない |
+| 同一UUIDの複数Service | `BLEServer::createService(uuid, numHandles, **inst_id**)` と `getByUUID(uuid, inst_id)` が instance id を持つ | **可能**。backendは元から多重インスタンス対応 |
+| 同一UUIDの複数Characteristic | `BLECharacteristicMap::m_uuidMap` は **BLECharacteristic\* をキー**とするmap（値がUUID文字列）。`getByUUID()` が先頭を返すだけ | **可能**。EspBle側がポインタを保持すれば重複は成立する |
+| Advertisingの未公開オプション（追加発見） | `BLEAdvertising::addTxPower()`、`BLEAdvertisementData::setFlags()` / `setShortName()` / `setPreferredParams()` / `setPartialServices()` | いずれも未公開。Phase 1で公開範囲を選定する |
+
+**Phase 4の前提が確認できた**: 同一UUIDの多重登録を阻んでいるのは backend ではなく EspBle 自身のUUIDキー設計であり、是正は純粋に自分たちの側の問題。
+
+#### 0-3 の決定 — GATT Server APIは**ハンドル返却型**
+
+`addService()` が不透明ハンドルを返し、`addCharacteristic()` はそのハンドルを受け取ってCharacteristicハンドルを返す。以降の値操作・送信もハンドル指定に統一する。UUID指定のショートカットは**残さない**（APIの二重化を避け、examplesの書き方を一本化するため）。
+
+```cpp
+auto svc = ble.gattServer().addService("181A");
+auto chr = ble.gattServer().addCharacteristic(svc, "2A6E", config);
+ble.gattServer().setValue(chr, value);
+ble.gattServer().notify(chr, value);
+
+auto svc2 = ble.gattServer().addService("181A");  // 同一UUIDの2つ目も自然に書ける
+```
+
+採用理由: Client側が既にハンドルベースAPI（`discoveredCharacteristic().handle` → handle指定の read/write/subscribe）を持っており、**Server側だけがUUIDキーという非対称を解消できる**。BLEの仕様上「同じUUIDのServiceやCharacteristicが複数存在しうる」以上、UUIDを主キーにする設計自体が誤り。
+
+影響: `EspBleGattServer` の全メソッド、HID / MIDI を含む全profile helper、`examples/Gatt/**` の全sketch、Peerテスト一式。Phase 4で実施する。
+
+#### 0-4 の決定 — `preferredMtu` の既定値は **247**
+
+notify payload 上限が 20 バイト → 244 バイトになり、初学者が最初にぶつかる壁を除去できる。NKROの「32未満は `begin()` で `InvalidArgument`」チェックも設定なしで満たされる。517（ATT最大）は接続ごとのバッファ確保がRAMを圧迫し、最大3接続との相性が悪いため採らない。
+
+#### 0-5 の決定 — 章立ては **GAP章 / GATT章の2部構成**
+
+各章の中で Peripheral → Central の時系列順に並記する。memoの流れ（アドバタイズ → スキャン → 接続 → GATT）にそのまま対応する。
+
+```
+1. BLEとは / GAPとGATTの役割
+2. GAP編
+   2.1 アドバタイズ（Peripheral）
+   2.2 スキャン（Central）
+   2.3 接続（両者）
+   2.4 アドレスとプライバシー
+   2.5 初期化時に決めること（MTU等）
+3. GATT編
+   3.1 Service / Characteristic / Descriptor
+   3.2 Server側の組み立て
+   3.3 Client側の探索と読み書き
+   3.4 Notify / Indicate
+4. UUIDを理解する（既存の解説を流用）
+```
+
+Phase 3が2章まで、Phase 6が3章と4章を担当する。
 
 ### Phase 1 — GAP側のライブラリ変更（Cのうち影響が浅い側）
 
 | # | 項目 | 状況 |
 |---|---|---|
 | 1-1 | Scan Responseに任意ペイロードを載せるAPI（現状name固定を解消） | 未着手 |
-| 1-2 | Directed Advertising（0-1がOKなら） | 未着手 |
-| 1-3 | Filter Accept List / Peripheral側の接続拒否手段（0-2がOKなら） | 未着手 |
+| 1-2 | ~~Directed Advertising~~ → **0-1により見送り**。「対象外（backend由来）」として [FEATURE_MATRIX.ja.md](FEATURE_MATRIX.ja.md) と [DESIGN_DEBT.ja.md](DESIGN_DEBT.ja.md) に記録する | 記録待ち |
+| 1-3 | Filter Accept List（`whiteListAdd` ＋ `setScanFilter`）によるPeripheral側の接続制限 | 未着手 |
 | 1-4 | `preferredMtu` デフォルト変更（0-4の決定に従う） | 未着手 |
+| 1-5 | Advertisingの未公開オプション公開（Tx Power / Flags / Short Name / Preferred Params）。公開範囲は要選定 | 未着手 |
 
 各項目に Peerテスト追加と [FEATURE_MATRIX.ja.md](FEATURE_MATRIX.ja.md) 更新を伴う。
 
@@ -130,6 +189,8 @@ Service / Characteristic / Descriptor、UUIDとハンドルの使い分け、Ser
 
 ## 未決事項
 
-- Phase 0の5項目（0-1〜0-5）はすべて未決。特に 0-3 はPhase 4の形を決めるため、Phase 4着手前に確定が必要。
-- Cの各項目は現在 [DESIGN_DEBT.ja.md](DESIGN_DEBT.ja.md) に記載が無い。Phase 0の決定内容を同文書へ「クラスタD」等として追記し、既存の運用（是正計画→実装→DECISIONS移送）に載せるのが望ましい。
-- 2-3（Gap/Scan と Info/ScanDump の役割重複）は、最小例を残す方針かどうかで結論が変わる。
+- **Phase 0は完了**（0-1〜0-5すべて決着）。次はPhase 1から着手する。
+- Cの各項目は現在 [DESIGN_DEBT.ja.md](DESIGN_DEBT.ja.md) に記載が無い。Phase 0の決定内容を同文書へ「クラスタD」として追記し、既存の運用（是正計画→実装→DECISIONS移送）に載せる。Directed Advertising は「対象外（backend由来）」節へ。
+- 2-3（Gap/Scan と Info/ScanDump の役割重複）は、最小例を残す方針かどうかで結論が変わる。Phase 2着手時に判断する。
+- 1-5（Advertisingの未公開オプション）は公開範囲が未選定。Tx Power は実用性が高いが、Flags / Short Name / Preferred Params は現実の必要性で取捨する（[MEMORY: scope-by-real-world-use] の方針に従う）。
+- 調査は Arduino-ESP32 **3.3.10** のソースで実施。examplesのpinは **3.3.11** のため、Phase 1着手時に該当APIを再確認する。
