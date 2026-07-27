@@ -79,9 +79,9 @@ HID Host の `discover()` が汎用queueエンジンに乗らず、別経路に�
 
 ### 小粒（自己完結）
 
-1. **persistent-subscription registryの無言overflow**: `free==nullptr` で黙って記録しない（[EspBle.cpp:1443](../src/EspBle.cpp#L1443)、容量16 [1399](../src/EspBle.cpp#L1399)）。既定onのため、再接続時に復元されないことにアプリが気づけない。→ drop/overflowカウンタを露出（`droppedEventCount()` に倣う）。**状況: 未着手**
-2. **切断時のqueue未purge＋GATT op中の `disconnect()` reject**: `removeConnection`（[EspBle.cpp:576](../src/EspBle.cpp#L576)）が `gattQueue` を触らず、切断済み接続のqueue済みopが残って他の生存接続を遅延させる。`disconnect()` はGATT op中false（[6853](../src/EspBle.cpp#L6853)）。→ removeConnectionで当該connectionIdのqueue済みopをdrop、disconnectは遅延/queue化。**状況: 未着手**
-3. **NKROのMTU下限未引き上げ**: `enableNkro()`（[EspBle.cpp:4301](../src/EspBle.cpp#L4301)）はフラグとreport長29のみ設定し `preferredMtu`（既定23）を触らないため、29-byte notifyが送信時に無言失敗（MTU payload guard [4030](../src/EspBle.cpp#L4030)）。→ `enableNkro()` で実効MTU下限を32へ（or begin()でNKRO＋MTU<32を明示エラー）。**状況: 未着手**
+1. **persistent-subscription registryの無言overflow**: `free==nullptr` で黙って記録しない（容量16）。既定onのため、再接続時に復元されないことにアプリが気づけない。→ **完了**: `droppedPersistentSubscriptions` カウンタを追加、overflow時に加算し、公開 `EspBle::droppedPersistentSubscriptionCount()` で露出（`droppedEventCount()` に倣う）。**状況: 完了（要実機再確認）**
+2. **切断時のqueue未purge＋GATT op中の `disconnect()` reject**: `removeConnection` が `gattQueue` を触らず、切断済み接続のqueue済みopが残って生存接続を遅延させる。`disconnect()` はGATT op中false。→ **完了**: `removeConnection` が `purgeQueuedGattOpsLocked(connectionId)` で当該接続のqueue済みopをdrop（generic opは失敗GattResultを配送して完了contractを維持、queued HidDiscoverはHID Host切断処理に委ねて静かにdrop、実行中opは無干渉）。`disconnect()` はGATT op中に**rejectせず deferred**（`ConnectionSlot::pendingDisconnect`＋`update()` の `drainPendingDisconnects()` でop完了後に実行）。**状況: 完了（要実機再確認）**
+3. **NKROのMTU下限未引き上げ**: `enableNkro()` はフラグとreport長29のみ設定し `preferredMtu`（既定23）を触らないため、29-byte notifyが送信時に無言失敗。→ **完了**: ライブラリの明示エラー方針に合わせ、`begin()` で「NKRO keyboard configured かつ `preferredMtu < 32`」を `InvalidArgument` で拒否（無言失敗より明示エラー。silentにMTUを上書きしない）。**状況: 完了（要実機再確認）**
 
 ### より大きめ（任意・クラスタA完了が前提）
 

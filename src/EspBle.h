@@ -1269,6 +1269,9 @@ public:
   // indicate the whole database.
   bool notifyServicesChanged(uint16_t startHandle, uint16_t endHandle);
   size_t droppedEventCount() const;
+  // Number of persistent subscriptions dropped because the registry was full;
+  // non-zero means some subscriptions will not be restored on reconnect.
+  size_t droppedPersistentSubscriptionCount() const;
   size_t connectionCount() const;
   bool connection(EspBleConnectionId connectionId, EspBleConnection &connection) const;
   bool requestSecurity(EspBleConnectionId connectionId);
@@ -1498,6 +1501,7 @@ private:
   // update() so operations serialize behind whatever is currently running.
   void pumpGattQueue();
   void pumpSendQueue();
+  void drainPendingDisconnects();
   EspBleListenerId allocateGattListenerIdLocked();
 
   bool initialized_ = false;

@@ -137,6 +137,10 @@ struct EspBleImpl
     bool used = false;
     EspBleConnection connection;
     BLEClient *client = nullptr;
+    // Set when disconnect() is called while a GATT op is in flight on this
+    // connection; EspBle::drainPendingDisconnects() performs the disconnect once
+    // the op completes, instead of rejecting the disconnect() call.
+    bool pendingDisconnect = false;
   };
 
   // Central clients waiting to be freed on the loop task. The backend has no
@@ -580,7 +584,50 @@ struct EspBleImpl
     event.connection = slot.connection;
     pushEvent(event);
     releaseDatabaseLocked(slot.connection.id);
+    purgeQueuedGattOpsLocked(slot.connection.id);
     slot = ConnectionSlot();
+  }
+
+  // Drop queued (not-yet-started) GATT ops for a gone connection so they do not
+  // clog the single-slot queue ahead of live connections. The op in flight
+  // (gattOperating) is left untouched; it finishes with a backend error through
+  // its own worker. Each dropped generic op still gets a failure completion so
+  // the caller's callback contract holds; a queued HID discovery is dropped
+  // quietly (the HID host's disconnect handling covers its cleanup).
+  void purgeQueuedGattOpsLocked(EspBleConnectionId connectionId)
+  {
+    size_t readIdx = gattQueueHead;
+    size_t writeIdx = gattQueueHead;
+    size_t survivors = 0;
+    for (size_t i = 0; i < gattQueueCount; ++i)
+    {
+      PendingGattOp &op = gattQueue[readIdx];
+      if (op.connectionId == connectionId)
+      {
+        if (op.operation != EspBleGattOperation::HidDiscover)
+        {
+          Event failure;
+          failure.type = EventType::GattResult;
+          failure.gattResult.operation = op.operation;
+          failure.gattResult.connectionId = op.connectionId;
+          failure.gattResult.serviceUuid = op.serviceUuid;
+          failure.gattResult.characteristicUuid = op.characteristicUuid;
+          failure.gattResult.descriptorUuid = op.descriptorUuid;
+          failure.gattResult.handle = op.characteristicHandle;
+          failure.gattResult.error = EspBleError::InvalidState;
+          failure.gattResult.detail = "connection closed before the queued GATT operation started";
+          pushEvent(failure);
+        }
+      }
+      else
+      {
+        if (writeIdx != readIdx) gattQueue[writeIdx] = std::move(op);
+        writeIdx = (writeIdx + 1) % GattQueueCapacity;
+        ++survivors;
+      }
+      readIdx = (readIdx + 1) % GattQueueCapacity;
+    }
+    gattQueueCount = survivors;
   }
 
   // Role-agnostic MTU tracker. Both the server's onMtuChanged callback and the
@@ -1407,6 +1454,9 @@ struct EspBleImpl
   };
   PersistentSubscription persistentSubscriptions[PersistentSubscriptionCapacity];
   bool persistentSubscriptionsEnabled = true;
+  // Counts subscriptions that could not be recorded because the registry was
+  // full. Non-zero means some subscriptions will not be restored on reconnect.
+  size_t droppedPersistentSubscriptions = 0;
 
   String connectionAddressLocked(EspBleConnectionId connectionId)
   {
@@ -1440,7 +1490,13 @@ struct EspBleImpl
         return;
       }
     }
-    if (free == nullptr) return; // registry full: leave existing records intact
+    if (free == nullptr)
+    {
+      // Registry full: leave existing records intact but count the loss so the
+      // application can tell some subscriptions will not be restored.
+      ++droppedPersistentSubscriptions;
+      return;
+    }
     free->used = true;
     free->peerAddress = peerAddress;
     free->serviceUuid = serviceUuid;
@@ -6633,6 +6689,17 @@ bool EspBle::begin(const EspBleConfig &config)
     setError(EspBleError::InvalidArgument, "preferred MTU must be between 23 and 517");
     return false;
   }
+  // An NKRO keyboard notifies a 29-byte report, which needs MTU >= 32 (29 + the
+  // 3-byte ATT header). Reject up front instead of letting every report notify
+  // fail silently against the MTU payload guard.
+  if (hidKeyboardDevice_.configured() && hidKeyboardDevice_.nkroEnabled() &&
+      config.preferredMtu < 32)
+  {
+    setError(
+      EspBleError::InvalidArgument,
+      "NKRO keyboard requires preferredMtu >= 32 (29-byte report + 3-byte ATT header)");
+    return false;
+  }
   if (!config.security.enabled &&
       (config.security.mitm || config.security.staticPasskeyEnabled ||
        config.security.ioCapability != EspBleSecurityIoCapability::None))
@@ -6922,12 +6989,45 @@ void EspBle::end()
   impl_ = nullptr;
 }
 
+void EspBle::drainPendingDisconnects()
+{
+  if (impl_ == nullptr) return;
+  struct Target
+  {
+    BLEClient *client = nullptr;
+    BLEServer *server = nullptr;
+    uint16_t handle = 0xffff;
+  };
+  Target targets[ConnectionCapacity];
+  size_t count = 0;
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    for (EspBleImpl::ConnectionSlot &slot : impl_->connections)
+    {
+      if (!slot.used || !slot.pendingDisconnect) continue;
+      // Still wait while a GATT op is in flight on this connection.
+      if (impl_->gattOperating && impl_->gattConnectionId == slot.connection.id) continue;
+      slot.pendingDisconnect = false;
+      targets[count].client = slot.client;
+      targets[count].server = impl_->server;
+      targets[count].handle = slot.connection.handle;
+      ++count;
+    }
+  }
+  for (size_t i = 0; i < count; ++i)
+  {
+    if (targets[i].client != nullptr) targets[i].client->disconnect();
+    else if (targets[i].server != nullptr) targets[i].server->disconnect(targets[i].handle);
+  }
+}
+
 void EspBle::update()
 {
   cancelExpiredConnectAttempt();
   expireGattOperation();
   pumpGattQueue();
   pumpSendQueue();
+  drainPendingDisconnects();
   scanner_.dispatchPendingResults();
   dispatchConnectionEvents();
   reapRetiredClients();
@@ -7156,26 +7256,37 @@ bool EspBle::disconnect(EspBleConnectionId connectionId)
   uint16_t handle = 0xffff;
   {
     std::lock_guard<std::mutex> lock(impl_->mutex);
-    if (impl_->gattOperating && impl_->gattConnectionId == connectionId)
-    {
-      setError(EspBleError::InvalidState, "a GATT operation is active on this connection");
-      return false;
-    }
-    for (const EspBleImpl::ConnectionSlot &slot : impl_->connections)
+    EspBleImpl::ConnectionSlot *found = nullptr;
+    for (EspBleImpl::ConnectionSlot &slot : impl_->connections)
     {
       if (slot.used && slot.connection.id == connectionId)
       {
-        client = slot.client;
-        server = impl_->server;
-        handle = slot.connection.handle;
-        // A disconnect() is intentional: stop auto-reconnecting to this peer.
-        if (slot.connection.localRole == EspBleRole::Central)
-        {
-          impl_->forgetDesiredLocked(slot.connection.peerAddress);
-        }
+        found = &slot;
         break;
       }
     }
+    if (found == nullptr)
+    {
+      setError(EspBleError::InvalidArgument, "connection ID was not found");
+      return false;
+    }
+    // A disconnect() is intentional: stop auto-reconnecting to this peer.
+    if (found->connection.localRole == EspBleRole::Central)
+    {
+      impl_->forgetDesiredLocked(found->connection.peerAddress);
+    }
+    if (impl_->gattOperating && impl_->gattConnectionId == connectionId)
+    {
+      // A GATT op is in flight on this connection; defer the disconnect until it
+      // completes (drainPendingDisconnects() from update()) instead of rejecting
+      // and tearing the client down under the running worker.
+      found->pendingDisconnect = true;
+      clearError();
+      return true;
+    }
+    client = found->client;
+    server = impl_->server;
+    handle = found->connection.handle;
   }
 
   if (handle == 0xffff)
@@ -7351,6 +7462,16 @@ size_t EspBle::droppedEventCount() const
   }
   std::lock_guard<std::mutex> lock(impl_->mutex);
   return impl_->droppedEvents;
+}
+
+size_t EspBle::droppedPersistentSubscriptionCount() const
+{
+  if (impl_ == nullptr)
+  {
+    return 0;
+  }
+  std::lock_guard<std::mutex> lock(impl_->mutex);
+  return impl_->droppedPersistentSubscriptions;
 }
 
 size_t EspBle::connectionCount() const
