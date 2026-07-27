@@ -1,13 +1,14 @@
 // en: GlucoseServer - standard Glucose Service (0x1808) with the Record Access
 //     Control Point (RACP). When a client writes "Report Stored Records (all)",
 //     the server notifies one Glucose Measurement (sequence, base time, SFLOAT
-//     concentration) and then indicates the RACP response. BLE sends are
-//     single-in-flight, so the notify and indicate are sequenced from onSent.
+//     concentration) and then indicates the RACP response. Sends are queued, so
+//     onSent here is a deliberate choice: the RACP "operation complete" response
+//     is indicated only after the measurement is confirmed delivered.
 // ja: GlucoseServer - Record Access Control Point（RACP）付きの標準Glucose
 //     Service（0x1808）。Clientが「Report Stored Records（all）」を書き込むと、
 //     Glucose Measurement（sequence、base time、SFLOAT濃度）を1件Notifyし、続けて
-//     RACP応答をIndicateする。BLE送信は同時1件のため、notifyとindicateはonSentで
-//     順次実行する。
+//     RACP応答をIndicateする。送信はFIFOにqueueされるので、ここでonSentを使うのは
+//     意図的で、measurementの配送完了を待ってからRACPの「完了」応答をIndicateする。
 #include <EspBle.h>
 #include <EspBleMedicalFloat.h>
 

@@ -13,7 +13,7 @@ Standard Glucose Service (0x1808) peripheral with the **Record Access Control Po
 
 - Registers Glucose Measurement (0x2A18, notify), Glucose Feature (0x2A51, read), and RACP (0x2A52, write + indicate)
 - On a RACP "Report Stored Records" write, notifies one measurement (sequence number, base time, SFLOAT concentration, type/location)
-- Sequences the measurement notify and the RACP response indicate from `onSent` (BLE sends are single-in-flight)
+- Sequences the measurement notify and the RACP response indicate from `onSent` (sends queue, so this ordering is a deliberate delivery-confirmation choice)
 
 ## Key APIs
 

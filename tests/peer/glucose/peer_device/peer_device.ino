@@ -2,8 +2,8 @@
 // exercising the Record Access Control Point (RACP) procedure. When the client
 // writes "Report Stored Records (all)" to the RACP, the server notifies one
 // Glucose Measurement (sequence number, base time, SFLOAT concentration) and
-// then indicates the RACP response. Because BLE sends are single-in-flight, the
-// measurement notify and the RACP indicate are sequenced from onSent.
+// then indicates the RACP response. Sends are queued, so the RACP indicate is
+// sequenced from onSent to complete only after the measurement is delivered.
 #include <EspBle.h>
 #include <EspBleMedicalFloat.h>
 #include <freertos/FreeRTOS.h>

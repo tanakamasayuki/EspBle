@@ -13,7 +13,7 @@
 
 - Glucose Measurement（0x2A18, notify）、Glucose Feature（0x2A51, read）、RACP（0x2A52, write + indicate）を登録
 - RACP「Report Stored Records」書込みで、Measurement（sequence番号、base time、SFLOAT濃度、type/location）を1件Notify
-- BLE送信は同時1件のため、Measurement notifyとRACP応答indicateを`onSent`で順次実行
+- 送信はqueueされるが、Measurement配送完了を待ってRACP応答をIndicateするため`onSent`で順次実行する
 
 ## 主なAPI
 

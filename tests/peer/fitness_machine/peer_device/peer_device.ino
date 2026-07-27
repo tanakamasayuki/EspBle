@@ -2,9 +2,9 @@
 // Machine Service (0x1826). Indoor Bike Data (0x2AD2) is a notification; Fitness
 // Machine Feature (0x2ACC) is readable; the Fitness Machine Control Point
 // (0x2AD9, write + indicate) drives interactive control and Fitness Machine
-// Status (0x2ADA) notifies the resulting change. Because BLE sends are
-// single-in-flight, the Control Point response indication and the Status
-// notification are sequenced from onSent.
+// Status (0x2ADA) notifies the resulting change. Sends are queued, so the
+// Control Point response indication and the Status notification are sequenced
+// from onSent to preserve their control-flow ordering.
 #include <EspBle.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>

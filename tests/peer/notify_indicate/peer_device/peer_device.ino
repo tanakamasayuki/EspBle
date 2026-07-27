@@ -7,6 +7,7 @@ static constexpr const char *TEST_CHARACTERISTIC_UUID = "71756361-5fa4-43bc-9003
 
 EspBle ble;
 TaskHandle_t loopTask = nullptr;
+EspBleConnectionId serverConnectionId = 0;
 
 static const char *callbackContext()
 {
@@ -41,7 +42,8 @@ void setup()
   });
   gattServer.onSent([](const EspBleGattSendResult &result) {
     Serial.printf(
-      "SENT indication=%u success=%u value=%s detail=%s context=%s\n",
+      "SENT id=%u indication=%u success=%u value=%s detail=%s context=%s\n",
+      static_cast<unsigned>(result.connectionId),
       result.indication ? 1 : 0,
       result.success ? 1 : 0,
       result.value.c_str(),
@@ -56,6 +58,10 @@ void setup()
     Serial.printf("BLE_INIT_FAILED %s %s\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
     return;
   }
+  ble.onConnected([](const EspBleConnection &connection) {
+    serverConnectionId = connection.id;
+    Serial.printf("PERIPHERAL_CONNECTED id=%u\n", static_cast<unsigned>(connection.id));
+  });
 
   auto &advertising = ble.advertising();
   advertising.setName("EspBle Subscription Peer");
@@ -90,6 +96,29 @@ void loop()
           TEST_SERVICE_UUID, TEST_CHARACTERISTIC_UUID, String("indicate-value"))
           ? "INDICATE_REQUESTED"
           : "INDICATE_REQUEST_FAILED");
+    }
+    else if (command == 'q')
+    {
+      // Fire three notifies back-to-back without waiting for onSent. Before the
+      // send FIFO this rejected every call after the first; now all queue.
+      unsigned queued = 0;
+      queued += ble.gattServer().notify(
+        TEST_SERVICE_UUID, TEST_CHARACTERISTIC_UUID, String("burst-1")) ? 1 : 0;
+      queued += ble.gattServer().notify(
+        TEST_SERVICE_UUID, TEST_CHARACTERISTIC_UUID, String("burst-2")) ? 1 : 0;
+      queued += ble.gattServer().notify(
+        TEST_SERVICE_UUID, TEST_CHARACTERISTIC_UUID, String("burst-3")) ? 1 : 0;
+      Serial.printf("BURST_QUEUED ok=%u\n", queued);
+    }
+    else if (command == 't')
+    {
+      // Connection-scoped notify to exactly this connection.
+      Serial.println(
+        ble.gattServer().notify(
+          serverConnectionId, TEST_SERVICE_UUID, TEST_CHARACTERISTIC_UUID,
+          String("targeted-value"))
+          ? "TARGETED_REQUESTED"
+          : "TARGETED_REQUEST_FAILED");
     }
   }
 

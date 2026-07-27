@@ -1738,62 +1738,127 @@ struct EspBleGattServerImpl
     EspBleGattServerImpl *impl = static_cast<EspBleGattServerImpl *>(argument);
     BLECharacteristic *backend = nullptr;
     EspBleGattSendResult result;
+    EspBleConnectionId targetConnectionId = 0;
     {
       std::lock_guard<std::mutex> lock(impl->mutex);
       backend = impl->sendBackend;
+      result.connectionId = impl->sendConnectionId;
       result.serviceUuid = impl->sendServiceUuid;
       result.characteristicUuid = impl->sendCharacteristicUuid;
       result.value = impl->sendValue;
       result.indication = impl->sendIndication;
+      targetConnectionId = impl->sendConnectionId;
       impl->sendStatusReceived = false;
     }
 
-    backend->setValue(
-      reinterpret_cast<const uint8_t *>(result.value.c_str()),
-      result.value.length());
-    backend->notify(!result.indication);
-
-    BLECharacteristicCallbacks::Status status = BLECharacteristicCallbacks::Status::ERROR_GATT;
-    uint32_t statusCode = 0;
-    bool statusReceived = false;
+    if (targetConnectionId != 0 && !result.indication)
     {
-      std::lock_guard<std::mutex> lock(impl->mutex);
-      status = impl->sendStatus;
-      statusCode = impl->sendStatusCode;
-      statusReceived = impl->sendStatusReceived;
-    }
-
-    result.success = statusReceived &&
-      ((!result.indication && status == BLECharacteristicCallbacks::Status::SUCCESS_NOTIFY) ||
-       (result.indication && status == BLECharacteristicCallbacks::Status::SUCCESS_INDICATE));
-    if (!result.success)
-    {
-      result.error = EspBleError::BackendFailure;
-      switch (status)
+      // Connection-scoped notify. The bundled BLECharacteristic::notify()
+      // broadcasts to every subscriber, so target a single connection through
+      // the low-level primitive (fire-and-forget, no confirmation semaphore).
+      uint16_t connectionHandle = 0xffff;
+      bool connected = false;
+      EspBle *owner = impl->server->owner_;
+      if (owner->impl_ != nullptr)
       {
-      case BLECharacteristicCallbacks::Status::ERROR_NO_CLIENT:
-        result.detail = "no connected GATT Client";
-        break;
-      case BLECharacteristicCallbacks::Status::ERROR_NO_SUBSCRIBER:
-        result.detail = "no subscribed GATT Client";
-        break;
-      case BLECharacteristicCallbacks::Status::ERROR_NOTIFY_DISABLED:
-        result.detail = "notifications are disabled";
-        break;
-      case BLECharacteristicCallbacks::Status::ERROR_INDICATE_DISABLED:
-        result.detail = "indications are disabled";
-        break;
-      case BLECharacteristicCallbacks::Status::ERROR_INDICATE_TIMEOUT:
-        result.detail = "indication confirmation timed out";
-        break;
-      case BLECharacteristicCallbacks::Status::ERROR_INDICATE_FAILURE:
-        result.detail = "indication confirmation failed";
-        break;
-      default:
-        result.detail = statusReceived
-          ? String("GATT send failed with backend code ") + statusCode
-          : String("GATT send completed without status");
-        break;
+        std::lock_guard<std::mutex> lock(owner->impl_->mutex);
+        for (const EspBleImpl::ConnectionSlot &slot : owner->impl_->connections)
+        {
+          if (slot.used && slot.connection.localRole == EspBleRole::Peripheral &&
+              slot.connection.id == targetConnectionId)
+          {
+            connectionHandle = slot.connection.handle;
+            connected = true;
+            break;
+          }
+        }
+      }
+      // Keep the readable characteristic value in step with the last payload
+      // handed to notify(), matching the broadcast path.
+      backend->setValue(
+        reinterpret_cast<const uint8_t *>(result.value.c_str()),
+        result.value.length());
+      if (!connected)
+      {
+        result.success = false;
+        result.error = EspBleError::NotFound;
+        result.detail = "target connection is not connected";
+      }
+      else
+      {
+        os_mbuf *value = ble_hs_mbuf_from_flat(
+          reinterpret_cast<const uint8_t *>(result.value.c_str()), result.value.length());
+        if (value == nullptr)
+        {
+          result.success = false;
+          result.error = EspBleError::ResourceExhausted;
+          result.detail = "failed to allocate notify buffer";
+        }
+        else
+        {
+          const int backendCode =
+            ble_gatts_notify_custom(connectionHandle, backend->getHandle(), value);
+          result.success = backendCode == 0;
+          if (!result.success)
+          {
+            result.error = EspBleError::BackendFailure;
+            result.detail =
+              String("connection-scoped notify failed with backend code ") + backendCode;
+          }
+        }
+      }
+    }
+    else
+    {
+      // Broadcast notify, or indicate (targeted indicate delegates here because
+      // the backend's indication confirmation is per-characteristic).
+      backend->setValue(
+        reinterpret_cast<const uint8_t *>(result.value.c_str()),
+        result.value.length());
+      backend->notify(!result.indication);
+
+      BLECharacteristicCallbacks::Status status = BLECharacteristicCallbacks::Status::ERROR_GATT;
+      uint32_t statusCode = 0;
+      bool statusReceived = false;
+      {
+        std::lock_guard<std::mutex> lock(impl->mutex);
+        status = impl->sendStatus;
+        statusCode = impl->sendStatusCode;
+        statusReceived = impl->sendStatusReceived;
+      }
+
+      result.success = statusReceived &&
+        ((!result.indication && status == BLECharacteristicCallbacks::Status::SUCCESS_NOTIFY) ||
+         (result.indication && status == BLECharacteristicCallbacks::Status::SUCCESS_INDICATE));
+      if (!result.success)
+      {
+        result.error = EspBleError::BackendFailure;
+        switch (status)
+        {
+        case BLECharacteristicCallbacks::Status::ERROR_NO_CLIENT:
+          result.detail = "no connected GATT Client";
+          break;
+        case BLECharacteristicCallbacks::Status::ERROR_NO_SUBSCRIBER:
+          result.detail = "no subscribed GATT Client";
+          break;
+        case BLECharacteristicCallbacks::Status::ERROR_NOTIFY_DISABLED:
+          result.detail = "notifications are disabled";
+          break;
+        case BLECharacteristicCallbacks::Status::ERROR_INDICATE_DISABLED:
+          result.detail = "indications are disabled";
+          break;
+        case BLECharacteristicCallbacks::Status::ERROR_INDICATE_TIMEOUT:
+          result.detail = "indication confirmation timed out";
+          break;
+        case BLECharacteristicCallbacks::Status::ERROR_INDICATE_FAILURE:
+          result.detail = "indication confirmation failed";
+          break;
+        default:
+          result.detail = statusReceived
+            ? String("GATT send failed with backend code ") + statusCode
+            : String("GATT send completed without status");
+          break;
+        }
       }
     }
     // Queue the result before clearing the busy flag: end() tears the stack
@@ -1831,6 +1896,25 @@ struct EspBleGattServerImpl
   BLECharacteristicCallbacks::Status sendStatus = BLECharacteristicCallbacks::Status::ERROR_GATT;
   uint32_t sendStatusCode = 0;
   bool sendStatusReceived = false;
+
+  // Internal send FIFO: notify()/indicate() enqueue here instead of rejecting
+  // when a send is already in flight. EspBle::pumpSendQueue() dequeues one at a
+  // time from update() and runs it through sendTaskEntry, mirroring the GATT
+  // client queue. connectionId 0 means broadcast.
+  struct SendRequest
+  {
+    EspBleConnectionId connectionId = 0;
+    BLECharacteristic *backend = nullptr;
+    String serviceUuid;
+    String characteristicUuid;
+    String value;
+    bool indication = false;
+  };
+  static constexpr size_t SendQueueCapacity = 8;
+  SendRequest sendQueue[SendQueueCapacity];
+  size_t sendQueueHead = 0;
+  size_t sendQueueCount = 0;
+  EspBleConnectionId sendConnectionId = 0;
 };
 
 struct EspBleHidDeviceManagerImpl
@@ -3954,7 +4038,7 @@ bool EspBleGattServer::notify(
   const uint8_t *data,
   size_t length)
 {
-  return send(serviceUuid, characteristicUuid, data, length, false);
+  return send(0, serviceUuid, characteristicUuid, data, length, false);
 }
 
 bool EspBleGattServer::notify(
@@ -3975,7 +4059,7 @@ bool EspBleGattServer::indicate(
   const uint8_t *data,
   size_t length)
 {
-  return send(serviceUuid, characteristicUuid, data, length, true);
+  return send(0, serviceUuid, characteristicUuid, data, length, true);
 }
 
 bool EspBleGattServer::indicate(
@@ -3990,7 +4074,56 @@ bool EspBleGattServer::indicate(
     value.length());
 }
 
+bool EspBleGattServer::notify(
+  EspBleConnectionId connectionId,
+  const char *serviceUuid,
+  const char *characteristicUuid,
+  const uint8_t *data,
+  size_t length)
+{
+  return send(connectionId, serviceUuid, characteristicUuid, data, length, false);
+}
+
+bool EspBleGattServer::notify(
+  EspBleConnectionId connectionId,
+  const char *serviceUuid,
+  const char *characteristicUuid,
+  const String &value)
+{
+  return notify(
+    connectionId,
+    serviceUuid,
+    characteristicUuid,
+    reinterpret_cast<const uint8_t *>(value.c_str()),
+    value.length());
+}
+
+bool EspBleGattServer::indicate(
+  EspBleConnectionId connectionId,
+  const char *serviceUuid,
+  const char *characteristicUuid,
+  const uint8_t *data,
+  size_t length)
+{
+  return send(connectionId, serviceUuid, characteristicUuid, data, length, true);
+}
+
+bool EspBleGattServer::indicate(
+  EspBleConnectionId connectionId,
+  const char *serviceUuid,
+  const char *characteristicUuid,
+  const String &value)
+{
+  return indicate(
+    connectionId,
+    serviceUuid,
+    characteristicUuid,
+    reinterpret_cast<const uint8_t *>(value.c_str()),
+    value.length());
+}
+
 bool EspBleGattServer::send(
+  EspBleConnectionId connectionId,
   const char *serviceUuid,
   const char *characteristicUuid,
   const uint8_t *data,
@@ -4010,36 +4143,65 @@ bool EspBleGattServer::send(
     return false;
   }
 
-  size_t maximumPayload = static_cast<size_t>(-1);
-  bool hasPeripheralConnection = false;
+  // MTU guard. A connection-scoped send is bounded by its own connection's
+  // payload; a broadcast is bounded by the smallest subscriber payload so the
+  // backend never silently truncates for anyone.
+  if (connectionId != 0)
   {
-    std::lock_guard<std::mutex> lock(owner_->impl_->mutex);
-    for (const EspBleImpl::ConnectionSlot &slot : owner_->impl_->connections)
+    bool found = false;
+    size_t maximumPayload = 0;
     {
-      if (slot.used && slot.connection.localRole == EspBleRole::Peripheral)
+      std::lock_guard<std::mutex> lock(owner_->impl_->mutex);
+      for (const EspBleImpl::ConnectionSlot &slot : owner_->impl_->connections)
       {
-        hasPeripheralConnection = true;
-        const size_t connectionMaximum = slot.connection.maximumNotificationPayload();
-        if (connectionMaximum < maximumPayload)
+        if (slot.used && slot.connection.localRole == EspBleRole::Peripheral &&
+            slot.connection.id == connectionId)
         {
-          maximumPayload = connectionMaximum;
+          found = true;
+          maximumPayload = slot.connection.maximumNotificationPayload();
+          break;
         }
       }
     }
+    if (!found)
+    {
+      owner_->setError(EspBleError::NotFound, "target connection is not a connected peripheral");
+      return false;
+    }
+    if (length > maximumPayload)
+    {
+      owner_->setError(EspBleError::InvalidArgument, "GATT send value exceeds negotiated MTU payload");
+      return false;
+    }
   }
-  if (hasPeripheralConnection && length > maximumPayload)
+  else
   {
-    owner_->setError(EspBleError::InvalidArgument, "GATT send value exceeds negotiated MTU payload");
-    return false;
+    size_t maximumPayload = static_cast<size_t>(-1);
+    bool hasPeripheralConnection = false;
+    {
+      std::lock_guard<std::mutex> lock(owner_->impl_->mutex);
+      for (const EspBleImpl::ConnectionSlot &slot : owner_->impl_->connections)
+      {
+        if (slot.used && slot.connection.localRole == EspBleRole::Peripheral)
+        {
+          hasPeripheralConnection = true;
+          const size_t connectionMaximum = slot.connection.maximumNotificationPayload();
+          if (connectionMaximum < maximumPayload)
+          {
+            maximumPayload = connectionMaximum;
+          }
+        }
+      }
+    }
+    if (hasPeripheralConnection && length > maximumPayload)
+    {
+      owner_->setError(EspBleError::InvalidArgument, "GATT send value exceeds negotiated MTU payload");
+      return false;
+    }
   }
 
   {
     std::lock_guard<std::mutex> lock(impl_->mutex);
-    if (impl_->sending)
-    {
-      owner_->setError(EspBleError::InvalidState, "a GATT Server send is already in progress");
-      return false;
-    }
 
     EspBleGattServerImpl::CharacteristicDefinition *found = nullptr;
     for (size_t index = 0; index < impl_->characteristicCount; ++index)
@@ -4065,42 +4227,93 @@ bool EspBleGattServer::send(
         indication ? "GATT characteristic is not indicatable" : "GATT characteristic is not notifiable");
       return false;
     }
+    if (impl_->sendQueueCount >= EspBleGattServerImpl::SendQueueCapacity)
+    {
+      owner_->setError(EspBleError::ResourceExhausted, "GATT Server send queue is full");
+      return false;
+    }
 
+    // Enqueue instead of rejecting when a send is already in flight; the value
+    // is captured per request so interleaved sends keep their own payloads.
     found->value = length == 0
       ? String()
       : String(reinterpret_cast<const char *>(data), length);
-    impl_->sendBackend = found->backend;
-    impl_->sendServiceUuid = found->serviceUuid;
-    impl_->sendCharacteristicUuid = found->uuid;
-    impl_->sendValue = found->value;
-    impl_->sendIndication = indication;
-    impl_->sending = true;
-  }
-
-  TaskHandle_t task = nullptr;
-  const BaseType_t result = xTaskCreate(
-    EspBleGattServerImpl::sendTaskEntry,
-    "espble-gatt-send",
-    4096,
-    impl_,
-    1,
-    &task);
-  if (result != pdPASS)
-  {
-    std::lock_guard<std::mutex> lock(impl_->mutex);
-    impl_->sending = false;
-    owner_->setError(EspBleError::ResourceExhausted, "failed to create GATT Server send task");
-    return false;
-  }
-  {
-    std::lock_guard<std::mutex> lock(impl_->mutex);
-    if (impl_->sending)
-    {
-      impl_->sendTask = task;
-    }
+    const size_t tail =
+      (impl_->sendQueueHead + impl_->sendQueueCount) % EspBleGattServerImpl::SendQueueCapacity;
+    EspBleGattServerImpl::SendRequest &request = impl_->sendQueue[tail];
+    request.connectionId = connectionId;
+    request.backend = found->backend;
+    request.serviceUuid = found->serviceUuid;
+    request.characteristicUuid = found->uuid;
+    request.value = found->value;
+    request.indication = indication;
+    ++impl_->sendQueueCount;
   }
   owner_->clearError();
   return true;
+}
+
+void EspBle::pumpSendQueue()
+{
+  if (gattServer_.impl_ == nullptr) return;
+  EspBleGattServerImpl *impl = gattServer_.impl_;
+
+  {
+    std::lock_guard<std::mutex> lock(impl->mutex);
+    // One send in flight at a time (single backend send path); the next request
+    // starts once the running task clears `sending` (observed a later update()).
+    if (impl->sending || impl->sendQueueCount == 0) return;
+    EspBleGattServerImpl::SendRequest &request = impl->sendQueue[impl->sendQueueHead];
+    impl->sendConnectionId = request.connectionId;
+    impl->sendBackend = request.backend;
+    impl->sendServiceUuid = request.serviceUuid;
+    impl->sendCharacteristicUuid = request.characteristicUuid;
+    impl->sendValue = request.value;
+    impl->sendIndication = request.indication;
+    impl->sendQueueHead = (impl->sendQueueHead + 1) % EspBleGattServerImpl::SendQueueCapacity;
+    --impl->sendQueueCount;
+    impl->sending = true;
+  }
+
+  TaskHandle_t task = nullptr;
+  const BaseType_t created = xTaskCreate(
+    EspBleGattServerImpl::sendTaskEntry,
+    "espble-gatt-send",
+    4096,
+    impl,
+    1,
+    &task);
+  if (created != pdPASS)
+  {
+    // Report the failure so the caller's onSent still fires, then clear busy so
+    // the queue keeps draining on the next update().
+    EspBleGattSendResult failure;
+    {
+      std::lock_guard<std::mutex> lock(impl->mutex);
+      failure.connectionId = impl->sendConnectionId;
+      failure.serviceUuid = impl->sendServiceUuid;
+      failure.characteristicUuid = impl->sendCharacteristicUuid;
+      failure.value = impl->sendValue;
+      failure.indication = impl->sendIndication;
+      failure.success = false;
+      failure.error = EspBleError::ResourceExhausted;
+      failure.detail = "failed to create GATT Server send task";
+      impl->sending = false;
+      impl->sendTask = nullptr;
+    }
+    if (impl_ != nullptr)
+    {
+      impl_->queueServerSendResult(failure);
+    }
+    return;
+  }
+  {
+    std::lock_guard<std::mutex> lock(impl->mutex);
+    if (impl->sending)
+    {
+      impl->sendTask = task;
+    }
+  }
 }
 
 void EspBleGattServer::onWritten(WriteCallback callback)
@@ -6552,6 +6765,12 @@ void EspBle::end()
   }
   if (gattServer_.impl_ != nullptr)
   {
+    {
+      // Drop queued-but-unstarted sends; update() no longer runs to pump them.
+      std::lock_guard<std::mutex> lock(gattServer_.impl_->mutex);
+      gattServer_.impl_->sendQueueHead = 0;
+      gattServer_.impl_->sendQueueCount = 0;
+    }
     while (true)
     {
       {
@@ -6619,6 +6838,7 @@ void EspBle::update()
   cancelExpiredConnectAttempt();
   expireGattOperation();
   pumpGattQueue();
+  pumpSendQueue();
   scanner_.dispatchPendingResults();
   dispatchConnectionEvents();
   reapRetiredClients();

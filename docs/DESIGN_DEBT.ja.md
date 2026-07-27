@@ -51,11 +51,14 @@ HID Host の `discover()` が汎用queueエンジンに乗らず、別経路に�
 - `sending` 中は**queueせずreject**（[EspBle.cpp:4038](../src/EspBle.cpp#L4038)）。characteristic AとBの同時notifyもできず、Glucose RACP / FTMS control point / MIDI SysEx は全て `onSent` 駆動の手動シーケンスを強いられる（クライアント側で撤廃したのと同じfootgun）。
 - MTU判定が**全peripheral接続の最小payload**（[EspBle.cpp:4013](../src/EspBle.cpp#L4013)）。無関係な低MTU接続のせいで、高MTU購読者への大きなnotifyが拒否される。
 
-**あるべき姿**: `notify(connId, service, char, …)` / `indicate(connId, …)` 追加＋broadcast overloadは併存。`EspBleGattSendResult` に `connectionId`。クライアントと同じ内部送信FIFO（`update()` からpump）で「いつ呼んでもqueue」化。MTU判定は接続scope後に**対象接続のMTUのみ**で行い、保守的なmin-MTU回避を削除。
+**是正内容（実装済み・scope A）**: クライアントと同じ内部送信FIFO（容量8、`EspBle::pumpSendQueue()` が `update()` からpump）を追加し、`notify()`/`indicate()` は**rejectせず常にqueue**（真のエラー＝未接続・未登録・非notifiable・queue満杯でのみfalse）。`EspBleGattSendResult` に `connectionId`（0=broadcast）。`notify(connId, …)` を追加し、backend低レベルの `ble_gatts_notify_custom(connHandle, char->getHandle(), om)`（HID Device送信と同型）で**接続指定送信**、MTU判定も**対象接続のMTUのみ**。broadcast送信は従来どおりbackend `notify()` 経由でmin-MTU判定を維持。
 
-**破壊的変更**: `EspBleGattSendResult` 構造体、send系の挙動（reject→queue）。
-**テスト影響**: `glucose` / `fitness_machine` / `midi_*`（手動onSent pumpの簡素化）、notify/indicate系Peer。
-**状況: 未着手**
+- **indicateの接続指定はbackend制約でbroadcast確認パスに委譲**: 同梱backendのindication確認は `m_semaphoreConfEvt`（characteristic単位、private）で待つため、接続単位の確認応答を安全に取り出せない。`indicate(connId, …)` はAPI対称性のため用意するが確認付きbroadcastパスで送る（単一購読者ならその接続、resultの `connectionId` は要求値を反映）。**クラスタAでHID writeをqueue化して実機退行したのと同種の「wrapper確認machinery自前化」リスクを避ける判断**。scope選択の記録。
+- **profileのonSent順次実行は撤廃せず、コメントを修正**: Glucose RACP / FTMS Control Point のonSent駆動シーケンスは「send単一in-flightのworkaround」ではなく、**measurement配送完了を待って完了応答をIndicateする配送順序保証**という独立した妥当性を持つ。よって撤廃せず、誤解を招く「BLE送信は同時1件」コメント（GlucoseServer/glucose/fitness_machine の各sketch＋README）を実態（送信はqueueされる／onSentは順序保証の意図的選択）へ修正した。
+
+**破壊的変更**: `EspBleGattSendResult` に `connectionId` フィールド追加、send系の挙動（reject→queue）。`send()` privateシグネチャにconnectionId追加。
+**テスト影響**: `notify_indicate`（connectionId出力・queued burst・接続指定notifyの検証を追加）。`glucose` / `fitness_machine` はコメントのみ変更で挙動不変。
+**状況: 完了（scope A。要実機再確認）**
 
 ### クラスタC — コアcallbackが単一スロット（HID Hostだけ多listener）
 
@@ -90,7 +93,7 @@ HID Host の `discover()` が汎用queueエンジンに乗らず、別経路に�
 - operation id / 強制cancel無し（DECISIONS #19）。ただし上記「切断時purge」は別扱いで是正。
 - Boot Protocol既定off（discovery leak増幅回避、多くのHostはReport Protocolで足りる）。
 - `update()` 駆動の単一スレッドdispatch（DECISIONS #17）。
-- MIDI SysEx / RACP の `onSent` 駆動pump は**クラスタBの症状**。B完了後にprofile側を簡素化する。
+- Glucose RACP / FTMS Control Point の `onSent` 駆動シーケンスは**配送順序保証として維持**（クラスタB完了後の再評価で、send単一in-flightのworkaroundではなく完了応答の順序保証だと確認。誤解コメントのみ修正済み）。
 
 ## 対象外（backend由来・修正不能）
 

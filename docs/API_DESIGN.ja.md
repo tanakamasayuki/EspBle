@@ -82,7 +82,9 @@ ble.onMtuChanged([](const EspBleMtuChanged &event) {
 });
 ```
 
-`maximumNotificationPayload()`は現在のMTUからATT notification/indicationの3-byte headerを除いた`mtu - 3`を返します。Server送信はbackendによる黙示的な切詰めを避けるため、activeなPeripheral Connectionのうち最小の上限を超えるpayloadを`EspBleError::InvalidArgument`で拒否します。この判定は購読者だけでなく全active Peripheral Connectionを対象にする保守的な暫定実装です。
+`maximumNotificationPayload()`は現在のMTUからATT notification/indicationの3-byte headerを除いた`mtu - 3`を返します。Server送信はbackendによる黙示的な切詰めを避けるため、上限を超えるpayloadを`EspBleError::InvalidArgument`で拒否します。判定scopeは送信種別で異なります: `notify(connectionId, …)`（接続指定）は**対象接続のMTUのみ**、broadcastの`notify()`/`indicate()`は**全active Peripheral Connectionの最小**（誰にも切り詰められないための保守的判定）です。
+
+Server送信は内部FIFO（`update()`からpump）にqueueされ、送信中でもrejectされません。`notify()`/`indicate()`が`false`を返すのは未初期化・未接続・未登録characteristic・非notifiable/indicatable・queue満杯といった真のエラーのみで、送信結果は`onSent()`（`EspBleGattSendResult`）へ非同期に届きます。`connectionId`は接続指定送信で対象接続、broadcastで0です。接続指定`notify()`はbackend低レベルAPIで単一接続へ送ります。接続指定`indicate()`はAPI対称性のため用意しますが、同梱backendのindication確認がcharacteristic単位のため確認付きbroadcastパスで送ります（単一購読者ならその接続、結果の`connectionId`は要求値）。
 
 接続後にアプリケーションからMTU交換を再要求するAPIはまだ提供しません。Central側のMTUは接続時のsnapshotのみで、同梱backendにclient側のMTU変更callbackがないため接続後の変化は追跡できません（DECISIONS Connection/GATT #23）。希望MTUの動的変更、複数接続ごとの送信可否判定、MTU callbackの厳密な順序は、backendの制約と複数接続テストを踏まえて確定します。
 

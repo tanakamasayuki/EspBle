@@ -365,6 +365,8 @@ struct EspBleGattSubscription
 
 struct EspBleGattSendResult
 {
+  // The connection this send targeted, or 0 for a broadcast to all subscribers.
+  EspBleConnectionId connectionId = 0;
   String serviceUuid;
   String characteristicUuid;
   String value;
@@ -715,6 +717,7 @@ public:
     const char *characteristicUuid,
     const char *descriptorUuid,
     String &value) const;
+  // Broadcast to every subscriber of the characteristic.
   bool notify(
     const char *serviceUuid,
     const char *characteristicUuid,
@@ -727,6 +730,34 @@ public:
     const uint8_t *data,
     size_t length);
   bool indicate(const char *serviceUuid, const char *characteristicUuid, const String &value);
+  // Connection-scoped send. notify(connectionId, …) targets exactly one
+  // connection (per-connection MTU applies). indicate(connectionId, …) is
+  // accepted for symmetry but is delivered through the confirmed broadcast
+  // path because the bundled backend's indication confirmation is
+  // per-characteristic, not per-connection; with a single subscriber that is
+  // the requested connection, and the result reports connectionId regardless.
+  bool notify(
+    EspBleConnectionId connectionId,
+    const char *serviceUuid,
+    const char *characteristicUuid,
+    const uint8_t *data,
+    size_t length);
+  bool notify(
+    EspBleConnectionId connectionId,
+    const char *serviceUuid,
+    const char *characteristicUuid,
+    const String &value);
+  bool indicate(
+    EspBleConnectionId connectionId,
+    const char *serviceUuid,
+    const char *characteristicUuid,
+    const uint8_t *data,
+    size_t length);
+  bool indicate(
+    EspBleConnectionId connectionId,
+    const char *serviceUuid,
+    const char *characteristicUuid,
+    const String &value);
   void onWritten(WriteCallback callback);
   void onDescriptorWritten(DescriptorWriteCallback callback);
   void onSubscriptionChanged(SubscriptionCallback callback);
@@ -746,6 +777,7 @@ private:
   void dispatchSubscription(const EspBleGattSubscription &subscription);
   void dispatchSendResult(const EspBleGattSendResult &result);
   bool send(
+    EspBleConnectionId connectionId,
     const char *serviceUuid,
     const char *characteristicUuid,
     const uint8_t *data,
@@ -1351,6 +1383,7 @@ private:
   // Start the next queued GATT operation if the ATT channel is free. Pumped from
   // update() so operations serialize behind whatever is currently running.
   void pumpGattQueue();
+  void pumpSendQueue();
 
   bool initialized_ = false;
   bool autoReconnect_ = false;

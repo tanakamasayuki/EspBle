@@ -56,7 +56,7 @@
 8. Notification/Indicationの購読、解除、受信payloadとServer側CCCD変更は値イベントへcopyし、`ble.update()`から配送できる。
 9. Server側Notification/Indication送信は内部taskで実行し、Indication確認待ちでloopをblockしない。送信結果は別イベントで通知する。
 10. Arduino-ESP32 3.3.10のNimBLE Indicationではcontroller確認成功後に同期wrapper由来のtimeout statusが重複するため、先に観測した`SUCCESS_INDICATE`を保持するbackend workaroundを内部に置く。
-11. 現在のServer送信は該当方式を購読する全Connection向けとする。Connection指定送信と購読者ごとの結果は複数接続実装時に決める。
+11. 現在のServer送信は該当方式を購読する全Connection向けとする。Connection指定送信と購読者ごとの結果は複数接続実装時に決める。→ #25で確定（接続指定`notify()`・`connectionId`付き結果・内部送信FIFOを追加）。
 12. 希望MTUは`begin()`前に23〜517で設定し、同梱NimBLE backendが接続時に交換したMTUをConnection snapshotへ反映する。接続後の再交換APIは現時点で設けない。
 13. MTU変更はConnection snapshotと変更前MTUを持つ値イベントとしてqueueへcopyし、`ble.update()` contextで配送できる。
 14. Notification/Indication payloadの上限は`mtu - 3`とし、backendによる黙示的な切詰めを避けるため超過を送信前に拒否する。複数接続ではactiveな全Peripheral Connectionの最小値を使う保守的な判定から開始する。
@@ -70,6 +70,7 @@
 22. GATT worker task（operation/discovery）は開始時に`isConnected()`を1回確認する以外の接続状態同期を行わない。操作途中の切断はbackendエラーとして完了イベントへ伝播する。同梱backendではremote service treeは切断で解放されず（解放は`~BLEClient`のみ）、client解放はGATT operation実行中はreapを遅延し`end()`はbusy flag解除を待つため、worker taskが解放済みobjectへ触れる経路はない。
 23. Central側MTUは接続時のsnapshotのみ保持する。同梱backendのclient側にはMTU変更callbackがなく、接続後の変化は追跡できない。MTU交換がconnect timeout+1秒までに完了しない場合、snapshotが既定値23になる可能性がある。制限としてSTATUSへ記載する。
 24. 同梱backendのNimBLE `BLEClient::connect()`はtimeout引数を無視して内部既定の30秒を待つため、`connect(scanResult, timeoutMilliseconds)`のtimeoutは`update()`が経過時間を監視し`ble_gap_conn_cancel()`で強制する。失敗は要求timeout付近でConnectionFailedイベントとして配送される（`lifecycle_stress`で検証）。`update()`を呼ばない場合はbackendの30秒が上限になる。
+25. Server送信はCentral GATT clientと同じく内部FIFO（`update()`からpump）へ積み、送信中でもrejectしない（#9・#11を上書き）。`EspBleGattSendResult`に`connectionId`（0=broadcast）を持ち、`notify(connectionId, …)`は同梱backend低レベルの`ble_gatts_notify_custom(connHandle, char->getHandle(), om)`で単一接続へ送る（HID Device送信と同型）。MTU判定は接続指定なら対象接続のみ、broadcastは全Peripheral接続の最小（#14の保守判定はbroadcastに限定）。`indicate(connectionId, …)`は対称性のため用意するが、同梱backendのindication確認が`m_semaphoreConfEvt`（characteristic単位・private）で待つ設計のため接続単位の確認応答を安全に取り出せず、確認付きbroadcastパスへ委譲する（単一購読者ならその接続、結果の`connectionId`は要求値を反映）。接続単位のindicate確認はbackend側APIが確認応答を接続単位で公開するまで見送る。
 
 ## Securityスパイクで確認済み（公開API確定前）
 
