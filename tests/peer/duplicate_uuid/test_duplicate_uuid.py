@@ -33,11 +33,15 @@ def test_duplicate_uuid_registration(dut, peers):
     # would have dropped the second.
     dut.expect_exact("DISCOVERED services=2 characteristics=2", timeout=20)
 
-    # The first service is the one the wrapper also knows, so reading it works
-    # today. Reading the second service's characteristic still fails: the read
-    # path resolves handles through the wrapper's remote objects, which never
-    # saw that service. Raw ATT operations are the remaining piece of the
-    # bypass; until then only discovery sees both.
-    match = dut.expect(READ, timeout=15)
-    assert int(match.group(1)) != 0
-    assert match.group(2) == b"first", f"unexpected value {match.group(2)!r}"
+    # Both characteristics are readable by attribute handle. The second one has
+    # no object in the wrapper (its service repeats a UUID), so that read goes
+    # through raw ATT.
+    values, handles = [], []
+    for _ in range(2):
+        match = dut.expect(READ, timeout=15)
+        handles.append(int(match.group(1)))
+        values.append(match.group(2).decode())
+    dut.expect_exact("READ_DONE", timeout=10)
+
+    assert len(set(handles)) == 2, f"attribute handles are not distinct: {handles}"
+    assert sorted(values) == ["first", "other"], f"unexpected values {values}"

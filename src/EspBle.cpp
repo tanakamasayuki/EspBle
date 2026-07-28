@@ -235,6 +235,69 @@ inline bool wait(Waiter &context, uint32_t timeoutMilliseconds)
 }
 } // namespace espble_discovery
 
+// Raw ATT operations for attributes the bundled wrapper cannot resolve. Its
+// remote-service map is keyed by UUID, so characteristics belonging to a second
+// service that repeats a UUID have no BLERemoteCharacteristic to go through;
+// these talk to the peer by attribute handle directly.
+namespace espble_raw
+{
+struct Operation
+{
+  volatile bool done = false;
+  int status = 0;
+  String value;
+};
+
+inline int readCallback(
+  uint16_t connectionHandle, const struct ble_gatt_error *error,
+  struct ble_gatt_attr *attribute, void *argument)
+{
+  Operation *operation = static_cast<Operation *>(argument);
+  operation->status = error == nullptr ? 0 : error->status;
+  if (operation->status == 0 && attribute != nullptr && attribute->om != nullptr)
+  {
+    const uint16_t length = OS_MBUF_PKTLEN(attribute->om);
+    if (length > 0)
+    {
+      char *buffer = new (std::nothrow) char[length];
+      if (buffer != nullptr)
+      {
+        uint16_t copied = 0;
+        if (ble_hs_mbuf_to_flat(attribute->om, buffer, length, &copied) == 0)
+        {
+          operation->value = String(buffer, copied);
+        }
+        delete[] buffer;
+      }
+    }
+  }
+  operation->done = true;
+  return 0;
+}
+
+inline int writeCallback(
+  uint16_t connectionHandle, const struct ble_gatt_error *error,
+  struct ble_gatt_attr *attribute, void *argument)
+{
+  Operation *operation = static_cast<Operation *>(argument);
+  operation->status = error == nullptr ? 0 : error->status;
+  operation->done = true;
+  return 0;
+}
+
+inline bool wait(Operation &operation, uint32_t timeoutMilliseconds)
+{
+  const uint32_t deadline = millis() + timeoutMilliseconds;
+  while (!operation.done)
+  {
+    if (millis() >= deadline) return false;
+    delay(1);
+  }
+  return true;
+}
+} // namespace espble_raw
+
+
 
 // Complete a connection-scoped indication whose confirmation just arrived.
 // Defined once EspBleGattServerImpl is complete; declared here because the GAP
@@ -1404,6 +1467,10 @@ struct EspBleImpl
     else
     {
       BLERemoteCharacteristic *characteristic = nullptr;
+      // Non-zero when the operation must go through raw ATT because the wrapper
+      // has no object for this attribute handle.
+      uint16_t rawHandle = 0;
+      uint16_t rawConnectionHandle = 0xffff;
       if (result.handle != 0)
       {
         // Handle-based target: search every discovered service by handle so a
@@ -1412,8 +1479,47 @@ struct EspBleImpl
           espBleFindCharacteristicByHandle(client, result.handle, result.serviceUuid);
         if (characteristic == nullptr)
         {
-          result.error = EspBleError::NotFound;
-          result.detail = "GATT characteristic handle was not found (discover services first)";
+          // The wrapper cannot resolve every handle: its remote-service map is
+          // keyed by UUID, so a service repeating a UUID has no objects behind
+          // it. Fall back to talking to the attribute handle directly, using
+          // the UUIDs our own discovery snapshot recorded.
+          uint16_t connectionHandle = 0xffff;
+          bool knownHandle = false;
+          {
+            std::lock_guard<std::mutex> lock(impl->mutex);
+            for (const EspBleImpl::ConnectionSlot &slot : impl->connections)
+            {
+              if (slot.used && slot.connection.id == result.connectionId)
+              {
+                connectionHandle = slot.connection.handle;
+                break;
+              }
+            }
+            const GattDatabaseSnapshot *database =
+              impl->findDatabaseLocked(result.connectionId);
+            if (database != nullptr)
+            {
+              for (size_t index = 0; index < database->characteristicCount; ++index)
+              {
+                if (database->characteristics[index].handle != result.handle) continue;
+                result.serviceUuid = database->characteristics[index].serviceUuid;
+                result.characteristicUuid = database->characteristics[index].characteristicUuid;
+                knownHandle = true;
+                break;
+              }
+            }
+          }
+
+          if (!knownHandle || connectionHandle == 0xffff)
+          {
+            result.error = EspBleError::NotFound;
+            result.detail = "GATT characteristic handle was not found (discover services first)";
+          }
+          else
+          {
+            rawHandle = result.handle;
+            rawConnectionHandle = connectionHandle;
+          }
         }
         else
         {
@@ -1439,7 +1545,70 @@ struct EspBleImpl
         }
       }
       {
-        if (characteristic != nullptr)
+        if (characteristic == nullptr && rawHandle != 0)
+        {
+          // Raw ATT path: no wrapper object exists for this attribute.
+          espble_raw::Operation operation;
+          switch (result.operation)
+          {
+          case EspBleGattOperation::Discover:
+            result.success = true;
+            break;
+          case EspBleGattOperation::Read:
+            if (ble_gattc_read(
+                  rawConnectionHandle, rawHandle, espble_raw::readCallback, &operation) != 0 ||
+                !espble_raw::wait(operation, 10000))
+            {
+              result.error = EspBleError::Timeout;
+              result.detail = "GATT read timed out";
+            }
+            else if (operation.status != 0)
+            {
+              result.error = EspBleError::BackendFailure;
+              result.detail = String("GATT read failed with status ") + operation.status;
+            }
+            else
+            {
+              result.value = operation.value;
+              result.success = true;
+            }
+            break;
+          case EspBleGattOperation::Write:
+            if (!result.response)
+            {
+              result.success = ble_gattc_write_no_rsp_flat(
+                rawConnectionHandle, rawHandle, writeValue.c_str(), writeValue.length()) == 0;
+              if (!result.success)
+              {
+                result.error = EspBleError::BackendFailure;
+                result.detail = "GATT write without response failed";
+              }
+            }
+            else if (ble_gattc_write_flat(
+                       rawConnectionHandle, rawHandle, writeValue.c_str(), writeValue.length(),
+                       espble_raw::writeCallback, &operation) != 0 ||
+                     !espble_raw::wait(operation, 10000))
+            {
+              result.error = EspBleError::Timeout;
+              result.detail = "GATT write timed out";
+            }
+            else if (operation.status != 0)
+            {
+              result.error = EspBleError::BackendFailure;
+              result.detail = String("GATT write failed with status ") + operation.status;
+            }
+            else
+            {
+              result.success = true;
+            }
+            break;
+          default:
+            result.error = EspBleError::NotFound;
+            result.detail = "operation is not supported for this attribute handle yet";
+            break;
+          }
+        }
+        else if (characteristic != nullptr)
         {
           result.handle = characteristic->getHandle();
           result.readable = characteristic->canRead();
