@@ -12,6 +12,9 @@ static constexpr const char *BLOOD_PRESSURE_MEASUREMENT_UUID = "2a35";
 static constexpr const char *BLOOD_PRESSURE_FEATURE_UUID = "2a49";
 
 EspBle ble;
+EspBleGattService bloodPressureServiceService;
+EspBleGattCharacteristic bloodPressureMeasurementCharacteristic;
+EspBleGattCharacteristic bloodPressureFeatureCharacteristic;
 TaskHandle_t loopTask = nullptr;
 const uint8_t feature[2] = {0x03, 0x00}; // Body Movement + Cuff Fit detection
 
@@ -31,12 +34,10 @@ void setup()
   EspBleGattCharacteristicConfig featureConfig;
   featureConfig.readable = true;
   auto &server = ble.gattServer();
-  if (!server.addService(BLOOD_PRESSURE_SERVICE_UUID) ||
-      !server.addCharacteristic(
-        BLOOD_PRESSURE_SERVICE_UUID, BLOOD_PRESSURE_MEASUREMENT_UUID, measurementConfig) ||
-      !server.addCharacteristic(
-        BLOOD_PRESSURE_SERVICE_UUID, BLOOD_PRESSURE_FEATURE_UUID, featureConfig) ||
-      !server.setValue(BLOOD_PRESSURE_SERVICE_UUID, BLOOD_PRESSURE_FEATURE_UUID, feature, sizeof(feature)))
+  if (!(bloodPressureServiceService = server.addService(BLOOD_PRESSURE_SERVICE_UUID)).valid() ||
+      !(bloodPressureMeasurementCharacteristic = server.addCharacteristic(bloodPressureServiceService, BLOOD_PRESSURE_MEASUREMENT_UUID, measurementConfig)).valid() ||
+      !(bloodPressureFeatureCharacteristic = server.addCharacteristic(bloodPressureServiceService, BLOOD_PRESSURE_FEATURE_UUID, featureConfig)).valid() ||
+      !server.setValue(bloodPressureFeatureCharacteristic, feature, sizeof(feature)))
   {
     Serial.printf("CONFIG_FAILED %s %s\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
     return;
@@ -80,10 +81,8 @@ void loop()
       espBleWriteMedicalSFloatLE(&measurement[1], 120, 0);
       espBleWriteMedicalSFloatLE(&measurement[3], 80, 0);
       espBleWriteMedicalSFloatLE(&measurement[5], 93, 0);
-      const bool stored = ble.gattServer().setValue(
-        BLOOD_PRESSURE_SERVICE_UUID, BLOOD_PRESSURE_MEASUREMENT_UUID, measurement, sizeof(measurement));
-      const bool indicated = ble.gattServer().indicate(
-        BLOOD_PRESSURE_SERVICE_UUID, BLOOD_PRESSURE_MEASUREMENT_UUID, measurement, sizeof(measurement));
+      const bool stored = ble.gattServer().setValue(bloodPressureMeasurementCharacteristic, measurement, sizeof(measurement));
+      const bool indicated = ble.gattServer().indicate(bloodPressureMeasurementCharacteristic, measurement, sizeof(measurement));
       Serial.printf("BP_UPDATED stored=%u indicated=%u\n", stored ? 1 : 0, indicated ? 1 : 0);
     }
   }

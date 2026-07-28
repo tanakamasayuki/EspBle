@@ -9,6 +9,8 @@ static constexpr const char *SERVICE_UUID = "43a2c560-71b4-49bd-9003-696e6469636
 static constexpr const char *CHARACTERISTIC_UUID = "43a2c561-71b4-49bd-9003-696e64696361";
 
 EspBle ble;
+EspBleGattService service;
+EspBleGattCharacteristic characteristic;
 bool hasIndicationSubscriber = false; // en: is there an indication subscriber / ja: Indication購読者がいるか
 uint32_t lastIndication = 0;
 uint32_t counter = 0;
@@ -21,8 +23,8 @@ void setup()
   EspBleGattCharacteristicConfig counterConfig;
   counterConfig.readable = true;
   counterConfig.indicatable = true; // en: add Indicate property and CCCD / ja: Indicate propertyとCCCDを付与
-  gattServer.addService(SERVICE_UUID);
-  gattServer.addCharacteristic(SERVICE_UUID, CHARACTERISTIC_UUID, counterConfig);
+  service = gattServer.addService(SERVICE_UUID);
+  characteristic = gattServer.addCharacteristic(service, CHARACTERISTIC_UUID, counterConfig);
   gattServer.onSubscriptionChanged([](const EspBleGattSubscription &subscription) {
     hasIndicationSubscriber = subscription.indications;
   });
@@ -61,7 +63,7 @@ void loop()
     const String value = String(++counter);
     // en: Accepted synchronously; the confirmation arrives later via onSent().
     // ja: 同期的に受理され、確認はあとから onSent() で届く。
-    ble.gattServer().indicate(SERVICE_UUID, CHARACTERISTIC_UUID, value);
+    ble.gattServer().indicate(characteristic, value);
   }
   delay(1);
 }

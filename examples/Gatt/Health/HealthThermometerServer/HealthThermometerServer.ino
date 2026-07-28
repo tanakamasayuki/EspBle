@@ -14,6 +14,9 @@ static constexpr const char *TEMPERATURE_MEASUREMENT_UUID = "2a1c";
 static constexpr const char *TEMPERATURE_TYPE_UUID = "2a1d";
 
 EspBle ble;
+EspBleGattService healthThermometerServiceService;
+EspBleGattCharacteristic temperatureMeasurementCharacteristic;
+EspBleGattCharacteristic temperatureTypeCharacteristic;
 const uint8_t temperatureType = 0x02; // en: Body / ja: 体温
 int16_t temperatureHundredths = 3650; // en: 36.50 C / ja: 36.50 度
 unsigned long lastUpdate = 0;
@@ -27,10 +30,10 @@ void setup()
   EspBleGattCharacteristicConfig typeConfig;
   typeConfig.readable = true;
   auto &server = ble.gattServer();
-  server.addService(HEALTH_THERMOMETER_SERVICE_UUID);
-  server.addCharacteristic(HEALTH_THERMOMETER_SERVICE_UUID, TEMPERATURE_MEASUREMENT_UUID, measurementConfig);
-  server.addCharacteristic(HEALTH_THERMOMETER_SERVICE_UUID, TEMPERATURE_TYPE_UUID, typeConfig);
-  server.setValue(HEALTH_THERMOMETER_SERVICE_UUID, TEMPERATURE_TYPE_UUID, &temperatureType, 1);
+  healthThermometerServiceService = server.addService(HEALTH_THERMOMETER_SERVICE_UUID);
+  temperatureMeasurementCharacteristic = server.addCharacteristic(healthThermometerServiceService, TEMPERATURE_MEASUREMENT_UUID, measurementConfig);
+  temperatureTypeCharacteristic = server.addCharacteristic(healthThermometerServiceService, TEMPERATURE_TYPE_UUID, typeConfig);
+  server.setValue(temperatureTypeCharacteristic, &temperatureType, 1);
 
   EspBleConfig config;
   config.deviceName = "EspBle Thermometer";
@@ -57,12 +60,10 @@ void loop()
     uint8_t measurement[5];
     measurement[0] = 0x00; // en: Celsius, no timestamp/type / ja: 摂氏、timestamp/type無し
     espBleWriteMedicalFloat32LE(&measurement[1], temperatureHundredths, -2);
-    ble.gattServer().setValue(
-      HEALTH_THERMOMETER_SERVICE_UUID, TEMPERATURE_MEASUREMENT_UUID, measurement, sizeof(measurement));
+    ble.gattServer().setValue(temperatureMeasurementCharacteristic, measurement, sizeof(measurement));
     // en: indicate() only reaches subscribers; it is a no-op with none.
     // ja: indicate()は購読者にのみ届く。購読者がいなければ何もしない。
-    ble.gattServer().indicate(
-      HEALTH_THERMOMETER_SERVICE_UUID, TEMPERATURE_MEASUREMENT_UUID, measurement, sizeof(measurement));
+    ble.gattServer().indicate(temperatureMeasurementCharacteristic, measurement, sizeof(measurement));
   }
 
   ble.update();

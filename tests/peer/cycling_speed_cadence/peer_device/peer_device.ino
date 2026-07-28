@@ -12,6 +12,10 @@ static constexpr const char *CSC_FEATURE_UUID = "2a5c";
 static constexpr const char *SENSOR_LOCATION_UUID = "2a5d";
 
 EspBle ble;
+EspBleGattService cscServiceService;
+EspBleGattCharacteristic cscMeasurementCharacteristic;
+EspBleGattCharacteristic cscFeatureCharacteristic;
+EspBleGattCharacteristic sensorLocationCharacteristic;
 TaskHandle_t loopTask = nullptr;
 const uint8_t feature[2] = {0x03, 0x00};   // Wheel + Crank Revolution supported
 const uint8_t sensorLocation = 12;         // Rear Hub
@@ -38,12 +42,12 @@ void setup()
   EspBleGattCharacteristicConfig readConfig;
   readConfig.readable = true;
   auto &server = ble.gattServer();
-  if (!server.addService(CSC_SERVICE_UUID) ||
-      !server.addCharacteristic(CSC_SERVICE_UUID, CSC_MEASUREMENT_UUID, measurementConfig) ||
-      !server.addCharacteristic(CSC_SERVICE_UUID, CSC_FEATURE_UUID, readConfig) ||
-      !server.addCharacteristic(CSC_SERVICE_UUID, SENSOR_LOCATION_UUID, readConfig) ||
-      !server.setValue(CSC_SERVICE_UUID, CSC_FEATURE_UUID, feature, sizeof(feature)) ||
-      !server.setValue(CSC_SERVICE_UUID, SENSOR_LOCATION_UUID, &sensorLocation, 1))
+  if (!(cscServiceService = server.addService(CSC_SERVICE_UUID)).valid() ||
+      !(cscMeasurementCharacteristic = server.addCharacteristic(cscServiceService, CSC_MEASUREMENT_UUID, measurementConfig)).valid() ||
+      !(cscFeatureCharacteristic = server.addCharacteristic(cscServiceService, CSC_FEATURE_UUID, readConfig)).valid() ||
+      !(sensorLocationCharacteristic = server.addCharacteristic(cscServiceService, SENSOR_LOCATION_UUID, readConfig)).valid() ||
+      !server.setValue(cscFeatureCharacteristic, feature, sizeof(feature)) ||
+      !server.setValue(sensorLocationCharacteristic, &sensorLocation, 1))
   {
     Serial.printf("CONFIG_FAILED %s %s\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
     return;
@@ -91,10 +95,8 @@ void loop()
       appendU16(&measurement[5], 2048);
       appendU16(&measurement[7], 50);
       appendU16(&measurement[9], 1024);
-      const bool stored = ble.gattServer().setValue(
-        CSC_SERVICE_UUID, CSC_MEASUREMENT_UUID, measurement, sizeof(measurement));
-      const bool notified = ble.gattServer().notify(
-        CSC_SERVICE_UUID, CSC_MEASUREMENT_UUID, measurement, sizeof(measurement));
+      const bool stored = ble.gattServer().setValue(cscMeasurementCharacteristic, measurement, sizeof(measurement));
+      const bool notified = ble.gattServer().notify(cscMeasurementCharacteristic, measurement, sizeof(measurement));
       Serial.printf("CSC_UPDATED stored=%u notified=%u\n", stored ? 1 : 0, notified ? 1 : 0);
     }
   }

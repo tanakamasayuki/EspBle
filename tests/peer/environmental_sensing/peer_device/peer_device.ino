@@ -8,6 +8,10 @@ static constexpr const char *HUMIDITY_UUID = "2a6f";
 static constexpr const char *PRESSURE_UUID = "2a6d";
 
 EspBle ble;
+EspBleGattService environmentalSensingServiceService;
+EspBleGattCharacteristic temperatureCharacteristic;
+EspBleGattCharacteristic humidityCharacteristic;
+EspBleGattCharacteristic pressureCharacteristic;
 TaskHandle_t loopTask = nullptr;
 uint8_t temperatureValue[2];
 uint8_t humidityValue[2];
@@ -47,19 +51,13 @@ void setup()
   EspBleGattCharacteristicConfig readable;
   readable.readable = true;
   auto &server = ble.gattServer();
-  if (!server.addService(ENVIRONMENTAL_SENSING_SERVICE_UUID) ||
-      !server.addCharacteristic(
-        ENVIRONMENTAL_SENSING_SERVICE_UUID, TEMPERATURE_UUID, temperatureConfig) ||
-      !server.addCharacteristic(
-        ENVIRONMENTAL_SENSING_SERVICE_UUID, HUMIDITY_UUID, readable) ||
-      !server.addCharacteristic(
-        ENVIRONMENTAL_SENSING_SERVICE_UUID, PRESSURE_UUID, readable) ||
-      !server.setValue(ENVIRONMENTAL_SENSING_SERVICE_UUID, TEMPERATURE_UUID,
-        temperatureValue, sizeof(temperatureValue)) ||
-      !server.setValue(ENVIRONMENTAL_SENSING_SERVICE_UUID, HUMIDITY_UUID,
-        humidityValue, sizeof(humidityValue)) ||
-      !server.setValue(ENVIRONMENTAL_SENSING_SERVICE_UUID, PRESSURE_UUID,
-        pressureValue, sizeof(pressureValue)))
+  if (!(environmentalSensingServiceService = server.addService(ENVIRONMENTAL_SENSING_SERVICE_UUID)).valid() ||
+      !(temperatureCharacteristic = server.addCharacteristic(environmentalSensingServiceService, TEMPERATURE_UUID, temperatureConfig)).valid() ||
+      !(humidityCharacteristic = server.addCharacteristic(environmentalSensingServiceService, HUMIDITY_UUID, readable)).valid() ||
+      !(pressureCharacteristic = server.addCharacteristic(environmentalSensingServiceService, PRESSURE_UUID, readable)).valid() ||
+      !server.setValue(temperatureCharacteristic, temperatureValue, sizeof(temperatureValue)) ||
+      !server.setValue(humidityCharacteristic, humidityValue, sizeof(humidityValue)) ||
+      !server.setValue(pressureCharacteristic, pressureValue, sizeof(pressureValue)))
   {
     Serial.printf("CONFIG_FAILED %s %s\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
     return;
@@ -98,12 +96,8 @@ void loop()
     else if (command == 't')
     {
       encode16(2345, temperatureValue);
-      const bool stored = ble.gattServer().setValue(
-        ENVIRONMENTAL_SENSING_SERVICE_UUID, TEMPERATURE_UUID,
-        temperatureValue, sizeof(temperatureValue));
-      const bool notified = ble.gattServer().notify(
-        ENVIRONMENTAL_SENSING_SERVICE_UUID, TEMPERATURE_UUID,
-        temperatureValue, sizeof(temperatureValue));
+      const bool stored = ble.gattServer().setValue(temperatureCharacteristic, temperatureValue, sizeof(temperatureValue));
+      const bool notified = ble.gattServer().notify(temperatureCharacteristic, temperatureValue, sizeof(temperatureValue));
       Serial.printf("ENV_UPDATED stored=%u notified=%u raw=2345\n",
         stored ? 1 : 0, notified ? 1 : 0);
     }

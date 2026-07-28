@@ -13,6 +13,8 @@ static constexpr const char *ALERT_LEVEL_UUID = "2a06";
 
 EspBle ble;
 
+EspBleGattService immediateAlertServiceService;
+EspBleGattCharacteristic alertLevelCharacteristic;
 void setup()
 {
   Serial.begin(115200);
@@ -21,8 +23,8 @@ void setup()
   alertLevelConfig.writable = true;
   alertLevelConfig.writableWithoutResponse = true;
   auto &server = ble.gattServer();
-  server.addService(IMMEDIATE_ALERT_SERVICE_UUID);
-  server.addCharacteristic(IMMEDIATE_ALERT_SERVICE_UUID, ALERT_LEVEL_UUID, alertLevelConfig);
+  immediateAlertServiceService = server.addService(IMMEDIATE_ALERT_SERVICE_UUID);
+  alertLevelCharacteristic = server.addCharacteristic(immediateAlertServiceService, ALERT_LEVEL_UUID, alertLevelConfig);
 
   server.onWritten([](const EspBleGattWrite &write) {
     if (!write.characteristicUuid.equalsIgnoreCase(ALERT_LEVEL_UUID) || write.value.length() != 1)

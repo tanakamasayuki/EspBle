@@ -12,6 +12,9 @@ static constexpr const char *PLX_SPOT_CHECK_UUID = "2a5e";
 static constexpr const char *PLX_FEATURES_UUID = "2a60";
 
 EspBle ble;
+EspBleGattService plxServiceService;
+EspBleGattCharacteristic plxSpotCheckCharacteristic;
+EspBleGattCharacteristic plxFeaturesCharacteristic;
 const uint8_t features[2] = {0x03, 0x00};
 int spo2 = 98;
 unsigned long lastUpdate = 0;
@@ -25,10 +28,10 @@ void setup()
   EspBleGattCharacteristicConfig featuresConfig;
   featuresConfig.readable = true;
   auto &server = ble.gattServer();
-  server.addService(PLX_SERVICE_UUID);
-  server.addCharacteristic(PLX_SERVICE_UUID, PLX_SPOT_CHECK_UUID, spotCheckConfig);
-  server.addCharacteristic(PLX_SERVICE_UUID, PLX_FEATURES_UUID, featuresConfig);
-  server.setValue(PLX_SERVICE_UUID, PLX_FEATURES_UUID, features, sizeof(features));
+  plxServiceService = server.addService(PLX_SERVICE_UUID);
+  plxSpotCheckCharacteristic = server.addCharacteristic(plxServiceService, PLX_SPOT_CHECK_UUID, spotCheckConfig);
+  plxFeaturesCharacteristic = server.addCharacteristic(plxServiceService, PLX_FEATURES_UUID, featuresConfig);
+  server.setValue(plxFeaturesCharacteristic, features, sizeof(features));
 
   EspBleConfig config;
   config.deviceName = "EspBle Pulse Oximeter";
@@ -56,8 +59,8 @@ void loop()
     measurement[0] = 0x00; // en: no optional fields / ja: optionalなし
     espBleWriteMedicalSFloatLE(&measurement[1], static_cast<int16_t>(spo2), 0);
     espBleWriteMedicalSFloatLE(&measurement[3], 60, 0);
-    ble.gattServer().setValue(PLX_SERVICE_UUID, PLX_SPOT_CHECK_UUID, measurement, sizeof(measurement));
-    ble.gattServer().indicate(PLX_SERVICE_UUID, PLX_SPOT_CHECK_UUID, measurement, sizeof(measurement));
+    ble.gattServer().setValue(plxSpotCheckCharacteristic, measurement, sizeof(measurement));
+    ble.gattServer().indicate(plxSpotCheckCharacteristic, measurement, sizeof(measurement));
   }
 
   ble.update();

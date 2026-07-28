@@ -7,6 +7,9 @@
 #include <EspBle.h>
 
 EspBle ble;
+EspBleGattService anonService;
+EspBleGattCharacteristic anonCharacteristic;
+EspBleGattCharacteristic anonCharacteristic2;
 EspBleConnectionId connectionId = 0;
 
 // HID 1.11 Appendix E.6 boot keyboard report map (no Report ID).
@@ -24,7 +27,7 @@ const uint8_t bootReportMap[] = {
 
 static bool notifyReport(const uint8_t *data, size_t length)
 {
-  return ble.gattServer().notify("1812", "2a4d", data, length);
+  return ble.gattServer().notify(anonCharacteristic2, data, length);
 }
 
 void setup()
@@ -38,10 +41,10 @@ void setup()
   EspBleGattCharacteristicConfig inputConfig;
   inputConfig.readable = true;
   inputConfig.notifiable = true;
-  if (!server.addService("1812") ||
-      !server.addCharacteristic("1812", "2a4b", readable) ||
-      !server.addCharacteristic("1812", "2a4d", inputConfig) ||
-      !server.setValue("1812", "2a4b", bootReportMap, sizeof(bootReportMap)))
+  if (!(anonService = server.addService("1812")).valid() ||
+      !(anonCharacteristic = server.addCharacteristic(anonService, "2a4b", readable)).valid() ||
+      !(anonCharacteristic2 = server.addCharacteristic(anonService, "2a4d", inputConfig)).valid() ||
+      !server.setValue(anonCharacteristic, bootReportMap, sizeof(bootReportMap)))
   {
     Serial.printf("DEVICE_CONFIG_FAILED %s %s\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
     return;

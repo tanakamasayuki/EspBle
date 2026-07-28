@@ -12,6 +12,9 @@ static constexpr const char *BLOOD_PRESSURE_MEASUREMENT_UUID = "2a35";
 static constexpr const char *BLOOD_PRESSURE_FEATURE_UUID = "2a49";
 
 EspBle ble;
+EspBleGattService bloodPressureServiceService;
+EspBleGattCharacteristic bloodPressureMeasurementCharacteristic;
+EspBleGattCharacteristic bloodPressureFeatureCharacteristic;
 const uint8_t feature[2] = {0x03, 0x00}; // en: Body Movement + Cuff Fit / ja: 体動＋カフ装着検出
 unsigned long lastUpdate = 0;
 
@@ -24,10 +27,10 @@ void setup()
   EspBleGattCharacteristicConfig featureConfig;
   featureConfig.readable = true;
   auto &server = ble.gattServer();
-  server.addService(BLOOD_PRESSURE_SERVICE_UUID);
-  server.addCharacteristic(BLOOD_PRESSURE_SERVICE_UUID, BLOOD_PRESSURE_MEASUREMENT_UUID, measurementConfig);
-  server.addCharacteristic(BLOOD_PRESSURE_SERVICE_UUID, BLOOD_PRESSURE_FEATURE_UUID, featureConfig);
-  server.setValue(BLOOD_PRESSURE_SERVICE_UUID, BLOOD_PRESSURE_FEATURE_UUID, feature, sizeof(feature));
+  bloodPressureServiceService = server.addService(BLOOD_PRESSURE_SERVICE_UUID);
+  bloodPressureMeasurementCharacteristic = server.addCharacteristic(bloodPressureServiceService, BLOOD_PRESSURE_MEASUREMENT_UUID, measurementConfig);
+  bloodPressureFeatureCharacteristic = server.addCharacteristic(bloodPressureServiceService, BLOOD_PRESSURE_FEATURE_UUID, featureConfig);
+  server.setValue(bloodPressureFeatureCharacteristic, feature, sizeof(feature));
 
   EspBleConfig config;
   config.deviceName = "EspBle Blood Pressure";
@@ -52,10 +55,8 @@ void loop()
     espBleWriteMedicalSFloatLE(&measurement[1], 120, 0);
     espBleWriteMedicalSFloatLE(&measurement[3], 80, 0);
     espBleWriteMedicalSFloatLE(&measurement[5], 93, 0);
-    ble.gattServer().setValue(
-      BLOOD_PRESSURE_SERVICE_UUID, BLOOD_PRESSURE_MEASUREMENT_UUID, measurement, sizeof(measurement));
-    ble.gattServer().indicate(
-      BLOOD_PRESSURE_SERVICE_UUID, BLOOD_PRESSURE_MEASUREMENT_UUID, measurement, sizeof(measurement));
+    ble.gattServer().setValue(bloodPressureMeasurementCharacteristic, measurement, sizeof(measurement));
+    ble.gattServer().indicate(bloodPressureMeasurementCharacteristic, measurement, sizeof(measurement));
   }
 
   ble.update();

@@ -14,6 +14,10 @@ static constexpr const char *FIRST_NAME_UUID = "2a8a";
 static constexpr const char *DB_CHANGE_INCREMENT_UUID = "2a99";
 
 EspBle ble;
+EspBleGattService userDataServiceService;
+EspBleGattCharacteristic ageCharacteristic;
+EspBleGattCharacteristic firstNameCharacteristic;
+EspBleGattCharacteristic dbChangeIncrementCharacteristic;
 uint32_t dbChangeIncrement = 0;
 
 static void notifyIncrement()
@@ -24,8 +28,8 @@ static void notifyIncrement()
   bytes[1] = static_cast<uint8_t>((dbChangeIncrement >> 8) & 0xFF);
   bytes[2] = static_cast<uint8_t>((dbChangeIncrement >> 16) & 0xFF);
   bytes[3] = static_cast<uint8_t>((dbChangeIncrement >> 24) & 0xFF);
-  ble.gattServer().setValue(USER_DATA_SERVICE_UUID, DB_CHANGE_INCREMENT_UUID, bytes, sizeof(bytes));
-  ble.gattServer().notify(USER_DATA_SERVICE_UUID, DB_CHANGE_INCREMENT_UUID, bytes, sizeof(bytes));
+  ble.gattServer().setValue(dbChangeIncrementCharacteristic, bytes, sizeof(bytes));
+  ble.gattServer().notify(dbChangeIncrementCharacteristic, bytes, sizeof(bytes));
 }
 
 void setup()
@@ -45,18 +49,18 @@ void setup()
   auto &server = ble.gattServer();
   const uint8_t initialAge = 25;
   const uint8_t initialIncrement[4] = {0, 0, 0, 0};
-  server.addService(USER_DATA_SERVICE_UUID);
-  server.addCharacteristic(USER_DATA_SERVICE_UUID, AGE_UUID, ageConfig);
-  server.addCharacteristic(USER_DATA_SERVICE_UUID, FIRST_NAME_UUID, nameConfig);
-  server.addCharacteristic(USER_DATA_SERVICE_UUID, DB_CHANGE_INCREMENT_UUID, incrementConfig);
-  server.setValue(USER_DATA_SERVICE_UUID, AGE_UUID, &initialAge, sizeof(initialAge));
-  server.setValue(USER_DATA_SERVICE_UUID, DB_CHANGE_INCREMENT_UUID, initialIncrement, sizeof(initialIncrement));
+  userDataServiceService = server.addService(USER_DATA_SERVICE_UUID);
+  ageCharacteristic = server.addCharacteristic(userDataServiceService, AGE_UUID, ageConfig);
+  firstNameCharacteristic = server.addCharacteristic(userDataServiceService, FIRST_NAME_UUID, nameConfig);
+  dbChangeIncrementCharacteristic = server.addCharacteristic(userDataServiceService, DB_CHANGE_INCREMENT_UUID, incrementConfig);
+  server.setValue(ageCharacteristic, &initialAge, sizeof(initialAge));
+  server.setValue(dbChangeIncrementCharacteristic, initialIncrement, sizeof(initialIncrement));
 
   server.onWritten([](const EspBleGattWrite &write) {
     if (write.characteristicUuid.equalsIgnoreCase(AGE_UUID) && write.value.length() == 1)
     {
       const uint8_t age = static_cast<uint8_t>(write.value[0]);
-      ble.gattServer().setValue(USER_DATA_SERVICE_UUID, AGE_UUID, &age, sizeof(age));
+      ble.gattServer().setValue(ageCharacteristic, &age, sizeof(age));
       Serial.printf("Age updated: %u\n", age);
       notifyIncrement();
     }

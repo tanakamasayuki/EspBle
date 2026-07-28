@@ -12,6 +12,9 @@ static constexpr const char *PLX_SPOT_CHECK_UUID = "2a5e";
 static constexpr const char *PLX_FEATURES_UUID = "2a60";
 
 EspBle ble;
+EspBleGattService plxServiceService;
+EspBleGattCharacteristic plxSpotCheckCharacteristic;
+EspBleGattCharacteristic plxFeaturesCharacteristic;
 TaskHandle_t loopTask = nullptr;
 const uint8_t features[2] = {0x03, 0x00};
 
@@ -31,10 +34,10 @@ void setup()
   EspBleGattCharacteristicConfig featuresConfig;
   featuresConfig.readable = true;
   auto &server = ble.gattServer();
-  if (!server.addService(PLX_SERVICE_UUID) ||
-      !server.addCharacteristic(PLX_SERVICE_UUID, PLX_SPOT_CHECK_UUID, spotCheckConfig) ||
-      !server.addCharacteristic(PLX_SERVICE_UUID, PLX_FEATURES_UUID, featuresConfig) ||
-      !server.setValue(PLX_SERVICE_UUID, PLX_FEATURES_UUID, features, sizeof(features)))
+  if (!(plxServiceService = server.addService(PLX_SERVICE_UUID)).valid() ||
+      !(plxSpotCheckCharacteristic = server.addCharacteristic(plxServiceService, PLX_SPOT_CHECK_UUID, spotCheckConfig)).valid() ||
+      !(plxFeaturesCharacteristic = server.addCharacteristic(plxServiceService, PLX_FEATURES_UUID, featuresConfig)).valid() ||
+      !server.setValue(plxFeaturesCharacteristic, features, sizeof(features)))
   {
     Serial.printf("CONFIG_FAILED %s %s\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
     return;
@@ -77,10 +80,8 @@ void loop()
       measurement[0] = 0x00;
       espBleWriteMedicalSFloatLE(&measurement[1], 98, 0);
       espBleWriteMedicalSFloatLE(&measurement[3], 60, 0);
-      const bool stored = ble.gattServer().setValue(
-        PLX_SERVICE_UUID, PLX_SPOT_CHECK_UUID, measurement, sizeof(measurement));
-      const bool indicated = ble.gattServer().indicate(
-        PLX_SERVICE_UUID, PLX_SPOT_CHECK_UUID, measurement, sizeof(measurement));
+      const bool stored = ble.gattServer().setValue(plxSpotCheckCharacteristic, measurement, sizeof(measurement));
+      const bool indicated = ble.gattServer().indicate(plxSpotCheckCharacteristic, measurement, sizeof(measurement));
       Serial.printf("PLX_UPDATED stored=%u indicated=%u\n", stored ? 1 : 0, indicated ? 1 : 0);
     }
   }

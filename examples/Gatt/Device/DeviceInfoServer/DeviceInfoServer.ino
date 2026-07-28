@@ -8,6 +8,11 @@ static constexpr const char *PNP_ID_UUID = "2a50";
 
 EspBle ble;
 
+EspBleGattService deviceInformationServiceService;
+EspBleGattCharacteristic manufacturerNameCharacteristic;
+EspBleGattCharacteristic modelNumberCharacteristic;
+EspBleGattCharacteristic firmwareRevisionCharacteristic;
+EspBleGattCharacteristic pnpIdCharacteristic;
 void setup()
 {
   Serial.begin(115200);
@@ -21,22 +26,15 @@ void setup()
     0x78, 0x56, // Product ID 0x5678, little-endian
     0x00, 0x01  // Product version 0x0100, little-endian
   };
-  if (!server.addService(DEVICE_INFORMATION_SERVICE_UUID) ||
-      !server.addCharacteristic(
-        DEVICE_INFORMATION_SERVICE_UUID, MANUFACTURER_NAME_UUID, readable) ||
-      !server.addCharacteristic(
-        DEVICE_INFORMATION_SERVICE_UUID, MODEL_NUMBER_UUID, readable) ||
-      !server.addCharacteristic(
-        DEVICE_INFORMATION_SERVICE_UUID, FIRMWARE_REVISION_UUID, readable) ||
-      !server.addCharacteristic(DEVICE_INFORMATION_SERVICE_UUID, PNP_ID_UUID, readable) ||
-      !server.setValue(
-        DEVICE_INFORMATION_SERVICE_UUID, MANUFACTURER_NAME_UUID, String("EspBle")) ||
-      !server.setValue(
-        DEVICE_INFORMATION_SERVICE_UUID, MODEL_NUMBER_UUID, String("DeviceInfoServer")) ||
-      !server.setValue(
-        DEVICE_INFORMATION_SERVICE_UUID, FIRMWARE_REVISION_UUID, String(ESPBLE_VERSION_STR)) ||
-      !server.setValue(
-        DEVICE_INFORMATION_SERVICE_UUID, PNP_ID_UUID, pnpId, sizeof(pnpId)))
+  if (!(deviceInformationServiceService = server.addService(DEVICE_INFORMATION_SERVICE_UUID)).valid() ||
+      !(manufacturerNameCharacteristic = server.addCharacteristic(deviceInformationServiceService, MANUFACTURER_NAME_UUID, readable)).valid() ||
+      !(modelNumberCharacteristic = server.addCharacteristic(deviceInformationServiceService, MODEL_NUMBER_UUID, readable)).valid() ||
+      !(firmwareRevisionCharacteristic = server.addCharacteristic(deviceInformationServiceService, FIRMWARE_REVISION_UUID, readable)).valid() ||
+      !(pnpIdCharacteristic = server.addCharacteristic(deviceInformationServiceService, PNP_ID_UUID, readable)).valid() ||
+      !server.setValue(manufacturerNameCharacteristic, String("EspBle")) ||
+      !server.setValue(modelNumberCharacteristic, String("DeviceInfoServer")) ||
+      !server.setValue(firmwareRevisionCharacteristic, String(ESPBLE_VERSION_STR)) ||
+      !server.setValue(pnpIdCharacteristic, pnpId, sizeof(pnpId)))
   {
     Serial.printf("Device Information configuration failed: %s\n",
       ble.lastErrorDetail().c_str());

@@ -14,6 +14,9 @@ static constexpr const char *DESCRIPTOR_UUID = "10da4dd2-8eaa-4c69-9003-67617474
 
 EspBle ble;
 
+EspBleGattService service;
+EspBleGattCharacteristic characteristic;
+EspBleGattDescriptor descriptor;
 void setup()
 {
   Serial.begin(115200);
@@ -28,13 +31,11 @@ void setup()
 
   // en: Register service -> characteristic -> initial value, all before begin().
   // ja: begin() 前に Service → Characteristic → 初期値 の順で登録する。
-  if (!gattServer.addService(SERVICE_UUID) ||
-      !gattServer.addCharacteristic(SERVICE_UUID, CHARACTERISTIC_UUID, valueConfig) ||
-      !gattServer.addDescriptor(
-        SERVICE_UUID, CHARACTERISTIC_UUID, DESCRIPTOR_UUID, descriptorConfig) ||
-      !gattServer.setValue(SERVICE_UUID, CHARACTERISTIC_UUID, String("ready")) ||
-      !gattServer.setDescriptorValue(
-        SERVICE_UUID, CHARACTERISTIC_UUID, DESCRIPTOR_UUID, String("EspBle value")))
+  if (!(service = gattServer.addService(SERVICE_UUID)).valid() ||
+      !(characteristic = gattServer.addCharacteristic(service, CHARACTERISTIC_UUID, valueConfig)).valid() ||
+      !(descriptor = gattServer.addDescriptor(characteristic, DESCRIPTOR_UUID, descriptorConfig)).valid() ||
+      !gattServer.setValue(characteristic, String("ready")) ||
+      !gattServer.setDescriptorValue(descriptor, String("EspBle value")))
   {
     Serial.printf("GATT configuration failed: %s\n", ble.lastErrorDetail().c_str());
     return;

@@ -16,6 +16,10 @@ static constexpr const char *NEW_ALERT_UUID = "2a46";
 static constexpr const char *ALERT_CONTROL_POINT_UUID = "2a44";
 
 EspBle ble;
+EspBleGattService ansServiceService;
+EspBleGattCharacteristic supportedNewAlertCategoryCharacteristic;
+EspBleGattCharacteristic newAlertCharacteristic;
+EspBleGattCharacteristic alertControlPointCharacteristic;
 // en: bit 1 = Email, bit 5 = SMS/MMS / ja: bit 1 = Email、bit 5 = SMS/MMS
 const uint8_t supportedCategories[2] = {0x22, 0x00};
 
@@ -30,12 +34,11 @@ void setup()
   EspBleGattCharacteristicConfig controlConfig;
   controlConfig.writable = true;
   auto &server = ble.gattServer();
-  server.addService(ANS_SERVICE_UUID);
-  server.addCharacteristic(ANS_SERVICE_UUID, SUPPORTED_NEW_ALERT_CATEGORY_UUID, categoryConfig);
-  server.addCharacteristic(ANS_SERVICE_UUID, NEW_ALERT_UUID, alertConfig);
-  server.addCharacteristic(ANS_SERVICE_UUID, ALERT_CONTROL_POINT_UUID, controlConfig);
-  server.setValue(ANS_SERVICE_UUID, SUPPORTED_NEW_ALERT_CATEGORY_UUID,
-    supportedCategories, sizeof(supportedCategories));
+  ansServiceService = server.addService(ANS_SERVICE_UUID);
+  supportedNewAlertCategoryCharacteristic = server.addCharacteristic(ansServiceService, SUPPORTED_NEW_ALERT_CATEGORY_UUID, categoryConfig);
+  newAlertCharacteristic = server.addCharacteristic(ansServiceService, NEW_ALERT_UUID, alertConfig);
+  alertControlPointCharacteristic = server.addCharacteristic(ansServiceService, ALERT_CONTROL_POINT_UUID, controlConfig);
+  server.setValue(supportedNewAlertCategoryCharacteristic, supportedCategories, sizeof(supportedCategories));
 
   server.onWritten([](const EspBleGattWrite &write) {
     if (!write.characteristicUuid.equalsIgnoreCase(ALERT_CONTROL_POINT_UUID) || write.value.length() < 2)
@@ -47,7 +50,7 @@ void setup()
     {
       Serial.printf("Notify New Alert for category %u\n", category);
       const uint8_t alert[5] = {category, 3, 'B', 'o', 'b'};
-      ble.gattServer().notify(ANS_SERVICE_UUID, NEW_ALERT_UUID, alert, sizeof(alert));
+      ble.gattServer().notify(newAlertCharacteristic, alert, sizeof(alert));
     }
   });
 

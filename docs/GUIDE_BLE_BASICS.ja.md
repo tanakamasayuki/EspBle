@@ -417,6 +417,8 @@ GATTでは、データが3階層で表現されます。
 
 それぞれがUUIDという識別子を持ちます（4章で詳しく説明します）。
 
+ただし**UUIDは「型」であって「どれか」ではありません。** 仕様上、同じUUIDのServiceやCharacteristicを1台が複数持てます。HIDキーボードが複数のReport Characteristicを同じUUIDで並べるのが典型例です。そのためServerを組み立てる側は、登録時に返る**ハンドル**で対象を指定します。`addService()` がServiceのハンドルを返し、それを `addCharacteristic()` へ渡すとCharacteristicのハンドルが返り、以降の値設定やNotifyはそのハンドルで行います。Client側も同様に、同じUUIDが複数あるときは属性ハンドルで撃ち分けます。
+
 値のやり取りには次の方法があります。
 
 | 操作 | 向き | 説明 |

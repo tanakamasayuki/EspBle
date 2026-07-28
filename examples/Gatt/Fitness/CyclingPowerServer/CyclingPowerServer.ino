@@ -14,6 +14,10 @@ static constexpr const char *CYCLING_POWER_FEATURE_UUID = "2a65";
 static constexpr const char *SENSOR_LOCATION_UUID = "2a5d";
 
 EspBle ble;
+EspBleGattService cyclingPowerServiceService;
+EspBleGattCharacteristic cyclingPowerMeasurementCharacteristic;
+EspBleGattCharacteristic cyclingPowerFeatureCharacteristic;
+EspBleGattCharacteristic sensorLocationCharacteristic;
 const uint8_t feature[4] = {0x0C, 0x00, 0x00, 0x00};
 const uint8_t sensorLocation = 6; // en: Right Crank / ja: 右クランク
 int16_t power = 200;
@@ -28,12 +32,12 @@ void setup()
   EspBleGattCharacteristicConfig readConfig;
   readConfig.readable = true;
   auto &server = ble.gattServer();
-  server.addService(CYCLING_POWER_SERVICE_UUID);
-  server.addCharacteristic(CYCLING_POWER_SERVICE_UUID, CYCLING_POWER_MEASUREMENT_UUID, measurementConfig);
-  server.addCharacteristic(CYCLING_POWER_SERVICE_UUID, CYCLING_POWER_FEATURE_UUID, readConfig);
-  server.addCharacteristic(CYCLING_POWER_SERVICE_UUID, SENSOR_LOCATION_UUID, readConfig);
-  server.setValue(CYCLING_POWER_SERVICE_UUID, CYCLING_POWER_FEATURE_UUID, feature, sizeof(feature));
-  server.setValue(CYCLING_POWER_SERVICE_UUID, SENSOR_LOCATION_UUID, &sensorLocation, 1);
+  cyclingPowerServiceService = server.addService(CYCLING_POWER_SERVICE_UUID);
+  cyclingPowerMeasurementCharacteristic = server.addCharacteristic(cyclingPowerServiceService, CYCLING_POWER_MEASUREMENT_UUID, measurementConfig);
+  cyclingPowerFeatureCharacteristic = server.addCharacteristic(cyclingPowerServiceService, CYCLING_POWER_FEATURE_UUID, readConfig);
+  sensorLocationCharacteristic = server.addCharacteristic(cyclingPowerServiceService, SENSOR_LOCATION_UUID, readConfig);
+  server.setValue(cyclingPowerFeatureCharacteristic, feature, sizeof(feature));
+  server.setValue(sensorLocationCharacteristic, &sensorLocation, 1);
 
   EspBleConfig config;
   config.deviceName = "EspBle Cycling Power";
@@ -62,8 +66,8 @@ void loop()
     measurement[1] = 0x00;
     measurement[2] = static_cast<uint8_t>(static_cast<uint16_t>(power) & 0xFF);
     measurement[3] = static_cast<uint8_t>((static_cast<uint16_t>(power) >> 8) & 0xFF);
-    ble.gattServer().setValue(CYCLING_POWER_SERVICE_UUID, CYCLING_POWER_MEASUREMENT_UUID, measurement, sizeof(measurement));
-    ble.gattServer().notify(CYCLING_POWER_SERVICE_UUID, CYCLING_POWER_MEASUREMENT_UUID, measurement, sizeof(measurement));
+    ble.gattServer().setValue(cyclingPowerMeasurementCharacteristic, measurement, sizeof(measurement));
+    ble.gattServer().notify(cyclingPowerMeasurementCharacteristic, measurement, sizeof(measurement));
   }
 
   ble.update();

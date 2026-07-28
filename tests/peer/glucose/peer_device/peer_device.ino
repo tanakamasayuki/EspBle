@@ -15,6 +15,10 @@ static constexpr const char *GLUCOSE_FEATURE_UUID = "2a51";
 static constexpr const char *RACP_UUID = "2a52";
 
 EspBle ble;
+EspBleGattService glucoseServiceService;
+EspBleGattCharacteristic glucoseMeasurementCharacteristic;
+EspBleGattCharacteristic glucoseFeatureCharacteristic;
+EspBleGattCharacteristic racpCharacteristic;
 TaskHandle_t loopTask = nullptr;
 const uint8_t feature[2] = {0x00, 0x00};
 
@@ -62,11 +66,11 @@ void setup()
   racpConfig.writable = true;
   racpConfig.indicatable = true;
   auto &server = ble.gattServer();
-  if (!server.addService(GLUCOSE_SERVICE_UUID) ||
-      !server.addCharacteristic(GLUCOSE_SERVICE_UUID, GLUCOSE_MEASUREMENT_UUID, measurementConfig) ||
-      !server.addCharacteristic(GLUCOSE_SERVICE_UUID, GLUCOSE_FEATURE_UUID, featureConfig) ||
-      !server.addCharacteristic(GLUCOSE_SERVICE_UUID, RACP_UUID, racpConfig) ||
-      !server.setValue(GLUCOSE_SERVICE_UUID, GLUCOSE_FEATURE_UUID, feature, sizeof(feature)))
+  if (!(glucoseServiceService = server.addService(GLUCOSE_SERVICE_UUID)).valid() ||
+      !(glucoseMeasurementCharacteristic = server.addCharacteristic(glucoseServiceService, GLUCOSE_MEASUREMENT_UUID, measurementConfig)).valid() ||
+      !(glucoseFeatureCharacteristic = server.addCharacteristic(glucoseServiceService, GLUCOSE_FEATURE_UUID, featureConfig)).valid() ||
+      !(racpCharacteristic = server.addCharacteristic(glucoseServiceService, RACP_UUID, racpConfig)).valid() ||
+      !server.setValue(glucoseFeatureCharacteristic, feature, sizeof(feature)))
   {
     Serial.printf("CONFIG_FAILED %s %s\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
     return;
@@ -85,7 +89,7 @@ void setup()
     uint8_t measurement[13];
     buildMeasurement(measurement);
     racpState = RACP_SEND_MEASUREMENT;
-    ble.gattServer().notify(GLUCOSE_SERVICE_UUID, GLUCOSE_MEASUREMENT_UUID, measurement, sizeof(measurement));
+    ble.gattServer().notify(glucoseMeasurementCharacteristic, measurement, sizeof(measurement));
   });
   server.onSent([](const EspBleGattSendResult &result) {
     if (result.characteristicUuid.equalsIgnoreCase(GLUCOSE_MEASUREMENT_UUID) &&
@@ -94,7 +98,7 @@ void setup()
       racpState = RACP_SEND_RESPONSE;
       // RACP response: Response Code (0x06), operator 0, request opcode 1, success 1.
       const uint8_t response[4] = {0x06, 0x00, 0x01, 0x01};
-      ble.gattServer().indicate(GLUCOSE_SERVICE_UUID, RACP_UUID, response, sizeof(response));
+      ble.gattServer().indicate(racpCharacteristic, response, sizeof(response));
     }
     else if (result.characteristicUuid.equalsIgnoreCase(RACP_UUID) &&
              racpState == RACP_SEND_RESPONSE)

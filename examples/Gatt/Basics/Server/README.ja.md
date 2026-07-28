@@ -20,7 +20,8 @@ Read/Write可能なCharacteristicとDescriptorを1つずつ持つ独自GATT Serv
 
 ## 主なAPI
 
-- `ble.gattServer().addService(uuid)` / `addCharacteristic(serviceUuid, characteristicUuid, config)` — `begin()`前に呼ぶ必要があります
+- `ble.gattServer().addService(uuid)` — Serviceを登録してハンドルを返す。`begin()`前に呼ぶ必要があります
+- `addCharacteristic(service, uuid, config)` — Serviceのハンドルを渡してCharacteristicを登録し、そのハンドルを返す。以降の値操作・送信はこのハンドルで指定します（同じUUIDのCharacteristicを複数持てるため、UUIDでは一意に決まりません）
 - `EspBleGattCharacteristicConfig` — `readable`、`writable`のほか`notifiable`、`indicatable`、暗号化/認証permission
 - `addDescriptor()` / `EspBleGattDescriptorConfig` / `setDescriptorValue()` — Descriptor定義、permission、binary-safeな値
 - `gattServer.setValue(...)` / `gattServer.value(...)` — 保持値（binary-safeな`String`。pointer+length overloadもあります）

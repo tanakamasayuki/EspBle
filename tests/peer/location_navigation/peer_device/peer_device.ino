@@ -11,6 +11,9 @@ static constexpr const char *LOCATION_AND_SPEED_UUID = "2a67";
 static constexpr const char *LN_FEATURE_UUID = "2a6a";
 
 EspBle ble;
+EspBleGattService lnServiceService;
+EspBleGattCharacteristic locationAndSpeedCharacteristic;
+EspBleGattCharacteristic lnFeatureCharacteristic;
 TaskHandle_t loopTask = nullptr;
 // bit 0 = Instantaneous Speed Supported, bit 2 = Location Supported.
 const uint8_t feature[4] = {0x05, 0x00, 0x00, 0x00};
@@ -31,10 +34,10 @@ void setup()
   EspBleGattCharacteristicConfig featureConfig;
   featureConfig.readable = true;
   auto &server = ble.gattServer();
-  if (!server.addService(LN_SERVICE_UUID) ||
-      !server.addCharacteristic(LN_SERVICE_UUID, LOCATION_AND_SPEED_UUID, measurementConfig) ||
-      !server.addCharacteristic(LN_SERVICE_UUID, LN_FEATURE_UUID, featureConfig) ||
-      !server.setValue(LN_SERVICE_UUID, LN_FEATURE_UUID, feature, sizeof(feature)))
+  if (!(lnServiceService = server.addService(LN_SERVICE_UUID)).valid() ||
+      !(locationAndSpeedCharacteristic = server.addCharacteristic(lnServiceService, LOCATION_AND_SPEED_UUID, measurementConfig)).valid() ||
+      !(lnFeatureCharacteristic = server.addCharacteristic(lnServiceService, LN_FEATURE_UUID, featureConfig)).valid() ||
+      !server.setValue(lnFeatureCharacteristic, feature, sizeof(feature)))
   {
     Serial.printf("CONFIG_FAILED %s %s\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
     return;
@@ -94,10 +97,8 @@ void loop()
       measurement[9] = static_cast<uint8_t>((lon >> 8) & 0xFF);
       measurement[10] = static_cast<uint8_t>((lon >> 16) & 0xFF);
       measurement[11] = static_cast<uint8_t>((lon >> 24) & 0xFF);
-      const bool stored = ble.gattServer().setValue(
-        LN_SERVICE_UUID, LOCATION_AND_SPEED_UUID, measurement, sizeof(measurement));
-      const bool notified = ble.gattServer().notify(
-        LN_SERVICE_UUID, LOCATION_AND_SPEED_UUID, measurement, sizeof(measurement));
+      const bool stored = ble.gattServer().setValue(locationAndSpeedCharacteristic, measurement, sizeof(measurement));
+      const bool notified = ble.gattServer().notify(locationAndSpeedCharacteristic, measurement, sizeof(measurement));
       Serial.printf("LNS_UPDATED stored=%u notified=%u\n", stored ? 1 : 0, notified ? 1 : 0);
     }
   }

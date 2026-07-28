@@ -13,6 +13,9 @@ static constexpr const char *BODY_COMPOSITION_MEASUREMENT_UUID = "2a9c";
 static constexpr const char *BODY_COMPOSITION_FEATURE_UUID = "2a9b";
 
 EspBle ble;
+EspBleGattService bodyCompositionServiceService;
+EspBleGattCharacteristic bodyCompositionMeasurementCharacteristic;
+EspBleGattCharacteristic bodyCompositionFeatureCharacteristic;
 const uint8_t feature[4] = {0x00, 0x02, 0x00, 0x00}; // en: bit 9 = Weight supported / ja: bit 9 = Weight対応
 unsigned long lastUpdate = 0;
 uint16_t rawFat = 275; // en: 27.5 % / ja: 27.5 %
@@ -26,10 +29,10 @@ void setup()
   EspBleGattCharacteristicConfig featureConfig;
   featureConfig.readable = true;
   auto &server = ble.gattServer();
-  server.addService(BODY_COMPOSITION_SERVICE_UUID);
-  server.addCharacteristic(BODY_COMPOSITION_SERVICE_UUID, BODY_COMPOSITION_MEASUREMENT_UUID, measurementConfig);
-  server.addCharacteristic(BODY_COMPOSITION_SERVICE_UUID, BODY_COMPOSITION_FEATURE_UUID, featureConfig);
-  server.setValue(BODY_COMPOSITION_SERVICE_UUID, BODY_COMPOSITION_FEATURE_UUID, feature, sizeof(feature));
+  bodyCompositionServiceService = server.addService(BODY_COMPOSITION_SERVICE_UUID);
+  bodyCompositionMeasurementCharacteristic = server.addCharacteristic(bodyCompositionServiceService, BODY_COMPOSITION_MEASUREMENT_UUID, measurementConfig);
+  bodyCompositionFeatureCharacteristic = server.addCharacteristic(bodyCompositionServiceService, BODY_COMPOSITION_FEATURE_UUID, featureConfig);
+  server.setValue(bodyCompositionFeatureCharacteristic, feature, sizeof(feature));
 
   EspBleConfig config;
   config.deviceName = "EspBle Body Composition";
@@ -64,10 +67,8 @@ void loop()
     measurement[3] = static_cast<uint8_t>((rawFat >> 8) & 0xFF);
     measurement[4] = static_cast<uint8_t>(rawWeight & 0xFF);
     measurement[5] = static_cast<uint8_t>((rawWeight >> 8) & 0xFF);
-    ble.gattServer().setValue(
-      BODY_COMPOSITION_SERVICE_UUID, BODY_COMPOSITION_MEASUREMENT_UUID, measurement, sizeof(measurement));
-    ble.gattServer().indicate(
-      BODY_COMPOSITION_SERVICE_UUID, BODY_COMPOSITION_MEASUREMENT_UUID, measurement, sizeof(measurement));
+    ble.gattServer().setValue(bodyCompositionMeasurementCharacteristic, measurement, sizeof(measurement));
+    ble.gattServer().indicate(bodyCompositionMeasurementCharacteristic, measurement, sizeof(measurement));
   }
 
   ble.update();

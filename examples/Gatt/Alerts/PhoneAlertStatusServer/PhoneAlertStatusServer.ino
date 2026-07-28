@@ -15,14 +15,18 @@ static constexpr const char *RINGER_SETTING_UUID = "2a41";
 static constexpr const char *RINGER_CONTROL_POINT_UUID = "2a40";
 
 EspBle ble;
+EspBleGattService passServiceService;
+EspBleGattCharacteristic alertStatusCharacteristic;
+EspBleGattCharacteristic ringerSettingCharacteristic;
+EspBleGattCharacteristic ringerControlPointCharacteristic;
 const uint8_t alertStatus = 0x01; // en: bit 0 = Ringer State active / ja: bit 0 = Ringer State稼働
 uint8_t ringerSetting = 1;        // en: 0 = Silent, 1 = Normal / ja: 0 = Silent、1 = Normal
 
 static void setRingerSetting(uint8_t value)
 {
   ringerSetting = value;
-  ble.gattServer().setValue(PASS_SERVICE_UUID, RINGER_SETTING_UUID, &ringerSetting, sizeof(ringerSetting));
-  ble.gattServer().notify(PASS_SERVICE_UUID, RINGER_SETTING_UUID, &ringerSetting, sizeof(ringerSetting));
+  ble.gattServer().setValue(ringerSettingCharacteristic, &ringerSetting, sizeof(ringerSetting));
+  ble.gattServer().notify(ringerSettingCharacteristic, &ringerSetting, sizeof(ringerSetting));
 }
 
 void setup()
@@ -38,12 +42,12 @@ void setup()
   EspBleGattCharacteristicConfig controlConfig;
   controlConfig.writableWithoutResponse = true;
   auto &server = ble.gattServer();
-  server.addService(PASS_SERVICE_UUID);
-  server.addCharacteristic(PASS_SERVICE_UUID, ALERT_STATUS_UUID, alertStatusConfig);
-  server.addCharacteristic(PASS_SERVICE_UUID, RINGER_SETTING_UUID, ringerSettingConfig);
-  server.addCharacteristic(PASS_SERVICE_UUID, RINGER_CONTROL_POINT_UUID, controlConfig);
-  server.setValue(PASS_SERVICE_UUID, ALERT_STATUS_UUID, &alertStatus, sizeof(alertStatus));
-  server.setValue(PASS_SERVICE_UUID, RINGER_SETTING_UUID, &ringerSetting, sizeof(ringerSetting));
+  passServiceService = server.addService(PASS_SERVICE_UUID);
+  alertStatusCharacteristic = server.addCharacteristic(passServiceService, ALERT_STATUS_UUID, alertStatusConfig);
+  ringerSettingCharacteristic = server.addCharacteristic(passServiceService, RINGER_SETTING_UUID, ringerSettingConfig);
+  ringerControlPointCharacteristic = server.addCharacteristic(passServiceService, RINGER_CONTROL_POINT_UUID, controlConfig);
+  server.setValue(alertStatusCharacteristic, &alertStatus, sizeof(alertStatus));
+  server.setValue(ringerSettingCharacteristic, &ringerSetting, sizeof(ringerSetting));
 
   server.onWritten([](const EspBleGattWrite &write) {
     if (!write.characteristicUuid.equalsIgnoreCase(RINGER_CONTROL_POINT_UUID) || write.value.length() != 1)

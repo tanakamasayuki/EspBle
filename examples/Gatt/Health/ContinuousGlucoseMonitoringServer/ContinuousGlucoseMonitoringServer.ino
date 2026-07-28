@@ -15,6 +15,9 @@ static constexpr const char *CGM_MEASUREMENT_UUID = "2aa7";
 static constexpr const char *CGM_FEATURE_UUID = "2aa8";
 
 EspBle ble;
+EspBleGattService cgmServiceService;
+EspBleGattCharacteristic cgmMeasurementCharacteristic;
+EspBleGattCharacteristic cgmFeatureCharacteristic;
 unsigned long lastUpdate = 0;
 uint16_t timeOffset = 5; // en: minutes since session start / ja: セッション開始からの分
 int glucose = 100;       // en: mg/dL / ja: mg/dL
@@ -34,10 +37,10 @@ void setup()
   feature[2] = 0x00;
   feature[3] = 0x11; // en: Type = Capillary Whole blood, Location = Finger / ja: Type=毛細血、Location=指
   espBleCgmAppendCrc(feature, 4);
-  server.addService(CGM_SERVICE_UUID);
-  server.addCharacteristic(CGM_SERVICE_UUID, CGM_MEASUREMENT_UUID, measurementConfig);
-  server.addCharacteristic(CGM_SERVICE_UUID, CGM_FEATURE_UUID, featureConfig);
-  server.setValue(CGM_SERVICE_UUID, CGM_FEATURE_UUID, feature, sizeof(feature));
+  cgmServiceService = server.addService(CGM_SERVICE_UUID);
+  cgmMeasurementCharacteristic = server.addCharacteristic(cgmServiceService, CGM_MEASUREMENT_UUID, measurementConfig);
+  cgmFeatureCharacteristic = server.addCharacteristic(cgmServiceService, CGM_FEATURE_UUID, featureConfig);
+  server.setValue(cgmFeatureCharacteristic, feature, sizeof(feature));
 
   EspBleConfig config;
   config.deviceName = "EspBle CGM";
@@ -71,8 +74,8 @@ void loop()
     measurement[4] = static_cast<uint8_t>(timeOffset & 0xFF);
     measurement[5] = static_cast<uint8_t>((timeOffset >> 8) & 0xFF);
     espBleCgmAppendCrc(measurement, 6);
-    ble.gattServer().setValue(CGM_SERVICE_UUID, CGM_MEASUREMENT_UUID, measurement, sizeof(measurement));
-    ble.gattServer().notify(CGM_SERVICE_UUID, CGM_MEASUREMENT_UUID, measurement, sizeof(measurement));
+    ble.gattServer().setValue(cgmMeasurementCharacteristic, measurement, sizeof(measurement));
+    ble.gattServer().notify(cgmMeasurementCharacteristic, measurement, sizeof(measurement));
   }
 
   ble.update();

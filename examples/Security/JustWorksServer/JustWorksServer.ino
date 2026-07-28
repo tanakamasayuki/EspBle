@@ -12,6 +12,8 @@ static constexpr const char *CHARACTERISTIC_UUID = "be31dd61-5e70-4fd5-9003-7365
 
 EspBle ble;
 
+EspBleGattService service;
+EspBleGattCharacteristic characteristic;
 void setup()
 {
   Serial.begin(115200);
@@ -25,9 +27,9 @@ void setup()
   valueConfig.encryptedWrite = true;
 
   auto &gattServer = ble.gattServer();
-  gattServer.addService(SERVICE_UUID);
-  gattServer.addCharacteristic(SERVICE_UUID, CHARACTERISTIC_UUID, valueConfig);
-  gattServer.setValue(SERVICE_UUID, CHARACTERISTIC_UUID, String("encrypted value"));
+  service = gattServer.addService(SERVICE_UUID);
+  characteristic = gattServer.addCharacteristic(service, CHARACTERISTIC_UUID, valueConfig);
+  gattServer.setValue(characteristic, String("encrypted value"));
   gattServer.onWritten([](const EspBleGattWrite &write) {
     Serial.printf("Encrypted write: %s\n", write.value.c_str());
   });

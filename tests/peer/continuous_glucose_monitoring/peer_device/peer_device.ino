@@ -14,6 +14,9 @@ static constexpr const char *CGM_MEASUREMENT_UUID = "2aa7";
 static constexpr const char *CGM_FEATURE_UUID = "2aa8";
 
 EspBle ble;
+EspBleGattService cgmServiceService;
+EspBleGattCharacteristic cgmMeasurementCharacteristic;
+EspBleGattCharacteristic cgmFeatureCharacteristic;
 TaskHandle_t loopTask = nullptr;
 
 static const char *contextName()
@@ -55,10 +58,10 @@ void setup()
   auto &server = ble.gattServer();
   uint8_t feature[6];
   buildFeature(feature);
-  if (!server.addService(CGM_SERVICE_UUID) ||
-      !server.addCharacteristic(CGM_SERVICE_UUID, CGM_MEASUREMENT_UUID, measurementConfig) ||
-      !server.addCharacteristic(CGM_SERVICE_UUID, CGM_FEATURE_UUID, featureConfig) ||
-      !server.setValue(CGM_SERVICE_UUID, CGM_FEATURE_UUID, feature, sizeof(feature)))
+  if (!(cgmServiceService = server.addService(CGM_SERVICE_UUID)).valid() ||
+      !(cgmMeasurementCharacteristic = server.addCharacteristic(cgmServiceService, CGM_MEASUREMENT_UUID, measurementConfig)).valid() ||
+      !(cgmFeatureCharacteristic = server.addCharacteristic(cgmServiceService, CGM_FEATURE_UUID, featureConfig)).valid() ||
+      !server.setValue(cgmFeatureCharacteristic, feature, sizeof(feature)))
   {
     Serial.printf("CONFIG_FAILED %s %s\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
     return;
@@ -97,10 +100,8 @@ void loop()
     {
       uint8_t measurement[8];
       buildMeasurement(measurement);
-      const bool stored = ble.gattServer().setValue(
-        CGM_SERVICE_UUID, CGM_MEASUREMENT_UUID, measurement, sizeof(measurement));
-      const bool notified = ble.gattServer().notify(
-        CGM_SERVICE_UUID, CGM_MEASUREMENT_UUID, measurement, sizeof(measurement));
+      const bool stored = ble.gattServer().setValue(cgmMeasurementCharacteristic, measurement, sizeof(measurement));
+      const bool notified = ble.gattServer().notify(cgmMeasurementCharacteristic, measurement, sizeof(measurement));
       Serial.printf("CGM_UPDATED stored=%u notified=%u\n", stored ? 1 : 0, notified ? 1 : 0);
     }
   }

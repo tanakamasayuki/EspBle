@@ -13,6 +13,9 @@ static constexpr const char *TEMPERATURE_MEASUREMENT_UUID = "2a1c";
 static constexpr const char *TEMPERATURE_TYPE_UUID = "2a1d";
 
 EspBle ble;
+EspBleGattService healthThermometerServiceService;
+EspBleGattCharacteristic temperatureMeasurementCharacteristic;
+EspBleGattCharacteristic temperatureTypeCharacteristic;
 TaskHandle_t loopTask = nullptr;
 const uint8_t temperatureType = 0x02; // Body
 
@@ -32,12 +35,10 @@ void setup()
   EspBleGattCharacteristicConfig typeConfig;
   typeConfig.readable = true;
   auto &server = ble.gattServer();
-  if (!server.addService(HEALTH_THERMOMETER_SERVICE_UUID) ||
-      !server.addCharacteristic(
-        HEALTH_THERMOMETER_SERVICE_UUID, TEMPERATURE_MEASUREMENT_UUID, measurementConfig) ||
-      !server.addCharacteristic(
-        HEALTH_THERMOMETER_SERVICE_UUID, TEMPERATURE_TYPE_UUID, typeConfig) ||
-      !server.setValue(HEALTH_THERMOMETER_SERVICE_UUID, TEMPERATURE_TYPE_UUID, &temperatureType, 1))
+  if (!(healthThermometerServiceService = server.addService(HEALTH_THERMOMETER_SERVICE_UUID)).valid() ||
+      !(temperatureMeasurementCharacteristic = server.addCharacteristic(healthThermometerServiceService, TEMPERATURE_MEASUREMENT_UUID, measurementConfig)).valid() ||
+      !(temperatureTypeCharacteristic = server.addCharacteristic(healthThermometerServiceService, TEMPERATURE_TYPE_UUID, typeConfig)).valid() ||
+      !server.setValue(temperatureTypeCharacteristic, &temperatureType, 1))
   {
     Serial.printf("CONFIG_FAILED %s %s\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
     return;
@@ -79,10 +80,8 @@ void loop()
       uint8_t measurement[5];
       measurement[0] = 0x00;
       espBleWriteMedicalFloat32LE(&measurement[1], 375, -1);
-      const bool stored = ble.gattServer().setValue(
-        HEALTH_THERMOMETER_SERVICE_UUID, TEMPERATURE_MEASUREMENT_UUID, measurement, sizeof(measurement));
-      const bool indicated = ble.gattServer().indicate(
-        HEALTH_THERMOMETER_SERVICE_UUID, TEMPERATURE_MEASUREMENT_UUID, measurement, sizeof(measurement));
+      const bool stored = ble.gattServer().setValue(temperatureMeasurementCharacteristic, measurement, sizeof(measurement));
+      const bool indicated = ble.gattServer().indicate(temperatureMeasurementCharacteristic, measurement, sizeof(measurement));
       Serial.printf("THERM_UPDATED stored=%u indicated=%u\n", stored ? 1 : 0, indicated ? 1 : 0);
     }
   }

@@ -14,6 +14,10 @@ static constexpr const char *RSC_FEATURE_UUID = "2a54";
 static constexpr const char *SENSOR_LOCATION_UUID = "2a5d";
 
 EspBle ble;
+EspBleGattService rscServiceService;
+EspBleGattCharacteristic rscMeasurementCharacteristic;
+EspBleGattCharacteristic rscFeatureCharacteristic;
+EspBleGattCharacteristic sensorLocationCharacteristic;
 const uint8_t feature[2] = {0x03, 0x00}; // en: Stride + Distance / ja: Stride + Distance
 const uint8_t sensorLocation = 2;        // en: In Shoe / ja: 靴内
 uint32_t totalDistance = 0;
@@ -28,12 +32,12 @@ void setup()
   EspBleGattCharacteristicConfig readConfig;
   readConfig.readable = true;
   auto &server = ble.gattServer();
-  server.addService(RSC_SERVICE_UUID);
-  server.addCharacteristic(RSC_SERVICE_UUID, RSC_MEASUREMENT_UUID, measurementConfig);
-  server.addCharacteristic(RSC_SERVICE_UUID, RSC_FEATURE_UUID, readConfig);
-  server.addCharacteristic(RSC_SERVICE_UUID, SENSOR_LOCATION_UUID, readConfig);
-  server.setValue(RSC_SERVICE_UUID, RSC_FEATURE_UUID, feature, sizeof(feature));
-  server.setValue(RSC_SERVICE_UUID, SENSOR_LOCATION_UUID, &sensorLocation, 1);
+  rscServiceService = server.addService(RSC_SERVICE_UUID);
+  rscMeasurementCharacteristic = server.addCharacteristic(rscServiceService, RSC_MEASUREMENT_UUID, measurementConfig);
+  rscFeatureCharacteristic = server.addCharacteristic(rscServiceService, RSC_FEATURE_UUID, readConfig);
+  sensorLocationCharacteristic = server.addCharacteristic(rscServiceService, SENSOR_LOCATION_UUID, readConfig);
+  server.setValue(rscFeatureCharacteristic, feature, sizeof(feature));
+  server.setValue(sensorLocationCharacteristic, &sensorLocation, 1);
 
   EspBleConfig config;
   config.deviceName = "EspBle RSC";
@@ -66,8 +70,8 @@ void loop()
     measurement[7] = static_cast<uint8_t>((totalDistance >> 8) & 0xFF);
     measurement[8] = static_cast<uint8_t>((totalDistance >> 16) & 0xFF);
     measurement[9] = static_cast<uint8_t>((totalDistance >> 24) & 0xFF);
-    ble.gattServer().setValue(RSC_SERVICE_UUID, RSC_MEASUREMENT_UUID, measurement, sizeof(measurement));
-    ble.gattServer().notify(RSC_SERVICE_UUID, RSC_MEASUREMENT_UUID, measurement, sizeof(measurement));
+    ble.gattServer().setValue(rscMeasurementCharacteristic, measurement, sizeof(measurement));
+    ble.gattServer().notify(rscMeasurementCharacteristic, measurement, sizeof(measurement));
   }
 
   ble.update();

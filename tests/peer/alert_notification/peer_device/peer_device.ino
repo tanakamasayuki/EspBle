@@ -14,6 +14,10 @@ static constexpr const char *NEW_ALERT_UUID = "2a46";
 static constexpr const char *ALERT_CONTROL_POINT_UUID = "2a44";
 
 EspBle ble;
+EspBleGattService ansServiceService;
+EspBleGattCharacteristic supportedNewAlertCategoryCharacteristic;
+EspBleGattCharacteristic newAlertCharacteristic;
+EspBleGattCharacteristic alertControlPointCharacteristic;
 TaskHandle_t loopTask = nullptr;
 // Supported categories bitmask: bit 1 = Email, bit 5 = SMS/MMS => 0x0022.
 const uint8_t supportedCategories[2] = {0x22, 0x00};
@@ -36,12 +40,11 @@ void setup()
   EspBleGattCharacteristicConfig controlConfig;
   controlConfig.writable = true;
   auto &server = ble.gattServer();
-  if (!server.addService(ANS_SERVICE_UUID) ||
-      !server.addCharacteristic(ANS_SERVICE_UUID, SUPPORTED_NEW_ALERT_CATEGORY_UUID, categoryConfig) ||
-      !server.addCharacteristic(ANS_SERVICE_UUID, NEW_ALERT_UUID, alertConfig) ||
-      !server.addCharacteristic(ANS_SERVICE_UUID, ALERT_CONTROL_POINT_UUID, controlConfig) ||
-      !server.setValue(ANS_SERVICE_UUID, SUPPORTED_NEW_ALERT_CATEGORY_UUID,
-        supportedCategories, sizeof(supportedCategories)))
+  if (!(ansServiceService = server.addService(ANS_SERVICE_UUID)).valid() ||
+      !(supportedNewAlertCategoryCharacteristic = server.addCharacteristic(ansServiceService, SUPPORTED_NEW_ALERT_CATEGORY_UUID, categoryConfig)).valid() ||
+      !(newAlertCharacteristic = server.addCharacteristic(ansServiceService, NEW_ALERT_UUID, alertConfig)).valid() ||
+      !(alertControlPointCharacteristic = server.addCharacteristic(ansServiceService, ALERT_CONTROL_POINT_UUID, controlConfig)).valid() ||
+      !server.setValue(supportedNewAlertCategoryCharacteristic, supportedCategories, sizeof(supportedCategories)))
   {
     Serial.printf("CONFIG_FAILED %s %s\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
     return;
@@ -57,7 +60,7 @@ void setup()
     {
       // New Alert: Category ID + Number of New Alert + Text ("Bob").
       const uint8_t alert[5] = {category, 3, 'B', 'o', 'b'};
-      ble.gattServer().notify(ANS_SERVICE_UUID, NEW_ALERT_UUID, alert, sizeof(alert));
+      ble.gattServer().notify(newAlertCharacteristic, alert, sizeof(alert));
     }
   });
   server.onSubscriptionChanged([](const EspBleGattSubscription &subscription) {

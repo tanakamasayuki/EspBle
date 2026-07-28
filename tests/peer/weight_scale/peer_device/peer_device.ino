@@ -10,6 +10,9 @@ static constexpr const char *WEIGHT_MEASUREMENT_UUID = "2a9d";
 static constexpr const char *WEIGHT_SCALE_FEATURE_UUID = "2a9e";
 
 EspBle ble;
+EspBleGattService weightScaleServiceService;
+EspBleGattCharacteristic weightMeasurementCharacteristic;
+EspBleGattCharacteristic weightScaleFeatureCharacteristic;
 TaskHandle_t loopTask = nullptr;
 const uint8_t feature[4] = {0x08, 0x00, 0x00, 0x00}; // weight-resolution field present
 
@@ -29,12 +32,10 @@ void setup()
   EspBleGattCharacteristicConfig featureConfig;
   featureConfig.readable = true;
   auto &server = ble.gattServer();
-  if (!server.addService(WEIGHT_SCALE_SERVICE_UUID) ||
-      !server.addCharacteristic(
-        WEIGHT_SCALE_SERVICE_UUID, WEIGHT_MEASUREMENT_UUID, measurementConfig) ||
-      !server.addCharacteristic(
-        WEIGHT_SCALE_SERVICE_UUID, WEIGHT_SCALE_FEATURE_UUID, featureConfig) ||
-      !server.setValue(WEIGHT_SCALE_SERVICE_UUID, WEIGHT_SCALE_FEATURE_UUID, feature, sizeof(feature)))
+  if (!(weightScaleServiceService = server.addService(WEIGHT_SCALE_SERVICE_UUID)).valid() ||
+      !(weightMeasurementCharacteristic = server.addCharacteristic(weightScaleServiceService, WEIGHT_MEASUREMENT_UUID, measurementConfig)).valid() ||
+      !(weightScaleFeatureCharacteristic = server.addCharacteristic(weightScaleServiceService, WEIGHT_SCALE_FEATURE_UUID, featureConfig)).valid() ||
+      !server.setValue(weightScaleFeatureCharacteristic, feature, sizeof(feature)))
   {
     Serial.printf("CONFIG_FAILED %s %s\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
     return;
@@ -78,10 +79,8 @@ void loop()
       measurement[0] = 0x00;
       measurement[1] = static_cast<uint8_t>(raw & 0xFF);
       measurement[2] = static_cast<uint8_t>((raw >> 8) & 0xFF);
-      const bool stored = ble.gattServer().setValue(
-        WEIGHT_SCALE_SERVICE_UUID, WEIGHT_MEASUREMENT_UUID, measurement, sizeof(measurement));
-      const bool indicated = ble.gattServer().indicate(
-        WEIGHT_SCALE_SERVICE_UUID, WEIGHT_MEASUREMENT_UUID, measurement, sizeof(measurement));
+      const bool stored = ble.gattServer().setValue(weightMeasurementCharacteristic, measurement, sizeof(measurement));
+      const bool indicated = ble.gattServer().indicate(weightMeasurementCharacteristic, measurement, sizeof(measurement));
       Serial.printf("WS_UPDATED stored=%u indicated=%u\n", stored ? 1 : 0, indicated ? 1 : 0);
     }
   }

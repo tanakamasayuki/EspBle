@@ -10,6 +10,8 @@ static constexpr const char *IMMEDIATE_ALERT_SERVICE_UUID = "1802";
 static constexpr const char *ALERT_LEVEL_UUID = "2a06";
 
 EspBle ble;
+EspBleGattService immediateAlertServiceService;
+EspBleGattCharacteristic alertLevelCharacteristic;
 TaskHandle_t loopTask = nullptr;
 
 static const char *contextName()
@@ -27,8 +29,8 @@ void setup()
   alertLevelConfig.writable = true;              // Write With Response
   alertLevelConfig.writableWithoutResponse = true; // Write Without Response
   auto &server = ble.gattServer();
-  if (!server.addService(IMMEDIATE_ALERT_SERVICE_UUID) ||
-      !server.addCharacteristic(IMMEDIATE_ALERT_SERVICE_UUID, ALERT_LEVEL_UUID, alertLevelConfig))
+  if (!(immediateAlertServiceService = server.addService(IMMEDIATE_ALERT_SERVICE_UUID)).valid() ||
+      !(alertLevelCharacteristic = server.addCharacteristic(immediateAlertServiceService, ALERT_LEVEL_UUID, alertLevelConfig)).valid())
   {
     Serial.printf("CONFIG_FAILED %s %s\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
     return;

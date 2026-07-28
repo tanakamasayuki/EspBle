@@ -7,6 +7,9 @@ static constexpr const char *HEART_RATE_MEASUREMENT_UUID = "2a37";
 static constexpr const char *BODY_SENSOR_LOCATION_UUID = "2a38";
 
 EspBle ble;
+EspBleGattService heartRateServiceService;
+EspBleGattCharacteristic heartRateMeasurementCharacteristic;
+EspBleGattCharacteristic bodySensorLocationCharacteristic;
 TaskHandle_t loopTask = nullptr;
 uint8_t measurement[] = {0x10, 65, 0x00, 0x04};
 const uint8_t bodySensorLocation = 1;
@@ -27,15 +30,11 @@ void setup()
   EspBleGattCharacteristicConfig locationConfig;
   locationConfig.readable = true;
   auto &server = ble.gattServer();
-  if (!server.addService(HEART_RATE_SERVICE_UUID) ||
-      !server.addCharacteristic(
-        HEART_RATE_SERVICE_UUID, HEART_RATE_MEASUREMENT_UUID, measurementConfig) ||
-      !server.addCharacteristic(
-        HEART_RATE_SERVICE_UUID, BODY_SENSOR_LOCATION_UUID, locationConfig) ||
-      !server.setValue(HEART_RATE_SERVICE_UUID, HEART_RATE_MEASUREMENT_UUID,
-        measurement, sizeof(measurement)) ||
-      !server.setValue(HEART_RATE_SERVICE_UUID, BODY_SENSOR_LOCATION_UUID,
-        &bodySensorLocation, 1))
+  if (!(heartRateServiceService = server.addService(HEART_RATE_SERVICE_UUID)).valid() ||
+      !(heartRateMeasurementCharacteristic = server.addCharacteristic(heartRateServiceService, HEART_RATE_MEASUREMENT_UUID, measurementConfig)).valid() ||
+      !(bodySensorLocationCharacteristic = server.addCharacteristic(heartRateServiceService, BODY_SENSOR_LOCATION_UUID, locationConfig)).valid() ||
+      !server.setValue(heartRateMeasurementCharacteristic, measurement, sizeof(measurement)) ||
+      !server.setValue(bodySensorLocationCharacteristic, &bodySensorLocation, 1))
   {
     Serial.printf("CONFIG_FAILED %s %s\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
     return;
@@ -81,12 +80,8 @@ void loop()
         0x2a, 0x00, // 42 kJ.
         0x00, 0x04  // 1024/1024 second.
       };
-      const bool stored = ble.gattServer().setValue(
-        HEART_RATE_SERVICE_UUID, HEART_RATE_MEASUREMENT_UUID,
-        extendedMeasurement, sizeof(extendedMeasurement));
-      const bool notified = ble.gattServer().notify(
-        HEART_RATE_SERVICE_UUID, HEART_RATE_MEASUREMENT_UUID,
-        extendedMeasurement, sizeof(extendedMeasurement));
+      const bool stored = ble.gattServer().setValue(heartRateMeasurementCharacteristic, extendedMeasurement, sizeof(extendedMeasurement));
+      const bool notified = ble.gattServer().notify(heartRateMeasurementCharacteristic, extendedMeasurement, sizeof(extendedMeasurement));
       Serial.printf("HEART_UPDATED stored=%u notified=%u\n",
         stored ? 1 : 0, notified ? 1 : 0);
     }

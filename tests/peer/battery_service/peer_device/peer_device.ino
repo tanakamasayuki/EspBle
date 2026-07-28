@@ -6,6 +6,8 @@ static constexpr const char *BATTERY_SERVICE_UUID = "180f";
 static constexpr const char *BATTERY_LEVEL_UUID = "2a19";
 
 EspBle ble;
+EspBleGattService batteryServiceService;
+EspBleGattCharacteristic batteryLevelCharacteristic;
 TaskHandle_t loopTask = nullptr;
 uint8_t batteryLevel = 73;
 
@@ -24,9 +26,9 @@ void setup()
   levelConfig.readable = true;
   levelConfig.notifiable = true;
   auto &server = ble.gattServer();
-  if (!server.addService(BATTERY_SERVICE_UUID) ||
-      !server.addCharacteristic(BATTERY_SERVICE_UUID, BATTERY_LEVEL_UUID, levelConfig) ||
-      !server.setValue(BATTERY_SERVICE_UUID, BATTERY_LEVEL_UUID, &batteryLevel, 1))
+  if (!(batteryServiceService = server.addService(BATTERY_SERVICE_UUID)).valid() ||
+      !(batteryLevelCharacteristic = server.addCharacteristic(batteryServiceService, BATTERY_LEVEL_UUID, levelConfig)).valid() ||
+      !server.setValue(batteryLevelCharacteristic, &batteryLevel, 1))
   {
     Serial.printf("CONFIG_FAILED %s %s\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
     return;
@@ -66,10 +68,8 @@ void loop()
     else if (command == 'u')
     {
       batteryLevel = 42;
-      const bool stored = ble.gattServer().setValue(
-        BATTERY_SERVICE_UUID, BATTERY_LEVEL_UUID, &batteryLevel, 1);
-      const bool notified = ble.gattServer().notify(
-        BATTERY_SERVICE_UUID, BATTERY_LEVEL_UUID, &batteryLevel, 1);
+      const bool stored = ble.gattServer().setValue(batteryLevelCharacteristic, &batteryLevel, 1);
+      const bool notified = ble.gattServer().notify(batteryLevelCharacteristic, &batteryLevel, 1);
       Serial.printf("BATTERY_UPDATED stored=%u notified=%u level=%u\n",
         stored ? 1 : 0, notified ? 1 : 0, batteryLevel);
     }

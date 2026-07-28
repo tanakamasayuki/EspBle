@@ -18,6 +18,10 @@ static constexpr const char *GLUCOSE_FEATURE_UUID = "2a51";
 static constexpr const char *RACP_UUID = "2a52";
 
 EspBle ble;
+EspBleGattService glucoseServiceService;
+EspBleGattCharacteristic glucoseMeasurementCharacteristic;
+EspBleGattCharacteristic glucoseFeatureCharacteristic;
+EspBleGattCharacteristic racpCharacteristic;
 const uint8_t feature[2] = {0x00, 0x00};
 enum RacpState { RACP_IDLE, RACP_SEND_MEASUREMENT, RACP_SEND_RESPONSE };
 RacpState racpState = RACP_IDLE;
@@ -34,11 +38,11 @@ void setup()
   racpConfig.writable = true;
   racpConfig.indicatable = true;
   auto &server = ble.gattServer();
-  server.addService(GLUCOSE_SERVICE_UUID);
-  server.addCharacteristic(GLUCOSE_SERVICE_UUID, GLUCOSE_MEASUREMENT_UUID, measurementConfig);
-  server.addCharacteristic(GLUCOSE_SERVICE_UUID, GLUCOSE_FEATURE_UUID, featureConfig);
-  server.addCharacteristic(GLUCOSE_SERVICE_UUID, RACP_UUID, racpConfig);
-  server.setValue(GLUCOSE_SERVICE_UUID, GLUCOSE_FEATURE_UUID, feature, sizeof(feature));
+  glucoseServiceService = server.addService(GLUCOSE_SERVICE_UUID);
+  glucoseMeasurementCharacteristic = server.addCharacteristic(glucoseServiceService, GLUCOSE_MEASUREMENT_UUID, measurementConfig);
+  glucoseFeatureCharacteristic = server.addCharacteristic(glucoseServiceService, GLUCOSE_FEATURE_UUID, featureConfig);
+  racpCharacteristic = server.addCharacteristic(glucoseServiceService, RACP_UUID, racpConfig);
+  server.setValue(glucoseFeatureCharacteristic, feature, sizeof(feature));
 
   server.onWritten([](const EspBleGattWrite &write) {
     if (!write.characteristicUuid.equalsIgnoreCase(RACP_UUID))
@@ -59,7 +63,7 @@ void setup()
       espBleWriteMedicalSFloatLE(&measurement[10], 99, 0);
       measurement[12] = 0x11;
       racpState = RACP_SEND_MEASUREMENT;
-      ble.gattServer().notify(GLUCOSE_SERVICE_UUID, GLUCOSE_MEASUREMENT_UUID, measurement, sizeof(measurement));
+      ble.gattServer().notify(glucoseMeasurementCharacteristic, measurement, sizeof(measurement));
     }
   });
   server.onSent([](const EspBleGattSendResult &result) {
@@ -68,7 +72,7 @@ void setup()
     {
       racpState = RACP_SEND_RESPONSE;
       const uint8_t response[4] = {0x06, 0x00, 0x01, 0x01};
-      ble.gattServer().indicate(GLUCOSE_SERVICE_UUID, RACP_UUID, response, sizeof(response));
+      ble.gattServer().indicate(racpCharacteristic, response, sizeof(response));
     }
     else if (result.characteristicUuid.equalsIgnoreCase(RACP_UUID))
     {

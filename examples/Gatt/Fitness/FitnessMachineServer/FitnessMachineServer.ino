@@ -14,6 +14,9 @@ static constexpr const char *INDOOR_BIKE_DATA_UUID = "2ad2";
 static constexpr const char *FITNESS_MACHINE_FEATURE_UUID = "2acc";
 
 EspBle ble;
+EspBleGattService ftmsServiceService;
+EspBleGattCharacteristic indoorBikeDataCharacteristic;
+EspBleGattCharacteristic fitnessMachineFeatureCharacteristic;
 // Fitness Machine Features = 0x00000006 (Cadence + Total Distance supported).
 const uint8_t feature[8] = {0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 uint16_t speed = 3000; // en: 0.01 km/h units / ja: 0.01 km/h単位
@@ -28,10 +31,10 @@ void setup()
   EspBleGattCharacteristicConfig readConfig;
   readConfig.readable = true;
   auto &server = ble.gattServer();
-  server.addService(FTMS_SERVICE_UUID);
-  server.addCharacteristic(FTMS_SERVICE_UUID, INDOOR_BIKE_DATA_UUID, measurementConfig);
-  server.addCharacteristic(FTMS_SERVICE_UUID, FITNESS_MACHINE_FEATURE_UUID, readConfig);
-  server.setValue(FTMS_SERVICE_UUID, FITNESS_MACHINE_FEATURE_UUID, feature, sizeof(feature));
+  ftmsServiceService = server.addService(FTMS_SERVICE_UUID);
+  indoorBikeDataCharacteristic = server.addCharacteristic(ftmsServiceService, INDOOR_BIKE_DATA_UUID, measurementConfig);
+  fitnessMachineFeatureCharacteristic = server.addCharacteristic(ftmsServiceService, FITNESS_MACHINE_FEATURE_UUID, readConfig);
+  server.setValue(fitnessMachineFeatureCharacteristic, feature, sizeof(feature));
 
   EspBleConfig config;
   config.deviceName = "EspBle Fitness Machine";
@@ -69,8 +72,8 @@ void loop()
     data[5] = static_cast<uint8_t>((cadence >> 8) & 0xFF);
     data[6] = static_cast<uint8_t>(static_cast<uint16_t>(power) & 0xFF);
     data[7] = static_cast<uint8_t>((static_cast<uint16_t>(power) >> 8) & 0xFF);
-    ble.gattServer().setValue(FTMS_SERVICE_UUID, INDOOR_BIKE_DATA_UUID, data, sizeof(data));
-    ble.gattServer().notify(FTMS_SERVICE_UUID, INDOOR_BIKE_DATA_UUID, data, sizeof(data));
+    ble.gattServer().setValue(indoorBikeDataCharacteristic, data, sizeof(data));
+    ble.gattServer().notify(indoorBikeDataCharacteristic, data, sizeof(data));
   }
 
   ble.update();

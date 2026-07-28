@@ -9,6 +9,9 @@ static constexpr const char *NUS_TX_UUID =
 
 EspBle ble;
 
+EspBleGattService nusServiceService;
+EspBleGattCharacteristic nusRxCharacteristic;
+EspBleGattCharacteristic nusTxCharacteristic;
 void setup()
 {
   Serial.begin(115200);
@@ -20,9 +23,9 @@ void setup()
   txConfig.notifiable = true;
 
   auto &server = ble.gattServer();
-  if (!server.addService(NUS_SERVICE_UUID) ||
-      !server.addCharacteristic(NUS_SERVICE_UUID, NUS_RX_UUID, rxConfig) ||
-      !server.addCharacteristic(NUS_SERVICE_UUID, NUS_TX_UUID, txConfig))
+  if (!(nusServiceService = server.addService(NUS_SERVICE_UUID)).valid() ||
+      !(nusRxCharacteristic = server.addCharacteristic(nusServiceService, NUS_RX_UUID, rxConfig)).valid() ||
+      !(nusTxCharacteristic = server.addCharacteristic(nusServiceService, NUS_TX_UUID, txConfig)).valid())
   {
     Serial.printf("NUS configuration failed: %s\n", ble.lastErrorDetail().c_str());
     return;
@@ -30,8 +33,7 @@ void setup()
   server.onWritten([](const EspBleGattWrite &write) {
     if (!write.characteristicUuid.equalsIgnoreCase(NUS_RX_UUID)) return;
     Serial.printf("RX: %s\n", write.value.c_str());
-    const bool echoed = ble.gattServer().notify(
-      NUS_SERVICE_UUID, NUS_TX_UUID, write.value);
+    const bool echoed = ble.gattServer().notify(nusTxCharacteristic, write.value);
     Serial.printf("Echo accepted: %u\n", echoed ? 1 : 0);
   });
   server.onSubscriptionChanged([](const EspBleGattSubscription &subscription) {

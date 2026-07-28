@@ -15,6 +15,9 @@ static constexpr const char *BOND_MANAGEMENT_CONTROL_POINT_UUID = "2aa4";
 static constexpr const char *BOND_MANAGEMENT_FEATURE_UUID = "2aa5";
 
 EspBle ble;
+EspBleGattService bmsServiceService;
+EspBleGattCharacteristic bondManagementControlPointCharacteristic;
+EspBleGattCharacteristic bondManagementFeatureCharacteristic;
 // en: bit 0 = Delete bond of requesting device (LE); bit 4 = Delete all bonds (LE + BR/EDR).
 // ja: bit 0 = Delete bond of requesting device（LE）、bit 4 = 全bond削除（LE + BR/EDR）。
 const uint8_t feature[3] = {0x11, 0x00, 0x00};
@@ -45,10 +48,10 @@ void setup()
   EspBleGattCharacteristicConfig featureConfig;
   featureConfig.readable = true;
   auto &server = ble.gattServer();
-  server.addService(BMS_SERVICE_UUID);
-  server.addCharacteristic(BMS_SERVICE_UUID, BOND_MANAGEMENT_CONTROL_POINT_UUID, controlConfig);
-  server.addCharacteristic(BMS_SERVICE_UUID, BOND_MANAGEMENT_FEATURE_UUID, featureConfig);
-  server.setValue(BMS_SERVICE_UUID, BOND_MANAGEMENT_FEATURE_UUID, feature, sizeof(feature));
+  bmsServiceService = server.addService(BMS_SERVICE_UUID);
+  bondManagementControlPointCharacteristic = server.addCharacteristic(bmsServiceService, BOND_MANAGEMENT_CONTROL_POINT_UUID, controlConfig);
+  bondManagementFeatureCharacteristic = server.addCharacteristic(bmsServiceService, BOND_MANAGEMENT_FEATURE_UUID, featureConfig);
+  server.setValue(bondManagementFeatureCharacteristic, feature, sizeof(feature));
 
   server.onWritten([](const EspBleGattWrite &write) {
     if (!write.characteristicUuid.equalsIgnoreCase(BOND_MANAGEMENT_CONTROL_POINT_UUID) || write.value.length() < 1)

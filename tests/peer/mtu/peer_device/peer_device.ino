@@ -6,6 +6,8 @@ static constexpr const char *TEST_SERVICE_UUID = "866d5d30-cd84-442d-9003-6d7475
 static constexpr const char *TEST_CHARACTERISTIC_UUID = "866d5d31-cd84-442d-9003-6d7475746573";
 
 EspBle ble;
+EspBleGattService testServiceService;
+EspBleGattCharacteristic testCharacteristicCharacteristic;
 TaskHandle_t loopTask = nullptr;
 
 static const char *callbackContext()
@@ -23,9 +25,8 @@ void setup()
   characteristicConfig.readable = true;
   characteristicConfig.notifiable = true;
   auto &gattServer = ble.gattServer();
-  gattServer.addService(TEST_SERVICE_UUID);
-  gattServer.addCharacteristic(
-    TEST_SERVICE_UUID, TEST_CHARACTERISTIC_UUID, characteristicConfig);
+  testServiceService = gattServer.addService(TEST_SERVICE_UUID);
+  testCharacteristicCharacteristic = gattServer.addCharacteristic(testServiceService, TEST_CHARACTERISTIC_UUID, characteristicConfig);
   gattServer.onSubscriptionChanged([](const EspBleGattSubscription &subscription) {
     Serial.printf(
       "SUBSCRIPTION notifications=%u context=%s\n",
@@ -82,7 +83,7 @@ void loop()
       for (size_t index = 0; index < 125; ++index) payload += 'a';
       Serial.printf(
         "%s length=%u\n",
-        ble.gattServer().notify(TEST_SERVICE_UUID, TEST_CHARACTERISTIC_UUID, payload)
+        ble.gattServer().notify(testCharacteristicCharacteristic, payload)
           ? "MAX_NOTIFY_REQUESTED"
           : "MAX_NOTIFY_REQUEST_FAILED",
         static_cast<unsigned>(payload.length()));
@@ -92,8 +93,7 @@ void loop()
       String payload;
       payload.reserve(126);
       for (size_t index = 0; index < 126; ++index) payload += 'b';
-      const bool accepted = ble.gattServer().notify(
-        TEST_SERVICE_UUID, TEST_CHARACTERISTIC_UUID, payload);
+      const bool accepted = ble.gattServer().notify(testCharacteristicCharacteristic, payload);
       Serial.printf(
         "%s error=%s\n",
         accepted ? "OVERSIZE_ACCEPTED" : "OVERSIZE_REJECTED",

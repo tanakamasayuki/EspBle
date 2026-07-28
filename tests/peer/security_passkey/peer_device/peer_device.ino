@@ -7,6 +7,8 @@ static constexpr const char *TEST_CHARACTERISTIC_UUID = "35c6a571-a63d-44a2-9003
 static constexpr uint32_t TEST_PASSKEY = 438209;
 
 EspBle ble;
+EspBleGattService testServiceService;
+EspBleGattCharacteristic testCharacteristicCharacteristic;
 TaskHandle_t loopTask = nullptr;
 
 static const char *callbackContext()
@@ -26,9 +28,9 @@ void setup()
   characteristicConfig.authenticatedRead = true;
   characteristicConfig.authenticatedWrite = true;
   auto &gattServer = ble.gattServer();
-  gattServer.addService(TEST_SERVICE_UUID);
-  gattServer.addCharacteristic(TEST_SERVICE_UUID, TEST_CHARACTERISTIC_UUID, characteristicConfig);
-  gattServer.setValue(TEST_SERVICE_UUID, TEST_CHARACTERISTIC_UUID, String("authenticated-ready"));
+  testServiceService = gattServer.addService(TEST_SERVICE_UUID);
+  testCharacteristicCharacteristic = gattServer.addCharacteristic(testServiceService, TEST_CHARACTERISTIC_UUID, characteristicConfig);
+  gattServer.setValue(testCharacteristicCharacteristic, String("authenticated-ready"));
   gattServer.onWritten([](const EspBleGattWrite &write) {
     EspBleConnection connection;
     const bool found = ble.connection(write.connectionId, connection);

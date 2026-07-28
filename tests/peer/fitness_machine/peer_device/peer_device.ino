@@ -16,6 +16,11 @@ static constexpr const char *CONTROL_POINT_UUID = "2ad9";
 static constexpr const char *STATUS_UUID = "2ada";
 
 EspBle ble;
+EspBleGattService ftmsServiceService;
+EspBleGattCharacteristic indoorBikeDataCharacteristic;
+EspBleGattCharacteristic fitnessMachineFeatureCharacteristic;
+EspBleGattCharacteristic controlPointCharacteristic;
+EspBleGattCharacteristic statusCharacteristic;
 TaskHandle_t loopTask = nullptr;
 // Fitness Machine Features = 0x00000006 (Cadence + Total Distance supported),
 // Target Setting Features = 0x00000008 (Power Target Setting supported).
@@ -44,12 +49,12 @@ void setup()
   controlConfig.writable = true;
   controlConfig.indicatable = true;
   auto &server = ble.gattServer();
-  if (!server.addService(FTMS_SERVICE_UUID) ||
-      !server.addCharacteristic(FTMS_SERVICE_UUID, INDOOR_BIKE_DATA_UUID, notifyConfig) ||
-      !server.addCharacteristic(FTMS_SERVICE_UUID, FITNESS_MACHINE_FEATURE_UUID, readConfig) ||
-      !server.addCharacteristic(FTMS_SERVICE_UUID, CONTROL_POINT_UUID, controlConfig) ||
-      !server.addCharacteristic(FTMS_SERVICE_UUID, STATUS_UUID, notifyConfig) ||
-      !server.setValue(FTMS_SERVICE_UUID, FITNESS_MACHINE_FEATURE_UUID, feature, sizeof(feature)))
+  if (!(ftmsServiceService = server.addService(FTMS_SERVICE_UUID)).valid() ||
+      !(indoorBikeDataCharacteristic = server.addCharacteristic(ftmsServiceService, INDOOR_BIKE_DATA_UUID, notifyConfig)).valid() ||
+      !(fitnessMachineFeatureCharacteristic = server.addCharacteristic(ftmsServiceService, FITNESS_MACHINE_FEATURE_UUID, readConfig)).valid() ||
+      !(controlPointCharacteristic = server.addCharacteristic(ftmsServiceService, CONTROL_POINT_UUID, controlConfig)).valid() ||
+      !(statusCharacteristic = server.addCharacteristic(ftmsServiceService, STATUS_UUID, notifyConfig)).valid() ||
+      !server.setValue(fitnessMachineFeatureCharacteristic, feature, sizeof(feature)))
   {
     Serial.printf("CONFIG_FAILED %s %s\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
     return;
@@ -82,7 +87,7 @@ void setup()
     }
     // Response: Response Code (0x80), request op code, result code.
     const uint8_t response[3] = {0x80, op, result};
-    ble.gattServer().indicate(FTMS_SERVICE_UUID, CONTROL_POINT_UUID, response, sizeof(response));
+    ble.gattServer().indicate(controlPointCharacteristic, response, sizeof(response));
   });
   server.onSent([](const EspBleGattSendResult &result) {
     Serial.printf("FTMS_SENT success=%u length=%u context=%s\n",
@@ -128,10 +133,8 @@ void loop()
       data[5] = static_cast<uint8_t>((cadence >> 8) & 0xFF);
       data[6] = static_cast<uint8_t>(static_cast<uint16_t>(power) & 0xFF);
       data[7] = static_cast<uint8_t>((static_cast<uint16_t>(power) >> 8) & 0xFF);
-      const bool stored = ble.gattServer().setValue(
-        FTMS_SERVICE_UUID, INDOOR_BIKE_DATA_UUID, data, sizeof(data));
-      const bool notified = ble.gattServer().notify(
-        FTMS_SERVICE_UUID, INDOOR_BIKE_DATA_UUID, data, sizeof(data));
+      const bool stored = ble.gattServer().setValue(indoorBikeDataCharacteristic, data, sizeof(data));
+      const bool notified = ble.gattServer().notify(indoorBikeDataCharacteristic, data, sizeof(data));
       Serial.printf("FTMS_UPDATED stored=%u notified=%u\n", stored ? 1 : 0, notified ? 1 : 0);
     }
     else if (command == 'g')
@@ -142,7 +145,7 @@ void loop()
         0x08,
         static_cast<uint8_t>(static_cast<uint16_t>(targetPower) & 0xFF),
         static_cast<uint8_t>((static_cast<uint16_t>(targetPower) >> 8) & 0xFF)};
-      const bool notified = ble.gattServer().notify(FTMS_SERVICE_UUID, STATUS_UUID, status, sizeof(status));
+      const bool notified = ble.gattServer().notify(statusCharacteristic, status, sizeof(status));
       Serial.printf("STATUS_SENT notified=%u power=%d\n", notified ? 1 : 0, static_cast<int>(targetPower));
     }
   }

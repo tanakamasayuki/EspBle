@@ -18,7 +18,7 @@ Nordic UART Service（NUS）のUUID構成を汎用GATT Server APIで実装しま
 
 ## 主なAPI
 
-- `gattServer.addCharacteristic(serviceUuid, uuid, config)` — RXは`writable` + `writableWithoutResponse`、TXは`notifiable`
+- `gattServer.addCharacteristic(service, uuid, config)` — RXは`writable` + `writableWithoutResponse`、TXは`notifiable`。返るハンドルで以降を操作します
 - `gattServer.onWritten(callback)` — `characteristicUuid.equalsIgnoreCase(...)`でRX UUIDに絞り込む`EspBleGattWrite`
 - `gattServer.notify(serviceUuid, characteristicUuid, value)` — 受信バイトをTXでechoし、受理されたかを返します
 - `gattServer.onSubscriptionChanged(callback)` — TX Characteristicの`subscription.notifications`

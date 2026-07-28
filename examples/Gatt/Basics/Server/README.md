@@ -20,7 +20,8 @@ Use the [Gatt/Client](../Client/) example on a second board (it targets the same
 
 ## Key APIs
 
-- `ble.gattServer().addService(uuid)` / `addCharacteristic(serviceUuid, characteristicUuid, config)` — must be called before `begin()`
+- `ble.gattServer().addService(uuid)` — register a service and return its handle; must be called before `begin()`
+- `addCharacteristic(service, uuid, config)` — register a characteristic in that service and return its handle. Every later value or send operation takes the handle, because a UUID does not identify one characteristic (several may share it)
 - `EspBleGattCharacteristicConfig` — `readable`, `writable`, plus `notifiable`, `indicatable`, and encrypted/authenticated permissions
 - `addDescriptor()` / `EspBleGattDescriptorConfig` / `setDescriptorValue()` — descriptor definition, permissions, and binary-safe value
 - `gattServer.setValue(...)` / `gattServer.value(...)` — held value (binary-safe `String`, pointer+length overloads available)

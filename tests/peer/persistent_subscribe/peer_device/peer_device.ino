@@ -6,6 +6,8 @@ static constexpr const char *TEST_SERVICE_UUID = "70657273-7375-6273-9003-737562
 static constexpr const char *TEST_CHARACTERISTIC_UUID = "70657273-7375-6273-9003-7375627363cd";
 
 EspBle ble;
+EspBleGattService testServiceService;
+EspBleGattCharacteristic testCharacteristicCharacteristic;
 TaskHandle_t loopTask = nullptr;
 
 static const char *callbackContext()
@@ -23,9 +25,8 @@ void setup()
   EspBleGattCharacteristicConfig characteristicConfig;
   characteristicConfig.readable = true;
   characteristicConfig.notifiable = true;
-  if (!gattServer.addService(TEST_SERVICE_UUID) ||
-      !gattServer.addCharacteristic(
-        TEST_SERVICE_UUID, TEST_CHARACTERISTIC_UUID, characteristicConfig))
+  if (!(testServiceService = gattServer.addService(TEST_SERVICE_UUID)).valid() ||
+      !(testCharacteristicCharacteristic = gattServer.addCharacteristic(testServiceService, TEST_CHARACTERISTIC_UUID, characteristicConfig)).valid())
   {
     Serial.printf("GATT_CONFIG_FAILED %s %s\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
     return;
@@ -74,8 +75,7 @@ void loop()
     else if (command == 'n')
     {
       Serial.println(
-        ble.gattServer().notify(
-          TEST_SERVICE_UUID, TEST_CHARACTERISTIC_UUID, String("notify-value"))
+        ble.gattServer().notify(testCharacteristicCharacteristic, String("notify-value"))
           ? "NOTIFY_REQUESTED"
           : "NOTIFY_REQUEST_FAILED");
     }

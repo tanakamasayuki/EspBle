@@ -9,6 +9,8 @@
 static constexpr const char *MARKER_SERVICE_UUID = "1815"; // advertised marker
 
 EspBle ble;
+EspBleGattService markerServiceService;
+EspBleGattCharacteristic anonCharacteristic;
 TaskHandle_t loopTask = nullptr;
 
 static const char *contextName()
@@ -26,9 +28,9 @@ void setup()
   markerConfig.readable = true;
   auto &server = ble.gattServer();
   const uint8_t marker = 0;
-  if (!server.addService(MARKER_SERVICE_UUID) ||
-      !server.addCharacteristic(MARKER_SERVICE_UUID, "2ae2", markerConfig) ||
-      !server.setValue(MARKER_SERVICE_UUID, "2ae2", &marker, sizeof(marker)))
+  if (!(markerServiceService = server.addService(MARKER_SERVICE_UUID)).valid() ||
+      !(anonCharacteristic = server.addCharacteristic(markerServiceService, "2ae2", markerConfig)).valid() ||
+      !server.setValue(anonCharacteristic, &marker, sizeof(marker)))
   {
     Serial.printf("CONFIG_FAILED %s %s\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
     return;

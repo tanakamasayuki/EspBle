@@ -13,6 +13,10 @@ static constexpr const char *CSC_FEATURE_UUID = "2a5c";
 static constexpr const char *SENSOR_LOCATION_UUID = "2a5d";
 
 EspBle ble;
+EspBleGattService cscServiceService;
+EspBleGattCharacteristic cscMeasurementCharacteristic;
+EspBleGattCharacteristic cscFeatureCharacteristic;
+EspBleGattCharacteristic sensorLocationCharacteristic;
 const uint8_t feature[2] = {0x03, 0x00}; // en: Wheel + Crank / ja: Wheel + Crank
 const uint8_t sensorLocation = 12;       // en: Rear Hub / ja: リアハブ
 uint32_t wheelRevolutions = 0;
@@ -29,12 +33,12 @@ void setup()
   EspBleGattCharacteristicConfig readConfig;
   readConfig.readable = true;
   auto &server = ble.gattServer();
-  server.addService(CSC_SERVICE_UUID);
-  server.addCharacteristic(CSC_SERVICE_UUID, CSC_MEASUREMENT_UUID, measurementConfig);
-  server.addCharacteristic(CSC_SERVICE_UUID, CSC_FEATURE_UUID, readConfig);
-  server.addCharacteristic(CSC_SERVICE_UUID, SENSOR_LOCATION_UUID, readConfig);
-  server.setValue(CSC_SERVICE_UUID, CSC_FEATURE_UUID, feature, sizeof(feature));
-  server.setValue(CSC_SERVICE_UUID, SENSOR_LOCATION_UUID, &sensorLocation, 1);
+  cscServiceService = server.addService(CSC_SERVICE_UUID);
+  cscMeasurementCharacteristic = server.addCharacteristic(cscServiceService, CSC_MEASUREMENT_UUID, measurementConfig);
+  cscFeatureCharacteristic = server.addCharacteristic(cscServiceService, CSC_FEATURE_UUID, readConfig);
+  sensorLocationCharacteristic = server.addCharacteristic(cscServiceService, SENSOR_LOCATION_UUID, readConfig);
+  server.setValue(cscFeatureCharacteristic, feature, sizeof(feature));
+  server.setValue(sensorLocationCharacteristic, &sensorLocation, 1);
 
   EspBleConfig config;
   config.deviceName = "EspBle CSC";
@@ -70,8 +74,8 @@ void loop()
     measurement[8] = static_cast<uint8_t>((crankRevolutions >> 8) & 0xFF);
     measurement[9] = static_cast<uint8_t>(eventTime & 0xFF);
     measurement[10] = static_cast<uint8_t>((eventTime >> 8) & 0xFF);
-    ble.gattServer().setValue(CSC_SERVICE_UUID, CSC_MEASUREMENT_UUID, measurement, sizeof(measurement));
-    ble.gattServer().notify(CSC_SERVICE_UUID, CSC_MEASUREMENT_UUID, measurement, sizeof(measurement));
+    ble.gattServer().setValue(cscMeasurementCharacteristic, measurement, sizeof(measurement));
+    ble.gattServer().notify(cscMeasurementCharacteristic, measurement, sizeof(measurement));
   }
 
   ble.update();

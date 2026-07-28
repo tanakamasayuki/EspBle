@@ -6,6 +6,10 @@ static constexpr const char *HUMIDITY_UUID = "2a6f";
 static constexpr const char *PRESSURE_UUID = "2a6d";
 
 EspBle ble;
+EspBleGattService environmentalSensingServiceService;
+EspBleGattCharacteristic temperatureCharacteristic;
+EspBleGattCharacteristic humidityCharacteristic;
+EspBleGattCharacteristic pressureCharacteristic;
 int16_t temperatureHundredths = 2150;
 uint8_t temperatureValue[2];
 uint8_t humidityValue[2];
@@ -29,11 +33,8 @@ static void publishTemperature()
 {
   encode16(static_cast<uint16_t>(temperatureHundredths), temperatureValue);
   auto &server = ble.gattServer();
-  server.setValue(ENVIRONMENTAL_SENSING_SERVICE_UUID, TEMPERATURE_UUID,
-    temperatureValue, sizeof(temperatureValue));
-  const bool notified = server.notify(
-    ENVIRONMENTAL_SENSING_SERVICE_UUID, TEMPERATURE_UUID,
-    temperatureValue, sizeof(temperatureValue));
+  server.setValue(temperatureCharacteristic, temperatureValue, sizeof(temperatureValue));
+  const bool notified = server.notify(temperatureCharacteristic, temperatureValue, sizeof(temperatureValue));
   Serial.printf("Temperature raw: %d (notification accepted: %u)\n",
     temperatureHundredths, notified ? 1 : 0);
 }
@@ -51,19 +52,13 @@ void setup()
   EspBleGattCharacteristicConfig readable;
   readable.readable = true;
   auto &server = ble.gattServer();
-  if (!server.addService(ENVIRONMENTAL_SENSING_SERVICE_UUID) ||
-      !server.addCharacteristic(
-        ENVIRONMENTAL_SENSING_SERVICE_UUID, TEMPERATURE_UUID, temperatureConfig) ||
-      !server.addCharacteristic(
-        ENVIRONMENTAL_SENSING_SERVICE_UUID, HUMIDITY_UUID, readable) ||
-      !server.addCharacteristic(
-        ENVIRONMENTAL_SENSING_SERVICE_UUID, PRESSURE_UUID, readable) ||
-      !server.setValue(ENVIRONMENTAL_SENSING_SERVICE_UUID, TEMPERATURE_UUID,
-        temperatureValue, sizeof(temperatureValue)) ||
-      !server.setValue(ENVIRONMENTAL_SENSING_SERVICE_UUID, HUMIDITY_UUID,
-        humidityValue, sizeof(humidityValue)) ||
-      !server.setValue(ENVIRONMENTAL_SENSING_SERVICE_UUID, PRESSURE_UUID,
-        pressureValue, sizeof(pressureValue)))
+  if (!(environmentalSensingServiceService = server.addService(ENVIRONMENTAL_SENSING_SERVICE_UUID)).valid() ||
+      !(temperatureCharacteristic = server.addCharacteristic(environmentalSensingServiceService, TEMPERATURE_UUID, temperatureConfig)).valid() ||
+      !(humidityCharacteristic = server.addCharacteristic(environmentalSensingServiceService, HUMIDITY_UUID, readable)).valid() ||
+      !(pressureCharacteristic = server.addCharacteristic(environmentalSensingServiceService, PRESSURE_UUID, readable)).valid() ||
+      !server.setValue(temperatureCharacteristic, temperatureValue, sizeof(temperatureValue)) ||
+      !server.setValue(humidityCharacteristic, humidityValue, sizeof(humidityValue)) ||
+      !server.setValue(pressureCharacteristic, pressureValue, sizeof(pressureValue)))
   {
     Serial.printf("Environmental configuration failed: %s\n",
       ble.lastErrorDetail().c_str());

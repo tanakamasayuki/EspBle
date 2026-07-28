@@ -16,6 +16,8 @@ static constexpr uint32_t STATIC_PASSKEY = 438209;
 
 EspBle ble;
 
+EspBleGattService service;
+EspBleGattCharacteristic characteristic;
 void setup()
 {
   Serial.begin(115200);
@@ -28,9 +30,9 @@ void setup()
   valueConfig.authenticatedWrite = true;
 
   auto &gattServer = ble.gattServer();
-  gattServer.addService(SERVICE_UUID);
-  gattServer.addCharacteristic(SERVICE_UUID, CHARACTERISTIC_UUID, valueConfig);
-  gattServer.setValue(SERVICE_UUID, CHARACTERISTIC_UUID, String("MITM protected value"));
+  service = gattServer.addService(SERVICE_UUID);
+  characteristic = gattServer.addCharacteristic(service, CHARACTERISTIC_UUID, valueConfig);
+  gattServer.setValue(characteristic, String("MITM protected value"));
 
   EspBleConfig config;
   config.deviceName = "EspBle Passkey";

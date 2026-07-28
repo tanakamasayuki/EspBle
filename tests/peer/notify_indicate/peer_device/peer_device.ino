@@ -6,6 +6,8 @@ static constexpr const char *TEST_SERVICE_UUID = "71756360-5fa4-43bc-9003-6e6f74
 static constexpr const char *TEST_CHARACTERISTIC_UUID = "71756361-5fa4-43bc-9003-6e6f74696679";
 
 EspBle ble;
+EspBleGattService testServiceService;
+EspBleGattCharacteristic testCharacteristicCharacteristic;
 TaskHandle_t loopTask = nullptr;
 EspBleConnectionId serverConnectionId = 0;
 
@@ -25,9 +27,8 @@ void setup()
   characteristicConfig.readable = true;
   characteristicConfig.notifiable = true;
   characteristicConfig.indicatable = true;
-  if (!gattServer.addService(TEST_SERVICE_UUID) ||
-      !gattServer.addCharacteristic(
-        TEST_SERVICE_UUID, TEST_CHARACTERISTIC_UUID, characteristicConfig))
+  if (!(testServiceService = gattServer.addService(TEST_SERVICE_UUID)).valid() ||
+      !(testCharacteristicCharacteristic = gattServer.addCharacteristic(testServiceService, TEST_CHARACTERISTIC_UUID, characteristicConfig)).valid())
   {
     Serial.printf("GATT_CONFIG_FAILED %s %s\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
     return;
@@ -89,16 +90,14 @@ void loop()
     else if (command == 'n')
     {
       Serial.println(
-        ble.gattServer().notify(
-          TEST_SERVICE_UUID, TEST_CHARACTERISTIC_UUID, String("notify-value"))
+        ble.gattServer().notify(testCharacteristicCharacteristic, String("notify-value"))
           ? "NOTIFY_REQUESTED"
           : "NOTIFY_REQUEST_FAILED");
     }
     else if (command == 'i')
     {
       Serial.println(
-        ble.gattServer().indicate(
-          TEST_SERVICE_UUID, TEST_CHARACTERISTIC_UUID, String("indicate-value"))
+        ble.gattServer().indicate(testCharacteristicCharacteristic, String("indicate-value"))
           ? "INDICATE_REQUESTED"
           : "INDICATE_REQUEST_FAILED");
     }
@@ -107,21 +106,16 @@ void loop()
       // Fire three notifies back-to-back without waiting for onSent. Before the
       // send FIFO this rejected every call after the first; now all queue.
       unsigned queued = 0;
-      queued += ble.gattServer().notify(
-        TEST_SERVICE_UUID, TEST_CHARACTERISTIC_UUID, String("burst-1")) ? 1 : 0;
-      queued += ble.gattServer().notify(
-        TEST_SERVICE_UUID, TEST_CHARACTERISTIC_UUID, String("burst-2")) ? 1 : 0;
-      queued += ble.gattServer().notify(
-        TEST_SERVICE_UUID, TEST_CHARACTERISTIC_UUID, String("burst-3")) ? 1 : 0;
+      queued += ble.gattServer().notify(testCharacteristicCharacteristic, String("burst-1")) ? 1 : 0;
+      queued += ble.gattServer().notify(testCharacteristicCharacteristic, String("burst-2")) ? 1 : 0;
+      queued += ble.gattServer().notify(testCharacteristicCharacteristic, String("burst-3")) ? 1 : 0;
       Serial.printf("BURST_QUEUED ok=%u\n", queued);
     }
     else if (command == 't')
     {
       // Connection-scoped notify to exactly this connection.
       Serial.println(
-        ble.gattServer().notify(
-          serverConnectionId, TEST_SERVICE_UUID, TEST_CHARACTERISTIC_UUID,
-          String("targeted-value"))
+        ble.gattServer().notify(serverConnectionId, testCharacteristicCharacteristic, String("targeted-value"))
           ? "TARGETED_REQUESTED"
           : "TARGETED_REQUEST_FAILED");
     }

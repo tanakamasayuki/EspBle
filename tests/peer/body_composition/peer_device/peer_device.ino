@@ -11,6 +11,9 @@ static constexpr const char *BODY_COMPOSITION_MEASUREMENT_UUID = "2a9c";
 static constexpr const char *BODY_COMPOSITION_FEATURE_UUID = "2a9b";
 
 EspBle ble;
+EspBleGattService bodyCompositionServiceService;
+EspBleGattCharacteristic bodyCompositionMeasurementCharacteristic;
+EspBleGattCharacteristic bodyCompositionFeatureCharacteristic;
 TaskHandle_t loopTask = nullptr;
 const uint8_t feature[4] = {0x00, 0x02, 0x00, 0x00}; // bit 9 = Weight Measurement Supported
 
@@ -30,12 +33,10 @@ void setup()
   EspBleGattCharacteristicConfig featureConfig;
   featureConfig.readable = true;
   auto &server = ble.gattServer();
-  if (!server.addService(BODY_COMPOSITION_SERVICE_UUID) ||
-      !server.addCharacteristic(
-        BODY_COMPOSITION_SERVICE_UUID, BODY_COMPOSITION_MEASUREMENT_UUID, measurementConfig) ||
-      !server.addCharacteristic(
-        BODY_COMPOSITION_SERVICE_UUID, BODY_COMPOSITION_FEATURE_UUID, featureConfig) ||
-      !server.setValue(BODY_COMPOSITION_SERVICE_UUID, BODY_COMPOSITION_FEATURE_UUID, feature, sizeof(feature)))
+  if (!(bodyCompositionServiceService = server.addService(BODY_COMPOSITION_SERVICE_UUID)).valid() ||
+      !(bodyCompositionMeasurementCharacteristic = server.addCharacteristic(bodyCompositionServiceService, BODY_COMPOSITION_MEASUREMENT_UUID, measurementConfig)).valid() ||
+      !(bodyCompositionFeatureCharacteristic = server.addCharacteristic(bodyCompositionServiceService, BODY_COMPOSITION_FEATURE_UUID, featureConfig)).valid() ||
+      !server.setValue(bodyCompositionFeatureCharacteristic, feature, sizeof(feature)))
   {
     Serial.printf("CONFIG_FAILED %s %s\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
     return;
@@ -85,10 +86,8 @@ void loop()
       measurement[3] = static_cast<uint8_t>((fatRaw >> 8) & 0xFF);
       measurement[4] = static_cast<uint8_t>(weightRaw & 0xFF);
       measurement[5] = static_cast<uint8_t>((weightRaw >> 8) & 0xFF);
-      const bool stored = ble.gattServer().setValue(
-        BODY_COMPOSITION_SERVICE_UUID, BODY_COMPOSITION_MEASUREMENT_UUID, measurement, sizeof(measurement));
-      const bool indicated = ble.gattServer().indicate(
-        BODY_COMPOSITION_SERVICE_UUID, BODY_COMPOSITION_MEASUREMENT_UUID, measurement, sizeof(measurement));
+      const bool stored = ble.gattServer().setValue(bodyCompositionMeasurementCharacteristic, measurement, sizeof(measurement));
+      const bool indicated = ble.gattServer().indicate(bodyCompositionMeasurementCharacteristic, measurement, sizeof(measurement));
       Serial.printf("BC_UPDATED stored=%u indicated=%u\n", stored ? 1 : 0, indicated ? 1 : 0);
     }
   }

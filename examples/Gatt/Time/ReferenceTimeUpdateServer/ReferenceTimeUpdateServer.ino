@@ -15,6 +15,9 @@ static constexpr const char *TIME_UPDATE_CONTROL_POINT_UUID = "2a16";
 static constexpr const char *TIME_UPDATE_STATE_UUID = "2a17";
 
 EspBle ble;
+EspBleGattService rtusServiceService;
+EspBleGattCharacteristic timeUpdateControlPointCharacteristic;
+EspBleGattCharacteristic timeUpdateStateCharacteristic;
 // en: Current State: 0 = Idle, 1 = Update Pending. Result: 0 = Successful, 1 = Canceled.
 // ja: Current State: 0 = Idle、1 = Update Pending。Result: 0 = Successful、1 = Canceled。
 uint8_t timeUpdateState[2] = {0, 0};
@@ -23,7 +26,7 @@ static void setState(uint8_t current, uint8_t resultCode)
 {
   timeUpdateState[0] = current;
   timeUpdateState[1] = resultCode;
-  ble.gattServer().setValue(RTUS_SERVICE_UUID, TIME_UPDATE_STATE_UUID, timeUpdateState, sizeof(timeUpdateState));
+  ble.gattServer().setValue(timeUpdateStateCharacteristic, timeUpdateState, sizeof(timeUpdateState));
 }
 
 void setup()
@@ -35,10 +38,10 @@ void setup()
   EspBleGattCharacteristicConfig stateConfig;
   stateConfig.readable = true;
   auto &server = ble.gattServer();
-  server.addService(RTUS_SERVICE_UUID);
-  server.addCharacteristic(RTUS_SERVICE_UUID, TIME_UPDATE_CONTROL_POINT_UUID, controlConfig);
-  server.addCharacteristic(RTUS_SERVICE_UUID, TIME_UPDATE_STATE_UUID, stateConfig);
-  server.setValue(RTUS_SERVICE_UUID, TIME_UPDATE_STATE_UUID, timeUpdateState, sizeof(timeUpdateState));
+  rtusServiceService = server.addService(RTUS_SERVICE_UUID);
+  timeUpdateControlPointCharacteristic = server.addCharacteristic(rtusServiceService, TIME_UPDATE_CONTROL_POINT_UUID, controlConfig);
+  timeUpdateStateCharacteristic = server.addCharacteristic(rtusServiceService, TIME_UPDATE_STATE_UUID, stateConfig);
+  server.setValue(timeUpdateStateCharacteristic, timeUpdateState, sizeof(timeUpdateState));
 
   server.onWritten([](const EspBleGattWrite &write) {
     if (!write.characteristicUuid.equalsIgnoreCase(TIME_UPDATE_CONTROL_POINT_UUID) || write.value.length() != 1)

@@ -13,6 +13,9 @@ static constexpr const char *BOND_MANAGEMENT_CONTROL_POINT_UUID = "2aa4";
 static constexpr const char *BOND_MANAGEMENT_FEATURE_UUID = "2aa5";
 
 EspBle ble;
+EspBleGattService bmsServiceService;
+EspBleGattCharacteristic bondManagementControlPointCharacteristic;
+EspBleGattCharacteristic bondManagementFeatureCharacteristic;
 TaskHandle_t loopTask = nullptr;
 // bit 0 = Delete bond of requesting device (LE) supported,
 // bit 4 = Delete all bonds of requesting device (LE and BR/EDR) supported.
@@ -34,10 +37,10 @@ void setup()
   EspBleGattCharacteristicConfig featureConfig;
   featureConfig.readable = true;
   auto &server = ble.gattServer();
-  if (!server.addService(BMS_SERVICE_UUID) ||
-      !server.addCharacteristic(BMS_SERVICE_UUID, BOND_MANAGEMENT_CONTROL_POINT_UUID, controlConfig) ||
-      !server.addCharacteristic(BMS_SERVICE_UUID, BOND_MANAGEMENT_FEATURE_UUID, featureConfig) ||
-      !server.setValue(BMS_SERVICE_UUID, BOND_MANAGEMENT_FEATURE_UUID, feature, sizeof(feature)))
+  if (!(bmsServiceService = server.addService(BMS_SERVICE_UUID)).valid() ||
+      !(bondManagementControlPointCharacteristic = server.addCharacteristic(bmsServiceService, BOND_MANAGEMENT_CONTROL_POINT_UUID, controlConfig)).valid() ||
+      !(bondManagementFeatureCharacteristic = server.addCharacteristic(bmsServiceService, BOND_MANAGEMENT_FEATURE_UUID, featureConfig)).valid() ||
+      !server.setValue(bondManagementFeatureCharacteristic, feature, sizeof(feature)))
   {
     Serial.printf("CONFIG_FAILED %s %s\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
     return;

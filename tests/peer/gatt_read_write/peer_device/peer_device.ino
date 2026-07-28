@@ -11,6 +11,9 @@ static constexpr const char *SLOW_SERVICE_UUID = "10da4de0-8eaa-4c69-9003-676174
 static constexpr const char *SLOW_CHARACTERISTIC_UUID = "10da4de1-8eaa-4c69-9003-676174747277";
 
 EspBle ble;
+EspBleGattService testServiceService;
+EspBleGattCharacteristic testCharacteristicCharacteristic;
+EspBleGattDescriptor testDescriptorDescriptor;
 TaskHandle_t loopTask = nullptr;
 
 class SlowReadCallbacks : public BLECharacteristicCallbacks
@@ -35,24 +38,18 @@ void setup()
   EspBleGattDescriptorConfig descriptorConfig;
   descriptorConfig.readable = true;
   descriptorConfig.writable = true;
-  if (!gattServer.addService(TEST_SERVICE_UUID) ||
-      !gattServer.addCharacteristic(
-        TEST_SERVICE_UUID, TEST_CHARACTERISTIC_UUID, characteristicConfig) ||
-      !gattServer.addDescriptor(
-        TEST_SERVICE_UUID, TEST_CHARACTERISTIC_UUID, TEST_DESCRIPTOR_UUID, descriptorConfig) ||
-      !gattServer.setValue(
-        TEST_SERVICE_UUID, TEST_CHARACTERISTIC_UUID, String("peer-ready")) ||
-      !gattServer.setDescriptorValue(
-        TEST_SERVICE_UUID, TEST_CHARACTERISTIC_UUID,
-        TEST_DESCRIPTOR_UUID, String("peer-description")))
+  if (!(testServiceService = gattServer.addService(TEST_SERVICE_UUID)).valid() ||
+      !(testCharacteristicCharacteristic = gattServer.addCharacteristic(testServiceService, TEST_CHARACTERISTIC_UUID, characteristicConfig)).valid() ||
+      !(testDescriptorDescriptor = gattServer.addDescriptor(testCharacteristicCharacteristic, TEST_DESCRIPTOR_UUID, descriptorConfig)).valid() ||
+      !gattServer.setValue(testCharacteristicCharacteristic, String("peer-ready")) ||
+      !gattServer.setDescriptorValue(testDescriptorDescriptor, String("peer-description")))
   {
     Serial.printf("GATT_CONFIG_FAILED %s %s\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
     return;
   }
   gattServer.onWritten([](const EspBleGattWrite &write) {
     String storedValue;
-    const bool stored = ble.gattServer().value(
-      TEST_SERVICE_UUID, TEST_CHARACTERISTIC_UUID, storedValue);
+    const bool stored = ble.gattServer().value(testCharacteristicCharacteristic, storedValue);
     Serial.printf(
       "SERVER_WRITE id=%u value=%s stored=%u context=%s\n",
       static_cast<unsigned>(write.connectionId),
@@ -62,11 +59,9 @@ void setup()
   });
   gattServer.onDescriptorWritten([](const EspBleGattDescriptorWrite &write) {
     String storedValue;
-    const bool stored = ble.gattServer().descriptorValue(
-      write.serviceUuid.c_str(),
-      write.characteristicUuid.c_str(),
-      write.descriptorUuid.c_str(),
-      storedValue);
+    // The event carries the handle of the descriptor that was written, so the
+    // value can be read back without matching UUIDs.
+    const bool stored = ble.gattServer().descriptorValue(write.descriptor, storedValue);
     Serial.printf(
       "SERVER_DESCRIPTOR_WRITE value=%s stored=%u context=%s\n",
       write.value.c_str(),
@@ -113,8 +108,7 @@ void loop()
     else if (command == 'd')
     {
       String value;
-      const bool found = ble.gattServer().descriptorValue(
-        TEST_SERVICE_UUID, TEST_CHARACTERISTIC_UUID, TEST_DESCRIPTOR_UUID, value);
+      const bool found = ble.gattServer().descriptorValue(testDescriptorDescriptor, value);
       Serial.printf("SERVER_DESCRIPTOR found=%u value=%s\n",
         found ? 1 : 0, value.c_str());
     }

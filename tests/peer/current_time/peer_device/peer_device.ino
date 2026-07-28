@@ -6,6 +6,8 @@ static constexpr const char *CURRENT_TIME_SERVICE_UUID = "1805";
 static constexpr const char *CURRENT_TIME_UUID = "2a2b";
 
 EspBle ble;
+EspBleGattService currentTimeServiceService;
+EspBleGattCharacteristic currentTimeCharacteristic;
 TaskHandle_t loopTask = nullptr;
 uint8_t currentTime[] = {0xea, 0x07, 7, 19, 12, 34, 56, 7, 128, 0x02};
 
@@ -24,10 +26,9 @@ void setup()
   timeConfig.readable = true;
   timeConfig.notifiable = true;
   auto &server = ble.gattServer();
-  if (!server.addService(CURRENT_TIME_SERVICE_UUID) ||
-      !server.addCharacteristic(CURRENT_TIME_SERVICE_UUID, CURRENT_TIME_UUID, timeConfig) ||
-      !server.setValue(CURRENT_TIME_SERVICE_UUID, CURRENT_TIME_UUID,
-        currentTime, sizeof(currentTime)))
+  if (!(currentTimeServiceService = server.addService(CURRENT_TIME_SERVICE_UUID)).valid() ||
+      !(currentTimeCharacteristic = server.addCharacteristic(currentTimeServiceService, CURRENT_TIME_UUID, timeConfig)).valid() ||
+      !server.setValue(currentTimeCharacteristic, currentTime, sizeof(currentTime)))
   {
     Serial.printf("CONFIG_FAILED %s %s\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
     return;
@@ -68,10 +69,8 @@ void loop()
     else if (command == 't')
     {
       currentTime[6] = 57;
-      const bool stored = ble.gattServer().setValue(
-        CURRENT_TIME_SERVICE_UUID, CURRENT_TIME_UUID, currentTime, sizeof(currentTime));
-      const bool notified = ble.gattServer().notify(
-        CURRENT_TIME_SERVICE_UUID, CURRENT_TIME_UUID, currentTime, sizeof(currentTime));
+      const bool stored = ble.gattServer().setValue(currentTimeCharacteristic, currentTime, sizeof(currentTime));
+      const bool notified = ble.gattServer().notify(currentTimeCharacteristic, currentTime, sizeof(currentTime));
       Serial.printf("TIME_UPDATED stored=%u notified=%u second=%u\n",
         stored ? 1 : 0, notified ? 1 : 0, currentTime[6]);
     }

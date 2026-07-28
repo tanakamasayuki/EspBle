@@ -13,6 +13,10 @@ static constexpr const char *RSC_FEATURE_UUID = "2a54";
 static constexpr const char *SENSOR_LOCATION_UUID = "2a5d";
 
 EspBle ble;
+EspBleGattService rscServiceService;
+EspBleGattCharacteristic rscMeasurementCharacteristic;
+EspBleGattCharacteristic rscFeatureCharacteristic;
+EspBleGattCharacteristic sensorLocationCharacteristic;
 TaskHandle_t loopTask = nullptr;
 const uint8_t feature[2] = {0x03, 0x00}; // Stride Length + Total Distance supported
 const uint8_t sensorLocation = 2;        // In Shoe
@@ -33,12 +37,12 @@ void setup()
   EspBleGattCharacteristicConfig readConfig;
   readConfig.readable = true;
   auto &server = ble.gattServer();
-  if (!server.addService(RSC_SERVICE_UUID) ||
-      !server.addCharacteristic(RSC_SERVICE_UUID, RSC_MEASUREMENT_UUID, measurementConfig) ||
-      !server.addCharacteristic(RSC_SERVICE_UUID, RSC_FEATURE_UUID, readConfig) ||
-      !server.addCharacteristic(RSC_SERVICE_UUID, SENSOR_LOCATION_UUID, readConfig) ||
-      !server.setValue(RSC_SERVICE_UUID, RSC_FEATURE_UUID, feature, sizeof(feature)) ||
-      !server.setValue(RSC_SERVICE_UUID, SENSOR_LOCATION_UUID, &sensorLocation, 1))
+  if (!(rscServiceService = server.addService(RSC_SERVICE_UUID)).valid() ||
+      !(rscMeasurementCharacteristic = server.addCharacteristic(rscServiceService, RSC_MEASUREMENT_UUID, measurementConfig)).valid() ||
+      !(rscFeatureCharacteristic = server.addCharacteristic(rscServiceService, RSC_FEATURE_UUID, readConfig)).valid() ||
+      !(sensorLocationCharacteristic = server.addCharacteristic(rscServiceService, SENSOR_LOCATION_UUID, readConfig)).valid() ||
+      !server.setValue(rscFeatureCharacteristic, feature, sizeof(feature)) ||
+      !server.setValue(sensorLocationCharacteristic, &sensorLocation, 1))
   {
     Serial.printf("CONFIG_FAILED %s %s\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
     return;
@@ -89,10 +93,8 @@ void loop()
       measurement[7] = 0x27;
       measurement[8] = 0x00;
       measurement[9] = 0x00;
-      const bool stored = ble.gattServer().setValue(
-        RSC_SERVICE_UUID, RSC_MEASUREMENT_UUID, measurement, sizeof(measurement));
-      const bool notified = ble.gattServer().notify(
-        RSC_SERVICE_UUID, RSC_MEASUREMENT_UUID, measurement, sizeof(measurement));
+      const bool stored = ble.gattServer().setValue(rscMeasurementCharacteristic, measurement, sizeof(measurement));
+      const bool notified = ble.gattServer().notify(rscMeasurementCharacteristic, measurement, sizeof(measurement));
       Serial.printf("RSC_UPDATED stored=%u notified=%u\n", stored ? 1 : 0, notified ? 1 : 0);
     }
   }
