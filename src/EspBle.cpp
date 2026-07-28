@@ -3316,11 +3316,15 @@ struct EspBleScannerImpl
       {
         result.manufacturerData = device.getManufacturerData();
       }
-      if (device.haveServiceData())
+      const int serviceDataCount = device.getServiceDataCount();
+      for (int index = 0;
+           index < serviceDataCount &&
+             result.serviceDataCount < EspBleScanResult::MaxServiceData;
+           ++index)
       {
-        // The first service-data block (most beacon formats use exactly one).
-        result.serviceData = device.getServiceData();
-        result.serviceDataUuid = device.getServiceDataUUID().toString();
+        EspBleServiceData &block = result.serviceData[result.serviceDataCount++];
+        block.uuid = device.getServiceDataUUID(index).toString();
+        block.data = device.getServiceData(index);
       }
       if (device.haveAppearance())
       {
@@ -3383,7 +3387,24 @@ bool EspBleScanResult::hasManufacturerData() const
 
 bool EspBleScanResult::hasServiceData() const
 {
-  return !serviceData.isEmpty();
+  return serviceDataCount != 0;
+}
+
+bool EspBleScanResult::serviceDataFor(const char *uuid, String &data) const
+{
+  if (uuid == nullptr || uuid[0] == '\0')
+  {
+    return false;
+  }
+  for (size_t index = 0; index < serviceDataCount; ++index)
+  {
+    if (uuidEquals(serviceData[index].uuid, uuid))
+    {
+      data = serviceData[index].data;
+      return true;
+    }
+  }
+  return false;
 }
 
 bool EspBleScanResult::hasAppearance() const
@@ -3417,8 +3438,11 @@ void EspBleAdvertisingData::clear()
 {
   name_ = "";
   manufacturerData_ = "";
-  serviceData_ = "";
-  serviceDataUuid_ = "";
+  for (EspBleServiceData &block : serviceData_)
+  {
+    block = EspBleServiceData();
+  }
+  serviceDataCount_ = 0;
   serviceUuidCount_ = 0;
   appearance_ = 0;
   txPowerIncluded_ = false;
@@ -3461,20 +3485,48 @@ void EspBleAdvertisingData::setManufacturerData(const uint8_t *data, size_t leng
   manufacturerData_ = String(reinterpret_cast<const char *>(data), length);
 }
 
-bool EspBleAdvertisingData::setServiceData(const char *uuid, const uint8_t *data, size_t length)
+bool EspBleAdvertisingData::addServiceData(const char *uuid, const uint8_t *data, size_t length)
 {
-  if (uuid == nullptr)
+  if (uuid == nullptr || uuid[0] == '\0')
   {
     return false;
   }
+
+  size_t slot = serviceDataCount_;
+  for (size_t index = 0; index < serviceDataCount_; ++index)
+  {
+    if (uuidEquals(serviceData_[index].uuid, uuid))
+    {
+      slot = index;
+      break;
+    }
+  }
+
   if (data == nullptr || length == 0)
   {
-    serviceData_ = "";
-    serviceDataUuid_ = "";
+    // Removing a block that was never added is not an error.
+    if (slot == serviceDataCount_)
+    {
+      return true;
+    }
+    for (size_t next = slot + 1; next < serviceDataCount_; ++next)
+    {
+      serviceData_[next - 1] = serviceData_[next];
+    }
+    serviceData_[--serviceDataCount_] = EspBleServiceData();
     return true;
   }
-  serviceDataUuid_ = uuid;
-  serviceData_ = String(reinterpret_cast<const char *>(data), length);
+
+  if (slot == serviceDataCount_)
+  {
+    if (serviceDataCount_ == MaxServiceData)
+    {
+      return false;
+    }
+    ++serviceDataCount_;
+  }
+  serviceData_[slot].uuid = uuid;
+  serviceData_[slot].data = String(reinterpret_cast<const char *>(data), length);
   return true;
 }
 
@@ -3490,7 +3542,7 @@ void EspBleAdvertisingData::setTxPowerIncluded(bool included)
 
 bool EspBleAdvertisingData::isEmpty() const
 {
-  return name_.isEmpty() && manufacturerData_.isEmpty() && serviceData_.isEmpty() &&
+  return name_.isEmpty() && manufacturerData_.isEmpty() && serviceDataCount_ == 0 &&
     serviceUuidCount_ == 0 && appearance_ == 0 && !txPowerIncluded_;
 }
 
@@ -3543,11 +3595,16 @@ void EspBleAdvertising::setManufacturerData(const uint8_t *data, size_t length)
   data_.setManufacturerData(data, length);
 }
 
-bool EspBleAdvertising::setServiceData(const char *uuid, const uint8_t *data, size_t length)
+bool EspBleAdvertising::addServiceData(const char *uuid, const uint8_t *data, size_t length)
 {
-  if (!data_.setServiceData(uuid, data, length))
+  if (uuid == nullptr || uuid[0] == '\0')
   {
     owner_->setError(EspBleError::InvalidArgument, "service data UUID is required");
+    return false;
+  }
+  if (!data_.addServiceData(uuid, data, length))
+  {
+    owner_->setError(EspBleError::ResourceExhausted, "too many advertising service data blocks");
     return false;
   }
   owner_->clearError();
@@ -3698,10 +3755,11 @@ bool EspBleAdvertising::buildPayload(
       return fail("manufacturer data");
     }
   }
-  if (!source.serviceData_.isEmpty())
+  for (size_t index = 0; index < source.serviceDataCount_; ++index)
   {
+    const EspBleServiceData &block = source.serviceData_[index];
     previousLength = advertisingData.getPayload().length();
-    advertisingData.setServiceData(BLEUUID(source.serviceDataUuid_.c_str()), source.serviceData_);
+    advertisingData.setServiceData(BLEUUID(block.uuid.c_str()), block.data);
     if (advertisingData.getPayload().length() == previousLength)
     {
       return fail("service data");

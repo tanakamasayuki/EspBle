@@ -1,7 +1,9 @@
 import re
 
+BLOCK = re.compile(rb"SERVICE_DATA index=(\d+) uuid=(\S+) data=([0-9a-f]*)")
 
-def test_service_data_broadcast_and_read(dut, peers):
+
+def test_service_data_blocks_are_received_and_looked_up(dut, peers):
     peripheral = peers["device"]
 
     peripheral.write("?")
@@ -9,13 +11,21 @@ def test_service_data_broadcast_and_read(dut, peers):
 
     dut.write("s")
     dut.expect_exact("SCAN_STARTED", timeout=10)
-    match = dut.expect(
-        re.compile(rb"SERVICE_DATA uuid=(\S+) data=([0-9a-f]+)"), timeout=20
-    )
 
-    uuid = match.group(1).decode().lower()
-    data = match.group(2).decode()
+    # The peer advertises two blocks: AB CD EF 12 under 0xFEAB and 2E 09 under
+    # 0x181A.
+    dut.expect_exact("SERVICE_DATA_COUNT 2", timeout=20)
 
-    # The peer advertised payload AB CD EF 12 under 16-bit UUID 0xFEAB.
-    assert data == "abcdef12", f"unexpected service data {data}"
-    assert "feab" in uuid, f"service data UUID missing feab: {uuid}"
+    blocks = {}
+    for _ in range(2):
+        match = dut.expect(BLOCK, timeout=10)
+        blocks[match.group(2).decode().lower()] = match.group(3).decode()
+
+    feab = [data for uuid, data in blocks.items() if "feab" in uuid]
+    esss = [data for uuid, data in blocks.items() if "181a" in uuid]
+    assert feab == ["abcdef12"], f"unexpected 0xFEAB block: {blocks}"
+    assert esss == ["2e09"], f"unexpected 0x181A block: {blocks}"
+
+    # serviceDataFor() compares UUIDs by value, so the 16-bit shorthand "181A"
+    # matches the 128-bit form the scan result carries.
+    dut.expect_exact("SERVICE_DATA_LOOKUP data=2e09", timeout=10)

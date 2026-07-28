@@ -99,9 +99,22 @@ enum class EspBleAddressType : uint8_t
   RandomIdentity,
 };
 
+// One Service Data block from an advertisement (AD type 0x16/0x20/0x21): a
+// payload together with the service UUID it belongs to. uuid is reported in
+// full 128-bit form even when advertised as a 16-bit value.
+struct EspBleServiceData
+{
+  String uuid;
+  String data;
+};
+
 struct EspBleScanResult
 {
   static constexpr size_t MaxServiceUuids = 8;
+  // An advertisement plus its scan response give 62 bytes, and each block costs
+  // at least 5 (length + type + 16-bit UUID + one payload byte), so four covers
+  // any realistic advertiser.
+  static constexpr size_t MaxServiceData = 4;
 
   String address;
   EspBleAddressType addressType = EspBleAddressType::Public;
@@ -110,11 +123,11 @@ struct EspBleScanResult
   bool connectable = false;
   bool scannable = false;
   String manufacturerData;
-  // First Service Data block, if any (AD type 0x16/0x20/0x21). Most beacon
-  // formats carry their payload here; serviceDataUuid is the associated service
-  // UUID, reported in full 128-bit form even when advertised as a 16-bit value.
-  String serviceData;
-  String serviceDataUuid;
+  // Every Service Data block the advertisement carries, in the order received.
+  // Most beacon formats use exactly one; look a specific one up by UUID with
+  // serviceDataFor() rather than assuming an index.
+  EspBleServiceData serviceData[MaxServiceData];
+  size_t serviceDataCount = 0;
   String serviceUuids[MaxServiceUuids];
   size_t serviceUuidCount = 0;
   // Appearance (AD type 0x19): the device category a peer advertises, which
@@ -131,6 +144,10 @@ struct EspBleScanResult
   bool hasServiceData() const;
   bool hasAppearance() const;
   bool hasTxPowerLevel() const;
+  // Copy the payload of the Service Data block whose UUID matches, comparing
+  // UUIDs by value so a 16-bit shorthand matches its 128-bit form. Returns false
+  // when no block carries that UUID.
+  bool serviceDataFor(const char *uuid, String &data) const;
   bool advertisesService(const char *uuid) const;
 };
 
@@ -728,14 +745,18 @@ class EspBleAdvertisingData
 public:
   static constexpr size_t MaxServiceUuids = 4;
 
+  static constexpr size_t MaxServiceData = 4;
+
   void clear();
   void setName(const char *name);
   bool addServiceUuid(const char *uuid);
   void setManufacturerData(const uint8_t *data, size_t length);
-  // Set a Service Data block (AD type 0x16 / 0x20 / 0x21 by UUID size). Add the
-  // same UUID with addServiceUuid() too if scanners should also discover it via
-  // the service-UUID list.
-  bool setServiceData(const char *uuid, const uint8_t *data, size_t length);
+  // Add a Service Data block (AD type 0x16 / 0x20 / 0x21 by UUID size). Several
+  // blocks may be added, each with its own UUID; adding the same UUID twice
+  // replaces the earlier block. Add the same UUID with addServiceUuid() too if
+  // scanners should also discover it via the service-UUID list. Passing no data
+  // removes the block for that UUID.
+  bool addServiceData(const char *uuid, const uint8_t *data, size_t length);
   void setAppearance(uint16_t appearance);
   // Include the Tx Power Level AD type (0x0A). The controller fills in the
   // actual power, which lets a scanner estimate distance from it and the RSSI.
@@ -747,8 +768,8 @@ private:
 
   String name_;
   String manufacturerData_;
-  String serviceData_;
-  String serviceDataUuid_;
+  EspBleServiceData serviceData_[MaxServiceData];
+  size_t serviceDataCount_ = 0;
   String serviceUuids_[MaxServiceUuids];
   size_t serviceUuidCount_ = 0;
   uint16_t appearance_ = 0;
@@ -773,7 +794,7 @@ public:
   void setName(const char *name);
   bool addServiceUuid(const char *uuid);
   void setManufacturerData(const uint8_t *data, size_t length);
-  bool setServiceData(const char *uuid, const uint8_t *data, size_t length);
+  bool addServiceData(const char *uuid, const uint8_t *data, size_t length);
   void setAppearance(uint16_t appearance);
   void setScanResponseEnabled(bool enabled);
   // Restrict scan requests and/or connections to peers on the accept list.

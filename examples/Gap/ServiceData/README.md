@@ -27,16 +27,16 @@ This example broadcasts a temperature under the Environmental Sensing Service UU
 
 ## Key APIs
 
-- `ble.advertising().setServiceData(uuid, data, length)` — set the Service Data block; the AD type (0x16 / 0x20 / 0x21) follows the UUID size
+- `ble.advertising().addServiceData(uuid, data, length)` — add a Service Data block; the AD type (0x16 / 0x20 / 0x21) follows the UUID size. Up to four blocks with distinct UUIDs; calling it again with the same UUID replaces that block, and passing no data removes it
 - `ble.advertising().addServiceUuid(uuid)` — also list the UUID so a receiver's `advertisesService()` matches
 - `ble.advertising().setConnectable(false)` / `setScanResponseEnabled(false)` — make it a pure broadcaster
-- Receiving side: `scanResult.serviceData` / `scanResult.serviceDataUuid` / `scanResult.hasServiceData()`
+- Receiving side: `scanResult.serviceData[]` / `serviceDataCount` / `hasServiceData()`, and `scanResult.serviceDataFor(uuid, data)` to look one up by UUID
 
 ## Notes
 
 - Service Data consumes the 31-byte legacy advertising budget. A 128-bit UUID alone takes 16 bytes, so a custom UUID leaves little room for the payload.
-- On the receiving side EspBle extracts **only the first** Service Data block, because `EspBleScanResult` holds a single pair (`serviceData` and `serviceDataUuid`). Blocks after the first are not readable from a peer that advertises several.
-- The receiver's `serviceDataUuid` comes back in **full 128-bit form** (`0000181a-0000-1000-8000-00805f9b34fb`) even when the sender specified the 16-bit shorthand (`181A`). Compare UUIDs by value, as `advertisesService()` does, rather than by string.
+- One advertisement may carry several Service Data blocks (up to four, on both the sending and receiving side). Look a block up with `serviceDataFor()` by UUID rather than by index, so the code does not depend on ordering.
+- The receiver's `uuid` comes back in **full 128-bit form** (`0000181a-0000-1000-8000-00805f9b34fb`) even when the sender specified the 16-bit shorthand (`181A`). A plain string comparison will not match, so use `serviceDataFor()`, which compares by value.
 - Advertising stops and restarts on every update, so the broadcast has a brief gap each time. This is not suitable for updates every few hundred milliseconds.
 
 ## Expected Serial output

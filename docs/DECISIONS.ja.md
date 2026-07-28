@@ -171,7 +171,7 @@
 
 3. iBeaconはbackend非依存codec `EspBleIBeacon.h`（`espBleEncodeIBeacon`/`espBleDecodeIBeacon`/`espBleIsIBeacon`）で実装する。keymap/medical float/CGM CRC/MIDIと同じ「backend非依存ロジックはheader＋host unit test」方針に揃える。iBeaconはmanufacturer specific data（company ID 0x004C＋type 0x02＋length 0x15＋16 byte UUID＋big-endian major/minor＋int8 measured power、計25 byte）で、既存の`setManufacturerData`（送信）と`EspBleScanResult::manufacturerData`（受信）にそのまま載るため、advertising/scan APIの追加なしで完結する。unit testと`ibeacon` Peer（broadcast→decode）で検証。
 
-4. 汎用のService Data API（`EspBleAdvertising::setServiceData(uuid, data, length)`送信＝backendの`BLEAdvertisementData::setServiceData`、`EspBleScanResult::serviceData`/`serviceDataUuid`/`hasServiceData()`受信＝backendの`getServiceData`/`getServiceDataUUID`）を追加する。標準16-bitサービスのService Data（AD 0x16）やservice-dataビーコン一般で使える汎用機能。`service_data` Peerで送受信を検証。なお当初Eddystone対応（URL/UID/TLM）を実装したが、Eddystone/Physical Webは事実上終息したプロトコルのため、デッドプロトコルの保守面を避けてEddystone固有部分（codec・example・test）は削除した（判断: 現実の利用価値でスコープを決める）。iBeaconは現役のため維持し、汎用Service Data APIも独立して有用なため残した。
+4. 汎用のService Data API（`EspBleAdvertising::addServiceData(uuid, data, length)`で最大4ブロック送信、`EspBleScanResult::serviceData[]`/`serviceDataCount`/`hasServiceData()`/`serviceDataFor(uuid, data)`で受信）を追加する。標準16-bitサービスのService Data（AD 0x16）やservice-dataビーコン一般で使える汎用機能。`service_data` Peerで送受信を検証。なお当初Eddystone対応（URL/UID/TLM）を実装したが、Eddystone/Physical Webは事実上終息したプロトコルのため、デッドプロトコルの保守面を避けてEddystone固有部分（codec・example・test）は削除した（判断: 現実の利用価値でスコープを決める）。iBeaconは現役のため維持し、汎用Service Data APIも独立して有用なため残した。
 
 ## 優先順位候補
 

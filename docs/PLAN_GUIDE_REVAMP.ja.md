@@ -263,7 +263,13 @@ Phase 1で送信側に `setAppearance()` / `setTxPowerIncluded()` を追加し�
 - `Info/ScanDump` が両方を表示し、Tx PowerとRSSIの差（経路損失）も出す
 - 実機確認: `appearance=0x0341 txpower=9dBm loss=23dB`（`Gap/ScanResponse` が設定した値と一致）。`scan_response` / `service_data` Peerも再実行してPASS
 
-なお **Service Dataを先頭1ブロックしか保持しない**点はEspBle側の制約として残している（backendは `getServiceDataCount()` と添字アクセスを持つ）。スキャン結果の構造体はキューに複数保持されるため、ブロック数ぶんのStringを増やすとRAMを圧迫する。実運用でほぼ1ブロックであることを踏まえた選択。
+**Service Dataの複数ブロック対応**も同じ理由で入れた。当初はRAMを理由に先頭1ブロックのみとしていたが、実測するとScan Result 16件ぶんで増加は約1.1 KB（空Stringはヒープを確保しない）で、ESP32-S3の空き約298 KBに対して無視できる規模だった。
+
+- 送信: `EspBleAdvertising::addServiceData()`（`setServiceData()` から改名）で最大4ブロック。同一UUIDの再指定は差し替え、データ省略は削除
+- 受信: `EspBleScanResult::serviceData[]` / `serviceDataCount`、UUIDを値比較して引く `serviceDataFor(uuid, data)`
+- 上限4の根拠: advertisement＋scan responseで62バイト、1ブロックは最低5バイト（length＋type＋16bit UUID＋payload 1バイト）
+
+`service_data` Peerを2ブロック送出＋UUID検索の検証へ拡張し、実機でPASS（`SERVICE_DATA_COUNT 2`、`serviceDataFor("181A")` が128bitフル形と一致）。`scan_response` / `advertise_payload` / `beacon` / `ibeacon` も回帰PASS。
 
 #### 方針
 

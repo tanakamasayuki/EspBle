@@ -33,7 +33,7 @@ static void publishTemperature()
 
   auto &advertising = ble.advertising();
   advertising.stop();
-  if (!advertising.setServiceData(SERVICE_UUID, payload, sizeof(payload)))
+  if (!advertising.addServiceData(SERVICE_UUID, payload, sizeof(payload)))
   {
     Serial.printf("Service data failed: %s (%s)\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
     return;

@@ -28,17 +28,21 @@ static void printManufacturerData(const EspBleScanResult &scanResult)
   printHex(scanResult.manufacturerData);
 }
 
-// en: Service Data is a payload tagged with the service UUID it belongs to. EspBle
-//     surfaces the first block of an advertisement.
-// ja: Service Dataは、どのserviceの値かをUUIDで示したpayload。EspBleは
-//     advertisement中の最初の1ブロックを取り出す。
+// en: Service Data is a payload tagged with the service UUID it belongs to. An
+//     advertisement may carry several blocks, so print each one.
+// ja: Service Dataは、どのserviceの値かをUUIDで示したpayload。1つのadvertisementに
+//     複数ブロック載ることがあるので、すべて表示する。
 static void printServiceData(const EspBleScanResult &scanResult)
 {
-  Serial.printf(
-    " servicedata[%s][%u]=",
-    scanResult.serviceDataUuid.c_str(),
-    static_cast<unsigned>(scanResult.serviceData.length()));
-  printHex(scanResult.serviceData);
+  for (size_t i = 0; i < scanResult.serviceDataCount; ++i)
+  {
+    const EspBleServiceData &block = scanResult.serviceData[i];
+    Serial.printf(
+      " servicedata[%s][%u]=",
+      block.uuid.c_str(),
+      static_cast<unsigned>(block.data.length()));
+    printHex(block.data);
+  }
 }
 
 // en: iBeacon is a specific Manufacturer Data layout (Apple company ID 0x004C).

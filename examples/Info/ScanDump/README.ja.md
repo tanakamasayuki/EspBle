@@ -18,7 +18,7 @@ EspBleが各advertisementから取り出す全フィールドをダンプする�
 
 ## 主なAPI
 
-- `EspBleScanResult` — `address`、`addressType`、`rssi`、`connectable`、`scannable`、`name`、`serviceUuids[]` / `serviceUuidCount`、`manufacturerData`、`serviceData` / `serviceDataUuid`、`appearance`、`txPowerLevel`
+- `EspBleScanResult` — `address`、`addressType`、`rssi`、`connectable`、`scannable`、`name`、`serviceUuids[]` / `serviceUuidCount`、`manufacturerData`、`serviceData[]` / `serviceDataCount`、`appearance`、`txPowerLevel`
 - `scanResult.hasName()` / `hasManufacturerData()` / `hasServiceData()` / `hasAppearance()` / `hasTxPowerLevel()`
 - `EspBleIBeacon.h` の `espBleDecodeIBeacon()` — iBeacon manufacturer dataのデコード
 - `ble.scanner().droppedResultCount()` — queue溢れで失われたscan result数

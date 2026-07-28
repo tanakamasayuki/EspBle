@@ -18,7 +18,7 @@ Diagnostic scanner that dumps every field EspBle extracts from each advertisemen
 
 ## Key APIs
 
-- `EspBleScanResult` — `address`, `addressType`, `rssi`, `connectable`, `scannable`, `name`, `serviceUuids[]` / `serviceUuidCount`, `manufacturerData`, `serviceData` / `serviceDataUuid`, `appearance`, `txPowerLevel`
+- `EspBleScanResult` — `address`, `addressType`, `rssi`, `connectable`, `scannable`, `name`, `serviceUuids[]` / `serviceUuidCount`, `manufacturerData`, `serviceData[]` / `serviceDataCount`, `appearance`, `txPowerLevel`
 - `scanResult.hasName()` / `hasManufacturerData()` / `hasServiceData()` / `hasAppearance()` / `hasTxPowerLevel()`
 - `espBleDecodeIBeacon()` from `EspBleIBeacon.h` — decode an iBeacon manufacturer-data payload
 - `ble.scanner().droppedResultCount()` — scan results lost to queue overflow

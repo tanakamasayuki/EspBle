@@ -27,16 +27,16 @@ Service Data（AD type 0x16）を載せたadvertisingを行う例です。Servic
 
 ## 主なAPI
 
-- `ble.advertising().setServiceData(uuid, data, length)` — Service Dataブロックを設定する。UUIDのサイズに応じてAD type 0x16 / 0x20 / 0x21が選ばれる
+- `ble.advertising().addServiceData(uuid, data, length)` — Service Dataブロックを追加する。UUIDのサイズに応じてAD type 0x16 / 0x20 / 0x21が選ばれる。UUIDを変えて最大4ブロックまで載せられ、同じUUIDで呼び直すと差し替えになる。データを渡さなければそのブロックを削除する
 - `ble.advertising().addServiceUuid(uuid)` — service-UUID一覧にも同じUUIDを載せ、受信側の`advertisesService()`で絞り込めるようにする
 - `ble.advertising().setConnectable(false)` / `setScanResponseEnabled(false)` — 純粋なbroadcasterにする
-- 受信側: `scanResult.serviceData` / `scanResult.serviceDataUuid` / `scanResult.hasServiceData()`
+- 受信側: `scanResult.serviceData[]` / `serviceDataCount` / `hasServiceData()`、UUIDで引く `scanResult.serviceDataFor(uuid, data)`
 
 ## 注意
 
 - Service Dataは31byteのlegacy advertising payloadを消費します。UUIDが128bitだとそれだけで16byte使うため、独自UUIDで大きなpayloadを載せることはできません。
-- EspBleが受信時に取り出すのは**最初のService Dataブロック1つ**です。`EspBleScanResult` がService Dataを1組（`serviceData` と `serviceDataUuid`）しか持たないためで、複数ブロックを載せた相手では2つ目以降が読めません。
-- 受信側の `serviceDataUuid` は、送信側が16bit表記（`181A`）で指定していても**128bitのフル形**で返ります（`0000181a-0000-1000-8000-00805f9b34fb`）。文字列比較ではなく `advertisesService()` のような値比較を使ってください。
+- 1つのadvertisementに複数のService Dataブロックを載せられます（送受信とも最大4ブロック）。順序に依存せず取り出すには、添字ではなく `serviceDataFor()` でUUIDから引いてください。
+- 受信側の `uuid` は、送信側が16bit表記（`181A`）で指定していても**128bitのフル形**で返ります（`0000181a-0000-1000-8000-00805f9b34fb`）。自分で文字列比較すると一致しないので、値として比較する `serviceDataFor()` を使ってください。
 - 値の更新のたびにadvertisingを止めて再開するため、その瞬間だけ放送が途切れます。数百ミリ秒ごとの更新には向きません。
 
 ## 期待されるSerial出力
