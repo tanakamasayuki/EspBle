@@ -20,7 +20,7 @@ A GATT server that notifies a counter value once per second, but only while at l
 
 - `EspBleGattCharacteristicConfig::notifiable` — adds the Notify property and CCCD
 - `gattServer.onSubscriptionChanged(callback)` — `subscription.notifications` / `subscription.indications` per connection
-- `gattServer.notify(serviceUuid, characteristicUuid, value)` — accepted synchronously, sent to all subscribed connections; payload larger than `mtu - 3` is rejected with `InvalidArgument`
+- `gattServer.notify(characteristic, value)` — accepted synchronously, sent to all subscribed connections; payload larger than `mtu - 3` is rejected with `InvalidArgument`
 - `gattServer.onSent(callback)` — asynchronous send result (`EspBleGattSendResult`)
 
 ## Expected Serial output

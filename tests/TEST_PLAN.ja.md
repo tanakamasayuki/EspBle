@@ -40,6 +40,16 @@ pytest-embedded-cliの既存規約に従います。
 - radio環境による一時的な遅延にtimeoutは許すが、無制限retryで不具合を隠さない。
 - 接続・切断理由、MTU、Security状態を可能な限り両側で照合する。
 
+## 他スタックとの相互接続テスト（予定）
+
+同梱NimBLEどうしの通信だけでは、EspBleが「NimBLEの癖に依存した実装」になっていても気づけません。兄弟ライブラリの**EspBleBluedroid**（ESP32のBluedroidスタック版）を相手にした相互接続テストを追加します。
+
+- 対象: GATTのServer/Client両方向、Notify/Indicate、MTU交換、Pairing/Bonding
+- 位置づけ: NimBLE ↔ Bluedroid の組み合わせで、wire形式と手続きが仕様どおりかを確認する
+- 実施時期: EspBleBluedroid側のGATTが動作するようになってから
+
+既存の「可能な範囲で一方をArduino-ESP32同梱BLE APIの直接実装にする」という原則の延長ですが、**スタックそのものが異なる**点でより強い検証になります。同梱wrapper由来の制約（同一UUIDの扱いなど）が、相手スタックでどう見えるかの確認にも使えます。
+
 ## 3台Peer（manual test）
 
 3台目board前提のscenarioは`tests/manual/`配下に置きます（既定`pytest peer/`には含めず、3台目のport未設定時は自動skip）。実行は`tests/`から`uv run --env-file .env pytest manual/`。boardとportは[tests/manual/README.md](manual/README.md)参照。

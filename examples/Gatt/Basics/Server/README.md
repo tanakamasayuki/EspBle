@@ -18,15 +18,35 @@ Use the [Gatt/Client](../Client/) example on a second board (it targets the same
 - Prints each write received from a client, together with the connection ID
 - Advertises the service UUID so clients can find it
 
+## Building the server from handles
+
+Registration is a **three-step handle chain**: the handle from `addService()` goes into `addCharacteristic()`, whose handle goes into `addDescriptor()`.
+
+```cpp
+const EspBleGattService service = gattServer.addService(SERVICE_UUID);
+characteristic = gattServer.addCharacteristic(service, CHARACTERISTIC_UUID, valueConfig);
+descriptor = gattServer.addDescriptor(characteristic, DESCRIPTOR_UUID, descriptorConfig);
+```
+
+Every later value, send, and event check uses those handles rather than UUIDs, because **a UUID is a type, not an identity**. The spec lets one device expose several services with the same UUID, and from the client side a peer with several same-UUID characteristics (HID Reports, for example) is entirely normal.
+
+Keep the handles in globals. A failed registration returns an invalid handle, which `valid()` reports.
+
 ## Key APIs
 
 - `ble.gattServer().addService(uuid)` — register a service and return its handle; must be called before `begin()`
-- `addCharacteristic(service, uuid, config)` — register a characteristic in that service and return its handle. Every later value or send operation takes the handle, because a UUID does not identify one characteristic (several may share it)
+- `addCharacteristic(service, uuid, config)` — register a characteristic in that service and return its handle
 - `EspBleGattCharacteristicConfig` — `readable`, `writable`, plus `notifiable`, `indicatable`, and encrypted/authenticated permissions
-- `addDescriptor()` / `EspBleGattDescriptorConfig` / `setDescriptorValue()` — descriptor definition, permissions, and binary-safe value
-- `gattServer.setValue(...)` / `gattServer.value(...)` — held value (binary-safe `String`, pointer+length overloads available)
-- `gattServer.onWritten(callback)` — `EspBleGattWrite` with `connectionId`, UUIDs, and the written value
-- `gattServer.onDescriptorWritten(callback)` — `EspBleGattDescriptorWrite` with UUIDs and value
+- `addDescriptor(characteristic, uuid, config)` / `EspBleGattDescriptorConfig` / `setDescriptorValue(descriptor, value)` — descriptor definition, permissions, and binary-safe value
+- `gattServer.setValue(characteristic, value)` / `gattServer.value(characteristic, out)` — held value (binary-safe `String`, pointer+length overloads available)
+- `gattServer.onWritten(callback)` — `EspBleGattWrite` with `connectionId`, the handle of the characteristic written, and the value
+- `gattServer.onDescriptorWritten(callback)` — `EspBleGattDescriptorWrite` with the descriptor handle and value
+
+## Notes
+
+- **One callback serves every characteristic.** With more than one registered, check `write.characteristic == myHandle`. The event also carries UUID strings, but those cannot tell apart characteristics that share a UUID, so comparing handles is the reliable test.
+- **Two characteristics in one service may not share a UUID.** The bundled backend reuses the existing entry instead of registering the second, so `addCharacteristic()` refuses it and returns an invalid handle rather than leaving sends silently undelivered.
+- All registration must happen before `begin()`; `addService()` afterwards fails with `InvalidState`.
 
 ## Expected Serial output
 

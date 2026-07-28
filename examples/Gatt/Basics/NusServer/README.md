@@ -20,7 +20,7 @@ Implements the Nordic UART Service (NUS) UUID layout with the generic GATT serve
 
 - `gattServer.addCharacteristic(service, uuid, config)` — RX with `writable` + `writableWithoutResponse`, TX with `notifiable`; the returned handle drives everything afterwards
 - `gattServer.onWritten(callback)` — `EspBleGattWrite` filtered to the RX UUID via `characteristicUuid.equalsIgnoreCase(...)`
-- `gattServer.notify(serviceUuid, characteristicUuid, value)` — echoes the received bytes on TX; returns whether it was accepted
+- `gattServer.notify(characteristic, value)` — echoes the received bytes on TX; returns whether it was accepted
 - `gattServer.onSubscriptionChanged(callback)` — `subscription.notifications` for the TX characteristic
 
 ## Notes

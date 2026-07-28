@@ -20,7 +20,7 @@
 ## 主なAPI
 
 - `EspBleGattCharacteristicConfig::indicatable` — Indicate propertyとCCCDを追加します
-- `gattServer.indicate(serviceUuid, characteristicUuid, value)` — 同期的に受理され、確認待ちでloopをblockしません
+- `gattServer.indicate(characteristic, value)` — 同期的に受理され、確認待ちでloopをblockしません
 - `gattServer.onSent(callback)` — Indicationでは`result.success`がClientの配信確認を意味します
 - `subscription.indications` — 接続ごとのCCCD Indication状態
 

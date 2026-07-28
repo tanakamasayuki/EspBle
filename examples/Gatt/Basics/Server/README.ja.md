@@ -18,15 +18,35 @@ Read/Write可能なCharacteristicとDescriptorを1つずつ持つ独自GATT Serv
 - Clientからの書込みをConnection IDと一緒に表示します
 - ClientがみつけられるようにService UUIDをadvertiseします
 
+## ハンドルで組み立てる
+
+登録は**3段のハンドル連鎖**になります。`addService()` が返すハンドルを `addCharacteristic()` に渡し、それが返すハンドルを `addDescriptor()` に渡す、という形です。
+
+```cpp
+const EspBleGattService service = gattServer.addService(SERVICE_UUID);
+characteristic = gattServer.addCharacteristic(service, CHARACTERISTIC_UUID, valueConfig);
+descriptor = gattServer.addDescriptor(characteristic, DESCRIPTOR_UUID, descriptorConfig);
+```
+
+以降の値設定・送信・イベント判定はすべてこのハンドルで行い、UUIDでは指定しません。**UUIDは「型」であって「どれか」を表さない**ためです。仕様上、1台が同じUUIDのServiceを複数持てますし、Client側から見れば同じUUIDのCharacteristicが並ぶ相手（HIDのReportなど）も普通にあります。
+
+ハンドルはグローバル変数などに保持してください。失敗すると無効なハンドルが返るので、`valid()` で判定できます。
+
 ## 主なAPI
 
 - `ble.gattServer().addService(uuid)` — Serviceを登録してハンドルを返す。`begin()`前に呼ぶ必要があります
-- `addCharacteristic(service, uuid, config)` — Serviceのハンドルを渡してCharacteristicを登録し、そのハンドルを返す。以降の値操作・送信はこのハンドルで指定します（同じUUIDのCharacteristicを複数持てるため、UUIDでは一意に決まりません）
+- `addCharacteristic(service, uuid, config)` — Serviceのハンドルを渡してCharacteristicを登録し、そのハンドルを返します
 - `EspBleGattCharacteristicConfig` — `readable`、`writable`のほか`notifiable`、`indicatable`、暗号化/認証permission
-- `addDescriptor()` / `EspBleGattDescriptorConfig` / `setDescriptorValue()` — Descriptor定義、permission、binary-safeな値
-- `gattServer.setValue(...)` / `gattServer.value(...)` — 保持値（binary-safeな`String`。pointer+length overloadもあります）
-- `gattServer.onWritten(callback)` — `connectionId`、UUID、書込み値を持つ`EspBleGattWrite`
-- `gattServer.onDescriptorWritten(callback)` — UUIDと値を持つ`EspBleGattDescriptorWrite`
+- `addDescriptor(characteristic, uuid, config)` / `EspBleGattDescriptorConfig` / `setDescriptorValue(descriptor, value)` — Descriptor定義、permission、binary-safeな値
+- `gattServer.setValue(characteristic, value)` / `gattServer.value(characteristic, out)` — 保持値（binary-safeな`String`。pointer+length overloadもあります）
+- `gattServer.onWritten(callback)` — `connectionId`、書き込まれたCharacteristicのハンドル、値を持つ`EspBleGattWrite`
+- `gattServer.onDescriptorWritten(callback)` — Descriptorのハンドルと値を持つ`EspBleGattDescriptorWrite`
+
+## 注意
+
+- **コールバックは全Characteristic共通です。** 複数登録している場合は `write.characteristic == myHandle` で対象を判定してください。イベントにはUUID文字列も入っていますが、同じUUIDが複数あると区別できないため、ハンドルで比べるのが確実です。
+- **1つのServiceの中に同じUUIDのCharacteristicを2つ置くことはできません。** 同梱backendがGATTへ登録せず既存を再利用してしまうため、`addCharacteristic()` が無効なハンドルを返して拒否します。黙って送信が届かない状態を避けるための挙動です。
+- 登録はすべて `begin()` より前に行う必要があります。`begin()` 後の `addService()` は `InvalidState` で失敗します。
 
 ## 期待されるSerial出力
 

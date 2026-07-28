@@ -20,7 +20,7 @@ Use indications instead of notifications when the client must not miss a value (
 ## Key APIs
 
 - `EspBleGattCharacteristicConfig::indicatable` — adds the Indicate property and CCCD
-- `gattServer.indicate(serviceUuid, characteristicUuid, value)` — accepted synchronously; does not block the loop while waiting for the confirmation
+- `gattServer.indicate(characteristic, value)` — accepted synchronously; does not block the loop while waiting for the confirmation
 - `gattServer.onSent(callback)` — for indications, `result.success` means the client confirmed the delivery
 - `subscription.indications` — CCCD indication state per connection
 

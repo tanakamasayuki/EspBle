@@ -20,7 +20,7 @@
 
 - `EspBleGattCharacteristicConfig::notifiable` — Notify propertyとCCCDを追加します
 - `gattServer.onSubscriptionChanged(callback)` — 接続ごとの`subscription.notifications` / `subscription.indications`
-- `gattServer.notify(serviceUuid, characteristicUuid, value)` — 同期的に受理し、購読中の全接続へ送信。`mtu - 3`を超えるpayloadは`InvalidArgument`で拒否します
+- `gattServer.notify(characteristic, value)` — 同期的に受理し、購読中の全接続へ送信。`mtu - 3`を超えるpayloadは`InvalidArgument`で拒否します
 - `gattServer.onSent(callback)` — 非同期の送信結果（`EspBleGattSendResult`）
 
 ## 期待されるSerial出力
