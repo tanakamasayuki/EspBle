@@ -85,6 +85,11 @@ struct EspBleConfig
 struct EspBleScanConfig
 {
   bool active = true;
+  // When false (the default) each device is reported once per scan, which keeps
+  // a scan for "is this device around?" quiet. Set it to true to receive every
+  // advertisement, which is what a broadcaster whose payload changes over time
+  // (a sensor beacon) requires -- with the filter on, only its first value
+  // arrives and later ones look like they were never sent.
   bool wantDuplicates = false;
   uint16_t intervalMilliseconds = 100;
   uint16_t windowMilliseconds = 50;

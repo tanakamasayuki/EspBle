@@ -271,6 +271,15 @@ Phase 1で送信側に `setAppearance()` / `setTxPowerIncluded()` を追加し�
 
 `service_data` Peerを2ブロック送出＋UUID検索の検証へ拡張し、実機でPASS（`SERVICE_DATA_COUNT 2`、`serviceDataFor("181A")` が128bitフル形と一致）。`scan_response` / `advertise_payload` / `beacon` / `ibeacon` も回帰PASS。
 
+#### 図はMermaid
+
+GitHubがMarkdown内の ```mermaid フェンスをネイティブに描画するため、シーケンス図はMermaidで書く。ガイドには2枚ある。
+
+- 2.6 GAP編: アドバタイズ → （Active Scanのみの）Scan Request/Response → 判定 → 接続確立 → パラメータ交渉
+- 3.3 GATT編: Discovery → Read → Write → 購読 → Notify / Indicate
+
+3.3は元のASCIIアートを置き換えた。
+
 #### 方針
 
 **コードはexampleへ、概念はガイドへ**を徹底した。ガイド内のコードは `ble.update()` を呼ぶloopの3行だけで、これは大原則の説明に不可欠なため残している。

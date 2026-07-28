@@ -38,6 +38,7 @@ Service Data（AD type 0x16）を載せたadvertisingを行う例です。Servic
 - 1つのadvertisementに複数のService Dataブロックを載せられます（送受信とも最大4ブロック）。順序に依存せず取り出すには、添字ではなく `serviceDataFor()` でUUIDから引いてください。
 - 受信側の `uuid` は、送信側が16bit表記（`181A`）で指定していても**128bitのフル形**で返ります（`0000181a-0000-1000-8000-00805f9b34fb`）。自分で文字列比較すると一致しないので、値として比較する `serviceDataFor()` を使ってください。
 - 値の更新のたびにadvertisingを止めて再開するため、その瞬間だけ放送が途切れます。数百ミリ秒ごとの更新には向きません。
+- **受信側は重複報告を有効にしないと最初の値しか見えません。** スキャナは既定で1つの機器につき1回しか報告しないためです（`EspBleScanConfig::wantDuplicates = true`）。[Info/ScanDump](../../Info/ScanDump/)なら `d` で切り替えられます。
 
 ## 期待されるSerial出力
 

@@ -38,6 +38,7 @@ This example broadcasts a temperature under the Environmental Sensing Service UU
 - One advertisement may carry several Service Data blocks (up to four, on both the sending and receiving side). Look a block up with `serviceDataFor()` by UUID rather than by index, so the code does not depend on ordering.
 - The receiver's `uuid` comes back in **full 128-bit form** (`0000181a-0000-1000-8000-00805f9b34fb`) even when the sender specified the 16-bit shorthand (`181A`). A plain string comparison will not match, so use `serviceDataFor()`, which compares by value.
 - Advertising stops and restarts on every update, so the broadcast has a brief gap each time. This is not suitable for updates every few hundred milliseconds.
+- **The receiver only sees the first value unless it enables duplicate reporting**, because a scanner reports each device once by default (`EspBleScanConfig::wantDuplicates = true`). In [Info/ScanDump](../../Info/ScanDump/) press `d` to toggle it.
 
 ## Expected Serial output
 

@@ -10,6 +10,12 @@
 
 EspBle ble;
 
+// en: Report every advertisement, or only the first one per device. Off by
+//     default here: a diagnostic dump is easier to read one line per device.
+// ja: すべてのadvertisementを報告するか、機器ごとに最初の1件だけにするか。
+//     ここでは既定off。診断用のダンプは機器ごとに1行のほうが読みやすい。
+bool wantDuplicates = false;
+
 // en: Print a binary String as hex.
 // ja: バイナリのStringをhexで表示する。
 static void printHex(const String &data)
@@ -74,6 +80,29 @@ static void printIBeacon(const EspBleScanResult &scanResult)
     static_cast<int>(beacon.measuredPower));
 }
 
+// en: (Re)start scanning with the current duplicate setting.
+// ja: 現在の重複設定でscanを開始（再開）する。
+static bool startScan()
+{
+  ble.scanner().stop();
+
+  EspBleScanConfig scanConfig;
+  scanConfig.active = true;       // en: also request scan responses (more names) / ja: scan responseも要求（nameが得やすい）
+  scanConfig.durationSeconds = 0; // en: scan until reset / ja: リセットまでscan
+  // en: With this false, a device that keeps changing its payload -- a sensor
+  //     beacon -- is only reported once and the later values never appear.
+  // ja: これがfalseだと、payloadが変化し続ける機器（センサービーコン等）でも
+  //     報告は1回きりで、以降の値は届かない。
+  scanConfig.wantDuplicates = wantDuplicates;
+  if (!ble.scanner().start(scanConfig))
+  {
+    Serial.printf("Scan failed: %s (%s)\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
+    return false;
+  }
+  Serial.printf("Scanning. duplicates=%s\n", wantDuplicates ? "on" : "off");
+  return true;
+}
+
 void setup()
 {
   Serial.begin(115200);
@@ -130,27 +159,34 @@ void setup()
     Serial.println();
   });
 
-  EspBleScanConfig scanConfig;
-  scanConfig.active = true;       // en: also request scan responses (more names) / ja: scan responseも要求（nameが得やすい）
-  scanConfig.durationSeconds = 0; // en: scan until reset / ja: リセットまでscan
-  if (!ble.scanner().start(scanConfig))
+  if (!startScan())
   {
-    Serial.printf("Scan failed: %s (%s)\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
     return;
   }
-  Serial.println("Scanning. Send 'q' to print diagnostic counters.");
+  Serial.println("Commands: q counters, d toggle duplicate reporting");
 }
 
 void loop()
 {
-  // en: On 'q', print the drop counters (queue overflow diagnostics).
-  // ja: 'q' で取りこぼしカウンタ（queue溢れの診断）を表示する。
-  if (Serial.available() > 0 && Serial.read() == 'q')
+  if (Serial.available() > 0)
   {
-    Serial.printf(
-      "counters: droppedScanResults=%u droppedEvents=%u\n",
-      static_cast<unsigned>(ble.scanner().droppedResultCount()),
-      static_cast<unsigned>(ble.droppedEventCount()));
+    const char command = Serial.read();
+    if (command == 'q')
+    {
+      // en: drop counters (queue overflow diagnostics)
+      // ja: 取りこぼしカウンタ（queue溢れの診断）
+      Serial.printf(
+        "counters: droppedScanResults=%u droppedEvents=%u\n",
+        static_cast<unsigned>(ble.scanner().droppedResultCount()),
+        static_cast<unsigned>(ble.droppedEventCount()));
+    }
+    else if (command == 'd')
+    {
+      // en: The setting takes effect when the scan starts, so restart it.
+      // ja: 設定はscan開始時に効くので、開始し直す。
+      wantDuplicates = !wantDuplicates;
+      startScan();
+    }
   }
 
   ble.update();

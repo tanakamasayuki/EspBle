@@ -188,7 +188,15 @@ Passive Scanの利点は、こちらが電波を出さないことです。消�
 
 RSSIはdBmで、0に近いほど近くにあります。目安として-40は至近、-90はかなり遠い、という感覚です。
 
-同じ機器のアドバタイズは繰り返し飛んできますが、EspBleは既定で**重複を除外**し、1つの機器につき1回だけ通知します。ビーコンの値の変化を追いたい場合など、毎回受け取りたいときは重複除外を切ります。
+#### 重複除外という落とし穴
+
+同じ機器のアドバタイズは繰り返し飛んできます。EspBleは既定で**重複を除外**し、1つの機器につき1回だけ通知します。周囲の機器を一覧するだけならこのほうが扱いやすいためです。
+
+ここに落とし穴があります。**payloadが変化し続ける機器では、最初の値しか届きません。** 温度を5秒ごとに更新して放送するセンサービーコンでも、受け取れるのは1回目だけで、以降の更新は「送られてこない」ように見えます。送信側は正常に放送しているので、原因に気づきにくい部類の問題です。
+
+ビーコンの値を追いたいときは、スキャン設定の `wantDuplicates` を `true` にします。この設定はスキャン開始時に反映されるため、動作中に変える場合はスキャンを止めて開始し直してください。
+
+代償は通知の量です。周囲の全機器の全アドバタイズが届くようになるため、処理が追いつかないと取りこぼしが発生します。目的の機器が決まっているなら、絞り込みを先に行ってください。
 
 AppearanceとTx Power Levelも、載っていれば取り出せます。Tx Powerは特に有用で、**申告された送信電力とRSSIの差が経路損失**になり、距離推定の基礎になります。RSSIだけでは「もともと弱く送っている近くの機器」と「強く送っている遠くの機器」を区別できません。
 
@@ -310,7 +318,33 @@ MTUを下げる理由があるとすれば、多数の同時接続でメモリ�
 
 関連するexample: [Gap/Mtu](../examples/Gap/Mtu/)、[Security/JustWorksServer](../examples/Security/JustWorksServer/)、[Security/StaticPasskeyServer](../examples/Security/StaticPasskeyServer/)
 
-### 2.6 GAPで対応していないこと
+### 2.6 時系列で見る全体像（GAP）
+
+アドバタイズから接続確立までを1本の流れにすると次のようになります。Scan Requestは**Active Scanのときだけ**送られます。
+
+```mermaid
+sequenceDiagram
+    participant C as Central
+    participant P as Peripheral
+    Note over P: advertising().start()
+    loop アドバタイズ間隔ごと
+        P-->>C: アドバタイズ（誰宛でもない放送）
+    end
+    Note over C: scanner().start()
+    C->>P: Scan Request（Active Scanのみ）
+    P-->>C: Scan Response（残り31バイト）
+    Note over C: onResult<br/>UUID・名前・RSSIで<br/>目的の相手か判定
+    C->>P: 接続要求
+    Note over C,P: 接続確立（以後は1対1）
+    P->>C: 接続パラメータとMTUの交渉
+    Note over C: onConnected
+    Note over P: onConnected
+    Note over C,P: 以降はGATT（3章）
+```
+
+接続の必要がないビーコン用途では、`onResult` までで完結します。
+
+### 2.7 GAPで対応していないこと
 
 BLEの仕様にはあるが、EspBleでは使えない機能です。理由もあわせて挙げます。
 
@@ -391,25 +425,30 @@ Clientは相手のデータ構造を知りません。そこでまず**Discovery
 
 ### 3.3 時系列で見る全体像
 
+```mermaid
+sequenceDiagram
+    participant C as Central（GATT Client）
+    participant P as Peripheral（GATT Server）
+    Note over C,P: 2章の手順で接続が確立している
+    C->>P: Discovery要求
+    P-->>C: Service / Characteristic の構成
+    Note over C: onCharacteristicDiscovered
+    C->>P: Read要求
+    P-->>C: 値
+    Note over C: onCharacteristicRead
+    C->>P: Write要求
+    P-->>C: 応答（Write with Responseの場合）
+    Note over C: onCharacteristicWritten
+    C->>P: 購読の登録
+    loop 値が変わるたび
+        P-->>C: Notify（確認応答なし）
+        Note over C: onNotification
+    end
+    P-->>C: Indicate（確認応答あり）
+    C->>P: 確認応答
 ```
-Central(= GATT Client)                        Peripheral(= GATT Server)
-   |                                                |  アドバタイズ中
-   |  <---------- アドバタイズ --------------------  |
-   |  スキャン結果で「目的の相手か」を判定             |
-   |  接続要求 -------------------------------->     |
-   |  <================ 接続確立 ================>   |
-   |  接続イベント                                    |
-   |  Discovery要求 ---------------------------->    |
-   |  Discovery完了イベント                           |
-   |  Read要求 --------------------------------->    |
-   |  <---------------- 値 -----------------------   |
-   |  Read完了イベント                                |
-   |  Write要求 -------------------------------->    |
-   |  Write完了イベント                               |
-   |  （購読していれば） <----- Notify / Indicate ---  |
-   |                                                 |
-   ※ すべてのイベントは loop() の ble.update() から配送される
-```
+
+すべてのイベントは `loop()` の `ble.update()` から配送されます。要求を出した直後ではなく、**次に `update()` を呼んだとき**にコールバックが呼ばれます。
 
 ### 3.4 関連するexample
 
