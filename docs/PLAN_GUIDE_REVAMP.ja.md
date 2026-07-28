@@ -327,6 +327,35 @@ ble.gattServer().notify(chr, value);
 
 **影響範囲が広い**: HID / MIDI を含む全profile helper、`examples/Gatt/**` の全sketch、Peerテスト一式。Phase 1〜3とは独立しているため、別ブランチでの並行作業も可能。
 
+### Phase 4b — wrapper制約の回避（NimBLE直接呼び出し）
+
+EspBleのHID Deviceは、同梱wrapperを介さず `ble_gatt_svc_def` / `ble_gatt_chr_def` を自前で組み立て `ble_gatts_add_svcs()` を呼んでいる。だから**同一UUID（0x2A4D）のReport Characteristicを複数公開できている**。
+つまりこれまで「backendの制約」と記録してきたものの多くは**wrapperの制約であってNimBLEの制約ではない**。全件を洗い直した結果が次の表。
+
+| # | 制約 | 由来 | 回避 | 手段と規模 |
+|---|---|---|---|---|
+| 1 | 同一Service内の同一UUID Characteristic（Peripheral） | wrapper `BLEService::addCharacteristic()` が既存を再利用 | ✅ | `ble_gatts_add_svcs()` を自前で。access callback・CCCD・値保持の自前化が必要（**大**、HIDに前例あり） |
+| 2 | 同一UUID Serviceが1つに潰れる（Central） | wrapper `BLEClient::m_servicesMap` がUUIDキー | ✅ | `ble_gattc_disc_all_svcs()` / `disc_all_chrs()` を自前で走らせ、handle直指定のread/write/subscribeを追加（**中**） |
+| 3 | Directed Advertising 送信不可 | wrapper `start()` が `direct_addr = NULL` 固定 | ✅ | `ble_gap_adv_start()` を直接呼ぶ（**中**） |
+| 4 | スキャン側 Filter Accept List | wrapper `BLEScan` が `filter_policy` を非公開 | ✅ | `ble_gap_disc()` を自前で。スキャン結果の配送も自前化（**大**） |
+| 5 | Advertisingチャネルマップ | wrapper がNimBLE経路で非公開 | ✅ | #3と同じ自前adv startで同時に解決（**小**、#3の付随） |
+| 6 | **Extended / Periodic Advertising** | **ビルド構成** `CONFIG_BT_NIMBLE_EXT_ADV` 無効 | ❌ | **唯一の真の不可能**。プリビルドライブラリに関数自体が存在しない |
+| 7 | `connect()` timeout が効かない | wrapper が `esp_ble_gattc_open()` 経由 | ✅ | 放棄方式で対処済み。`ble_gap_connect()` 直呼びなら真のcancelも可能（**中**） |
+| 8 | indication確認がcharacteristic単位 | wrapper のセマフォがcharacteristic単位 | ✅ | `ble_gatts_indicate_custom(connHandle, chrHandle)` 直呼びで接続単位に（**小**） |
+| 9 | GATT client discoveryのヒープリーク（約2.6 KB/discovery） | wrapper内部の確保 | ✅ | #2の自前discoveryにすればwrapperのremoteオブジェクトを作らせない＝**リーク自体が消える**（#2の付随） |
+
+**#9は重要**: [DESIGN_DEBT.ja.md](DESIGN_DEBT.ja.md) で「対象外（backend由来・修正不能）」としていたヒープリークは、#2を実装すると副次的に解消する。
+
+#### 実施順
+
+1. **#2 ＋ #9**（自前discovery）— 2つの記録済み問題を同時に解決し、読み取り主体でリスクが低い。既存のwrapper経路は残し、wrapperが隠す属性のために生パスを足す形から始める
+2. **#8**（接続単位indication）— 小さく、`EspBleGattSendResult` の意味が正確になる
+3. **#3 ＋ #5**（自前adv start）— Directed Advertisingとチャネルマップ
+4. **#1**（自前GATT Server）— 最大。汎用ServerをHIDと同じ方式へ寄せる
+5. **#7**（真のconnect cancel）— 放棄方式で実害は消えているため優先度は最後
+
+#6のみ、ビルド構成に阻まれて手段がない。
+
 ### Phase 5 — GATT examples のコード＋README充実
 
 Phase 4後のAPIで、`Gatt/Basics/*` を中心に「概念はガイド、使い方はここ」の粒度へ書き直す。

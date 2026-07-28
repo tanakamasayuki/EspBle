@@ -432,10 +432,12 @@ Client側は、相手のCharacteristicを**属性ハンドル**で指定でき�
 | **Peripheral（公開する側）** | できる | **できない** |
 | **Central（読む側）** | **区別できない**（1つ目しか見えない） | 区別できる（属性ハンドルで指定） |
 
-いずれも同梱backendの都合です。
+いずれもBLEの仕様やチップの制約ではなく、**Arduino-ESP32同梱のBLEラッパーがUUIDをキーにして管理している**ことによるものです。
 
-- Peripheralで**Characteristicを重複させられない**のは、backendがServiceへCharacteristicを追加する際、同じUUIDが既にあると新しい方を登録せず既存を再利用してしまうためです。EspBleは黙って動かない状態を避けるため、この登録を明示的にエラーにします
-- Centralで**Serviceを区別できない**のは、backendがリモートServiceをUUIDで管理しており、2つ目が破棄されるためです。相手が2つ公開していても、こちらからは1つ目にしか到達できません
+- Peripheralで**Characteristicを重複させられない**のは、ラッパーがServiceへCharacteristicを追加する際、同じUUIDが既にあると新しい方を登録せず既存を再利用してしまうためです。EspBleは黙って動かない状態を避けるため、この登録を明示的にエラーにします
+- Centralで**Serviceを区別できない**のは、ラッパーがリモートServiceをUUIDで管理しており、2つ目が破棄されるためです。相手が2つ公開していても、こちらからは1つ目にしか到達できません
+
+なおEspBleのHID Deviceは、この制限を受けずに同一UUID（`0x2A4D`）のReport Characteristicを複数公開しています。ラッパーを介さずBLEスタックのAPIを直接呼んで属性テーブルを組み立てているためです。**制限はラッパー側にあり、スタック自体にはありません。**
 
 実用上いちばん多い「同じUUIDのHID Reportが並ぶ相手を読む」ケースは、右下（Central × Characteristic）にあたるので問題なく扱えます。
 
