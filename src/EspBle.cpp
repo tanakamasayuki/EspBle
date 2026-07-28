@@ -14,6 +14,7 @@
 #include <BLESecurity.h>
 #include <BLEUtils.h>
 #include <host/ble_gap.h>
+#include <host/ble_sm.h>
 #include <host/ble_uuid.h>
 #include <host/ble_hs_id.h>
 #include <host/ble_hs_mbuf.h>
@@ -858,6 +859,11 @@ struct EspBleImpl
         // No slot left: refuse the connection rather than hold one the
         // application can never see.
         ble_gap_terminate(event->connect.conn_handle, BLE_ERR_REM_USER_CONN_TERM);
+        return 0;
+      }
+      if (impl->securityEnabled && impl->pairOnConnect && !description.sec_state.encrypted)
+      {
+        ble_gap_security_initiate(event->connect.conn_handle);
       }
       return 0;
     }
@@ -876,6 +882,18 @@ struct EspBleImpl
       impl->stampDisconnectReason(
         event->disconnect.conn.conn_handle, event->disconnect.reason);
       espBleForgetServerSubscriptions(impl->owner, event->disconnect.conn.conn_handle);
+    }
+    else if (event->type == BLE_GAP_EVENT_ENC_CHANGE)
+    {
+      ble_gap_conn_desc description{};
+      if (ble_gap_conn_find(event->enc_change.conn_handle, &description) == 0)
+      {
+        impl->updateSecurity(event->enc_change.conn_handle, description.sec_state);
+      }
+    }
+    else if (event->type == BLE_GAP_EVENT_PASSKEY_ACTION)
+    {
+      impl->handlePasskeyAction(event->passkey.conn_handle, event->passkey.params);
     }
     else if (event->type == BLE_GAP_EVENT_SUBSCRIBE)
     {
@@ -1118,6 +1136,56 @@ struct EspBleImpl
   // entered. With a static passkey it returns immediately; otherwise it blocks
   // (yielding) until the loop task supplies one via providePasskey(), or a
   // timeout elapses and pairing is rejected with 0.
+  bool isPeripheralConnection(uint16_t connectionHandle)
+  {
+    std::lock_guard<std::mutex> lock(mutex);
+    for (const ConnectionSlot &slot : connections)
+    {
+      if (slot.used && slot.connection.handle == connectionHandle &&
+          slot.connection.localRole == EspBleRole::Peripheral)
+      {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Pairing input for a connection whose GAP events we own. Advertising is
+  // started here rather than through the bundled wrapper, so the wrapper's
+  // security callbacks never fire for an incoming connection and the answer has
+  // to be produced here. Central connections still belong to the wrapper.
+  void handlePasskeyAction(uint16_t connectionHandle, const ble_gap_passkey_params &params)
+  {
+    if (!isPeripheralConnection(connectionHandle)) return;
+    ble_sm_io io{};
+    io.action = params.action;
+    switch (params.action)
+    {
+    case BLE_SM_IOACT_DISP:
+    {
+      uint32_t passkey = 0;
+      {
+        std::lock_guard<std::mutex> lock(passkeyMutex);
+        passkey = staticPasskeyEnabled ? staticPasskey : (esp_random() % 1000000);
+      }
+      io.passkey = passkey;
+      queuePasskeyDisplayed(passkey);
+      break;
+    }
+    case BLE_SM_IOACT_INPUT:
+      // Blocks the host task until the application answers, exactly as the
+      // wrapper's synchronous callback did.
+      io.passkey = requestPasskey();
+      break;
+    case BLE_SM_IOACT_NUMCMP:
+      io.numcmp_accept = confirmNumericComparison(params.numcmp) ? 1 : 0;
+      break;
+    default:
+      return;
+    }
+    ble_sm_inject_io(connectionHandle, &io);
+  }
+
   uint32_t requestPasskey()
   {
     {
@@ -1498,7 +1566,7 @@ struct EspBleImpl
     pushEvent(event);
   }
 
-  static void connectTaskEntry(void *argument)
+  static void runConnect(void *argument)
   {
     EspBleImpl *impl = static_cast<EspBleImpl *>(argument);
     EspBleScanResult target;
@@ -1544,7 +1612,6 @@ struct EspBleImpl
       // still needs retiring; the connect slot was freed at abandonment, so
       // connecting / connectTask belong to a newer attempt and must be left be.
       impl->retireClient(client, 0);
-      vTaskDelete(nullptr);
       return;
     }
 
@@ -1560,8 +1627,17 @@ struct EspBleImpl
       impl->connectTask = nullptr;
       impl->connectClient = nullptr;
     }
+  }
+
+  // vTaskDelete() never returns, so the body runs in its own function: the destructors
+  // of its locals (Strings hold heap buffers) must run before the task ends, or every
+  // operation leaks them.
+  static void connectTaskEntry(void *argument)
+  {
+    runConnect(argument);
     vTaskDelete(nullptr);
   }
+
 
   // Enumerate the peer's whole attribute table into our own snapshot. This runs
   // straight through the NimBLE host API: the bundled wrapper's remote service
@@ -1736,7 +1812,7 @@ struct EspBleImpl
     return success;
   }
 
-  static void gattTaskEntry(void *argument)
+  static void runGattOperation(void *argument)
   {
     EspBleImpl *impl = static_cast<EspBleImpl *>(argument);
     EspBleGattResult result;
@@ -2145,8 +2221,17 @@ struct EspBleImpl
       impl->gattOperating = false;
       impl->gattTask = nullptr;
     }
+  }
+
+  // vTaskDelete() never returns, so the body runs in its own function: the destructors
+  // of its locals (Strings hold heap buffers) must run before the task ends, or every
+  // operation leaks them.
+  static void gattTaskEntry(void *argument)
+  {
+    runGattOperation(argument);
     vTaskDelete(nullptr);
   }
+
 
   EspBle *owner;
   mutable std::mutex mutex;
@@ -2225,6 +2310,8 @@ struct EspBleImpl
   SecurityCallbacks securityCallbacks;
   BLESecurity *securityBackend = nullptr;
   bool securityEnabled = false;
+  // Start pairing as soon as a peer connects (EspBleSecurityConfig::pairOnConnect).
+  bool pairOnConnect = false;
   // Passkey Entry (input side). When no static passkey is configured, the
   // backend's synchronous onPassKeyRequest() blocks here until the application
   // supplies one via providePasskey() from the loop task, enabling interactive
@@ -2767,7 +2854,7 @@ struct EspBleGattServerImpl
   // One send. The value handle identifies the attribute; connectionId 0 means
   // "every subscribed peer". Runs on its own task because an indication waits
   // for the peer's confirmation.
-  static void sendTaskEntry(void *argument)
+  static void runSend(void *argument)
   {
     EspBleGattServerImpl *impl = static_cast<EspBleGattServerImpl *>(argument);
     EspBleGattSendResult result;
@@ -2864,8 +2951,17 @@ struct EspBleGattServerImpl
       impl->sending = false;
       impl->sendTask = nullptr;
     }
+  }
+
+  // vTaskDelete() never returns, so the body runs in its own function: the destructors
+  // of its locals (Strings hold heap buffers) must run before the task ends, or every
+  // operation leaks them.
+  static void sendTaskEntry(void *argument)
+  {
+    runSend(argument);
     vTaskDelete(nullptr);
   }
+
 
   // Notify or indicate one connection. Fills result.error/detail on failure and
   // leaves them untouched on success, which is what the caller loops on.
@@ -3997,7 +4093,7 @@ struct EspBleHidKeyboardHostImpl
     if (event.changed) pushEventLocked(event, false);
   }
 
-  static void discoveryTaskEntry(void *argument)
+  static void runDiscovery(void *argument)
   {
     EspBleHidKeyboardHostImpl *impl = static_cast<EspBleHidKeyboardHostImpl *>(argument);
     EspBleHidKeyboardHostDiscovery result;
@@ -4258,8 +4354,17 @@ struct EspBleHidKeyboardHostImpl
       std::lock_guard<std::mutex> lock(impl->host->owner_->impl_->mutex);
       impl->host->owner_->impl_->gattOperating = false;
     }
+  }
+
+  // vTaskDelete() never returns, so the body runs in its own function: the destructors
+  // of its locals (Strings hold heap buffers) must run before the task ends, or every
+  // operation leaks them.
+  static void discoveryTaskEntry(void *argument)
+  {
+    runDiscovery(argument);
     vTaskDelete(nullptr);
   }
+
 
   EspBleHidHost *host;
   mutable std::mutex mutex;
@@ -4911,8 +5016,11 @@ bool EspBleAdvertising::start(uint32_t durationSeconds)
         return false;
       }
     }
-    // Always written, so a payload left over from a previous start() is cleared.
-    if (ble_gap_adv_rsp_set_data(responsePayload.bytes, responsePayload.length) != 0)
+    // Only published when there is something to send: setting scan response
+    // data at all makes a non-connectable advertisement scannable, which a
+    // beacon must not be.
+    if (responsePayload.length != 0 &&
+        ble_gap_adv_rsp_set_data(responsePayload.bytes, responsePayload.length) != 0)
     {
       owner_->setError(EspBleError::BackendFailure, "failed to set scan response data");
       return false;
@@ -4931,10 +5039,14 @@ bool EspBleAdvertising::start(uint32_t durationSeconds)
   }
   else
   {
-    // Scannable when a scan response is configured, plain broadcast otherwise.
     parameters.conn_mode = BLE_GAP_CONN_MODE_NON;
   }
-  parameters.disc_mode = BLE_GAP_DISC_MODE_GEN;
+  // The discovery mode picks the PDU type for a non-connectable advertiser:
+  // general is scannable (ADV_SCAN_IND, so scanners may send a scan request),
+  // non-discoverable is a pure broadcast (ADV_NONCONN_IND). A beacon with no
+  // scan response has nothing to answer with, so it advertises as the latter.
+  const bool scannable = connectable_ || (scanResponseEnabled_ && !scanResponseData_.isEmpty());
+  parameters.disc_mode = scannable ? BLE_GAP_DISC_MODE_GEN : BLE_GAP_DISC_MODE_NON;
   // Advertising interval: convert milliseconds to 0.625 ms units. A directed
   // high duty cycle advertisement has its timing fixed by the controller.
   if (intervalMinMs_ != 0 && intervalMaxMs_ != 0)
@@ -8217,6 +8329,7 @@ bool EspBle::begin(const EspBleConfig &config)
          ? BLE_OWN_ADDR_RANDOM
          : BLE_OWN_ADDR_RPA_RANDOM_DEFAULT);
   impl_->securityEnabled = config.security.enabled;
+  impl_->pairOnConnect = config.security.pairOnConnect;
   impl_->persistentSubscriptionsEnabled = config.persistentSubscriptions;
   impl_->autoReconnectEnabled = autoReconnect_;
   {

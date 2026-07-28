@@ -393,7 +393,7 @@ EspBleのHID Deviceは、同梱wrapperを介さず `ble_gatt_svc_def` / `ble_gat
 | 1 | **S0** | #8 接続単位indication | **完了** |
 | 2 | **S1** | #2 汎用GATT Client（discovery・read/write・descriptor・購読・notification受信） | **完了** |
 | 3 | **S2** | **GATT Server自前化**（#1）。ここでPeripheral側のGAPイベントを完全に引き取る。S3の前提 | **完了** |
-| 4 | **S3** | **Advertising自前化**（#3・#5） | 未着手 |
+| 4 | **S3** | **Advertising自前化**（#3・#5） | **進行中**（下記の残課題あり） |
 | 5 | **S4** | **Scan自前化**（#4） | 未着手 |
 | 6 | **S5** | **接続・Security・init/address/MTU自前化**（#7、SMブロッキング解消） | 未着手 |
 | 7 | **S6** | HID Hostを自前Client経路へ移行、wrapperの `#include` を全削除、`library.properties`・ドキュメント更新 | 未着手 |
@@ -453,6 +453,22 @@ EspBleのHID Deviceは、同梱wrapperを介さず `ble_gatt_svc_def` / `ble_gat
 実機確認（2ボード）: `peer/duplicate_uuid` を「1つのServiceに同一UUIDのCharacteristic 2つ＋同一UUIDのService 2つ」へ拡張し、**3つすべてをハンドル指定でread・subscribeし、Notificationを取り違えずに受信**するところまで検証した。
 
 `ble_gatts_start()` はまだwrapperの `BLEAdvertising::start()` 経由で呼ばれている。S3で自前の広告開始に移すときに引き取る。
+
+#### S3 の実施状況
+
+`ble_gap_adv_set_data()` / `ble_gap_adv_rsp_set_data()` / `ble_gap_adv_start()` を直接呼び、payloadのAD構造も自前で組む。`BLEAdvertising` / `BLEAdvertisementData` は使わない。新しく `setDirectedTarget()`（#3）と `setChannelMap()`（#5）を追加した。
+
+**この段階でPeripheral側のGAPイベントの持ち主が変わる**。広告開始時に渡したコールバックがその接続の全イベントを受け取るため、wrapperの `BLEServer` にはもう何も届かない。そこで一緒に引き取ったもの:
+
+- 接続の成立・切断（接続スロットの登録と解放）
+- `ble_gatts_start()`（従来はwrapperの広告開始が兼ねていた。最初の広告開始時に1回だけ実行する）
+- `BLE_GAP_EVENT_ENC_CHANGE` によるセキュリティ状態の更新
+- `BLE_GAP_EVENT_PASSKEY_ACTION`（表示・入力・数値比較）と `ble_sm_inject_io()`
+- `pairOnConnect` の接続時ペアリング開始（`ble_gap_security_initiate()`）
+
+判明した挙動: 非接続広告のPDU種別は **`disc_mode` で決まる**。`BLE_GAP_DISC_MODE_GEN` だとscannable（ADV_SCAN_IND）になり、scan responseを持たないビーコンでも走査要求を受けてしまう。scan responseの中身が無いときは `BLE_GAP_DISC_MODE_NON` を選ぶ。
+
+**残課題（3件）**: `security_passkey` / `numeric_comparison` / `runtime_passkey` が失敗する。中央側は接続まで進むが、周辺側でpasskeyの表示・入力・数値比較が発火しない。`security_bond`（MITM無しのJust Works）は通るので、暗号化と結合そのものは動いている。SMのIO交換の経路が残りの穴。
 
 ### Phase 5 — GATT examples のコード＋README充実
 

@@ -248,6 +248,17 @@ void loop()
       writePhase = 0;
       Serial.println("REARMED");
     }
+    else if (command == 'h')
+    {
+      Serial.printf("HEAP free=%u\n", static_cast<unsigned>(ESP.getFreeHeap()));
+    }
+    else if (command == 'r')
+    {
+      // Re-arm for another connect: the scan callback connects only once per arm.
+      connectionRequested = false;
+      writePhase = 0;
+      Serial.println("REARMED");
+    }
     else if (command == 't' && connectionId != 0)
     {
       const bool zeroAccepted = ble.readCharacteristic(
