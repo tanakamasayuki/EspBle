@@ -84,6 +84,158 @@ bool isValidAddressType(EspBleAddressType type)
 }
 } // namespace
 
+// Raw GATT client discovery, bypassing the bundled wrapper.
+//
+// The wrapper keys remote services by UUID (BLEClient::m_servicesMap), so a peer
+// exposing the same service UUID twice loses every instance after the first --
+// they are unreachable, and the BLERemoteService objects leak. Discovering
+// straight through the NimBLE host API keeps every instance and every
+// characteristic, identified by attribute handle as the spec intends.
+namespace espble_discovery
+{
+struct ServiceRange
+{
+  uint16_t startHandle = 0;
+  uint16_t endHandle = 0;
+  String uuid;
+};
+
+struct CharacteristicEntry
+{
+  uint16_t definitionHandle = 0;
+  uint16_t valueHandle = 0;
+  uint8_t properties = 0;
+  String uuid;
+};
+
+// One discovery procedure in flight. NimBLE reports results on the host task,
+// so the worker task that started it waits for `done`.
+//
+// Each phase keeps its own context type and the caller heap-allocates it: a
+// single context holding all three arrays is several kilobytes, and the three
+// nested would overflow the GATT worker task's stack.
+struct Waiter
+{
+  volatile bool done = false;
+  int status = 0;
+  bool overflowed = false;
+};
+
+struct ServiceContext : Waiter
+{
+  ServiceRange services[EspBle::MaxDiscoveredGattServices];
+  size_t count = 0;
+};
+
+struct CharacteristicContext : Waiter
+{
+  CharacteristicEntry characteristics[EspBle::MaxDiscoveredGattCharacteristics];
+  size_t count = 0;
+};
+
+struct DescriptorContext : Waiter
+{
+  EspBleGattDescriptorInfo descriptors[EspBle::MaxDiscoveredGattDescriptors];
+  size_t count = 0;
+};
+
+// Render through BLEUUID so discovery reports UUIDs in the same 128-bit form as
+// the rest of the library (ble_uuid_to_str() would print "0x180f" for a 16-bit
+// UUID, which no other EspBle surface does).
+inline String uuidToString(const ble_uuid_any_t &uuid)
+{
+  return BLEUUID(uuid).toString();
+}
+
+inline int serviceCallback(
+  uint16_t connectionHandle, const struct ble_gatt_error *error,
+  const struct ble_gatt_svc *service, void *argument)
+{
+  ServiceContext *context = static_cast<ServiceContext *>(argument);
+  if (error != nullptr && error->status != 0)
+  {
+    // BLE_HS_EDONE is the normal end of the procedure, not a failure.
+    context->status = error->status == BLE_HS_EDONE ? 0 : error->status;
+    context->done = true;
+    return 0;
+  }
+  if (service == nullptr) return 0;
+  if (context->count == EspBle::MaxDiscoveredGattServices)
+  {
+    context->overflowed = true;
+    return 0;
+  }
+  ServiceRange &entry = context->services[context->count++];
+  entry.startHandle = service->start_handle;
+  entry.endHandle = service->end_handle;
+  entry.uuid = uuidToString(service->uuid);
+  return 0;
+}
+
+inline int characteristicCallback(
+  uint16_t connectionHandle, const struct ble_gatt_error *error,
+  const struct ble_gatt_chr *characteristic, void *argument)
+{
+  CharacteristicContext *context = static_cast<CharacteristicContext *>(argument);
+  if (error != nullptr && error->status != 0)
+  {
+    context->status = error->status == BLE_HS_EDONE ? 0 : error->status;
+    context->done = true;
+    return 0;
+  }
+  if (characteristic == nullptr) return 0;
+  if (context->count == EspBle::MaxDiscoveredGattCharacteristics)
+  {
+    context->overflowed = true;
+    return 0;
+  }
+  CharacteristicEntry &entry = context->characteristics[context->count++];
+  entry.definitionHandle = characteristic->def_handle;
+  entry.valueHandle = characteristic->val_handle;
+  entry.properties = characteristic->properties;
+  entry.uuid = uuidToString(characteristic->uuid);
+  return 0;
+}
+
+inline int descriptorCallback(
+  uint16_t connectionHandle, const struct ble_gatt_error *error,
+  uint16_t characteristicValueHandle, const struct ble_gatt_dsc *descriptor,
+  void *argument)
+{
+  DescriptorContext *context = static_cast<DescriptorContext *>(argument);
+  if (error != nullptr && error->status != 0)
+  {
+    context->status = error->status == BLE_HS_EDONE ? 0 : error->status;
+    context->done = true;
+    return 0;
+  }
+  if (descriptor == nullptr) return 0;
+  if (context->count == EspBle::MaxDiscoveredGattDescriptors)
+  {
+    context->overflowed = true;
+    return 0;
+  }
+  EspBleGattDescriptorInfo &info = context->descriptors[context->count++];
+  info.descriptorUuid = uuidToString(descriptor->uuid);
+  info.handle = descriptor->handle;
+  return 0;
+}
+
+// Block until the in-flight procedure reports completion. Returns false on
+// timeout so a silent stall cannot hang the worker task forever.
+inline bool wait(Waiter &context, uint32_t timeoutMilliseconds)
+{
+  const uint32_t deadline = millis() + timeoutMilliseconds;
+  while (!context.done)
+  {
+    if (millis() >= deadline) return false;
+    delay(1);
+  }
+  return true;
+}
+} // namespace espble_discovery
+
+
 // Complete a connection-scoped indication whose confirmation just arrived.
 // Defined once EspBleGattServerImpl is complete; declared here because the GAP
 // event listener above needs it.
@@ -1096,102 +1248,156 @@ struct EspBleImpl
       }
       else
       {
-        std::map<std::string, BLERemoteService *> *services = client->getServices();
-        if (services == nullptr)
+        // Discover straight through the NimBLE host API. The wrapper's
+        // service map is keyed by UUID and would drop every repeat of a UUID.
+        // Heap-allocated: these contexts are far too large for the worker stack.
+        std::unique_ptr<espble_discovery::ServiceContext> context(
+          new (std::nothrow) espble_discovery::ServiceContext());
+        uint16_t connectionHandle = 0xffff;
+        {
+          std::lock_guard<std::mutex> lock(impl->mutex);
+          for (const EspBleImpl::ConnectionSlot &slot : impl->connections)
+          {
+            if (slot.used && slot.connection.id == result.connectionId)
+            {
+              connectionHandle = slot.connection.handle;
+              break;
+            }
+          }
+        }
+
+        if (context == nullptr)
+        {
+          result.error = EspBleError::ResourceExhausted;
+          result.detail = "failed to allocate GATT discovery state";
+        }
+        else if (connectionHandle == 0xffff)
+        {
+          result.error = EspBleError::InvalidState;
+          result.detail = "connection is not an active Central connection";
+        }
+        else if (ble_gattc_disc_all_svcs(
+                   connectionHandle, espble_discovery::serviceCallback, context.get()) != 0 ||
+                 !espble_discovery::wait(*context, 10000) || context->status != 0)
         {
           result.error = EspBleError::BackendFailure;
           result.detail = "failed to enumerate GATT services";
         }
-        else result.success = true;
-        if (services != nullptr)
-        for (const auto &serviceItem : *services)
+        else
         {
-          BLERemoteService *service = serviceItem.second;
-          if (service == nullptr) continue;
-          const String serviceUuid = service->getUUID().toString();
+          result.success = true;
+          const size_t serviceCount = context->count;
+          for (size_t serviceIndex = 0; serviceIndex < serviceCount && result.success;
+               ++serviceIndex)
           {
-            std::lock_guard<std::mutex> lock(impl->mutex);
-            if (database->serviceCount == EspBle::MaxDiscoveredGattServices)
+            const espble_discovery::ServiceRange service = context->services[serviceIndex];
+            {
+              std::lock_guard<std::mutex> lock(impl->mutex);
+              EspBleGattServiceInfo &info = database->services[database->serviceCount++];
+              info.serviceUuid = service.uuid;
+              info.handle = service.startHandle;
+            }
+
+            // Characteristics of this service, by handle range.
+            std::unique_ptr<espble_discovery::CharacteristicContext> characteristics(
+              new (std::nothrow) espble_discovery::CharacteristicContext());
+            if (characteristics == nullptr)
             {
               result.success = false;
               result.error = EspBleError::ResourceExhausted;
-              result.detail = "too many discovered GATT services";
+              result.detail = "failed to allocate GATT discovery state";
+              break;
             }
-            else
+            if (ble_gattc_disc_all_chrs(
+                  connectionHandle, service.startHandle, service.endHandle,
+                  espble_discovery::characteristicCallback, characteristics.get()) != 0 ||
+                !espble_discovery::wait(*characteristics, 10000) ||
+                characteristics->status != 0)
             {
-              EspBleGattServiceInfo &info = database->services[database->serviceCount++];
-              info.serviceUuid = serviceUuid;
-              info.handle = service->getHandle();
+              result.success = false;
+              result.error = EspBleError::BackendFailure;
+              result.detail = "failed to enumerate GATT characteristics";
+              break;
             }
-          }
-          if (!result.success) break;
 
-          // Enumerate by handle, not by UUID: several characteristics in one
-          // service can share a UUID (e.g. HID Report), and a UUID-keyed map
-          // would collapse them into a single entry.
-          std::map<uint16_t, BLERemoteCharacteristic *> *characteristics =
-            service->getCharacteristicsByHandle();
-          if (characteristics == nullptr)
-          {
-            result.success = false;
-            result.error = EspBleError::BackendFailure;
-            result.detail = "failed to enumerate GATT characteristics";
-            break;
-          }
-          for (const auto &characteristicItem : *characteristics)
-          {
-            BLERemoteCharacteristic *characteristic = characteristicItem.second;
-            if (characteristic == nullptr) continue;
-            const String characteristicUuid = characteristic->getUUID().toString();
+            for (size_t index = 0; index < characteristics->count; ++index)
             {
-              std::lock_guard<std::mutex> lock(impl->mutex);
-              if (database->characteristicCount == EspBle::MaxDiscoveredGattCharacteristics)
+              const espble_discovery::CharacteristicEntry &entry =
+                characteristics->characteristics[index];
               {
-                result.success = false;
-                result.error = EspBleError::ResourceExhausted;
-                result.detail = "too many discovered GATT characteristics";
-              }
-              else
-              {
+                std::lock_guard<std::mutex> lock(impl->mutex);
+                if (database->characteristicCount == EspBle::MaxDiscoveredGattCharacteristics)
+                {
+                  result.success = false;
+                  result.error = EspBleError::ResourceExhausted;
+                  result.detail = "too many discovered GATT characteristics";
+                  break;
+                }
                 EspBleGattCharacteristicInfo &info =
                   database->characteristics[database->characteristicCount++];
-                info.serviceUuid = serviceUuid;
-                info.characteristicUuid = characteristicUuid;
-                info.handle = characteristic->getHandle();
-                info.readable = characteristic->canRead();
-                info.writable = characteristic->canWrite();
-                info.writableWithoutResponse = characteristic->canWriteNoResponse();
-                info.notifiable = characteristic->canNotify();
-                info.indicatable = characteristic->canIndicate();
+                info.serviceUuid = service.uuid;
+                info.characteristicUuid = entry.uuid;
+                info.handle = entry.valueHandle;
+                info.readable = (entry.properties & BLE_GATT_CHR_PROP_READ) != 0;
+                info.writable = (entry.properties & BLE_GATT_CHR_PROP_WRITE) != 0;
+                info.writableWithoutResponse =
+                  (entry.properties & BLE_GATT_CHR_PROP_WRITE_NO_RSP) != 0;
+                info.notifiable = (entry.properties & BLE_GATT_CHR_PROP_NOTIFY) != 0;
+                info.indicatable = (entry.properties & BLE_GATT_CHR_PROP_INDICATE) != 0;
               }
-            }
-            if (!result.success) break;
 
-            std::map<std::string, BLERemoteDescriptor *> *descriptors =
-              characteristic->getDescriptors();
-            if (descriptors == nullptr) continue;
-            for (const auto &descriptorItem : *descriptors)
-            {
-              BLERemoteDescriptor *descriptor = descriptorItem.second;
-              if (descriptor == nullptr) continue;
-              std::lock_guard<std::mutex> lock(impl->mutex);
-              if (database->descriptorCount == EspBle::MaxDiscoveredGattDescriptors)
+              // Descriptors live between this characteristic's value handle and
+              // the next characteristic's declaration (or the service end).
+              const uint16_t descriptorEnd =
+                index + 1 < characteristics->count
+                  ? static_cast<uint16_t>(
+                      characteristics->characteristics[index + 1].definitionHandle - 1)
+                  : service.endHandle;
+              if (descriptorEnd <= entry.valueHandle) continue;
+
+              std::unique_ptr<espble_discovery::DescriptorContext> descriptors(
+                new (std::nothrow) espble_discovery::DescriptorContext());
+              if (descriptors == nullptr)
               {
                 result.success = false;
                 result.error = EspBleError::ResourceExhausted;
-                result.detail = "too many discovered GATT descriptors";
+                result.detail = "failed to allocate GATT discovery state";
                 break;
               }
-              EspBleGattDescriptorInfo &info =
-                database->descriptors[database->descriptorCount++];
-              info.serviceUuid = serviceUuid;
-              info.characteristicUuid = characteristicUuid;
-              info.descriptorUuid = descriptor->getUUID().toString();
-              info.handle = descriptor->getHandle();
+              if (ble_gattc_disc_all_dscs(
+                    connectionHandle, entry.valueHandle, descriptorEnd,
+                    espble_discovery::descriptorCallback, descriptors.get()) != 0 ||
+                  !espble_discovery::wait(*descriptors, 10000) || descriptors->status != 0)
+              {
+                result.success = false;
+                result.error = EspBleError::BackendFailure;
+                result.detail = "failed to enumerate GATT descriptors";
+                break;
+              }
+              std::lock_guard<std::mutex> lock(impl->mutex);
+              for (size_t d = 0; d < descriptors->count; ++d)
+              {
+                if (database->descriptorCount == EspBle::MaxDiscoveredGattDescriptors)
+                {
+                  result.success = false;
+                  result.error = EspBleError::ResourceExhausted;
+                  result.detail = "too many discovered GATT descriptors";
+                  break;
+                }
+                EspBleGattDescriptorInfo &info =
+                  database->descriptors[database->descriptorCount++];
+                info = descriptors->descriptors[d];
+                info.serviceUuid = service.uuid;
+                info.characteristicUuid = entry.uuid;
+              }
             }
-            if (!result.success) break;
           }
-          if (!result.success) break;
+          if (context->overflowed)
+          {
+            result.success = false;
+            result.error = EspBleError::ResourceExhausted;
+            result.detail = "too many discovered GATT services";
+          }
         }
       }
     }

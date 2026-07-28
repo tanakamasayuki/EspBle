@@ -1,5 +1,6 @@
 import re
 
+READ = re.compile(rb"READ handle=(\d+) value=(\S+)")
 HANDLES = re.compile(rb"HANDLES first=(\d+) duplicate=(\d+) other=(\d+)")
 
 
@@ -27,8 +28,16 @@ def test_duplicate_uuid_registration(dut, peers):
     dut.expect_exact("SCAN_STARTED", timeout=10)
     dut.expect("CENTRAL_CONNECTED id=", timeout=20)
 
-    # The peer registered the service twice, but the bundled backend keys remote
-    # services by UUID on the client side, so only the first is enumerable here.
-    dut.expect_exact("DISCOVERED services=1 characteristics=1", timeout=20)
-    dut.expect_exact("READ handle=", timeout=15)
-    dut.expect_exact("READ_DONE", timeout=10)
+    # Discovery runs straight through the NimBLE host API, so both instances of
+    # the service UUID are enumerated -- the wrapper's UUID-keyed service map
+    # would have dropped the second.
+    dut.expect_exact("DISCOVERED services=2 characteristics=2", timeout=20)
+
+    # The first service is the one the wrapper also knows, so reading it works
+    # today. Reading the second service's characteristic still fails: the read
+    # path resolves handles through the wrapper's remote objects, which never
+    # saw that service. Raw ATT operations are the remaining piece of the
+    # bypass; until then only discovery sees both.
+    match = dut.expect(READ, timeout=15)
+    assert int(match.group(1)) != 0
+    assert match.group(2) == b"first", f"unexpected value {match.group(2)!r}"
