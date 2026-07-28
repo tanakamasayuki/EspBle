@@ -4714,7 +4714,38 @@ bool EspBleGattServer::realize()
   for (size_t serviceIndex = 0; serviceIndex < impl_->serviceCount; ++serviceIndex)
   {
     auto &serviceDefinition = impl_->services[serviceIndex];
-    serviceDefinition.backend = server->createService(serviceDefinition.uuid.c_str());
+    // Two services may share a UUID, so each repetition needs its own instance
+    // id: the backend keys its service map on (UUID, instance id) and a second
+    // service created with the default id would collide with the first.
+    uint8_t instanceId = 0;
+    for (size_t prior = 0; prior < serviceIndex; ++prior)
+    {
+      if (uuidEquals(impl_->services[prior].uuid, serviceDefinition.uuid.c_str()))
+      {
+        ++instanceId;
+      }
+    }
+    // Size the attribute-handle budget from what this service actually holds
+    // instead of the backend's fixed default: the service declaration, two
+    // handles per characteristic, one per descriptor, and one more for the CCCD
+    // that a notifiable or indicatable characteristic gets automatically.
+    uint32_t handleCount = 1;
+    for (size_t index = 0; index < impl_->characteristicCount; ++index)
+    {
+      const auto &characteristic = impl_->characteristics[index];
+      if (characteristic.serviceIndex != serviceIndex) continue;
+      handleCount += 2;
+      if (characteristic.config.notifiable || characteristic.config.indicatable)
+      {
+        ++handleCount;
+      }
+      for (size_t descriptorIndex = 0; descriptorIndex < impl_->descriptorCount; ++descriptorIndex)
+      {
+        if (impl_->descriptors[descriptorIndex].characteristicIndex == index) ++handleCount;
+      }
+    }
+    serviceDefinition.backend = server->createService(
+      BLEUUID(serviceDefinition.uuid.c_str()), handleCount, instanceId);
     if (serviceDefinition.backend == nullptr)
     {
       owner_->setError(EspBleError::BackendFailure, "failed to create GATT service");
