@@ -68,7 +68,10 @@ pytest-embedded-cliの既存規約に従います。
 | 複数同時接続 / 接続分離 | | | | `manual/multi_connection`（2 Peripheral同時、notify routing、一方切断が他方に非影響） |
 | Address privacy（own address type） | | ✅ | ✅ `address_privacy`（random static advertising） | RPA回転（900秒周期のため自動試験対象外）はbonded peer解決を手動確認 |
 | iBeacon（broadcast / decode） | ✅ `unit/ibeacon` | ✅ | ✅ `ibeacon`（broadcast→decode、全フィールド） | iBeaconアプリ |
-| Advertising Service Data（AD 0x16） | | ✅ | ✅ `service_data`（`setServiceData` / `EspBleScanResult::serviceData`） | generic scanner |
+| Advertising Service Data（AD 0x16） | | ✅ | ✅ `service_data`（`addServiceData`複数ブロック / `serviceDataFor()`によるUUID検索） | generic scanner |
+| Scan Response payload分割 / Appearance / Tx Power受信 | | ✅ | ✅ `scan_response`（passiveで届かない項目とactiveで届く項目の切り分け） | generic scanner |
+| Filter Accept List / connect timeout | | ✅ | ✅ `accept_list`（制限policyで接続不成立→開放で成立、要求timeoutでの失敗通知） | |
+| 自分のアドレス / 送信電力 / 切断理由指定 | | ✅ | ✅ `local_identity`（`localAddress()`と観測値の一致、`setTxPower()`の電波への反映、理由コードの往復） | |
 | HID Keyboard Device | report codec（予定） | ✅ | ✅ `hid_keyboard_device` / `hid_robustness`（購読gate、queue満杯） | OS、市販HID Host |
 | HID NKRO Device / Host | ✅ `unit/report_map` | ✅ | ✅ `hid_keyboard_nkro`（8キー、高usage、個別release、LED） | OS、市販HID Host |
 | HID LED output | report codec（予定） | ✅ | ✅ `hid_keyboard_device` / `hid_keyboard_host`（WWR非block） | OS |
@@ -163,6 +166,8 @@ pytest-embedded-cliの既存規約に従います。
 57. ✅ `fitness_machine`: 標準Fitness Machine Service（0x1826）のdata＋control検証。ServerがFitness Machine Feature（0x2ACC）をRead提供し、Indoor Bike Data（0x2AD2）をflags 0x0044でNotify。ClientがFeature Read（features=6）、購読、Indoor Bike Dataをflag順にdecodeしてspeed=3000・cadence=90 rpm・power=250 Wを復元。続いてControl Point（0x2AD9）とStatus（0x2ADA）を購読し、Set Target Power（0x05,250）→応答indication [0x80,05,01]を確認、Serverの'g'で"Target Power Changed"（0x08,250）status notifyを確認（indicationは1接続同時1件のみのため単一indicationを検証）。最後にIndoor Bike Data購読解除と切断まで確認。
 58. ✅ `scan_response`: advertising payloadとscan responseの分割、およびAppearance / Tx Power Levelの受信の検証。PeripheralがService UUID・Appearance（0x0341）・Tx Power Levelをadvertising payloadへ、name・Manufacturer Dataをscan responseへ載せてbroadcast。CentralがPassive Scanでname・Manufacturer Dataが**届かない**ことと、Appearance・Tx Powerが届くことを確認し、続くActive Scanで4項目すべてが1件の結果へマージされることを確認。Tx Powerの値はcontrollerが埋めるため範囲と、両scan modeで同値であることを判定。
 59. ✅ `accept_list`: Filter Accept ListによるPeripheral側の接続制限の検証。Peripheralが到達不能アドレスのみをaccept listへ登録し`ConnectionFromAcceptList` policyでadvertise。Centralの接続が成立せず、要求timeout（4秒）で`onConnectionFailed`が返ること（backendは約30秒戻らないため、EspBleが試行を放棄して報告する経路の検証）を確認。続いてpolicyを`Any`へ戻すと同一Centralが接続できることを確認。
+
+60. ✅ `local_identity`: 自分のアドレス取得・送信電力・切断理由指定の検証。Peripheralが`localAddress()`/`localAddressType()`で報告した値が、Centralがスキャンで観測したaddress/addressTypeと一致することを確認。`setTxPower(-12)`と`setTxPower(9)`で、無線が適用した値（`txPower()`）と、advertisingのTx Power Levelとして電波に出る値の両方が追従することを確認。最後に`disconnect(id, 0x16)`の理由コードが相手の`disconnectReason`へ0x16のまま届くこと（backendの0x200オフセットを正規化していること）を確認。
 
 ## 合格条件
 

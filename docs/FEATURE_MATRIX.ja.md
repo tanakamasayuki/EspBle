@@ -98,10 +98,10 @@ EspUsbHost / EspUsbDeviceで扱っている機能のBLE版、およびBLEで一�
 | Directed Advertising（送信） | ❌ | 同梱wrapperの`BLEAdvertising::start()`が`ble_gap_adv_start()`を`direct_addr = NULL`固定で呼ぶため到達不可。`ble_gap_adv_start()`直呼びはadvertising状態とGAPイベント配線の二重管理になるため見送り。接続先の限定はFilter Accept Listで代替可能（再接続の速さは得られない） |
 | Directed Advertising（受信） | ⚠️ | 自分宛のADV_DIRECT_INDはスキャン結果として届き、address / addressType / rssi / connectable=true / scannable=false を持つ（仕様上ADデータを載せないため他は空）。そのまま接続可。ただし**advertisement typeを公開していないため判別不能**で、「connectable かつ non-scannable かつ payload空」からの推測になる |
 | スキャン側のFilter Accept List | ❌ | 同梱wrapperの`BLEScan`がfilter policyを公開していない（`setDuplicateFilter`のみ）。絞り込みは受信後にアプリ側で判定する |
-| 送信電力の変更 | 🔧 | backendは`BLEDevice::setPower()`/`getPower()`を持つがEspBleは未公開。現状はbackend既定値 |
-| 自分のアドレスの取得 | 🔧 | backendは`BLEDevice::getAddress()`を持つがEspBleは未公開。相手のaccept listへ登録してもらう際に必要になるが、現状は相手側でスキャンして調べる |
+| 送信電力の変更 | ✅ | `EspBle::setTxPower(dBm)` / `txPower()`。無線が対応する飛び飛びの値（-12..+9 dBm、3 dB刻み）へ丸める。`local_identity` Peerで、設定値がadvertisingのTx Power Levelとして電波に出ることを検証済み |
+| 自分のアドレスの取得 | ✅ | `EspBle::localAddress()` / `localAddressType()`。RPA使用時は回転のたびに変わる現在値。`local_identity` Peerで、相手がスキャンで観測したアドレスと一致することを検証済み |
 | 接続時のパラメータ / PHY指定 | 🔧 | `connect()`でConnection IntervalやPHYを指定できない。接続確立後に`updateConnectionParameters()`/`updatePhy()`で変更する |
-| 切断理由の指定（送信側） | 🔧 | `disconnect()`に理由コード引数がなく固定。受信側の理由取得は対応済み（`EspBleConnection::disconnectReason`） |
+| 切断理由の指定（送信側） | ✅ | `disconnect(id, reason)`。`disconnectReason`はHCIコードへ正規化して公開する（backendは0x200オフセット付きで報告するため）ので、渡した値がそのまま相手に現れる。`local_identity` Peerで検証済み |
 | Advertisingチャネルマップの選択 | ❌ | 同梱wrapperの`setAdvertisementChannelMap()`はBluedroid専用で、NimBLE経路には存在しない。常に37/38/39の3チャネルを使用 |
 | Extended Advertising / 複数Advertising Set | ❌ | 同梱NimBLEが`CONFIG_BT_NIMBLE_EXT_ADV`無効でビルドされており、Arduinoライブラリからは有効化不可 |
 | Periodic Advertising | ❌ | Extended Advertising（`CONFIG_BT_NIMBLE_EXT_ADV`）に依存するため同上で対応不可 |

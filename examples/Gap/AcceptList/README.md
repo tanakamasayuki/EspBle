@@ -19,7 +19,7 @@ Combine them as needed: use the accept list when a peer should not connect at al
 - 1 × ESP32-S3 running this sketch (peripheral)
 - A central that tries to connect — the [Gap/Connect](../Connect/) example on a second board, or a phone app
 
-Replace `ALLOWED_CENTRAL` in the sketch with **the address of the central you want to allow** before using it. Left unchanged, nobody can connect — which does at least demonstrate that the filter works.
+Replace `ALLOWED_CENTRAL` in the sketch with **the address of the central you want to allow** before using it. That board can report its own address with `ble.localAddress()`. Left unchanged, nobody can connect — which does at least demonstrate that the filter works.
 
 ## What it does
 

@@ -298,10 +298,12 @@ struct EspBleConnection
   bool authenticated = false;
   bool bonded = false;
   uint8_t encryptionKeySize = 0;
-  // Only meaningful in the onDisconnected() callback: the backend/HCI reason
-  // code for the disconnection, or 0 when the reason is unknown. A locally
-  // requested disconnect, a remote termination, and a supervision timeout
-  // report distinct codes. 0 in the onConnected()/onMtuChanged() events.
+  // Only meaningful in the onDisconnected() callback: the HCI reason code for
+  // the disconnection, or 0 when the reason is unknown. A locally requested
+  // disconnect, a remote termination, and a supervision timeout report distinct
+  // codes, and the code a peer passed to disconnect() arrives here unchanged.
+  // A reason that did not originate from HCI (a host-level failure) is reported
+  // as the backend's own error value instead. 0 in onConnected()/onMtuChanged().
   int disconnectReason = 0;
   // Current connection parameters, populated at connect and refreshed on each
   // update delivered to onConnectionParametersUpdated(). connectionInterval is
@@ -1350,12 +1352,37 @@ public:
   void end();
   void update();
 
+  // The address this device currently presents to peers, as a string, or an
+  // empty String before begin(). With ownAddressType = ResolvablePrivate this is
+  // the RPA in use at the moment, so it changes when the controller rotates it.
+  // Its type is the one requested through EspBleConfig::ownAddressType, reported
+  // by localAddressType().
+  String localAddress() const;
+  EspBleAddressType localAddressType() const;
+
+  // Transmit power in dBm. The radio supports discrete levels (-12..+9 dBm in
+  // 3 dB steps on the bundled build); setTxPower() rounds to the nearest one and
+  // txPower() reports what the radio actually applied. Raising it extends range
+  // at the cost of current draw. Returns false before begin(). The level applies
+  // to advertising, scanning and connections alike.
+  bool setTxPower(int8_t dBm);
+  // Current level in dBm, or INT8_MIN when it cannot be determined.
+  int8_t txPower() const;
+
   bool connect(const EspBleScanResult &scanResult, uint32_t timeoutMilliseconds = 10000);
   bool connect(
     const char *address,
     EspBleAddressType addressType,
     uint32_t timeoutMilliseconds = 10000);
-  bool disconnect(EspBleConnectionId connectionId);
+  // Close a connection. reason is the HCI reason code sent to the peer, which
+  // surfaces there as EspBleConnection::disconnectReason; the default is the
+  // "remote user terminated connection" code. Only a handful of codes are valid
+  // for a local termination, so leave the default unless the peer expects a
+  // specific one.
+  static constexpr uint8_t DisconnectReasonRemoteUserTerminated = 0x13;
+  bool disconnect(
+    EspBleConnectionId connectionId,
+    uint8_t reason = DisconnectReasonRemoteUserTerminated);
   // Automatic reconnection for Central connections (default off). When enabled,
   // every peer this central connects to is remembered, and if such a connection
   // drops unexpectedly the library reconnects to the same peer address on its
@@ -1647,6 +1674,7 @@ private:
 
   bool initialized_ = false;
   bool autoReconnect_ = false;
+  EspBleOwnAddressType activeOwnAddressType_ = EspBleOwnAddressType::Public;
   // Mirror of the backend accept list: the wrapper offers add/remove but no way
   // to enumerate or clear, so the entries are tracked here as well.
   EspBleBond acceptList_[MaxAcceptListEntries];

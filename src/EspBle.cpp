@@ -141,6 +141,7 @@ struct EspBleImpl
     // connection; EspBle::drainPendingDisconnects() performs the disconnect once
     // the op completes, instead of rejecting the disconnect() call.
     bool pendingDisconnect = false;
+    uint8_t pendingDisconnectReason = 0x13;
   };
 
   // Central clients waiting to be freed on the loop task. The backend has no
@@ -533,6 +534,14 @@ struct EspBleImpl
 
   void stampDisconnectReason(uint16_t handle, int reason)
   {
+    // The backend reports HCI-originated reasons in its own error space
+    // (0x0200 + the HCI code). Normalise them back to the plain HCI code, so a
+    // reason read here matches the one passed to disconnect(). Values outside
+    // that range are host-level errors and are passed through unchanged.
+    if (reason >= 0x0200 && reason <= 0x02ff)
+    {
+      reason -= 0x0200;
+    }
     std::lock_guard<std::mutex> lock(mutex);
     for (ConnectionSlot &slot : connections)
     {
@@ -7222,6 +7231,7 @@ bool EspBle::begin(const EspBleConfig &config)
 
   activeDeviceName_ = deviceName;
   activePreferredMtu_ = config.preferredMtu;
+  activeOwnAddressType_ = config.ownAddressType;
   activeSecurity_ = config.security;
   initialized_ = true;
   clearError();
@@ -7352,6 +7362,7 @@ void EspBle::drainPendingDisconnects()
     BLEClient *client = nullptr;
     BLEServer *server = nullptr;
     uint16_t handle = 0xffff;
+    uint8_t reason = 0x13;
   };
   Target targets[ConnectionCapacity];
   size_t count = 0;
@@ -7366,13 +7377,15 @@ void EspBle::drainPendingDisconnects()
       targets[count].client = slot.client;
       targets[count].server = impl_->server;
       targets[count].handle = slot.connection.handle;
+      targets[count].reason = slot.pendingDisconnectReason;
       ++count;
     }
   }
   for (size_t i = 0; i < count; ++i)
   {
-    if (targets[i].client != nullptr) targets[i].client->disconnect();
-    else if (targets[i].server != nullptr) targets[i].server->disconnect(targets[i].handle);
+    if (targets[i].client != nullptr) targets[i].client->disconnect(targets[i].reason);
+    else if (targets[i].server != nullptr)
+      targets[i].server->disconnect(targets[i].handle, targets[i].reason);
   }
 }
 
@@ -7619,7 +7632,7 @@ bool EspBle::connect(
   return connect(target, timeoutMilliseconds);
 }
 
-bool EspBle::disconnect(EspBleConnectionId connectionId)
+bool EspBle::disconnect(EspBleConnectionId connectionId, uint8_t reason)
 {
   if (!initialized_)
   {
@@ -7657,6 +7670,7 @@ bool EspBle::disconnect(EspBleConnectionId connectionId)
       // completes (drainPendingDisconnects() from update()) instead of rejecting
       // and tearing the client down under the running worker.
       found->pendingDisconnect = true;
+      found->pendingDisconnectReason = reason;
       clearError();
       return true;
     }
@@ -7671,7 +7685,8 @@ bool EspBle::disconnect(EspBleConnectionId connectionId)
     return false;
   }
 
-  const int result = client != nullptr ? client->disconnect() : server->disconnect(handle);
+  const int result =
+    client != nullptr ? client->disconnect(reason) : server->disconnect(handle, reason);
   if (result != 0)
   {
     setError(EspBleError::BackendFailure, "failed to request disconnection");
@@ -7949,6 +7964,72 @@ bool EspBle::syncAcceptList()
     memcpy(entries[index].val, address.getNative(), sizeof(entries[index].val));
   }
   return ble_gap_wl_set(entries, static_cast<uint8_t>(acceptListCount_)) == 0;
+}
+
+String EspBle::localAddress() const
+{
+  if (!initialized_)
+  {
+    return String();
+  }
+  // Only the address bytes are taken: the backend leaves the type field of the
+  // structure it fills uninitialised, so localAddressType() reports the type
+  // that was requested at begin() instead.
+  return BLEDevice::getAddress().toString();
+}
+
+EspBleAddressType EspBle::localAddressType() const
+{
+  return activeOwnAddressType_ == EspBleOwnAddressType::Public
+    ? EspBleAddressType::Public
+    : EspBleAddressType::Random;
+}
+
+namespace
+{
+// Transmit power levels the radio supports, paired with their dBm value.
+struct TxPowerLevel
+{
+  int8_t dBm;
+  esp_power_level_t level;
+};
+constexpr TxPowerLevel TxPowerLevels[] = {
+  {-12, ESP_PWR_LVL_N12}, {-9, ESP_PWR_LVL_N9}, {-6, ESP_PWR_LVL_N6},
+  {-3, ESP_PWR_LVL_N3},   {0, ESP_PWR_LVL_N0},  {3, ESP_PWR_LVL_P3},
+  {6, ESP_PWR_LVL_P6},    {9, ESP_PWR_LVL_P9},
+};
+} // namespace
+
+bool EspBle::setTxPower(int8_t dBm)
+{
+  if (!initialized_)
+  {
+    setError(EspBleError::InvalidState, "BLE stack is not initialized");
+    return false;
+  }
+
+  const TxPowerLevel *nearest = &TxPowerLevels[0];
+  for (const TxPowerLevel &candidate : TxPowerLevels)
+  {
+    if (abs(candidate.dBm - dBm) < abs(nearest->dBm - dBm))
+    {
+      nearest = &candidate;
+    }
+  }
+  BLEDevice::setPower(nearest->level, ESP_BLE_PWR_TYPE_DEFAULT);
+  clearError();
+  return true;
+}
+
+int8_t EspBle::txPower() const
+{
+  if (!initialized_)
+  {
+    return INT8_MIN;
+  }
+  const int level = BLEDevice::getPower(ESP_BLE_PWR_TYPE_DEFAULT);
+  // The backend answers -128 when the level is not one it recognises.
+  return level == -128 ? INT8_MIN : static_cast<int8_t>(level);
 }
 
 bool EspBle::addToAcceptList(const char *address, EspBleAddressType addressType)

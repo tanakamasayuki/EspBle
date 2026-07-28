@@ -7,10 +7,10 @@
 
 static constexpr const char *SERVICE_UUID = "5266f727-49d7-4eaf-a6f1-6163636570";
 
-// en: Replace with the address of the central you want to allow. Find it with the
-//     Info/ScanDump example running on that board, or from its own logs.
-// ja: 接続を許可したいCentralのアドレスに置き換える。相手側でInfo/ScanDumpを動かすか、
-//     相手のログから調べる。
+// en: Replace with the address of the central you want to allow. That board can
+//     print its own address with ble.localAddress().
+// ja: 接続を許可したいCentralのアドレスに置き換える。相手のボードでは
+//     ble.localAddress() で自分のアドレスを表示できる。
 static constexpr const char *ALLOWED_CENTRAL = "aa:bb:cc:dd:ee:ff";
 
 EspBle ble;
