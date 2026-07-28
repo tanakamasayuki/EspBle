@@ -1,35 +1,67 @@
-# スキャン→接続→通信の入門ガイド
+# BLE通信の入門ガイド
 
-BLEを初めて使う人向けに、EspBleで相手を探し、接続し、GATTで通信するまでの流れを説明します。
+BLEを初めて使う人が、**何が起きているのか**を理解するための資料です。用語はすべてこの文書内で説明します。
+
+実際のコードは各exampleにあります。この文書は概念に集中し、対応するexampleへのリンクを示します。
 
 ---
 
-## 全体像 — BLEの通信は3段階
+## 1. BLEとは
 
-BLEの通信は、大きく **「探す → つながる → やり取りする」** の3段階で考えると分かりやすいです。
+Bluetooth Low Energy（BLE）は、**小さなデータを低消費電力でやり取りする**ための無線規格です。
 
-1. **探す（Scanning / Advertising）** — 相手を見つける
-2. **つながる（Connection）** — 見つけた相手に接続する
-3. **やり取りする（GATT: Read / Write / Notify）** — 接続した相手とデータを交換する
+名前は似ていますが、イヤホンやSPP（Serial Port Profile）で使われてきた**Bluetooth Classicとは別物**で、互換性はありません。
 
-登場する役割は2組あります（詳しくは [examples/README.ja.md](../examples/README.ja.md) の「BLEとは」節）。
+| | Bluetooth Classic | BLE |
+|---|---|---|
+| 通信の形 | 常時接続のストリーム | 必要なときだけ短くやり取りするイベント指向 |
+| 向いているもの | 音声（A2DP/HFP）、シリアル（SPP） | センサー値、キー入力、設定値 |
+| 消費電力 | 大きい | ボタン電池で年単位を狙える |
 
-- **リンクの役割**: 探して接続しにいく側が **Central（親機）**、放送して待つ側が **Peripheral（周辺機器）**
-- **データの役割**: 値を持つ側が **GATT Server**、値を使う側が **GATT Client**
+EspBleはBLE専用です。ESP32-S3などの対象チップはBluetooth Classicを搭載しておらず、A2DP・HFP・SPPは使えません。「BLEでシリアル通信のようなことをしたい」場合は、後述するGATTの上に構築します。
 
-典型的には「Central=Client」「Peripheral=Server」ですが、この2組は独立した概念です。
-このガイドは **Central=Client** 側（＝相手を探して接続し、値を読み書きする側）の流れを追います。
-サーバ側の例は [Gatt/Basics/Server](../examples/Gatt/Basics/Server/) を参照してください。
+### 1.1 GAPとGATT — 2つの層
 
-## 大原則 — 「要求」と「イベント」は別のタイミング
+BLEを理解する最初の鍵は、**GAPとGATTという2つの層がまったく別の仕事をしている**ことです。
 
-EspBleのAPIを読むうえで最初に知っておくべき約束事です。
+| | GAP（Generic Access Profile） | GATT（Generic Attribute Profile） |
+|---|---|---|
+| 担当 | **探す・つながる** | **やり取りする** |
+| 扱うもの | アドバタイズ、スキャン、接続、アドレス | Service、Characteristic、値の読み書き |
+| いつ使うか | 接続が成立するまで | 接続が成立した後 |
 
-- **要求API**（`scanner().start()`、`connect()`、`readCharacteristic()` など）は
-  「お願いを受け付けたか」だけを **その場で `bool` で返します**。実際の完了はまだです。
-- **完了・失敗は、あとから「イベント」として届きます**（`onConnected`、`onCharacteristicRead` など）。
-- そして **すべてのイベントは、`loop()` の中で呼ぶ `ble.update()` から配送されます**。
-  BLEスタックの割り込みスレッドからコールバックが呼ばれることはありません。
+一言でいえば、**探して繋ぐまでがGAP、繋がった後の会話がGATT**です。この文書は2章でGAP、3章でGATTを扱います。
+
+### 1.2 4つの役割 — 2つの独立した軸
+
+BLEには役割を表す言葉が4つ出てきます。混乱しやすいのは、これが**独立した2つの軸**だからです。
+
+**軸1: リンクの役割（GAPの話）**
+
+- **Peripheral（周辺機器）** — アドバタイズして待つ側。接続を**受け入れる**
+- **Central（親機）** — スキャンして探す側。接続を**開始する**
+
+**軸2: データの役割（GATTの話）**
+
+- **GATT Server** — 値を**持っている**側。読み書きに応え、変化を通知する
+- **GATT Client** — 値を**使う**側。読み書きを要求し、通知を購読する
+
+典型的には「Peripheral = GATT Server」「Central = GATT Client」ですが、**これは決まりではありません**。接続が確立した後は、どちらの側もServerにもClientにもなれます。たとえばキーボード（Peripheral）がホストの時刻を読みに行けば、それはPeripheralかつGATT Clientです。
+
+ESP32は1台で**CentralとPeripheralを同時に**こなせます。たとえばキーボードから入力を受け取りつつ（Central）、PCへキーボードとして見せる（Peripheral）といった構成が可能です。
+
+### 1.3 大原則 — 要求とイベントは別のタイミング
+
+EspBleのAPIを読む前に、必ず知っておくべき約束事です。
+
+BLEの操作はほぼすべて**非同期**です。「接続して」と頼んでもその場では接続しません。無線のやり取りが終わるのは、早くて数十ミリ秒後、遅ければ数十秒後です。
+
+そこでEspBleは操作を2段階に分けています。
+
+1. **要求API** — 「お願いを受け付けたか」だけをその場で `bool` で返します。まだ何も完了していません
+2. **イベント** — 実際の完了・失敗は、後から登録済みのコールバックへ届きます
+
+そして**すべてのイベントは `loop()` の中で呼ぶ `ble.update()` から配送されます**。
 
 ```cpp
 void loop() {
@@ -38,165 +70,334 @@ void loop() {
 }
 ```
 
-つまり「操作を頼む → 次の操作は、その完了イベントの中で頼む」という
-**連鎖（チェーン）** で書くのが基本形です。Central側のGATT操作は同時に1件ずつなので、
-前の操作が終わってから次を出します。
+これは意図的な設計です。BLEスタックは専用のタスクで動いており、そこから直接コールバックを呼ぶと、アプリケーションのコードが別スレッドで動くことになります。EspBleはイベントを一度キューに溜め、`update()` を呼んだタスク（通常は `loop()`）でのみ配送します。**コールバックの中で共有変数を触っても排他制御が要らない**のはこのためです。
 
-## ステップ順
+裏を返せば、**`update()` を呼び忘れると何も起きません**。スキャン結果も接続完了も届かず、原因の分かりにくい「動かない」状態になります。
 
-### 0. 初期化
-
-```cpp
-#include <EspBle.h>
-EspBle ble;
-
-EspBleConfig config;
-config.deviceName = "EspBle Central";
-if (!ble.begin(config)) {
-  Serial.printf("BLE init failed: %s\n", ble.lastErrorDetail().c_str());
-}
-```
-
-### 1. 探す — スキャンを始める
-
-```cpp
-EspBleScanConfig scanConfig;
-scanConfig.active = true;   // active scan: 追加情報（名前など）も要求する
-ble.scanner().start(scanConfig);
-```
-
-`onResult` に、見つかった1件ごとのコールバックを登録します。周囲の**すべての**放送が
-届くので、ここで「目的の相手か」を判定します。
-
-```cpp
-ble.scanner().onResult([](const EspBleScanResult &r) {
-  // r.address          … 相手のアドレス（String）
-  // r.rssi             … 受信強度（dBm。0に近いほど近い。例: -40は近い、-90は遠い）
-  // r.serviceUuids[]   … 放送に載っていたService UUIDの一覧
-  // r.manufacturerData … Manufacturer Specific Data（iBeacon等はここに入る）
-  Serial.printf("%s RSSI=%d\n", r.address.c_str(), r.rssi);
-});
-```
-
-### 2. 絞り込む → つなぐ
-
-目的のService UUIDを放送している相手だけを選んで接続します。
-`advertisesService()` は放送に載っていたUUID群と比較して真偽を返します
-（UUIDの詳細は後述）。
-
-```cpp
-static constexpr const char *TARGET = "5266f727-49d7-4eaf-a6f1-636f6e6e6563";
-bool requested = false;
-
-ble.scanner().onResult([](const EspBleScanResult &r) {
-  if (requested || !r.advertisesService(TARGET)) return;  // 対象外は無視
-  ble.scanner().stop();                 // 接続の前にスキャンを止める
-  requested = ble.connect(r);           // 受理されれば true（完了はイベントで届く）
-});
-```
-
-### 3. 接続の結果を受け取る
-
-```cpp
-ble.onConnected([](const EspBleConnection &c) {
-  // c.id … 接続ごとに安定した識別子（backend handleとは別物）。以後この id で操作する
-  Serial.printf("Connected id=%u (%s)\n", c.id, c.peerAddress.c_str());
-});
-ble.onDisconnected([](const EspBleConnection &c) {
-  Serial.printf("Disconnected id=%u\n", c.id);
-});
-ble.onConnectionFailed([](const EspBleConnectionFailure &f) {
-  // 到達不能・timeout など。connect() が true を返した後でも、非同期に失敗しうる
-  Serial.printf("Connect failed: %s\n", f.detail.c_str());
-});
-```
-
-### 4. やり取りする — Discovery → Read → Write
-
-接続できたら、使いたいCharacteristicを **UUID指定でDiscovery** し、
-完了イベントを合図に Read、さらに Write…と連鎖させます。
-
-```cpp
-// 接続できた → 既知UUIDのCharacteristicをDiscovery
-ble.onConnected([](const EspBleConnection &c) {
-  ble.discoverCharacteristic(c.id, SERVICE_UUID, CHARACTERISTIC_UUID);
-});
-
-// Discovery完了 → Read要求
-ble.onCharacteristicDiscovered([](const EspBleGattResult &res) {
-  if (!res.success) { Serial.println(res.detail.c_str()); return; }
-  ble.readCharacteristic(res.connectionId, SERVICE_UUID, CHARACTERISTIC_UUID);
-});
-
-// Read完了 → 値を表示し、Write要求（最後の true = Write with Response）
-ble.onCharacteristicRead([](const EspBleGattResult &res) {
-  Serial.printf("Read: %s\n", res.value.c_str());
-  ble.writeCharacteristic(res.connectionId, SERVICE_UUID, CHARACTERISTIC_UUID,
-                          String("hello"), true);
-});
-
-ble.onCharacteristicWritten([](const EspBleGattResult &res) {
-  Serial.println(res.success ? "Write done" : "Write failed");
-});
-```
-
-値の変化を継続的に受け取りたい場合は、Read/Writeの代わりに **購読（Subscribe）** します。
-サーバ側が `notify`（確認応答なし）または `indicate`（確認応答あり）で値を送ってきます。
-実例は [Gatt/Basics/SubscribeClient](../examples/Gatt/Basics/SubscribeClient/) と
-[Gatt/Basics/IndicateClient](../examples/Gatt/Basics/IndicateClient/) を参照してください。
-
-### 通信全体の流れ（時系列）
-
-```
-Central(=Client)                             Peripheral(=Server)
-   |  scanner().start()                              |  advertising...
-   |  <---------- advertisement -------------------  |
-   |  onResult() で advertisesService() 判定          |
-   |  scanner().stop(); connect() ----------------->  |
-   |  <==================== 接続確立 ===============>  |
-   |  onConnected(id)                                 |
-   |  discoverCharacteristic(id,svc,chr) ---------->  |
-   |  onCharacteristicDiscovered()                    |
-   |  readCharacteristic(...) --------------------->  |
-   |  <---------------- value ----------------------  |
-   |  onCharacteristicRead(value)                     |
-   |  writeCharacteristic(...) -------------------->  |
-   |  onCharacteristicWritten()                       |
-   |  （購読すれば）  <-------- notify/indicate ------  |
-   |                                                  |
-   ※ すべてのコールバックは loop() の ble.update() から配送
-```
+この非同期の性質から、EspBleのコードは自然と**連鎖（チェーン）**の形になります。「操作を頼む → その完了イベントの中で次を頼む」の繰り返しです。
 
 ---
 
-## UUIDとは何か（初心者向け）
+## 2. GAP編 — 探してつながる
 
-### UUIDは「機能の型」を表す名札
+この章はBLE通信の時系列に沿って進みます。**アドバタイズ（Peripheral）→ スキャン（Central）→ 接続（両者）**の順です。
 
-BLEでは、Service（機能のまとまり）やCharacteristic（個々の値）が
-何であるかを **UUID（Universally Unique IDentifier）** で表します。
-UUIDは **128ビット（16バイト）の世界で一意な識別子**で、こう書きます。
+### 2.1 アドバタイズ — Peripheralが存在を知らせる
+
+すべての始まりはPeripheral側の**アドバタイズ**（advertising、広告）です。
+
+アドバタイズとは、**「ここにいます、こういう機器です」という短いデータを周囲へ一定間隔で放送し続ける**ことです。宛先はありません。電波の届く範囲にいる全員が受信できます。
+
+#### 何を載せられるか
+
+アドバタイズのデータは**AD構造**（AD structure）の並びです。それぞれが「長さ・種別・値」の3要素を持ちます。主な種別は次のとおりです。
+
+| 載せるもの | 用途 |
+|---|---|
+| **Flags** | 「接続可能か」「Classic非対応か」などの基本属性。EspBleが自動で付けます |
+| **Local Name** | 人間が読む名前。`EspBle Keyboard` など |
+| **Service UUID** | 提供する機能の種別。受信側が絞り込みに使う最も重要な情報 |
+| **Service Data** | Service UUIDと組にした値そのもの。センサーが値を放送するときに使う |
+| **Manufacturer Data** | ベンダー独自のデータ。iBeaconもこの形式 |
+| **Appearance** | 機器の見た目の種別（キーボード、体温計など）。スマホがアイコン表示に使う |
+| **Tx Power Level** | 送信電力。受信側がRSSIと組み合わせて距離を推定できる |
+
+#### 31バイトの壁
+
+ここが最初の関門です。**アドバタイズのデータは31バイトしか入りません。**
+
+しかも各AD構造は値のほかに2バイト（長さ＋種別）を消費します。128ビットのService UUIDを1つ載せるだけで、16 + 2 = 18バイト。Flagsの3バイトと合わせると、残りは10バイトしかありません。
+
+この制限を緩める仕組みが**Scan Response**です。受信側が「もっと教えて」と要求すると、Peripheralは**もう1つの31バイト**を返せます。合計62バイトです。
+
+- **アドバタイズ本体** — 近くの全員に届く。相手を判別するための最小限を置く
+- **Scan Response** — 要求してきた相手にだけ届く。名前などかさばる情報を置く
+
+EspBleは、Scan Responseに何も指定しなければ**デバイス名を自動的にそちらへ置きます**。31バイトを名前で消費しないためです。
+
+> **なぜ31バイトなのか、増やせないのか**
+> これはBLE 4.0からある**Legacy Advertising**の仕様上の上限です。BLE 5.0の**Extended Advertising**を使えば255バイトまで拡張できますが、EspBleでは利用できません。Arduino-ESP32に同梱されているNimBLEが `CONFIG_BT_NIMBLE_EXT_ADV` を無効にしてビルドされており、Arduinoライブラリ側からこの設定を変更する手段がないためです。
+
+#### 接続できるアドバタイズ、できないアドバタイズ
+
+アドバタイズには2種類あります。
+
+- **Connectable** — 「接続していいですよ」という放送。通常のPeripheral
+- **Non-connectable** — 放送するだけで接続は受け付けない。**ビーコン**と呼ばれる形態
+
+ビーコンは、値そのものをアドバタイズに載せてしまい、接続という手続きを省きます。温度センサーが5秒ごとに温度を放送する、店舗の棚が識別子を放送する、といった用途です。受信側は接続しないので、**1つのビーコンを何台でも同時に受信できる**という利点もあります。
+
+#### アドバタイズ間隔
+
+放送の間隔は20ミリ秒から10.24秒まで設定できます。トレードオフは明快です。
+
+- **短い** — すぐ見つけてもらえるが、電力を消費する
+- **長い** — 電池は持つが、相手が見つけるまで時間がかかる
+
+なお仕様上、Non-connectableなアドバタイズは**100ミリ秒以上**にする必要があります。
+
+#### 関連するexample
+
+| example | 内容 |
+|---|---|
+| [Gap/Advertise](../examples/Gap/Advertise/) | 名前とService UUIDを載せた最小のアドバタイズ |
+| [Gap/ScanResponse](../examples/Gap/ScanResponse/) | 2面に分けて31バイト制限を回避する |
+| [Gap/Beacon](../examples/Gap/Beacon/) | Manufacturer Dataを載せた接続不可のビーコン |
+| [Gap/IBeacon](../examples/Gap/IBeacon/) | Appleが定めたiBeaconレイアウト |
+| [Gap/ServiceData](../examples/Gap/ServiceData/) | Service Dataとしてセンサー値を放送する |
+
+### 2.2 スキャン — Centralが相手を探す
+
+Central側は**スキャン**（scanning）で周囲のアドバタイズを受信します。
+
+#### passiveとactive
+
+スキャンには2種類あります。
+
+- **Passive Scan** — ただ聞くだけ。アドバタイズ本体しか受け取れない
+- **Active Scan** — アドバタイズを受信したら**Scan Request**を送り返し、相手の**Scan Response**も受け取る
+
+前節のとおり名前はScan Responseに置かれることが多いため、**名前で相手を探すならActive Scanが必要**です。EspBleの既定はActive Scanです。
+
+Passive Scanの利点は、こちらが電波を出さないことです。消費電力が下がり、周囲に自分の存在を知られません。
+
+#### intervalとwindow
+
+スキャンには2つの時間設定があります。
+
+- **interval（間隔）** — スキャンを開始する周期
+- **window（窓）** — そのうち実際に受信している時間
+
+たとえばinterval 100ミリ秒・window 50ミリ秒なら、**受信しているのは半分の時間**です。残り半分は他の処理に使えます。window = intervalにすれば常時受信になりますが、消費電力は最大になります。
+
+#### 見落としの問題
+
+ここが実務で最も引っかかる点です。
+
+アドバタイズは一瞬の放送であり、スキャン側のwindowが閉じている間に飛んできたものは**受信できません**。さらにBLEは3つのチャネルを順に使うため、タイミングによってはさらに取りこぼします。
+
+したがって、**1回スキャンして見つからなくても「その機器が存在しない」とは言えません**。実用的には次のようにします。
+
+- 通常は**3〜5秒**のスキャンを行う
+- 周囲にBLE機器が多い環境では、さらに長く取る
+- 特定の相手を待つなら、時間無制限で見つかるまでスキャンし続ける
+
+#### 受信結果に何が入るか
+
+1件のスキャン結果には、アドバタイズ（とActive Scanなら Scan Response）から取り出した情報が入ります。アドレス、アドレス種別、RSSI（受信強度）、接続可能か、名前、Service UUIDの一覧、Service Data、Manufacturer Dataです。
+
+RSSIはdBmで、0に近いほど近くにあります。目安として-40は至近、-90はかなり遠い、という感覚です。
+
+同じ機器のアドバタイズは繰り返し飛んできますが、EspBleは既定で**重複を除外**し、1つの機器につき1回だけ通知します。ビーコンの値の変化を追いたい場合など、毎回受け取りたいときは重複除外を切ります。
+
+> **受け取れない情報もあります**
+> EspBleはスキャン結果へAppearanceとTx Power Levelを展開しません。またService Dataは**最初の1ブロックのみ**を保持します。1件のアドバタイズに複数のService Dataを載せた相手では、2つ目以降が読めません。
+
+#### 関連するexample
+
+| example | 内容 |
+|---|---|
+| [Gap/Scan](../examples/Gap/Scan/) | アドレス・RSSI・名前を表示する最小のスキャン |
+| [Info/ScanDump](../examples/Info/ScanDump/) | 取り出せる全フィールドの表示とiBeaconのデコード |
+
+接続の必要がない用途——ビーコンの受信——は、ここで完結します。
+
+### 2.3 接続 — 1対1の関係を作る
+
+目的の相手が見つかったら**接続**します。接続を開始できるのはCentral側だけです。
+
+#### 接続する前に判断する
+
+見つかった端末すべてに接続してはいけません。BLEの同時接続数には上限があり（EspBleが使う同梱NimBLEのビルドではESP32-S3で3接続）、無駄な接続は資源を奪います。
+
+スキャン結果には判断材料が揃っています。
+
+- **Service UUID** — 目的の機能を持っているか。最も確実な判定基準
+- **名前** — 人間が識別しやすい。ただし同名の機器がありうる
+- **接続可能フラグ** — ビーコンには接続できない
+- **アドレス** — 特定の1台だけを狙う場合
+- **RSSI** — 「十分近いものだけ」という条件を付けたい場合
+
+複数を組み合わせるのが実用的です。「このService UUIDを持ち、かつRSSIが-70より強いもの」といった具合です。
+
+#### Peripheral側は接続を拒否できるか
+
+**アプリケーションのコードでは拒否できません。**
+
+BLEには「接続要求が来ました、承認しますか？」という問い合わせの仕組みがありません。接続の可否はコントローラ（無線チップ側）が判断し、アプリケーションが知るのは接続が成立した後です。
+
+制限したい場合の手段は3つあります。
+
+| 手段 | 効果 |
+|---|---|
+| **Filter Accept List** | 許可リストに載っていない相手の接続要求をコントローラが黙って捨てる。最も確実 |
+| **接続後に切断する** | 相手を見て切断する。一度は接続が成立してしまう |
+| **属性を暗号化で守る** | 接続は許すが、値の読み書きにペアリングを要求する |
+
+なお拒否された相手に「拒否された」とは伝わりません。Link Layerに拒否を返すPDUが存在せず、要求が無視されるだけだからです。相手側からは応答のないタイムアウトに見えます。
+
+#### 接続が成立したら
+
+接続すると、以降のやり取りは**その1対1のリンクの中だけ**で行われます。アドバタイズのように周囲へ漏れることはありません。
+
+接続には次のパラメータがあり、通信の応答性と消費電力を決めます。
+
+- **Connection Interval** — 通信機会の周期。短いほど応答が速く、電力を食う
+- **Peripheral Latency** — Peripheralが応答をスキップしてよい回数。送るものがないときに電力を節約する
+- **Supervision Timeout** — この時間だけ通信が途絶えたら切断とみなす
+
+もう1つ重要なのが**MTU**（Maximum Transmission Unit）です。1回のやり取りで運べるバイト数の上限で、接続時に両者が希望値を交換し、**小さい方**が採用されます。
+
+MTUの仕様上の最小値は23バイトです。このうち3バイトはプロトコルのヘッダが使うため、実際に運べるのは**20バイト**しかありません。EspBleの既定値は247で、244バイトまで1回で送れます。これを超えるデータは分割が必要になります。
+
+接続が切れると切断イベントが届き、その中で切断理由のコードが分かります。自分から切ったのか、相手が切ったのか、電波が届かなくなった（Supervision Timeout）のかを区別できます。
+
+#### 関連するexample
+
+| example | 内容 |
+|---|---|
+| [Gap/Connect](../examples/Gap/Connect/) | Service UUIDで絞り込んで接続し、接続・切断・失敗を受け取る |
+| [Gap/AcceptList](../examples/Gap/AcceptList/) | Filter Accept Listで接続できる相手を制限する |
+| [Gap/Mtu](../examples/Gap/Mtu/) | MTUの交換と、1回で送れるサイズの確認 |
+| [Info/ConnectionInspector](../examples/Info/ConnectionInspector/) | 接続パラメータやPHYの観察 |
+
+### 2.4 アドレスとプライバシー
+
+アドバタイズには必ず送信元の**アドレス**（6バイト）が載ります。ここに問題があります。
+
+工場出荷時のアドレス（**Public Address**）をそのまま使うと、**その値が変わらないため、周囲の誰でもあなたの機器を追跡できます**。持ち歩く機器では現実的な問題です。
+
+BLEはこれに対して3種類のアドレスを用意しています。
+
+| 種別 | 性質 | 追跡耐性 |
+|---|---|---|
+| **Public** | 工場出荷の固定値 | なし |
+| **Random Static** | 起動時に生成する固定のランダム値 | 出荷アドレスは隠せるが、値自体で追跡できる |
+| **Resolvable Private Address（RPA）** | コントローラが定期的に変える | 高い |
+
+RPAは一定時間ごとにアドレスを変えるので、外から見ると別の機器になります。しかしそれでは**正規の相手も見失ってしまいます**。
+
+これを解決するのが**ボンディング**（bonding）です。ペアリング時に**IRK**（Identity Resolving Key）という鍵を交換しておくと、相手はその鍵でRPAを計算し、「これはあのときの機器だ」と復元できます。鍵を持たない第三者には、ただの変化するアドレスにしか見えません。
+
+つまり**RPAはボンディングとセットでのみ意味を持ちます**。ボンディングなしでRPAを使うと、相手は再接続できなくなります。
+
+ボンディング済みの相手を指す不変のアドレスを**Identity Address**と呼びます。Filter Accept Listがアドレスで照合する以上、RPAを使う相手を許可リストに載せられるのは、ボンディングしてIdentity Addressが効くようになってからです。
+
+> **RPAの変更周期は変えられません**
+> 同梱NimBLEのビルド設定（`CONFIG_BT_NIMBLE_RPA_TIMEOUT`、900秒）で固定されており、アプリケーションから変更する手段がありません。
+
+関連するexample: [Gap/PrivateAddress](../examples/Gap/PrivateAddress/)
+
+### 2.5 初期化時に決めること
+
+GAPの締めくくりとして、通信を始める前に決めておく設定をまとめます。これらは初期化時に指定し、以降の通信全体に影響します。
+
+| 設定 | 内容 |
+|---|---|
+| **デバイス名** | アドバタイズや接続後に相手へ見せる名前 |
+| **希望MTU** | 1回で運べるサイズ。既定247。大きいほど効率的だが、接続ごとにメモリを使う |
+| **自分のアドレス種別** | Public / Random Static / RPA（2.4節） |
+| **セキュリティ** | ペアリング・ボンディングの有効化と、認証方式 |
+
+MTUを下げる理由があるとすれば、多数の同時接続でメモリを節約したい場合です。逆に既定の247で困ることは通常ありません。
+
+セキュリティには、確認なしでリンクを暗号化する**Just Works**と、6桁の数字で相手を確認する**Passkey認証**があります。目的が「盗聴を防ぐ」だけならJust Worksで足り、「意図しない相手との接続を防ぐ」までを求めるならPasskey認証が必要です。
+
+関連するexample: [Gap/Mtu](../examples/Gap/Mtu/)、[Security/JustWorksServer](../examples/Security/JustWorksServer/)、[Security/StaticPasskeyServer](../examples/Security/StaticPasskeyServer/)
+
+---
+
+## 3. GATT編 — データをやり取りする
+
+接続が成立したら、ここからはGATTの領域です。
+
+### 3.1 GATTの構造
+
+GATTでは、データが3階層で表現されます。
+
+- **Service** — 機能のまとまり。「電池」「心拍計」など
+- **Characteristic** — 個々の値。「電池残量」「心拍数」など。Serviceの中に複数入る
+- **Descriptor** — Characteristicに付随する補足情報。単位や説明、通知の有効・無効の設定など
+
+それぞれがUUIDという識別子を持ちます（4章で詳しく説明します）。
+
+値のやり取りには次の方法があります。
+
+| 操作 | 向き | 説明 |
+|---|---|---|
+| **Read** | Client → Server | 値を読む |
+| **Write** | Client → Server | 値を書く。応答ありと応答なしがある |
+| **Notify** | Server → Client | 値の変化を送りつける。確認応答なし |
+| **Indicate** | Server → Client | 同上だが、Clientの確認応答を待つ |
+
+NotifyとIndicateは、Clientが事前に**購読**（subscribe）したものだけが届きます。購読の状態はDescriptorに記録されます。
+
+使い分けの基準は**取りこぼしが許されるか**です。秒間何度も更新されるセンサー値ならNotify（1つ落ちても次が来る）、確実に届けたい設定変更の結果ならIndicateです。
+
+### 3.2 Client側の手順
+
+Clientは相手のデータ構造を知りません。そこでまず**Discovery**（探索）を行い、目的のServiceとCharacteristicがどこにあるかを調べます。その後にRead・Write・購読を行います。
+
+1.3節で説明したとおり、これらはすべて非同期です。「Discoveryを頼む → 完了イベントの中でReadを頼む → 完了イベントの中でWriteを頼む」という連鎖で書きます。
+
+### 3.3 時系列で見る全体像
+
+```
+Central(= GATT Client)                        Peripheral(= GATT Server)
+   |                                                |  アドバタイズ中
+   |  <---------- アドバタイズ --------------------  |
+   |  スキャン結果で「目的の相手か」を判定             |
+   |  接続要求 -------------------------------->     |
+   |  <================ 接続確立 ================>   |
+   |  接続イベント                                    |
+   |  Discovery要求 ---------------------------->    |
+   |  Discovery完了イベント                           |
+   |  Read要求 --------------------------------->    |
+   |  <---------------- 値 -----------------------   |
+   |  Read完了イベント                                |
+   |  Write要求 -------------------------------->    |
+   |  Write完了イベント                               |
+   |  （購読していれば） <----- Notify / Indicate ---  |
+   |                                                 |
+   ※ すべてのイベントは loop() の ble.update() から配送される
+```
+
+### 3.4 関連するexample
+
+| example | 内容 |
+|---|---|
+| [Gatt/Basics/Server](../examples/Gatt/Basics/Server/) | 独自ServiceとCharacteristicを公開するServer |
+| [Gatt/Basics/Client](../examples/Gatt/Basics/Client/) | Discovery → Read → Write の連鎖 |
+| [Gatt/Basics/NotifyServer](../examples/Gatt/Basics/NotifyServer/) / [SubscribeClient](../examples/Gatt/Basics/SubscribeClient/) | Notifyの送出と購読 |
+| [Gatt/Basics/IndicateServer](../examples/Gatt/Basics/IndicateServer/) / [IndicateClient](../examples/Gatt/Basics/IndicateClient/) | 確認応答つきのIndicate |
+| [Gatt/Basics/NusServer](../examples/Gatt/Basics/NusServer/) / [NusClient](../examples/Gatt/Basics/NusClient/) | シリアル通信に相当するやり取り |
+
+---
+
+## 4. UUIDを理解する
+
+### 4.1 UUIDは「機能の型」を表す名札
+
+ServiceやCharacteristicが何であるかは、**UUID**（Universally Unique IDentifier）で表されます。128ビット（16バイト）の、世界で一意な識別子です。
 
 ```
 5266f727-49d7-4eaf-a6f1-636f6e6e6563   （8-4-4-4-12桁の16進数）
 ```
 
-たとえば「Battery Level（電池残量）」というCharacteristicには決まったUUIDが割り当てられており、
-どのメーカーの機器でも同じUUIDを使います。だから相手の機種を知らなくても
-「このUUIDのCharacteristicを読めば電池残量が分かる」と決め打ちできます。
-UUIDは名前ではなく **型（種類）を表す名札** だと考えてください。
+たとえば「電池残量」というCharacteristicには決まったUUIDが割り当てられており、どのメーカーの機器でも同じ値を使います。だから相手の機種を知らなくても「このUUIDを読めば電池残量が分かる」と決め打ちできます。
 
-### 標準UUIDと独自UUID
+UUIDは名前ではなく**型（種類）を表す名札**だと考えてください。
 
-- **標準（Bluetooth SIG割当）UUID**: Battery ServiceやHIDなど、仕様で決まった機能。
-  世界中で共通の値です。
-- **独自（カスタム）UUID**: 自分のアプリ専用の機能。自分でランダムに128ビットを生成して使います
-  （上の `5266f727-...` はexample用の独自UUIDです）。
+### 4.2 標準UUIDと独自UUID
 
-### フル形（128ビット）と短縮形（16ビット）
+- **標準UUID** — Bluetooth SIGが割り当てたもの。電池、心拍計、HIDなど、仕様で決まった機能に対応する
+- **独自UUID** — 自分のアプリ専用。ランダムに128ビットを生成して使う
 
-標準UUIDには **16ビットの短縮形** があります。たとえばBattery Serviceは短縮形で `180F`。
-これは、次の **Base UUID** の中の4桁に短縮形を差し込んだ128ビットUUIDの「省略表記」です。
+### 4.3 フル形と短縮形
+
+標準UUIDには**16ビットの短縮形**があります。たとえば電池サービスは `180F` です。
+
+これは次の**Base UUID**の中に短縮形を差し込んだ128ビットUUIDの、省略表記にすぎません。
 
 ```
 Base UUID:  0000____-0000-1000-8000-00805F9B34FB
@@ -204,31 +405,14 @@ Base UUID:  0000____-0000-1000-8000-00805F9B34FB
 180F の実体: 0000180F-0000-1000-8000-00805F9B34FB
 ```
 
-つまり **短縮形とフル形は同じUUIDを指す別表記** です。EspBleの `advertisesService()` は
-UUIDを **値として** 比較する（内部で16ビットをBase UUIDへ展開して突き合わせる）ので、
-`advertisesService("180F")` と `advertisesService("0000180f-0000-1000-8000-00805f9b34fb")`
-はどちらでも同じ相手に一致します。大文字小文字も区別しません。
+つまり**短縮形とフル形は同じUUIDを指す別表記**です。EspBleはUUIDを**値として**比較する（内部で短縮形をBase UUIDへ展開する）ので、`180F` と `0000180f-0000-1000-8000-00805f9b34fb` はどちらで書いても同じ相手に一致します。大文字小文字も区別しません。
 
-### なぜスキャン時に絞り込むのか
+ただし**文字列としては別物**です。スキャン結果に入っているUUIDを自分で文字列比較するのではなく、値として比較する仕組みを使ってください。
 
-`scanner().onResult()` には、目的の機器だけでなく **周囲のBLE機器の放送がすべて** 届きます
-（近所のイヤホン、スマホ、他のESP32…）。そのままでは目的の相手を判別できないので、
-放送に載っているService UUIDで **「これは自分の探している機能を持つ機器か？」** を
-絞り込みます。これがフィルタリングです。
+### 4.4 気をつける点
 
-- **標準機能を探す**とき（例: 心拍計、電池サービス）は、短縮形 `180D` などで絞れます。
-- **自作機器を探す**ときは、その機器の独自128ビットUUIDフル形で絞ります。
-
-### 気をつける点
-
-1. **独自サービスは必ず128ビットのフル形で書く。** 短縮形（16ビット）はSIGが割り当てた
-   標準UUID専用の表記です。自作サービスに勝手に16ビットを使ってはいけません。
-2. **桁とハイフン位置は正確に。** 大文字小文字は無視されますが、`8-4-4-4-12` の形が崩れると別物です。
-3. **放送に載るUUIDには数と長さの制限がある。** Legacy Advertisingのペイロードは31バイトしかなく、
-   Service UUIDを全部載せられるとは限りません。**「放送に出ていない＝そのサービスが無い」ではない**点に注意。
-   確実に知りたいときは、接続後にGATT Discoveryで確認します（このガイドのステップ4）。
-4. **Service UUIDを一切放送しない機器もある。** iBeaconのように名前もUUIDも出さず
-   Manufacturer Dataだけの機器は、`advertisesService()` では絞れません。その場合は
-   `r.address`（アドレス）や `r.manufacturerData`、名前などで判定します。
-   放送の全フィールドを観察するには [Info/ScanDump](../examples/Info/ScanDump/) が便利です。
-5. **短縮形が意味を持つのはSIG登録済みUUIDだけ。** 未登録の16ビット値には決まった意味がありません。
+1. **独自サービスは必ず128ビットのフル形で書く。** 短縮形はSIGが割り当てた標準UUID専用の表記です。自作サービスに勝手に16ビット値を使ってはいけません。
+2. **桁とハイフンの位置は正確に。** 大文字小文字は無視されますが、`8-4-4-4-12` の形が崩れると別のUUIDになります。
+3. **アドバタイズに出ていない＝そのServiceが無い、ではない。** 31バイトの制限のため、Service UUIDを全部載せられるとは限りません。確実に知りたいときは接続後のDiscoveryで確認します。
+4. **Service UUIDを一切載せない機器もある。** iBeaconのようにManufacturer Dataだけの機器は、UUIDでは絞り込めません。アドレスやManufacturer Dataの中身で判定します。
+5. **短縮形が意味を持つのはSIG登録済みの値だけ。** 未登録の16ビット値に決まった意味はありません。

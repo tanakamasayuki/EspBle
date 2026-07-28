@@ -241,11 +241,21 @@ ScanDumpを受信側に置き、2台目で各exampleを動かして確認した�
 
 | # | 項目 | 状況 |
 |---|---|---|
-| 3-1 | 用語節の新設（GAPとGATTの役割分担を最初に定義） | 未着手 |
-| 3-2 | Advertising節（connectable / non-connectable、載せられるデータ、31byte制限、Scan Response） | 未着手 |
-| 3-3 | Scanning節（active/passive、スキャン時間の考え方、取りこぼし） | 未着手 |
-| 3-4 | Connection節（接続すべきかの判断材料、Peripheral側の受け入れ、接続パラメータ・MTU） | 未着手 |
-| 3-5 | プライバシー節（public / random static / RPA） | 未着手 |
+| 3-1 | 用語節の新設（GAPとGATTの役割分担を最初に定義） | **完了** |
+| 3-2 | Advertising節（connectable / non-connectable、載せられるデータ、31byte制限、Scan Response） | **完了** |
+| 3-3 | Scanning節（active/passive、スキャン時間の考え方、取りこぼし） | **完了** |
+| 3-4 | Connection節（接続すべきかの判断材料、Peripheral側の受け入れ、接続パラメータ・MTU） | **完了** |
+| 3-5 | プライバシー節（public / random static / RPA） | **完了** |
+
+ガイドを0-5の章立てへ全面的に書き直した（419行）。
+
+- **1章「BLEとは」** — Classicとの違い、GAPとGATTの役割分担、4つの役割が2つの独立した軸であること、`update()` 駆動のイベント配送という大原則
+- **2章「GAP編」** — 2.1 アドバタイズ / 2.2 スキャン / 2.3 接続 / 2.4 アドレスとプライバシー / 2.5 初期化時に決めること
+- **3章「GATT編」** — 構造・操作・時系列図までの概念のみ。Phase 4のAPI再設計を経てPhase 6で本格化する
+- **4章「UUIDを理解する」** — 既存の解説を再構成して流用
+
+方針として、**コードはexampleへ、概念はガイドへ**を徹底した。ガイド内のコードは `ble.update()` を呼ぶloopの3行だけで、これは大原則の説明に不可欠なため残している。
+他文書へのリンクはゼロで、外部リンクはすべてexamplesへ向いている。制限を書く箇所ではすべて理由を併記した（31byte上限とExtended Advertising不可の理由、接続拒否ができない理由、RPA周期を変えられない理由など）。
 
 ### Phase 4 — GATT Server API 再設計（C本体・最大の破壊的変更）
 
