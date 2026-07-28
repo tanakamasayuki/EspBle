@@ -154,9 +154,11 @@ def test_release_event_survives_full_event_queue(dut, peers):
     device.expect_exact("DEVICE_READVERTISING 1", timeout=20)
 
 
-def test_disconnect_rejected_during_discovery(dut, peers):
-    """disconnect() on a connection whose HID discovery is still running must
-    be rejected instead of pulling the link out from under the worker."""
+def test_disconnect_deferred_during_discovery(dut, peers):
+    """disconnect() on a connection whose HID discovery is still running is
+    accepted but deferred: the worker runs to completion (the link is not pulled
+    out from under it) and the disconnect then happens automatically, without a
+    second disconnect() call."""
     device = peers["device"]
     _reset(dut, device)
     _connect(dut, device)
@@ -164,14 +166,16 @@ def test_disconnect_rejected_during_discovery(dut, peers):
     dut.write("D")
     match = dut.expect(DISCOVER_DISCONNECT_PATTERN, timeout=20)
     assert match.group(1) == b"1", "discovery must start"
-    assert match.group(2) == b"0", (
-        "disconnect() must be rejected while discovery is running "
+    assert match.group(2) == b"1", (
+        "disconnect() during discovery must be accepted and deferred, not rejected "
         f"(error={match.group(3).decode()})"
     )
+    assert match.group(3) == b"NONE", (
+        f"a deferred disconnect must not report an error (error={match.group(3).decode()})"
+    )
+    # The worker finishes normally despite the pending disconnect...
     dut.expect_exact("HOST_DISCOVERED success=1", timeout=20)
-
-    dut.write("d")
-    dut.expect_exact("HOST_DISCONNECT_STARTED success=1", timeout=10)
+    # ...then the deferred disconnect fires on its own (no second disconnect()).
     dut.expect(re.compile(rb"HOST_DISCONNECTED id=(\d+)"), timeout=20)
     device.expect_exact("DEVICE_READVERTISING 1", timeout=20)
 

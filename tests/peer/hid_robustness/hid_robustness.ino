@@ -90,8 +90,9 @@ void loop()
     }
     else if (command == 'D')
     {
-      // Disconnecting the same connection while its HID discovery is running
-      // must be rejected.
+      // Disconnecting the same connection while its HID discovery is running is
+      // accepted but deferred: the worker finishes, then the disconnect happens
+      // automatically (the link is not pulled out from under the worker).
       const bool discovering = ble.hidHost().discover(connectionId);
       const bool disconnected = ble.disconnect(connectionId);
       Serial.printf(
