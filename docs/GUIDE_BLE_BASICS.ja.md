@@ -152,23 +152,27 @@ Central側は**スキャン**（scanning）で周囲のアドバタイズを受�
 
 #### passiveとactive
 
-スキャンには2種類あります。
+スキャンには2種類あり、`scanner().start()` へ渡す `EspBleScanConfig` の `active` で選びます。
 
-- **Passive Scan** — ただ聞くだけ。アドバタイズ本体しか受け取れない
-- **Active Scan** — アドバタイズを受信したら**Scan Request**を送り返し、相手の**Scan Response**も受け取る
+| | `active` | 動作 | 受け取れるもの |
+|---|---|---|---|
+| **Active Scan** | `true`（既定） | アドバタイズを受信したら**Scan Request**を送り返す | アドバタイズ本体＋**Scan Response** |
+| **Passive Scan** | `false` | ただ聞くだけ。こちらは何も送信しない | アドバタイズ本体のみ |
 
-前節のとおり名前はScan Responseに置かれることが多いため、**名前で相手を探すならActive Scanが必要**です。EspBleの既定はActive Scanです。
+前節のとおり名前はScan Responseに置かれることが多いため、**名前で相手を探すならActive Scanが必要**です。既定が `true` なのはこのためです。
 
-Passive Scanの利点は、こちらが電波を出さないことです。消費電力が下がり、周囲に自分の存在を知られません。
+Passive Scanの利点は、こちらが電波を出さないことです。消費電力が下がり、周囲に自分の存在を知られません。相手を判別するのにService UUIDだけで足りるなら、Passiveで十分です。
 
 #### intervalとwindow
 
-スキャンには2つの時間設定があります。
+同じく `EspBleScanConfig` に、スキャンの時間を決める設定が2つあります。
 
-- **interval（間隔）** — スキャンを開始する周期
-- **window（窓）** — そのうち実際に受信している時間
+- **interval（間隔）** — スキャンを開始する周期。`intervalMilliseconds`
+- **window（窓）** — そのうち実際に受信している時間。`windowMilliseconds`
 
 たとえばinterval 100ミリ秒・window 50ミリ秒なら、**受信しているのは半分の時間**です。残り半分は他の処理に使えます。window = intervalにすれば常時受信になりますが、消費電力は最大になります。
+
+スキャンを続ける時間は `durationSeconds` で指定し、`0` なら止めるまで続きます。
 
 #### 見落としの問題
 

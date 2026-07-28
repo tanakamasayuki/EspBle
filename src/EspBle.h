@@ -84,6 +84,11 @@ struct EspBleConfig
 
 struct EspBleScanConfig
 {
+  // Active scanning (the default) answers each advertisement with a Scan
+  // Request and also receives the peer's Scan Response, which is where a device
+  // name usually lives. Set it to false for a passive scan: quieter and lower
+  // power because this device never transmits, but it only sees the
+  // advertising payload.
   bool active = true;
   // When false (the default) each device is reported once per scan, which keeps
   // a scan for "is this device around?" quiet. Set it to true to receive every
