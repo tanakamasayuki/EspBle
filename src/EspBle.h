@@ -453,9 +453,43 @@ struct EspBleGattDescriptorInfo
   uint16_t handle = 0;
 };
 
+// Opaque references to entries registered on the local GATT server. The add*
+// calls return one and every later operation takes it, because the Bluetooth
+// spec allows several Services or Characteristics to share a UUID: a UUID alone
+// cannot say which one is meant. A default-constructed handle is invalid, and
+// every call that takes an invalid handle fails with InvalidArgument.
+struct EspBleGattService
+{
+  uint16_t id = 0;
+  bool valid() const { return id != 0; }
+  explicit operator bool() const { return valid(); }
+};
+
+struct EspBleGattCharacteristic
+{
+  uint16_t id = 0;
+  bool valid() const { return id != 0; }
+  explicit operator bool() const { return valid(); }
+  bool operator==(const EspBleGattCharacteristic &other) const { return id == other.id; }
+  bool operator!=(const EspBleGattCharacteristic &other) const { return id != other.id; }
+};
+
+struct EspBleGattDescriptor
+{
+  uint16_t id = 0;
+  bool valid() const { return id != 0; }
+  explicit operator bool() const { return valid(); }
+  bool operator==(const EspBleGattDescriptor &other) const { return id == other.id; }
+  bool operator!=(const EspBleGattDescriptor &other) const { return id != other.id; }
+};
+
 struct EspBleGattWrite
 {
   EspBleConnectionId connectionId = 0;
+  // Which characteristic was written. Compare against the handle kept from
+  // addCharacteristic(); the UUIDs below are for logging and cannot tell apart
+  // characteristics that share one.
+  EspBleGattCharacteristic characteristic;
   String serviceUuid;
   String characteristicUuid;
   String value;
@@ -463,6 +497,7 @@ struct EspBleGattWrite
 
 struct EspBleGattDescriptorWrite
 {
+  EspBleGattDescriptor descriptor;
   String serviceUuid;
   String characteristicUuid;
   String descriptorUuid;
@@ -484,6 +519,7 @@ struct EspBleGattNotification
 struct EspBleGattSubscription
 {
   EspBleConnectionId connectionId = 0;
+  EspBleGattCharacteristic characteristic;
   String serviceUuid;
   String characteristicUuid;
   bool notifications = false;
@@ -494,6 +530,7 @@ struct EspBleGattSendResult
 {
   // The connection this send targeted, or 0 for a broadcast to all subscribers.
   EspBleConnectionId connectionId = 0;
+  EspBleGattCharacteristic characteristic;
   String serviceUuid;
   String characteristicUuid;
   String value;
@@ -874,8 +911,8 @@ private:
 class EspBleGattServer
 {
 public:
-  static constexpr size_t MaxServices = 4;
-  static constexpr size_t MaxCharacteristics = 16;
+  static constexpr size_t MaxServices = 8;
+  static constexpr size_t MaxCharacteristics = 32;
   static constexpr size_t MaxDescriptors = 16;
   using WriteCallback = std::function<void(const EspBleGattWrite &write)>;
   using DescriptorWriteCallback =
@@ -883,52 +920,35 @@ public:
   using SubscriptionCallback = std::function<void(const EspBleGattSubscription &subscription)>;
   using SendCallback = std::function<void(const EspBleGattSendResult &result)>;
 
-  bool addService(const char *serviceUuid);
-  bool addCharacteristic(
-    const char *serviceUuid,
+  // Register a Service. Two calls with the same UUID create two independent
+  // instances, as the spec allows. Returns an invalid handle on failure.
+  EspBleGattService addService(const char *serviceUuid);
+  // Register a Characteristic inside a Service. Several characteristics in one
+  // service may share a UUID (HID Report characteristics do); the handle is what
+  // tells them apart afterwards.
+  EspBleGattCharacteristic addCharacteristic(
+    EspBleGattService service,
     const char *characteristicUuid,
     const EspBleGattCharacteristicConfig &config);
-  bool addDescriptor(
-    const char *serviceUuid,
-    const char *characteristicUuid,
+  EspBleGattDescriptor addDescriptor(
+    EspBleGattCharacteristic characteristic,
     const char *descriptorUuid,
     const EspBleGattDescriptorConfig &config = EspBleGattDescriptorConfig());
+
   bool setValue(
-    const char *serviceUuid,
-    const char *characteristicUuid,
-    const uint8_t *data,
-    size_t length);
-  bool setValue(const char *serviceUuid, const char *characteristicUuid, const String &value);
-  bool value(const char *serviceUuid, const char *characteristicUuid, String &value) const;
+    EspBleGattCharacteristic characteristic, const uint8_t *data, size_t length);
+  bool setValue(EspBleGattCharacteristic characteristic, const String &value);
+  bool value(EspBleGattCharacteristic characteristic, String &value) const;
   bool setDescriptorValue(
-    const char *serviceUuid,
-    const char *characteristicUuid,
-    const char *descriptorUuid,
-    const uint8_t *data,
-    size_t length);
-  bool setDescriptorValue(
-    const char *serviceUuid,
-    const char *characteristicUuid,
-    const char *descriptorUuid,
-    const String &value);
-  bool descriptorValue(
-    const char *serviceUuid,
-    const char *characteristicUuid,
-    const char *descriptorUuid,
-    String &value) const;
+    EspBleGattDescriptor descriptor, const uint8_t *data, size_t length);
+  bool setDescriptorValue(EspBleGattDescriptor descriptor, const String &value);
+  bool descriptorValue(EspBleGattDescriptor descriptor, String &value) const;
+
   // Broadcast to every subscriber of the characteristic.
-  bool notify(
-    const char *serviceUuid,
-    const char *characteristicUuid,
-    const uint8_t *data,
-    size_t length);
-  bool notify(const char *serviceUuid, const char *characteristicUuid, const String &value);
-  bool indicate(
-    const char *serviceUuid,
-    const char *characteristicUuid,
-    const uint8_t *data,
-    size_t length);
-  bool indicate(const char *serviceUuid, const char *characteristicUuid, const String &value);
+  bool notify(EspBleGattCharacteristic characteristic, const uint8_t *data, size_t length);
+  bool notify(EspBleGattCharacteristic characteristic, const String &value);
+  bool indicate(EspBleGattCharacteristic characteristic, const uint8_t *data, size_t length);
+  bool indicate(EspBleGattCharacteristic characteristic, const String &value);
   // Connection-scoped send. notify(connectionId, …) targets exactly one
   // connection (per-connection MTU applies). indicate(connectionId, …) is
   // accepted for symmetry but is delivered through the confirmed broadcast
@@ -937,25 +957,21 @@ public:
   // the requested connection, and the result reports connectionId regardless.
   bool notify(
     EspBleConnectionId connectionId,
-    const char *serviceUuid,
-    const char *characteristicUuid,
+    EspBleGattCharacteristic characteristic,
     const uint8_t *data,
     size_t length);
   bool notify(
     EspBleConnectionId connectionId,
-    const char *serviceUuid,
-    const char *characteristicUuid,
+    EspBleGattCharacteristic characteristic,
     const String &value);
   bool indicate(
     EspBleConnectionId connectionId,
-    const char *serviceUuid,
-    const char *characteristicUuid,
+    EspBleGattCharacteristic characteristic,
     const uint8_t *data,
     size_t length);
   bool indicate(
     EspBleConnectionId connectionId,
-    const char *serviceUuid,
-    const char *characteristicUuid,
+    EspBleGattCharacteristic characteristic,
     const String &value);
   // Primary observer (one per event; a second call replaces it).
   void onWritten(WriteCallback callback);
@@ -987,8 +1003,7 @@ private:
   void dispatchSendResult(const EspBleGattSendResult &result);
   bool send(
     EspBleConnectionId connectionId,
-    const char *serviceUuid,
-    const char *characteristicUuid,
+    EspBleGattCharacteristic characteristic,
     const uint8_t *data,
     size_t length,
     bool indication);

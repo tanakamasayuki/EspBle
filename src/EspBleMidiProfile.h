@@ -41,10 +41,12 @@ public:
     config.writableWithoutResponse = true;
     config.writable = true;              // accept both, some hosts use write
     config.notifiable = true;
-    if (!ble_.gattServer().addService(ESP_BLE_MIDI_SERVICE_UUID))
+    const EspBleGattService service = ble_.gattServer().addService(ESP_BLE_MIDI_SERVICE_UUID);
+    if (!service.valid())
       return false;
-    if (!ble_.gattServer().addCharacteristic(
-          ESP_BLE_MIDI_SERVICE_UUID, ESP_BLE_MIDI_IO_CHARACTERISTIC_UUID, config))
+    io_ = ble_.gattServer().addCharacteristic(
+      service, ESP_BLE_MIDI_IO_CHARACTERISTIC_UUID, config);
+    if (!io_.valid())
       return false;
     ble_.advertising().addServiceUuid(ESP_BLE_MIDI_SERVICE_UUID);
 
@@ -150,9 +152,7 @@ public:
     EspBleMidiPacketBuilder builder(buffer, sizeof(buffer));
     if (!builder.appendMessage(nowTimestamp(), message, length))
       return false;
-    return ble_.gattServer().notify(
-      ESP_BLE_MIDI_SERVICE_UUID, ESP_BLE_MIDI_IO_CHARACTERISTIC_UUID,
-      builder.data(), builder.size());
+    return ble_.gattServer().notify(io_, builder.data(), builder.size());
   }
 
   // Send a full System Exclusive message (framed 0xF0 .. 0xF7). Large messages
@@ -245,9 +245,7 @@ private:
         return false;
       }
     }
-    const bool sent = ble_.gattServer().notify(
-      ESP_BLE_MIDI_SERVICE_UUID, ESP_BLE_MIDI_IO_CHARACTERISTIC_UUID,
-      sysExPacket_, sysExPacketLength_);
+    const bool sent = ble_.gattServer().notify(io_, sysExPacket_, sysExPacketLength_);
     if (sent)
     {
       sysExPacketLength_ = 0;
@@ -293,6 +291,8 @@ private:
   };
 
   EspBle &ble_;
+  // The BLE MIDI I/O characteristic this device registered.
+  EspBleGattCharacteristic io_;
   EspBleListenerId writtenListener_ = EspBleInvalidListenerId;
   EspBleListenerId subscriptionListener_ = EspBleInvalidListenerId;
   EspBleListenerId sentListener_ = EspBleInvalidListenerId;

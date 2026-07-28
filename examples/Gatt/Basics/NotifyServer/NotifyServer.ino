@@ -8,6 +8,9 @@ static constexpr const char *SERVICE_UUID = "71756360-5fa4-43bc-9003-6e6f7469667
 static constexpr const char *CHARACTERISTIC_UUID = "71756361-5fa4-43bc-9003-6e6f74696679";
 
 EspBle ble;
+// en: Handle of the registered characteristic; every later operation uses it.
+// ja: 登録したCharacteristicのハンドル。以降の操作はすべてこれで指定する。
+EspBleGattCharacteristic counterCharacteristic;
 bool hasNotificationSubscriber = false; // en: is there a CCCD subscriber / ja: CCCD購読者がいるか
 uint32_t lastNotification = 0;          // en: last send time / ja: 前回送信時刻
 uint32_t counter = 0;                   // en: counter value to send / ja: 送信するカウンタ値
@@ -20,12 +23,15 @@ void setup()
   EspBleGattCharacteristicConfig counterConfig;
   counterConfig.readable = true;
   counterConfig.notifiable = true; // en: add Notify property and CCCD / ja: Notify propertyとCCCDを付与
-  gattServer.addService(SERVICE_UUID);
-  gattServer.addCharacteristic(SERVICE_UUID, CHARACTERISTIC_UUID, counterConfig);
+  const EspBleGattService service = gattServer.addService(SERVICE_UUID);
+  counterCharacteristic = gattServer.addCharacteristic(service, CHARACTERISTIC_UUID, counterConfig);
 
   // en: Track CCCD subscription state so we notify only while a subscriber exists.
   // ja: CCCDの購読状態変化。購読者がいる間だけ notify するために追跡する。
   gattServer.onSubscriptionChanged([](const EspBleGattSubscription &subscription) {
+    // en: One callback serves every characteristic, so check which one it was.
+    // ja: callbackは全Characteristic共通なので、どれの購読かを確認する。
+    if (subscription.characteristic != counterCharacteristic) return;
     hasNotificationSubscriber = subscription.notifications;
   });
   // en: Asynchronous send result.
@@ -63,7 +69,7 @@ void loop()
     const String value = String(++counter);
     // en: notify() is accepted synchronously and sent to all subscribed connections.
     // ja: notify() は同期的に受理され、購読中の全接続へ送信される。
-    ble.gattServer().notify(SERVICE_UUID, CHARACTERISTIC_UUID, value);
+    ble.gattServer().notify(counterCharacteristic, value);
   }
   delay(1);
 }
