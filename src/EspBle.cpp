@@ -871,6 +871,12 @@ struct EspBleImpl
     {
       impl->removeServerConnection(event->disconnect.conn.conn_handle);
     }
+    else if (event->type == BLE_GAP_EVENT_PASSKEY_ACTION)
+    {
+      // Pairing input is answered from the connection's own callback: the
+      // global listener is not guaranteed to see this event.
+      impl->handlePasskeyAction(event->passkey.conn_handle, event->passkey.params);
+    }
     return 0;
   }
 
@@ -885,15 +891,16 @@ struct EspBleImpl
     }
     else if (event->type == BLE_GAP_EVENT_ENC_CHANGE)
     {
+      // Peripheral connections only: a central one is reported a second time by
+      // the wrapper's security callback, and two events would run the
+      // application's post-pairing work (discovery, and so its cached
+      // characteristics) twice.
       ble_gap_conn_desc description{};
-      if (ble_gap_conn_find(event->enc_change.conn_handle, &description) == 0)
+      if (impl->isPeripheralConnection(event->enc_change.conn_handle) &&
+          ble_gap_conn_find(event->enc_change.conn_handle, &description) == 0)
       {
         impl->updateSecurity(event->enc_change.conn_handle, description.sec_state);
       }
-    }
-    else if (event->type == BLE_GAP_EVENT_PASSKEY_ACTION)
-    {
-      impl->handlePasskeyAction(event->passkey.conn_handle, event->passkey.params);
     }
     else if (event->type == BLE_GAP_EVENT_SUBSCRIBE)
     {

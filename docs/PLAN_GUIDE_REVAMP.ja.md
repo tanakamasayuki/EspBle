@@ -393,7 +393,7 @@ EspBleのHID Deviceは、同梱wrapperを介さず `ble_gatt_svc_def` / `ble_gat
 | 1 | **S0** | #8 接続単位indication | **完了** |
 | 2 | **S1** | #2 汎用GATT Client（discovery・read/write・descriptor・購読・notification受信） | **完了** |
 | 3 | **S2** | **GATT Server自前化**（#1）。ここでPeripheral側のGAPイベントを完全に引き取る。S3の前提 | **完了** |
-| 4 | **S3** | **Advertising自前化**（#3・#5） | **進行中**（下記の残課題あり） |
+| 4 | **S3** | **Advertising自前化**（#3・#5） | **完了** |
 | 5 | **S4** | **Scan自前化**（#4） | 未着手 |
 | 6 | **S5** | **接続・Security・init/address/MTU自前化**（#7、SMブロッキング解消） | 未着手 |
 | 7 | **S6** | HID Hostを自前Client経路へ移行、wrapperの `#include` を全削除、`library.properties`・ドキュメント更新 | 未着手 |
@@ -468,7 +468,9 @@ EspBleのHID Deviceは、同梱wrapperを介さず `ble_gatt_svc_def` / `ble_gat
 
 判明した挙動: 非接続広告のPDU種別は **`disc_mode` で決まる**。`BLE_GAP_DISC_MODE_GEN` だとscannable（ADV_SCAN_IND）になり、scan responseを持たないビーコンでも走査要求を受けてしまう。scan responseの中身が無いときは `BLE_GAP_DISC_MODE_NON` を選ぶ。
 
-**残課題（3件）**: `security_passkey` / `numeric_comparison` / `runtime_passkey` が失敗する。中央側は接続まで進むが、周辺側でpasskeyの表示・入力・数値比較が発火しない。`security_bond`（MITM無しのJust Works）は通るので、暗号化と結合そのものは動いている。SMのIO交換の経路が残りの穴。
+判明した挙動その2: **`ble_gap_event_listener_register()` のグローバルリスナは `BLE_GAP_EVENT_PASSKEY_ACTION` を受け取らない**。`ENC_CHANGE` や `MTU` は届くのでリスナ側だけで足りると考えていたが、passkeyの表示・入力・数値比較はその接続のコールバック（＝自前広告に渡した `advertisingGapEvent`）にしか来ない。実機のダンプで、リスナ側に一度も届かないこと、接続コールバック側には `action=3`（DISP）が届くことを確認して切り分けた。
+
+判明した挙動その3: **Centralの `ENC_CHANGE` をグローバルリスナで拾うと、セキュリティ確立イベントが二重に上がる**。wrapperのセキュリティコールバックが同じことを報告するためで、アプリがそこでdiscoveryを走らせていると2回走り、HID Hostがキャッシュしていた `BLERemoteCharacteristic` が入れ替わってLED（Output Report）書き込みが失敗した。リスナ側の `ENC_CHANGE` はPeripheral接続に限定し、Central接続はwrapperの経路に任せる。Peripheral側を自前化したときは「引き取り漏れ」だけでなく「二重計上」も出る、という形の失敗。
 
 ### Phase 5 — GATT examples のコード＋README充実
 
