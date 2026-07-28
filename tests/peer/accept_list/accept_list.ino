@@ -27,6 +27,7 @@ void setup()
     if (connectRequested || !scanResult.advertisesService(SERVICE_UUID)) return;
     connectRequested = true;
     ble.scanner().stop();
+    Serial.printf("TARGET_FOUND %s\n", scanResult.address.c_str());
     if (!ble.connect(scanResult, CONNECT_TIMEOUT_MS))
     {
       Serial.printf("CONNECT_REJECTED %s\n", ble.lastErrorName());

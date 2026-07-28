@@ -123,10 +123,10 @@ Phase 3が2章まで、Phase 6が3章と4章を担当する。
 
 | # | 項目 | 状況 |
 |---|---|---|
-| 1-1 | Scan Responseに任意ペイロードを載せるAPI | **完了（実機未検証）** |
+| 1-1 | Scan Responseに任意ペイロードを載せるAPI | **完了（Peer検証済み）** |
 | 1-2 | ~~Directed Advertising~~ → 0-1により見送り。FEATURE_MATRIXへ❌として記録済み | **完了** |
-| 1-3 | Filter Accept ListによるPeripheral側の接続制限 | **完了（実機未検証）** |
-| 1-4 | `preferredMtu` 既定値を247へ | **完了（実機未検証）** |
+| 1-3 | Filter Accept ListによるPeripheral側の接続制限 | **完了（Peer検証済み）** |
+| 1-4 | `preferredMtu` 既定値を247へ | **完了（Peer検証済み）** |
 | 1-5 | Advertisingの未公開オプション公開 | **一部完了（Tx Powerのみ）** |
 
 #### 実装したAPI
@@ -174,12 +174,21 @@ Flagsは自動付与（advertising payloadのみ、scan responseには不可）�
 
 #### テスト
 
-| テスト | 内容 | 状況 |
-|---|---|---|
-| `tests/peer/scan_response` | passive scanではname/manufacturer dataが見えず、active scanでのみ見えることを検証 | 追加済み・**未実行** |
-| `tests/peer/accept_list` | 制限policy＋到達不能アドレスのみのaccept listでは接続が成立せず、policyをAnyに戻すと成立することを検証 | 追加済み・**未実行** |
+実機（ESP32-S3 × 2、Arduino-ESP32 3.3.11）で実行済み。
 
-既存の `tests/peer/mtu` は `previous=23` を期待するが、これは交換前の初期MTU（仕様上常に23）であり既定値変更の影響を受けない。
+| テスト | 内容 | 結果 |
+|---|---|---|
+| `tests/peer/scan_response` | passive scanではname/manufacturer dataが見えず、active scanでのみ見えることを検証 | **PASS** |
+| `tests/peer/accept_list` | 制限policy＋到達不能アドレスのみのaccept listでは接続が成立せず、policyをAnyに戻すと成立することを検証 | **PASS** |
+
+回帰確認（いずれもPASS）: `mtu` / `advertise_payload` / `advertise_scan` / `service_data` / `connect_disconnect` / `gatt_read_write` / `notify_indicate` / `hid_keyboard_nkro` / `beacon` / `ibeacon`。
+`tests/peer/mtu` が期待する `previous=23` は交換前の初期MTU（仕様上常に23）であり、既定値変更の影響を受けないことを実機でも確認した。
+
+#### 副産物として見つかった既存の不具合
+
+`accept_list` テスト作成中に、**`connect()` の timeout 引数が filtered peer に対して効かない**ことが判明した
+（4000 ms 指定に対し失敗検出まで実測約31秒＝backend既定の30秒）。Phase 1の変更とは無関係な既存の問題で、
+これまでどのテストも通っていなかった経路。[DESIGN_DEBT.ja.md](DESIGN_DEBT.ja.md) の「小粒」へ項目4として追加した。
 
 ### Phase 2 — GAP examples（B + Phase 1の新API分）
 
