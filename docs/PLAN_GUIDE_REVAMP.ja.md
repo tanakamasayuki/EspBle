@@ -261,7 +261,7 @@ Phase 1で送信側に `setAppearance()` / `setTxPowerIncluded()` を追加し�
 
 - `EspBleScanResult` に `appearance` / `hasAppearance()`、`txPowerLevel` / `hasTxPowerLevel()` を追加（0 dBmが正当な値のため存在フラグを別に持つ）
 - `Info/ScanDump` が両方を表示し、Tx PowerとRSSIの差（経路損失）も出す
-- 実機確認: `appearance=0x0341 txpower=9dBm loss=23dB`（`Gap/ScanResponse` が設定した値と一致）。`scan_response` / `service_data` Peerも再実行してPASS
+- `scan_response` Peerを拡張して自動テスト化。Peripheralが両フィールドをadvertising payloadへ載せ、Passive Scanでも届くこと（nameとManufacturer Dataは届かないこと）、Active Scanでも同値であることを判定する。Tx Powerの値はcontrollerが埋めるため範囲と両scan modeでの一致を見る。実機PASS（`appearance=0x0341 txpower=9`）
 
 **Service Dataの複数ブロック対応**も同じ理由で入れた。当初はRAMを理由に先頭1ブロックのみとしていたが、実測するとScan Result 16件ぶんで増加は約1.1 KB（空Stringはヒープを確保しない）で、ESP32-S3の空き約298 KBに対して無視できる規模だった。
 

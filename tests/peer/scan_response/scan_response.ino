@@ -19,10 +19,12 @@ static void reportResult(const EspBleScanResult &scanResult)
     snprintf(hex + i * 2, 3, "%02x", static_cast<uint8_t>(data[i]));
   }
   Serial.printf(
-    "RESULT mode=%s name=\"%s\" manufacturer=%s\n",
+    "RESULT mode=%s name=\"%s\" manufacturer=%s appearance=0x%04x txpower=%s\n",
     mode,
     scanResult.name.c_str(),
-    data.isEmpty() ? "-" : hex);
+    data.isEmpty() ? "-" : hex,
+    scanResult.appearance,
+    scanResult.hasTxPowerLevel() ? String(scanResult.txPowerLevel).c_str() : "-");
 }
 
 static void startScan(bool active, const char *label)

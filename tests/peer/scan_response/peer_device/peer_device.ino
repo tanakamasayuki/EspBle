@@ -1,9 +1,11 @@
 // Advertiser for the scan_response peer test: split the payload across the
-// advertising data (service UUID only) and the scan response (name +
-// manufacturer data), so a passive scanner sees only the former.
+// advertising data (service UUID, appearance, Tx Power) and the scan response
+// (name + manufacturer data), so a passive scanner sees only the former.
 #include <EspBle.h>
 
 static constexpr const char *SERVICE_UUID = "FEAC";
+// Generic Thermometer; the value only has to be recognisable in the test.
+static constexpr uint16_t APPEARANCE_THERMOMETER = 0x0341;
 
 EspBle ble;
 
@@ -21,9 +23,11 @@ void setup()
   }
 
   auto &advertising = ble.advertising();
-  // Advertising payload: the service UUID and nothing else. No name here, so a
-  // passive scanner cannot learn it.
+  // Advertising payload: the service UUID, appearance and Tx Power. No name
+  // here, so a passive scanner cannot learn it, but it does see these.
   advertising.addServiceUuid(SERVICE_UUID);
+  advertising.data().setAppearance(APPEARANCE_THERMOMETER);
+  advertising.data().setTxPowerIncluded(true);
 
   // Scan response payload: only an active scanner requests and receives this.
   const uint8_t manufacturerData[] = {0xFF, 0xFF, 0x51, 0x52};
