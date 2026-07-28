@@ -951,12 +951,10 @@ public:
   bool notify(EspBleGattCharacteristic characteristic, const String &value);
   bool indicate(EspBleGattCharacteristic characteristic, const uint8_t *data, size_t length);
   bool indicate(EspBleGattCharacteristic characteristic, const String &value);
-  // Connection-scoped send. notify(connectionId, …) targets exactly one
-  // connection (per-connection MTU applies). indicate(connectionId, …) is
-  // accepted for symmetry but is delivered through the confirmed broadcast
-  // path because the bundled backend's indication confirmation is
-  // per-characteristic, not per-connection; with a single subscriber that is
-  // the requested connection, and the result reports connectionId regardless.
+  // Connection-scoped send: both target exactly one connection, and the
+  // per-connection MTU applies. indicate(connectionId, …) waits for that
+  // peer's confirmation before reporting to onSent(), so with several
+  // subscribers each connection is confirmed on its own.
   bool notify(
     EspBleConnectionId connectionId,
     EspBleGattCharacteristic characteristic,

@@ -84,6 +84,13 @@ bool isValidAddressType(EspBleAddressType type)
 }
 } // namespace
 
+// Complete a connection-scoped indication whose confirmation just arrived.
+// Defined once EspBleGattServerImpl is complete; declared here because the GAP
+// event listener above needs it.
+void espBleConfirmIndication(
+  EspBle *owner, uint16_t connectionHandle, uint16_t attributeHandle, int status);
+
+
 // Resolve a remote characteristic by its attribute handle across all discovered
 // services on a client. Used by the handle-based GATT client operations to
 // target one of several characteristics that share a UUID. Returns nullptr if no
@@ -323,6 +330,13 @@ struct EspBleImpl
     delete securityBackend;
   }
 
+  // EspBleImpl is a friend of EspBle and EspBleGattServer, so it can hand the
+  // server's implementation to the free functions in this file.
+  static EspBleGattServerImpl *serverImplOf(EspBle *owner)
+  {
+    return owner->gattServer_.impl_;
+  }
+
   static bool isEvictableEvent(EventType type)
   {
     return type == EventType::Notification;
@@ -529,6 +543,19 @@ struct EspBleImpl
       // Fires on both roles when the ATT MTU is exchanged, letting a central
       // track the post-connect MTU the BLEClient callbacks do not surface.
       impl->updateMtu(event->mtu.conn_handle, event->mtu.value);
+    }
+    else if (event->type == BLE_GAP_EVENT_NOTIFY_TX)
+    {
+      // Confirmation for a connection-scoped indication sent with
+      // ble_gatts_indicate_custom(). status is 0 once the peer confirms, and
+      // BLE_HS_EDONE marks the intermediate "sent" report, which is not the
+      // confirmation and must not complete the wait.
+      if (event->notify_tx.indication && event->notify_tx.status != BLE_HS_EDONE)
+      {
+        espBleConfirmIndication(
+          impl->owner, event->notify_tx.conn_handle, event->notify_tx.attr_handle,
+          event->notify_tx.status);
+      }
     }
     return 0;
   }
@@ -1913,11 +1940,14 @@ struct EspBleGattServerImpl
       impl->sendStatusReceived = false;
     }
 
-    if (targetConnectionId != 0 && !result.indication)
+    if (targetConnectionId != 0)
     {
-      // Connection-scoped notify. The bundled BLECharacteristic::notify()
-      // broadcasts to every subscriber, so target a single connection through
-      // the low-level primitive (fire-and-forget, no confirmation semaphore).
+      // Connection-scoped send. The bundled BLECharacteristic::notify()
+      // broadcasts to every subscriber and confirms indications per
+      // characteristic, so target a single connection through the low-level
+      // primitives instead. A notification is fire-and-forget; an indication
+      // waits for the peer's confirmation, which the global GAP listener
+      // reports as BLE_GAP_EVENT_NOTIFY_TX for this connection and attribute.
       uint16_t connectionHandle = 0xffff;
       bool connected = false;
       EspBle *owner = impl->server->owner_;
@@ -1956,7 +1986,7 @@ struct EspBleGattServerImpl
           result.error = EspBleError::ResourceExhausted;
           result.detail = "failed to allocate notify buffer";
         }
-        else
+        else if (!result.indication)
         {
           const int backendCode =
             ble_gatts_notify_custom(connectionHandle, backend->getHandle(), value);
@@ -1968,12 +1998,62 @@ struct EspBleGattServerImpl
               String("connection-scoped notify failed with backend code ") + backendCode;
           }
         }
+        else
+        {
+          {
+            std::lock_guard<std::mutex> lock(impl->mutex);
+            impl->indicateConnectionHandle = connectionHandle;
+            impl->indicateAttributeHandle = backend->getHandle();
+            impl->indicateConfirmed = false;
+            impl->indicateStatus = 0;
+          }
+          const int backendCode =
+            ble_gatts_indicate_custom(connectionHandle, backend->getHandle(), value);
+          if (backendCode != 0)
+          {
+            result.success = false;
+            result.error = EspBleError::BackendFailure;
+            result.detail =
+              String("connection-scoped indicate failed with backend code ") + backendCode;
+          }
+          else
+          {
+            // The peer has 30 s to confirm per the spec; give up a little after
+            // that rather than holding the send queue forever.
+            const uint32_t deadline = millis() + 31000;
+            bool confirmed = false;
+            int status = 0;
+            while (millis() < deadline)
+            {
+              {
+                std::lock_guard<std::mutex> lock(impl->mutex);
+                confirmed = impl->indicateConfirmed;
+                status = impl->indicateStatus;
+              }
+              if (confirmed) break;
+              delay(1);
+            }
+            result.success = confirmed && status == 0;
+            if (!result.success)
+            {
+              result.error = confirmed ? EspBleError::BackendFailure : EspBleError::Timeout;
+              result.detail = confirmed
+                ? String("indication confirmation failed with status ") + status
+                : String("indication confirmation timed out");
+            }
+          }
+          {
+            std::lock_guard<std::mutex> lock(impl->mutex);
+            impl->indicateConnectionHandle = 0xffff;
+            impl->indicateAttributeHandle = 0;
+          }
+        }
       }
     }
     else
     {
-      // Broadcast notify, or indicate (targeted indicate delegates here because
-      // the backend's indication confirmation is per-characteristic).
+      // Broadcast notify or indicate: every subscriber receives it, and the
+      // backend confirms an indication per characteristic.
       backend->setValue(
         reinterpret_cast<const uint8_t *>(result.value.c_str()),
         result.value.length());
@@ -2052,6 +2132,12 @@ struct EspBleGattServerImpl
   TaskHandle_t sendTask = nullptr;
   BLECharacteristic *sendBackend = nullptr;
   EspBleGattCharacteristic sendCharacteristic;
+  // Connection-scoped indication in flight: the confirmation arrives as a
+  // BLE_GAP_EVENT_NOTIFY_TX on the global GAP listener, which matches on these.
+  uint16_t indicateConnectionHandle = 0xffff;
+  uint16_t indicateAttributeHandle = 0;
+  bool indicateConfirmed = false;
+  int indicateStatus = 0;
   String sendServiceUuid;
   String sendCharacteristicUuid;
   String sendValue;
@@ -2080,6 +2166,22 @@ struct EspBleGattServerImpl
   size_t sendQueueCount = 0;
   EspBleConnectionId sendConnectionId = 0;
 };
+
+void espBleConfirmIndication(
+  EspBle *owner, uint16_t connectionHandle, uint16_t attributeHandle, int status)
+{
+  EspBleGattServerImpl *server = EspBleImpl::serverImplOf(owner);
+  if (server == nullptr) return;
+  std::lock_guard<std::mutex> lock(server->mutex);
+  if (server->indicateAttributeHandle == 0 ||
+      server->indicateConnectionHandle != connectionHandle ||
+      server->indicateAttributeHandle != attributeHandle)
+  {
+    return;
+  }
+  server->indicateStatus = status;
+  server->indicateConfirmed = true;
+}
 
 struct EspBleHidDeviceManagerImpl
 {
