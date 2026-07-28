@@ -346,13 +346,25 @@ EspBleのHID Deviceは、同梱wrapperを介さず `ble_gatt_svc_def` / `ble_gat
 
 **#9は重要**: [DESIGN_DEBT.ja.md](DESIGN_DEBT.ja.md) で「対象外（backend由来・修正不能）」としていたヒープリークは、#2を実装すると副次的に解消する。
 
-#### 実施順
+#### 依存関係（着手して判明）
 
-1. **#2 ＋ #9**（自前discovery）— 2つの記録済み問題を同時に解決し、読み取り主体でリスクが低い。既存のwrapper経路は残し、wrapperが隠す属性のために生パスを足す形から始める
-2. **#8**（接続単位indication）— 小さく、`EspBleGattSendResult` の意味が正確になる
-3. **#3 ＋ #5**（自前adv start）— Directed Advertisingとチャネルマップ
-4. **#1**（自前GATT Server）— 最大。汎用ServerをHIDと同じ方式へ寄せる
-5. **#7**（真のconnect cancel）— 放棄方式で実害は消えているため優先度は最後
+**#3は#1を前提とする。** NimBLEでは、`ble_gap_adv_start()` に渡したコールバックが、その広告から成立した接続の**すべてのGAPイベント**（切断・購読・MTU・indication確認）を受け取る。自前で広告を開始すると、wrapperの`BLEServer`にはイベントが一切届かず、GATT Serverが機能しなくなる。
+
+- `BLEServer::handleGATTServerEvent(ble_gap_event*, void*)` は **private** で、自前のコールバックから転送できない
+- `BLEDevice::setCustomGapHandler()` は存在するが、**NimBLEパスでは一度も呼ばれない**（Bluedroidパスの`gapEventHandler`内でのみ使用）。設定できるだけの死んだAPI
+
+したがって「自前で広告を出す」には「自前でGATT Serverのイベントを処理する」ことがセットで必要になる。Directed Advertisingの用途（bonded peerへの高速再接続）は接続を伴うため、#1なしの#3には実用価値がない。
+
+#### 実施順（依存関係を反映）
+
+| 順 | 項目 | 理由 |
+|---|---|---|
+| 1 | **#8**（接続単位indication） | **完了**。小さく独立 |
+| 2 | **#2 ＋ #9**（自前discovery） | Client側で完結し、Server側の作業と独立。記録済みの2問題を同時に解決 |
+| 3 | **#1**（自前GATT Server） | 最大。#3の前提でもある |
+| 4 | **#3 ＋ #5**（自前adv start） | #1完了後に初めて成立 |
+| 5 | **#4**（自前scan） | Central側で独立。#2の自前discoveryと基盤を共有できる |
+| 6 | **#7**（真のconnect cancel） | 放棄方式で実害が消えているため最後 |
 
 #6のみ、ビルド構成に阻まれて手段がない。
 
