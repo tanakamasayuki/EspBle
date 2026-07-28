@@ -360,13 +360,39 @@ EspBleのHID Deviceは、同梱wrapperを介さず `ble_gatt_svc_def` / `ble_gat
 | 順 | 項目 | 理由 |
 |---|---|---|
 | 1 | **#8**（接続単位indication） | **完了**。小さく独立 |
-| 2 | **#2 ＋ #9**（自前discovery） | Client側で完結し、Server側の作業と独立。記録済みの2問題を同時に解決 |
+| 2 | **#2**（自前discovery。#9はヒープ実測待ち） | **完了**。Client側で完結し、Server側の作業と独立。記録済みの2問題を同時に解決 |
 | 3 | **#1**（自前GATT Server） | 最大。#3の前提でもある |
 | 4 | **#3 ＋ #5**（自前adv start） | #1完了後に初めて成立 |
 | 5 | **#4**（自前scan） | Central側で独立。#2の自前discoveryと基盤を共有できる |
 | 6 | **#7**（真のconnect cancel） | 放棄方式で実害が消えているため最後 |
 
 #6のみ、ビルド構成に阻まれて手段がない。
+
+#### #2 の実施結果（#9はヒープ実測待ち）
+
+**GATT Clientの汎用操作からwrapperを完全に外した。** `BLEClient` は接続の生存確認にしか使っていない。
+
+| 段階 | 実装 |
+|---|---|
+| discovery | `ble_gattc_disc_all_svcs()` / `disc_all_chrs()` / `disc_all_dscs()` を自前で走らせ、Service・Characteristic・Descriptorを自前のスナップショットへ記録する |
+| 対象の解決 | スナップショットをハンドルで、またはUUID対で引く。UUID指定はcallerの表記（`"2a19"` など）をそのまま返し、ハンドル指定のときだけdiscoveryが記録した128bit形を返す |
+| read / write | `ble_gattc_read()` / `write_flat()` / `write_no_rsp_flat()` |
+| descriptor | 同じ関数を、所属Characteristicの値ハンドルで特定したdescriptorハンドルに対して呼ぶ |
+| subscribe | CCCDへの書き込み（Notification `0x0001` / Indication `0x0002` / 解除 `0x0000`） |
+| notification受信 | グローバルGAPリスナの `BLE_GAP_EVENT_NOTIFY_RX`。購読テーブルを (接続ハンドル, 値ハンドル) で引くので、UUIDが重複していても取り違えない |
+
+得られたもの:
+
+- **同一UUIDのServiceを複数持つ相手と完全に通信できる**（read / write / subscribe / notify すべて）
+- **#9のリーク経路を汎用Clientから外した**。wrapperの `BLEClient::getServices()` は毎回 `clearServices()` してから全discoveryをやり直す作りで、UUIDが重複したServiceの2つ目以降は確保したまま捨てていた。この関数を呼ばなくなったため、汎用Client操作ではwrapper側の確保が一切起きない。ただし[upstream報告案](UPSTREAM_REQUEST_ARDUINO_ESP32_GATTC_DISCOVERY_LEAK.ja.md)は原因を「`BLEClient`が所有するC++オブジェクトの外側」と切り分けており、**自前discoveryでも同じホスト内部確保を踏む可能性が残る。ヒープ実測で確認するまで解消とは書かない**（HID Host / MIDI Hostは自前経路のため未変更）
+- Notificationの配送経路が1本になった（wrapperのcharacteristic callbackを経由しない）
+
+副作用として決めたこと:
+
+- **再接続時の購読自動復元は、UUIDが一意なCharacteristicに限る。** 復元はpeerアドレスとUUIDで引くため、同じUUIDが複数あるとどれを購読していたか言えない。該当時は記録しない
+- 購読テーブルは8件（`ClientSubscriptionCapacity`）。溢れたら `ResourceExhausted` で失敗させる
+
+実機確認（2ボード）: `peer/duplicate_uuid` を拡張し、同一UUIDの2つのCharacteristicへ**ハンドル指定でread・subscribeし、それぞれのNotificationを取り違えずに受信**するところまで検証した。HID Host / MIDI Host は自前のdiscovery経路を持つため、この変更の対象外。
 
 ### Phase 5 — GATT examples のコード＋README充実
 

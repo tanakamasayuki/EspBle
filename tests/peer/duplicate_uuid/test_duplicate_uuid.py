@@ -1,6 +1,8 @@
 import re
 
 READ = re.compile(rb"READ handle=(\d+) value=(\S+)")
+SUBSCRIBED = re.compile(rb"SUBSCRIBED handle=(\d+) ok=(\d)")
+NOTIFY = re.compile(rb"NOTIFY handle=(\d+) value=(\S+)")
 HANDLES = re.compile(rb"HANDLES first=(\d+) duplicate=(\d+) other=(\d+)")
 
 
@@ -45,3 +47,20 @@ def test_duplicate_uuid_registration(dut, peers):
 
     assert len(set(handles)) == 2, f"attribute handles are not distinct: {handles}"
     assert sorted(values) == ["first", "other"], f"unexpected values {values}"
+
+    # Both are subscribable by handle. The second one's CCCD is written over raw
+    # ATT, and its notifications arrive through the GAP event listener.
+    for _ in range(2):
+        match = dut.expect(SUBSCRIBED, timeout=15)
+        assert match.group(2) == b"1", f"subscribe failed for handle {match.group(1)}"
+    dut.expect_exact("SUBSCRIBE_DONE", timeout=10)
+
+    # One notification at a time, so each arrival is attributable to a handle.
+    for command, marker, payload in (("1", "first", "ping-first"), ("2", "other", "ping-other")):
+        peripheral.write(command)
+        peripheral.expect_exact(f"NOTIFIED {marker}=1", timeout=10)
+        match = dut.expect(NOTIFY, timeout=15)
+        assert int(match.group(1)) == handles[values.index(marker)], (
+            f"{payload} arrived on handle {match.group(1)}"
+        )
+        assert match.group(2).decode() == payload

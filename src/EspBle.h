@@ -451,6 +451,10 @@ struct EspBleGattDescriptorInfo
   String characteristicUuid;
   String descriptorUuid;
   uint16_t handle = 0;
+  // Value handle of the characteristic this descriptor belongs to. The UUID pair
+  // above cannot identify it when a peer repeats a UUID, so the handle is what
+  // ties a CCCD to one specific characteristic.
+  uint16_t characteristicHandle = 0;
 };
 
 // Opaque references to entries registered on the local GATT server. The add*
@@ -1359,6 +1363,11 @@ public:
   static constexpr size_t MaxDiscoveredGattServices = 16;
   static constexpr size_t MaxDiscoveredGattCharacteristics = 48;
   static constexpr size_t MaxDiscoveredGattDescriptors = 48;
+  // Client Characteristic Configuration Descriptor, the descriptor a client
+  // writes to turn Notification or Indication on. Useful when walking
+  // discoveredDescriptors() to find what a characteristic can be subscribed to.
+  static constexpr const char *ClientCharacteristicConfigurationUuid =
+    "00002902-0000-1000-8000-00805f9b34fb";
   using ConnectionCallback = std::function<void(const EspBleConnection &connection)>;
   using ConnectionFailureCallback = std::function<void(const EspBleConnectionFailure &failure)>;
   using MtuChangedCallback = std::function<void(const EspBleMtuChanged &event)>;

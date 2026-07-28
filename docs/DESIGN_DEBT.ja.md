@@ -107,7 +107,7 @@ HID Host の `discover()` が汎用queueエンジンに乗らず、別経路に�
 - SMコールバック（passkey要求 / Numeric Comparison確認）が同期でhost taskを最大30秒block（NimBLEの `onPassKeyRequest()`/`onConfirmPIN()` がinline戻り必須）。
 - passkey表示 / Numeric Comparisonの接続attributionが「最初の未暗号化接続」の推定（backend callbackにconn handle無し、DECISIONS Security#8）。
 - Descriptor Write eventに接続ID無し（backendが非公開）。
-- GATT client discoveryのheap leak（約2.6 KB/discovery）。
+- GATT client discoveryのheap leak（約2.6 KB/discovery）。ただし**汎用GATT Clientはこの経路を通らなくなった**: discoveryもread/write/購読もNimBLEホストAPIへ直接発行し、wrapperの `BLEClient` のremoteオブジェクトを作らない（[PLAN_GUIDE_REVAMP.ja.md](PLAN_GUIDE_REVAMP.ja.md) Phase 4b #2）。残る利用箇所はHID Host / MIDI Hostの自前discovery経路で、そこは未変更。
 - client側MTU変更callback無し（接続時snapshotのみ）。
 - Extended/Periodic Advertising、動的service追加、`connect()` のtimeout引数無視、最大3接続（同梱NimBLEビルド構成）。
 

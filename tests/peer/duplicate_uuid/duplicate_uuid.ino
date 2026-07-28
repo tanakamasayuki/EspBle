@@ -1,5 +1,6 @@
-// Central for the duplicate_uuid peer test: discover the peer's whole database
-// and read each characteristic that shares a UUID by its attribute handle.
+// Central for the duplicate_uuid peer test: discover the peer's whole database,
+// then read and subscribe to each characteristic that shares a UUID by its
+// attribute handle.
 #include <EspBle.h>
 
 static constexpr const char *SERVICE_UUID = "5266f727-49d7-4eaf-a6f1-647570736572";
@@ -11,12 +12,25 @@ EspBleConnectionId connectionId = 0;
 uint16_t targets[MaxTargets];
 size_t targetCount = 0;
 size_t readIndex = 0;
+size_t subscribeIndex = 0;
+
+static void subscribeNext()
+{
+  if (subscribeIndex >= targetCount)
+  {
+    Serial.println("SUBSCRIBE_DONE");
+    return;
+  }
+  ble.subscribe(connectionId, targets[subscribeIndex]);
+}
 
 static void readNext()
 {
   if (readIndex >= targetCount)
   {
     Serial.println("READ_DONE");
+    subscribeIndex = 0;
+    subscribeNext();
     return;
   }
   ble.readCharacteristic(connectionId, targets[readIndex]);
@@ -101,6 +115,21 @@ void setup()
       "READ handle=%u value=%s\n", result.handle, result.value.c_str());
     ++readIndex;
     readNext();
+  });
+
+  // The second characteristic's CCCD is written over raw ATT too, and its
+  // notifications arrive through the GAP event listener rather than the
+  // wrapper's callback.
+  ble.onSubscribed([](const EspBleGattResult &result) {
+    Serial.printf(
+      "SUBSCRIBED handle=%u ok=%u\n", result.handle, result.success ? 1 : 0);
+    ++subscribeIndex;
+    subscribeNext();
+  });
+
+  ble.onNotification([](const EspBleGattNotification &notification) {
+    Serial.printf(
+      "NOTIFY handle=%u value=%s\n", notification.handle, notification.value.c_str());
   });
 }
 

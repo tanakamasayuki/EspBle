@@ -31,6 +31,12 @@ void setup()
   // Same UUID in a different service: fine.
   otherServiceValue = gattServer.addCharacteristic(second, VALUE_UUID, config);
 
+  gattServer.onSubscriptionChanged([](const EspBleGattSubscription &subscription) {
+    Serial.printf(
+      "SUBSCRIPTION id=%u notify=%u\n",
+      subscription.characteristic.id, subscription.notifications ? 1 : 0);
+  });
+
   gattServer.setValue(firstValue, String("first"));
   gattServer.setValue(otherServiceValue, String("other"));
 
@@ -58,6 +64,20 @@ void loop()
     if (command == '?')
     {
       Serial.printf("ADVERTISING %u\n", ble.advertising().isAdvertising() ? 1 : 0);
+    }
+    // Notify one instance at a time: a send is asynchronous, so the central can
+    // only attribute a notification to a characteristic if they do not overlap.
+    else if (command == '1')
+    {
+      Serial.printf(
+        "NOTIFIED first=%u\n",
+        ble.gattServer().notify(firstValue, String("ping-first")) ? 1 : 0);
+    }
+    else if (command == '2')
+    {
+      Serial.printf(
+        "NOTIFIED other=%u\n",
+        ble.gattServer().notify(otherServiceValue, String("ping-other")) ? 1 : 0);
     }
     else if (command == 'h')
     {
