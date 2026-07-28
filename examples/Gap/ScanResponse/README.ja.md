@@ -42,7 +42,8 @@ scan responseに何か1つでも設定すると、この自動配置は解除さ
 
 ## 注意
 
-- **AppearanceとTx Powerは受信側のEspBleでは観測できません。** EspBleはスキャン結果へこの2つのAD type（0x19 / 0x0A）を展開せず、`EspBleScanResult` に対応するフィールドを持たないためです。載せる意味があるのは相手がスマホや汎用スキャナの場合で、appearanceはアイコン表示に、Tx PowerはRSSIと組み合わせた距離推定に使われます。
+- **Tx Powerの値はコントローラが埋めます。** sketchで指定するのは「載せるかどうか」だけで、実際の送信電力は無線側が書き込みます。受信側は `txPowerLevel` と `rssi` の差（経路損失）から距離を推定できます。
+- Appearanceはスマホ側でアイコン表示に使われます。受信側の `EspBleScanResult` からは `appearance` / `hasAppearance()` で読めます。
 - どちらの面も31byteを超えると `start()` が `InvalidArgument` で失敗し、**どのフィールドが入らなかったか**が `lastErrorDetail()` に出ます。
 
   ```

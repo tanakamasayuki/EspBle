@@ -16,8 +16,8 @@ EspUsbHost / EspUsbDeviceで扱っている機能のBLE版、およびBLEで一�
 | 機能 | 状況 | 備考 |
 |---|---|---|
 | Legacy Advertising | ✅ | name / Service UUID / Manufacturer Data / Service Data / Appearance / Tx Power、connectable/non-connectable、Advertising間隔制御 |
-| Scan Response payload | ✅ | `EspBleAdvertising::scanResponse()` がadvertising payloadと同じ builder を返し、31byteをもう1面使える。未設定かつscan response有効時はdevice nameを自動的にこちらへ配置（従来動作）。`scan_response` Peerで passive/active の差を検証予定 |
-| Scanning（active/passive、値型Scan Result） | ✅ | `Gap/Scan`、`Info/ScanDump` |
+| Scan Response payload | ✅ | `EspBleAdvertising::scanResponse()` がadvertising payloadと同じ builder を返し、31byteをもう1面使える。未設定かつscan response有効時はdevice nameを自動的にこちらへ配置。`scan_response` Peerで passive/active の差を検証済み |
+| Scanning（active/passive、値型Scan Result） | ✅ | `Gap/Scan`、`Info/ScanDump`。Scan Resultはaddress / addressType / rssi / connectable / scannable / name / serviceUuids / serviceData / manufacturerData / appearance / txPowerLevel を保持。Service Dataは先頭1ブロックのみ |
 | Central接続 / Peripheral接続受け入れ / 切断 | ✅ | Scan Result/address直接接続、Connection ID管理、複数同時接続（同時接続数は同梱NimBLE controllerの上限=esp32s3で3）、auto-reconnect（`setAutoReconnect`、既定off） |
 | GATT Server（独自Service・Characteristic・Descriptor） | ✅ | 任意UUID、permission、binary-safeな値、Descriptor Write event |
 | GATT Client（一覧/既知UUID Discovery・Read・Write） | ✅ | 接続ごとのdiscovery snapshot、Descriptor操作、Write Without Response、操作単位timeout、操作の自動キュー |
@@ -93,7 +93,7 @@ EspUsbHost / EspUsbDeviceで扱っている機能のBLE版、およびBLEで一�
 | Beacon（non-connectable broadcaster） | ✅ | `setConnectable(false)`＋`setScanResponseEnabled(false)`＋`setInterval()`。payloadは`setManufacturerData`等で構築。実機Peer検証済み |
 | iBeacon（Apple beacon layout） | ✅ | backend非依存codec `EspBleIBeacon.h`（`espBleEncodeIBeacon`/`espBleDecodeIBeacon`）。company ID 0x004C＋UUID＋major/minor＋measured power。unit test＋`ibeacon` Peerでbroadcast/decodeを検証済み |
 | Advertising Service Data（AD 0x16） | ✅ | `EspBleAdvertising::setServiceData(uuid, data, length)`送信、`EspBleScanResult::serviceData`/`serviceDataUuid`/`hasServiceData()`受信。`service_data` Peerで検証済み |
-| Filter Accept List（Peripheral側の接続制限） | ✅ | `EspBle::addToAcceptList()` ＋ `EspBleAdvertising::setFilterPolicy()`（Any / ScanRequest / Connection / Both）。コントローラが弾くのでアプリまで届かない。同梱wrapperのwhite list APIはリンク不能なため`ble_gap_wl_set()`を直接使用（[UPSTREAM_REQUEST_ARDUINO_ESP32_NIMBLE_WHITELIST.ja.md](UPSTREAM_REQUEST_ARDUINO_ESP32_NIMBLE_WHITELIST.ja.md)）。`accept_list` Peerで検証予定 |
+| Filter Accept List（Peripheral側の接続制限） | ✅ | `EspBle::addToAcceptList()` ＋ `EspBleAdvertising::setFilterPolicy()`（Any / ScanRequest / Connection / Both）。コントローラが弾くのでアプリまで届かない。同梱wrapperのwhite list APIはリンク不能なため`ble_gap_wl_set()`を直接使用（[UPSTREAM_REQUEST_ARDUINO_ESP32_NIMBLE_WHITELIST.ja.md](UPSTREAM_REQUEST_ARDUINO_ESP32_NIMBLE_WHITELIST.ja.md)）。`accept_list` Peerで検証済み |
 | Directed Advertising | ❌ | 同梱wrapperの`BLEAdvertising::start()`が`ble_gap_adv_start()`を`direct_addr = NULL`固定で呼ぶため到達不可。`ble_gap_adv_start()`直呼びはadvertising状態とGAPイベント配線の二重管理になるため見送り |
 | Extended Advertising / 複数Advertising Set | ❌ | 同梱NimBLEが`CONFIG_BT_NIMBLE_EXT_ADV`無効でビルドされており、Arduinoライブラリからは有効化不可 |
 | Periodic Advertising | ❌ | Extended Advertising（`CONFIG_BT_NIMBLE_EXT_ADV`）に依存するため同上で対応不可 |

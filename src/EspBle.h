@@ -110,17 +110,27 @@ struct EspBleScanResult
   bool connectable = false;
   bool scannable = false;
   String manufacturerData;
-  // First Service Data block, if any (AD type 0x16/0x20/0x21). Eddystone and
-  // most beacon formats carry their payload here; serviceDataUuid is the
-  // associated service UUID (e.g. "0xfeaa" for Eddystone).
+  // First Service Data block, if any (AD type 0x16/0x20/0x21). Most beacon
+  // formats carry their payload here; serviceDataUuid is the associated service
+  // UUID, reported in full 128-bit form even when advertised as a 16-bit value.
   String serviceData;
   String serviceDataUuid;
   String serviceUuids[MaxServiceUuids];
   size_t serviceUuidCount = 0;
+  // Appearance (AD type 0x19): the device category a peer advertises, which
+  // hosts use to pick an icon. 0 when the advertisement carries none.
+  uint16_t appearance = 0;
+  // Tx Power Level (AD type 0x0A) in dBm, as declared by the advertiser. Combine
+  // it with rssi to estimate distance: the larger the gap, the further away.
+  // Valid only when hasTxPowerLevel() is true, since 0 dBm is a legal value.
+  int8_t txPowerLevel = 0;
+  bool txPowerLevelPresent = false;
 
   bool hasName() const;
   bool hasManufacturerData() const;
   bool hasServiceData() const;
+  bool hasAppearance() const;
+  bool hasTxPowerLevel() const;
   bool advertisesService(const char *uuid) const;
 };
 

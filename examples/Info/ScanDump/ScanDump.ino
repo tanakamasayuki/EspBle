@@ -94,6 +94,22 @@ void setup()
     {
       Serial.printf(" name=\"%s\"", scanResult.name.c_str());
     }
+    if (scanResult.hasAppearance())
+    {
+      // en: Device category the peer declares; hosts map it to an icon.
+      // ja: 相手が申告する機器種別。ホスト側はアイコンに対応づける。
+      Serial.printf(" appearance=0x%04x", scanResult.appearance);
+    }
+    if (scanResult.hasTxPowerLevel())
+    {
+      // en: Declared transmit power. rssi minus this is the path loss, which is
+      //     the basis for any distance estimate.
+      // ja: 申告された送信電力。rssiとの差が経路損失で、距離推定の基礎になる。
+      Serial.printf(
+        " txpower=%ddBm loss=%ddB",
+        static_cast<int>(scanResult.txPowerLevel),
+        static_cast<int>(scanResult.txPowerLevel) - scanResult.rssi);
+    }
     for (size_t i = 0; i < scanResult.serviceUuidCount; ++i)
     {
       Serial.printf(" uuid=%s", scanResult.serviceUuids[i].c_str());

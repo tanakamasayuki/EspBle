@@ -3318,9 +3318,19 @@ struct EspBleScannerImpl
       }
       if (device.haveServiceData())
       {
-        // The first service-data block (Eddystone and most beacons use one).
+        // The first service-data block (most beacon formats use exactly one).
         result.serviceData = device.getServiceData();
         result.serviceDataUuid = device.getServiceDataUUID().toString();
+      }
+      if (device.haveAppearance())
+      {
+        result.appearance = device.getAppearance();
+      }
+      if (device.haveTXPower())
+      {
+        // 0 dBm is a legal level, so presence needs its own flag.
+        result.txPowerLevel = device.getTXPower();
+        result.txPowerLevelPresent = true;
       }
 
       const int serviceCount = device.getServiceUUIDCount();
@@ -3374,6 +3384,16 @@ bool EspBleScanResult::hasManufacturerData() const
 bool EspBleScanResult::hasServiceData() const
 {
   return !serviceData.isEmpty();
+}
+
+bool EspBleScanResult::hasAppearance() const
+{
+  return appearance != 0;
+}
+
+bool EspBleScanResult::hasTxPowerLevel() const
+{
+  return txPowerLevelPresent;
 }
 
 bool EspBleScanResult::advertisesService(const char *uuid) const

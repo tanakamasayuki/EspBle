@@ -254,7 +254,20 @@ ScanDumpを受信側に置き、2台目で各exampleを動かして確認した�
 - **3章「GATT編」** — 構造・操作・時系列図までの概念のみ。Phase 4のAPI再設計を経てPhase 6で本格化する
 - **4章「UUIDを理解する」** — 既存の解説を再構成して流用
 
-方針として、**コードはexampleへ、概念はガイドへ**を徹底した。ガイド内のコードは `ble.update()` を呼ぶloopの3行だけで、これは大原則の説明に不可欠なため残している。
+#### 執筆中に見つかったAPIの非対称
+
+ガイドに「AppearanceとTx Powerは受信側で観測できない」と書いた際に根拠を確認したところ、**backendは供給しているのにEspBleが受け取っていないだけ**と判明した。
+Phase 1で送信側に `setAppearance()` / `setTxPowerIncluded()` を追加した以上、受信側で読めないのは非対称な欠陥のため修正した。
+
+- `EspBleScanResult` に `appearance` / `hasAppearance()`、`txPowerLevel` / `hasTxPowerLevel()` を追加（0 dBmが正当な値のため存在フラグを別に持つ）
+- `Info/ScanDump` が両方を表示し、Tx PowerとRSSIの差（経路損失）も出す
+- 実機確認: `appearance=0x0341 txpower=9dBm loss=23dB`（`Gap/ScanResponse` が設定した値と一致）。`scan_response` / `service_data` Peerも再実行してPASS
+
+なお **Service Dataを先頭1ブロックしか保持しない**点はEspBle側の制約として残している（backendは `getServiceDataCount()` と添字アクセスを持つ）。スキャン結果の構造体はキューに複数保持されるため、ブロック数ぶんのStringを増やすとRAMを圧迫する。実運用でほぼ1ブロックであることを踏まえた選択。
+
+#### 方針
+
+**コードはexampleへ、概念はガイドへ**を徹底した。ガイド内のコードは `ble.update()` を呼ぶloopの3行だけで、これは大原則の説明に不可欠なため残している。
 他文書へのリンクはゼロで、外部リンクはすべてexamplesへ向いている。制限を書く箇所ではすべて理由を併記した（31byte上限とExtended Advertising不可の理由、接続拒否ができない理由、RPA周期を変えられない理由など）。
 
 ### Phase 4 — GATT Server API 再設計（C本体・最大の破壊的変更）

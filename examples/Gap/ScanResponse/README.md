@@ -42,7 +42,8 @@ Every AD structure costs 2 bytes (length + type) on top of its value. The sketch
 
 ## Notes
 
-- **Appearance and Tx Power are not observable from EspBle's receiving side.** EspBle does not expand those two AD types (0x19 / 0x0A) into the scan result, so `EspBleScanResult` has no fields for them. They are still worth advertising when the receiver is a phone or a general-purpose scanner: appearance selects an icon, and Tx Power combines with the RSSI to estimate distance.
+- **The Tx Power value is filled in by the controller.** The sketch only chooses whether to include it; the radio writes the actual power. A receiver estimates distance from the gap between `txPowerLevel` and `rssi` (the path loss).
+- Appearance is what a phone uses to pick an icon. On the receiving side it is available as `appearance` / `hasAppearance()` on `EspBleScanResult`.
 - If either payload exceeds 31 bytes, `start()` fails with `InvalidArgument` and `lastErrorDetail()` **names the field that did not fit**.
 
   ```
