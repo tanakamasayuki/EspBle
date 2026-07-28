@@ -39,7 +39,7 @@ Replace `ALLOWED_CENTRAL` in the sketch with **the address of the central you wa
 - **A policy change takes effect when advertising starts.** To change it while running, do `stop()` → `setFilterPolicy()` → `start()` as this example does.
 - **Matching is by address.** A peer that rotates an RPA cannot be listed usefully until it is bonded and its identity address applies (see [Gap/PrivateAddress](../PrivateAddress/)).
 - **A restrictive policy with an empty accept list rejects everyone.** That is usable as a deliberate lock, but easy to hit by accident.
-- A rejected peer is not told it was rejected. Its connection request is simply ignored, which looks like a timeout on its side.
+- A rejected peer is not told it was rejected. The Link Layer has no PDU for refusing a connection, so the controller simply drops the request; from the peer's side it looks like a connection that timed out with no answer.
 
 ## Expected Serial output
 

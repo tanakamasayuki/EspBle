@@ -25,7 +25,7 @@ Requests a larger ATT MTU before connecting and observes the negotiated value. T
 
 ## Notes
 
-- On the central side the MTU is a connection-time snapshot; the backend has no client-side MTU-change callback for later updates (see `docs/DECISIONS.ja.md`, Connection/GATT #23).
+- On the central side the MTU is a connection-time snapshot: a later change is not tracked. The bundled backend gives the GATT client no MTU-change notification, so EspBle has no way to learn about it.
 
 ## Expected Serial output
 

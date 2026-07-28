@@ -35,7 +35,7 @@ This example broadcasts a temperature under the Environmental Sensing Service UU
 ## Notes
 
 - Service Data consumes the 31-byte legacy advertising budget. A 128-bit UUID alone takes 16 bytes, so a custom UUID leaves little room for the payload.
-- On the receiving side EspBle extracts **only the first** Service Data block. Keep that in mind for peers that advertise several.
+- On the receiving side EspBle extracts **only the first** Service Data block, because `EspBleScanResult` holds a single pair (`serviceData` and `serviceDataUuid`). Blocks after the first are not readable from a peer that advertises several.
 - The receiver's `serviceDataUuid` comes back in **full 128-bit form** (`0000181a-0000-1000-8000-00805f9b34fb`) even when the sender specified the 16-bit shorthand (`181A`). Compare UUIDs by value, as `advertisesService()` does, rather than by string.
 - Advertising stops and restarts on every update, so the broadcast has a brief gap each time. This is not suitable for updates every few hundred milliseconds.
 

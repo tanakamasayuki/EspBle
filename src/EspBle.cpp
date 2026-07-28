@@ -3718,8 +3718,8 @@ bool EspBleAdvertising::start(uint32_t durationSeconds)
 
   // Where the device name goes. With scan response enabled and no explicit scan
   // response payload, the name is moved there so it does not consume the
-  // advertising payload's 31 bytes -- the long-standing default. Any explicit
-  // scan response content takes over that placement entirely.
+  // advertising payload's 31 bytes. Any explicit scan response content takes
+  // over that placement entirely.
   const bool autoNameInScanResponse =
     scanResponseEnabled_ && scanResponseData_.isEmpty() && !data_.name_.isEmpty();
 

@@ -42,13 +42,13 @@ Every AD structure costs 2 bytes (length + type) on top of its value. The sketch
 
 ## Notes
 
-- **Appearance and Tx Power are not observable from EspBle's receiving side** — `EspBleScanResult` has no fields for them. They are worth advertising when the receiver is a phone or a general-purpose scanner: appearance selects an icon, and Tx Power combines with the RSSI to estimate distance.
+- **Appearance and Tx Power are not observable from EspBle's receiving side.** EspBle does not expand those two AD types (0x19 / 0x0A) into the scan result, so `EspBleScanResult` has no fields for them. They are still worth advertising when the receiver is a phone or a general-purpose scanner: appearance selects an icon, and Tx Power combines with the RSSI to estimate distance.
 - If either payload exceeds 31 bytes, `start()` fails with `InvalidArgument` and `lastErrorDetail()` **names the field that did not fit**.
 
   ```
   Advertising failed: INVALID_ARGUMENT (name does not fit in the 31-byte scan response payload)
   ```
-- Flags cannot be placed in a scan response; EspBle adds them to the advertising payload only.
+- **Flags cannot be placed in a scan response.** The Bluetooth Core Specification (CSS Part A) defines the Flags AD type for the advertising payload only, so putting it in a scan response violates the spec. EspBle adds it to the advertising payload automatically.
 
 ## Expected Serial output
 

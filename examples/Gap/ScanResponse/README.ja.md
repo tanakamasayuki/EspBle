@@ -42,13 +42,13 @@ scan responseに何か1つでも設定すると、この自動配置は解除さ
 
 ## 注意
 
-- **AppearanceとTx Powerは受信側のEspBleでは観測できません。** `EspBleScanResult` に該当フィールドが無いためです。載せる意味があるのは相手がスマホや汎用スキャナの場合で、appearanceはアイコン表示に、Tx PowerはRSSIと組み合わせた距離推定に使われます。
+- **AppearanceとTx Powerは受信側のEspBleでは観測できません。** EspBleはスキャン結果へこの2つのAD type（0x19 / 0x0A）を展開せず、`EspBleScanResult` に対応するフィールドを持たないためです。載せる意味があるのは相手がスマホや汎用スキャナの場合で、appearanceはアイコン表示に、Tx PowerはRSSIと組み合わせた距離推定に使われます。
 - どちらの面も31byteを超えると `start()` が `InvalidArgument` で失敗し、**どのフィールドが入らなかったか**が `lastErrorDetail()` に出ます。
 
   ```
   Advertising failed: INVALID_ARGUMENT (name does not fit in the 31-byte scan response payload)
   ```
-- Flagsをscan responseへ置くことはできません（EspBleはadvertising payloadにのみ自動付与します）。
+- **Flagsをscan responseへ置くことはできません。** Bluetooth Core Specification（CSS Part A）がFlags AD typeをadvertising payload専用と定めており、scan responseに入れると仕様違反になるためです。EspBleはadvertising payloadにのみ自動で付与します。
 
 ## 期待されるSerial出力
 

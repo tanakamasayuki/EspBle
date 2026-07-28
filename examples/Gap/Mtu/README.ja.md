@@ -25,7 +25,7 @@
 
 ## メモ
 
-- Central側のMTUは接続時のsnapshotです。backendにclient側のMTU変更callbackがないため、接続後の変化は追跡できません（`docs/DECISIONS.ja.md` Connection/GATT #23参照）。
+- Central側のMTUは接続時のsnapshotです。接続後にMTUが変わっても追跡できません。同梱backendがGATT client側にMTU変更の通知経路を持たず、EspBleが変化を知る手段がないためです。
 
 ## 期待されるSerial出力
 
