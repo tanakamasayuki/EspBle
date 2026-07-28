@@ -63,7 +63,11 @@ struct EspBleSecurityConfig
 struct EspBleConfig
 {
   const char *deviceName = "EspBle";
-  uint16_t preferredMtu = 23;
+  // Preferred ATT MTU negotiated with the peer (23..517; the smaller of the two
+  // sides wins). The default of 247 puts a single notification payload at 244
+  // bytes instead of the 20 bytes the 23-byte spec minimum allows, which is what
+  // almost every application wants. Lower it only to save RAM per connection.
+  uint16_t preferredMtu = 247;
   EspBleSecurityConfig security;
   // When true (the default), a successful GATT client subscribe() is remembered
   // per peer address, and the subscription is restored automatically the next
@@ -672,6 +676,10 @@ struct EspBleHidVendorReport : EspBleHidReport
 
 struct EspBleHidVendorInputEvent : EspBleHidReport {};
 
+// Backend type, forward declared so the public header stays free of NimBLE
+// includes (only EspBleAdvertising's private renderer references it).
+class BLEAdvertisementData;
+
 class EspBle;
 class EspBleAdvertising;
 class EspBleScanner;
@@ -686,7 +694,26 @@ struct EspBleGattServerImpl;
 struct EspBleHidDeviceManagerImpl;
 struct EspBleHidKeyboardHostImpl;
 
-class EspBleAdvertising
+// Which peers are allowed to scan-request and connect while advertising. Any
+// policy other than Any consults the accept list managed through
+// EspBle::addToAcceptList(); with an empty accept list, a restricted policy
+// rejects everyone. Enforced by the controller, so a rejected peer never
+// reaches the application.
+enum class EspBleAdvertisingFilterPolicy : uint8_t
+{
+  Any = 0,                  // anyone may scan-request and connect (default)
+  ScanRequestFromAcceptList,
+  ConnectionFromAcceptList,
+  Both,
+};
+
+// One legacy advertising payload (31 bytes). Two of these exist per advertiser:
+// the advertising payload itself (EspBleAdvertising::data()) and the scan
+// response (EspBleAdvertising::scanResponse()), which a scanner only receives
+// when it performs an active scan. Splitting fields across the two doubles the
+// space available. Flags are emitted automatically into the advertising payload
+// and are not permitted in a scan response.
+class EspBleAdvertisingData
 {
 public:
   static constexpr size_t MaxServiceUuids = 4;
@@ -695,12 +722,53 @@ public:
   void setName(const char *name);
   bool addServiceUuid(const char *uuid);
   void setManufacturerData(const uint8_t *data, size_t length);
-  // Set a Service Data block (AD type 0x16 for a 16-bit UUID). Used by Eddystone
-  // and other service-data beacons. Add the same UUID with addServiceUuid() too
-  // if scanners should also discover it via the service-UUID list.
+  // Set a Service Data block (AD type 0x16 / 0x20 / 0x21 by UUID size). Add the
+  // same UUID with addServiceUuid() too if scanners should also discover it via
+  // the service-UUID list.
+  bool setServiceData(const char *uuid, const uint8_t *data, size_t length);
+  void setAppearance(uint16_t appearance);
+  // Include the Tx Power Level AD type (0x0A). The controller fills in the
+  // actual power, which lets a scanner estimate distance from it and the RSSI.
+  void setTxPowerIncluded(bool included);
+  bool isEmpty() const;
+
+private:
+  friend class EspBleAdvertising;
+
+  String name_;
+  String manufacturerData_;
+  String serviceData_;
+  String serviceDataUuid_;
+  String serviceUuids_[MaxServiceUuids];
+  size_t serviceUuidCount_ = 0;
+  uint16_t appearance_ = 0;
+  bool txPowerIncluded_ = false;
+};
+
+class EspBleAdvertising
+{
+public:
+  static constexpr size_t MaxServiceUuids = EspBleAdvertisingData::MaxServiceUuids;
+
+  void clear();
+  // The advertising payload. The setters below forward to it, so
+  // setName("x") and data().setName("x") are the same call.
+  EspBleAdvertisingData &data();
+  // The scan response payload, sent only to active scanners. Empty by default;
+  // while it is empty and scan response is enabled, the device name is placed
+  // here automatically so it does not consume the advertising payload budget.
+  // Putting anything in it takes over that placement entirely.
+  EspBleAdvertisingData &scanResponse();
+
+  void setName(const char *name);
+  bool addServiceUuid(const char *uuid);
+  void setManufacturerData(const uint8_t *data, size_t length);
   bool setServiceData(const char *uuid, const uint8_t *data, size_t length);
   void setAppearance(uint16_t appearance);
   void setScanResponseEnabled(bool enabled);
+  // Restrict scan requests and/or connections to peers on the accept list.
+  void setFilterPolicy(EspBleAdvertisingFilterPolicy policy);
+  EspBleAdvertisingFilterPolicy filterPolicy() const;
   // Beacon support. setConnectable(false) advertises in a non-connectable mode
   // (a pure broadcaster / beacon); pair it with setScanResponseEnabled(false)
   // for non-connectable non-scannable advertising. setInterval() sets the
@@ -717,14 +785,18 @@ private:
 
   explicit EspBleAdvertising(EspBle *owner);
 
+  // Render one payload into the backend container, reporting an error through
+  // owner_ when a field does not fit in the 31-byte legacy budget.
+  bool buildPayload(
+    const EspBleAdvertisingData &source,
+    BLEAdvertisementData &destination,
+    bool includeFlags,
+    const char *payloadName) const;
+
   EspBle *owner_;
-  String name_;
-  String manufacturerData_;
-  String serviceData_;
-  String serviceDataUuid_;
-  String serviceUuids_[MaxServiceUuids];
-  size_t serviceUuidCount_ = 0;
-  uint16_t appearance_ = 0;
+  EspBleAdvertisingData data_;
+  EspBleAdvertisingData scanResponseData_;
+  EspBleAdvertisingFilterPolicy filterPolicy_ = EspBleAdvertisingFilterPolicy::Any;
   bool scanResponseEnabled_ = true;
   bool connectable_ = true;
   uint16_t intervalMinMs_ = 0;
@@ -1300,6 +1372,19 @@ public:
   // the secured connection; the pairing blocks until it arrives (or times out).
   // Not needed when a static passkey is configured.
   bool providePasskey(uint32_t passkey);
+  // Accept list (Filter Accept List, formerly "white list"). The controller
+  // filters on it when advertising with a restrictive
+  // EspBleAdvertisingFilterPolicy, so a peer that is not on the list never
+  // reaches the application. Entries are matched by address, so a peer using a
+  // rotating RPA cannot be listed usefully unless it is bonded and its identity
+  // address is used. Changes take effect the next time advertising starts.
+  static constexpr size_t MaxAcceptListEntries = 8;
+  bool addToAcceptList(const char *address, EspBleAddressType addressType);
+  bool removeFromAcceptList(const char *address, EspBleAddressType addressType);
+  void clearAcceptList();
+  size_t acceptListCount() const;
+  bool acceptListEntry(size_t index, EspBleBond &entry) const;
+
   size_t bondCount() const;
   bool bond(size_t index, EspBleBond &bond) const;
   bool deleteBond(const EspBleBond &bond);
@@ -1500,6 +1585,8 @@ private:
   friend struct EspBleHidKeyboardHostImpl;
 
   void setError(EspBleError error, const char *detail = nullptr);
+  // Overwrite the controller's accept list with acceptList_.
+  bool syncAcceptList();
   bool preparePeripheral();
   void dispatchConnectionEvents();
   void reapRetiredClients();
@@ -1529,6 +1616,10 @@ private:
 
   bool initialized_ = false;
   bool autoReconnect_ = false;
+  // Mirror of the backend accept list: the wrapper offers add/remove but no way
+  // to enumerate or clear, so the entries are tracked here as well.
+  EspBleBond acceptList_[MaxAcceptListEntries];
+  size_t acceptListCount_ = 0;
   String activeDeviceName_;
   uint16_t activePreferredMtu_ = 0;
   EspBleSecurityConfig activeSecurity_;

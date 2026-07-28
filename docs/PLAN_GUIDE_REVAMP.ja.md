@@ -123,13 +123,63 @@ Phase 3が2章まで、Phase 6が3章と4章を担当する。
 
 | # | 項目 | 状況 |
 |---|---|---|
-| 1-1 | Scan Responseに任意ペイロードを載せるAPI（現状name固定を解消） | 未着手 |
-| 1-2 | ~~Directed Advertising~~ → **0-1により見送り**。「対象外（backend由来）」として [FEATURE_MATRIX.ja.md](FEATURE_MATRIX.ja.md) と [DESIGN_DEBT.ja.md](DESIGN_DEBT.ja.md) に記録する | 記録待ち |
-| 1-3 | Filter Accept List（`whiteListAdd` ＋ `setScanFilter`）によるPeripheral側の接続制限 | 未着手 |
-| 1-4 | `preferredMtu` デフォルト変更（0-4の決定に従う） | 未着手 |
-| 1-5 | Advertisingの未公開オプション公開（Tx Power / Flags / Short Name / Preferred Params）。公開範囲は要選定 | 未着手 |
+| 1-1 | Scan Responseに任意ペイロードを載せるAPI | **完了（実機未検証）** |
+| 1-2 | ~~Directed Advertising~~ → 0-1により見送り。FEATURE_MATRIXへ❌として記録済み | **完了** |
+| 1-3 | Filter Accept ListによるPeripheral側の接続制限 | **完了（実機未検証）** |
+| 1-4 | `preferredMtu` 既定値を247へ | **完了（実機未検証）** |
+| 1-5 | Advertisingの未公開オプション公開 | **一部完了（Tx Powerのみ）** |
 
-各項目に Peerテスト追加と [FEATURE_MATRIX.ja.md](FEATURE_MATRIX.ja.md) 更新を伴う。
+#### 実装したAPI
+
+```cpp
+// 1-1: advertising payload と scan response payload が同じ builder を共有する
+class EspBleAdvertisingData {           // 31byte 1面ぶん
+  void clear();
+  void setName(const char *name);
+  bool addServiceUuid(const char *uuid);
+  void setManufacturerData(const uint8_t *data, size_t length);
+  bool setServiceData(const char *uuid, const uint8_t *data, size_t length);
+  void setAppearance(uint16_t appearance);
+  void setTxPowerIncluded(bool included);   // 1-5
+  bool isEmpty() const;
+};
+EspBleAdvertisingData &EspBleAdvertising::data();          // advertising payload
+EspBleAdvertisingData &EspBleAdvertising::scanResponse();  // scan response payload
+
+// 1-3: accept list と filter policy
+enum class EspBleAdvertisingFilterPolicy { Any, ScanRequestFromAcceptList, ConnectionFromAcceptList, Both };
+void EspBleAdvertising::setFilterPolicy(EspBleAdvertisingFilterPolicy policy);
+bool EspBle::addToAcceptList(const char *address, EspBleAddressType addressType);
+bool EspBle::removeFromAcceptList(const char *address, EspBleAddressType addressType);
+void EspBle::clearAcceptList();
+size_t EspBle::acceptListCount() const;
+bool EspBle::acceptListEntry(size_t index, EspBleBond &entry) const;
+```
+
+`EspBleAdvertising` の既存setter（`setName()` 等）は `data()` への転送として残したため、既存sketchは無改修。
+device nameの自動scan response配置も従来どおり（scan responseに明示的な中身を入れると、その配置は解除される）。
+
+#### 1-3 実装中に判明した上流バグ
+
+`BLEDevice::whiteListAdd()` 系は **NimBLE backendではリンクできない**（`m_whiteList` が宣言のみで未定義）。
+加えて `BLEAddress` を `ble_addr_t` へreinterpret_castしており、両者はフィールド順が逆。
+そのためEspBleは自前ミラー＋`ble_gap_wl_set()` 直呼びで実装した。
+報告案: [UPSTREAM_REQUEST_ARDUINO_ESP32_NIMBLE_WHITELIST.ja.md](UPSTREAM_REQUEST_ARDUINO_ESP32_NIMBLE_WHITELIST.ja.md)
+
+#### 1-5 の残り（未実施）
+
+`setFlags()` / `setShortName()` / `setPreferredParams()` / `setPartialServices()` は公開していない。
+Flagsは自動付与（advertising payloadのみ、scan responseには不可）で足り、他は現実の必要性が薄いという判断。
+必要になった時点で `EspBleAdvertisingData` に足せる。
+
+#### テスト
+
+| テスト | 内容 | 状況 |
+|---|---|---|
+| `tests/peer/scan_response` | passive scanではname/manufacturer dataが見えず、active scanでのみ見えることを検証 | 追加済み・**未実行** |
+| `tests/peer/accept_list` | 制限policy＋到達不能アドレスのみのaccept listでは接続が成立せず、policyをAnyに戻すと成立することを検証 | 追加済み・**未実行** |
+
+既存の `tests/peer/mtu` は `previous=23` を期待するが、これは交換前の初期MTU（仕様上常に23）であり既定値変更の影響を受けない。
 
 ### Phase 2 — GAP examples（B + Phase 1の新API分）
 

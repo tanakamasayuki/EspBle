@@ -3317,9 +3317,7 @@ size_t EspBleConnection::maximumNotificationPayload() const
   return mtu > 3 ? mtu - 3 : 0;
 }
 
-EspBleAdvertising::EspBleAdvertising(EspBle *owner) : owner_(owner) {}
-
-void EspBleAdvertising::clear()
+void EspBleAdvertisingData::clear()
 {
   name_ = "";
   manufacturerData_ = "";
@@ -3327,44 +3325,37 @@ void EspBleAdvertising::clear()
   serviceDataUuid_ = "";
   serviceUuidCount_ = 0;
   appearance_ = 0;
-  scanResponseEnabled_ = true;
-  connectable_ = true;
-  intervalMinMs_ = 0;
-  intervalMaxMs_ = 0;
+  txPowerIncluded_ = false;
 }
 
-void EspBleAdvertising::setName(const char *name)
+void EspBleAdvertisingData::setName(const char *name)
 {
   name_ = name == nullptr ? "" : name;
 }
 
-bool EspBleAdvertising::addServiceUuid(const char *uuid)
+bool EspBleAdvertisingData::addServiceUuid(const char *uuid)
 {
   if (uuid == nullptr || uuid[0] == '\0')
   {
-    owner_->setError(EspBleError::InvalidArgument, "service UUID is empty");
     return false;
   }
   for (size_t index = 0; index < serviceUuidCount_; ++index)
   {
     if (uuidEquals(serviceUuids_[index], uuid))
     {
-      owner_->clearError();
       return true;
     }
   }
   if (serviceUuidCount_ == MaxServiceUuids)
   {
-    owner_->setError(EspBleError::ResourceExhausted, "too many advertising service UUIDs");
     return false;
   }
 
   serviceUuids_[serviceUuidCount_++] = uuid;
-  owner_->clearError();
   return true;
 }
 
-void EspBleAdvertising::setManufacturerData(const uint8_t *data, size_t length)
+void EspBleAdvertisingData::setManufacturerData(const uint8_t *data, size_t length)
 {
   if (data == nullptr || length == 0)
   {
@@ -3374,34 +3365,117 @@ void EspBleAdvertising::setManufacturerData(const uint8_t *data, size_t length)
   manufacturerData_ = String(reinterpret_cast<const char *>(data), length);
 }
 
-bool EspBleAdvertising::setServiceData(const char *uuid, const uint8_t *data, size_t length)
+bool EspBleAdvertisingData::setServiceData(const char *uuid, const uint8_t *data, size_t length)
 {
   if (uuid == nullptr)
   {
-    owner_->setError(EspBleError::InvalidArgument, "service data UUID is required");
     return false;
   }
   if (data == nullptr || length == 0)
   {
     serviceData_ = "";
     serviceDataUuid_ = "";
-    owner_->clearError();
     return true;
   }
   serviceDataUuid_ = uuid;
   serviceData_ = String(reinterpret_cast<const char *>(data), length);
+  return true;
+}
+
+void EspBleAdvertisingData::setAppearance(uint16_t appearance)
+{
+  appearance_ = appearance;
+}
+
+void EspBleAdvertisingData::setTxPowerIncluded(bool included)
+{
+  txPowerIncluded_ = included;
+}
+
+bool EspBleAdvertisingData::isEmpty() const
+{
+  return name_.isEmpty() && manufacturerData_.isEmpty() && serviceData_.isEmpty() &&
+    serviceUuidCount_ == 0 && appearance_ == 0 && !txPowerIncluded_;
+}
+
+EspBleAdvertising::EspBleAdvertising(EspBle *owner) : owner_(owner) {}
+
+void EspBleAdvertising::clear()
+{
+  data_.clear();
+  scanResponseData_.clear();
+  filterPolicy_ = EspBleAdvertisingFilterPolicy::Any;
+  scanResponseEnabled_ = true;
+  connectable_ = true;
+  intervalMinMs_ = 0;
+  intervalMaxMs_ = 0;
+}
+
+EspBleAdvertisingData &EspBleAdvertising::data()
+{
+  return data_;
+}
+
+EspBleAdvertisingData &EspBleAdvertising::scanResponse()
+{
+  return scanResponseData_;
+}
+
+void EspBleAdvertising::setName(const char *name)
+{
+  data_.setName(name);
+}
+
+bool EspBleAdvertising::addServiceUuid(const char *uuid)
+{
+  if (uuid == nullptr || uuid[0] == '\0')
+  {
+    owner_->setError(EspBleError::InvalidArgument, "service UUID is empty");
+    return false;
+  }
+  if (!data_.addServiceUuid(uuid))
+  {
+    owner_->setError(EspBleError::ResourceExhausted, "too many advertising service UUIDs");
+    return false;
+  }
+  owner_->clearError();
+  return true;
+}
+
+void EspBleAdvertising::setManufacturerData(const uint8_t *data, size_t length)
+{
+  data_.setManufacturerData(data, length);
+}
+
+bool EspBleAdvertising::setServiceData(const char *uuid, const uint8_t *data, size_t length)
+{
+  if (!data_.setServiceData(uuid, data, length))
+  {
+    owner_->setError(EspBleError::InvalidArgument, "service data UUID is required");
+    return false;
+  }
   owner_->clearError();
   return true;
 }
 
 void EspBleAdvertising::setAppearance(uint16_t appearance)
 {
-  appearance_ = appearance;
+  data_.setAppearance(appearance);
 }
 
 void EspBleAdvertising::setScanResponseEnabled(bool enabled)
 {
   scanResponseEnabled_ = enabled;
+}
+
+void EspBleAdvertising::setFilterPolicy(EspBleAdvertisingFilterPolicy policy)
+{
+  filterPolicy_ = policy;
+}
+
+EspBleAdvertisingFilterPolicy EspBleAdvertising::filterPolicy() const
+{
+  return filterPolicy_;
 }
 
 void EspBleAdvertising::setConnectable(bool connectable)
@@ -3424,50 +3498,59 @@ bool EspBleAdvertising::setInterval(uint16_t minMilliseconds, uint16_t maxMillis
   return true;
 }
 
-bool EspBleAdvertising::start(uint32_t durationSeconds)
+bool EspBleAdvertising::buildPayload(
+  const EspBleAdvertisingData &source,
+  BLEAdvertisementData &advertisingData,
+  bool includeFlags,
+  const char *payloadName) const
 {
-  if (!owner_->initialized())
-  {
-    owner_->setError(EspBleError::InvalidState, "BLE stack is not initialized");
+  const auto fail = [this, payloadName](const char *field) {
+    String detail(field);
+    detail += " does not fit in the 31-byte ";
+    detail += payloadName;
+    detail += " payload";
+    owner_->setError(EspBleError::InvalidArgument, detail.c_str());
     return false;
-  }
-  if (!owner_->preparePeripheral())
-  {
-    return false;
-  }
+  };
 
-  BLEAdvertising *backend = BLEDevice::getAdvertising();
-  backend->stop();
-  backend->reset();
-
-  BLEAdvertisementData advertisingData;
   size_t previousLength = advertisingData.getPayload().length();
-  advertisingData.setFlags(0x06); // General Discoverable, BR/EDR not supported.
-  if (advertisingData.getPayload().length() == previousLength)
+  if (includeFlags)
   {
-    owner_->setError(EspBleError::InvalidArgument, "advertising flags do not fit in legacy payload");
-    return false;
-  }
-  if (appearance_ != 0)
-  {
-    previousLength = advertisingData.getPayload().length();
-    advertisingData.setAppearance(appearance_);
+    // Flags are only valid in the advertising payload, never in a scan response.
+    advertisingData.setFlags(0x06); // General Discoverable, BR/EDR not supported.
     if (advertisingData.getPayload().length() == previousLength)
     {
-      owner_->setError(EspBleError::InvalidArgument, "appearance does not fit in legacy advertising payload");
-      return false;
+      return fail("flags");
     }
   }
-  if (serviceUuidCount_ > 0)
+  if (source.txPowerIncluded_)
+  {
+    previousLength = advertisingData.getPayload().length();
+    advertisingData.addTxPower();
+    if (advertisingData.getPayload().length() == previousLength)
+    {
+      return fail("Tx Power Level");
+    }
+  }
+  if (source.appearance_ != 0)
+  {
+    previousLength = advertisingData.getPayload().length();
+    advertisingData.setAppearance(source.appearance_);
+    if (advertisingData.getPayload().length() == previousLength)
+    {
+      return fail("appearance");
+    }
+  }
+  if (source.serviceUuidCount_ > 0)
   {
     // CSS Part A 1.1: a data type must not occur more than once in a payload,
     // so all UUIDs of one size share a single "Complete List" AD structure.
     String uuids16;
     String uuids32;
     String uuids128;
-    for (size_t index = 0; index < serviceUuidCount_; ++index)
+    for (size_t index = 0; index < source.serviceUuidCount_; ++index)
     {
-      BLEUUID uuid(serviceUuids_[index].c_str());
+      BLEUUID uuid(source.serviceUuids_[index].c_str());
       switch (uuid.bitSize())
       {
       case 16:
@@ -3507,41 +3590,74 @@ bool EspBleAdvertising::start(uint32_t durationSeconds)
     }
     if (advertisingData.getPayload().length() != expectedLength)
     {
-      owner_->setError(EspBleError::InvalidArgument, "service UUIDs do not fit in legacy advertising payload");
-      return false;
+      return fail("service UUIDs");
     }
   }
-  if (!manufacturerData_.isEmpty())
+  if (!source.manufacturerData_.isEmpty())
   {
     previousLength = advertisingData.getPayload().length();
-    advertisingData.setManufacturerData(manufacturerData_);
+    advertisingData.setManufacturerData(source.manufacturerData_);
     if (advertisingData.getPayload().length() == previousLength)
     {
-      owner_->setError(EspBleError::InvalidArgument, "manufacturer data does not fit in legacy advertising payload");
-      return false;
+      return fail("manufacturer data");
     }
   }
-  if (!serviceData_.isEmpty())
+  if (!source.serviceData_.isEmpty())
   {
     previousLength = advertisingData.getPayload().length();
-    advertisingData.setServiceData(BLEUUID(serviceDataUuid_.c_str()), serviceData_);
+    advertisingData.setServiceData(BLEUUID(source.serviceDataUuid_.c_str()), source.serviceData_);
     if (advertisingData.getPayload().length() == previousLength)
     {
-      owner_->setError(EspBleError::InvalidArgument, "service data does not fit in legacy advertising payload");
-      return false;
+      return fail("service data");
     }
   }
-  if (!scanResponseEnabled_ && !name_.isEmpty())
+  if (!source.name_.isEmpty())
   {
     previousLength = advertisingData.getPayload().length();
-    advertisingData.setName(name_);
+    advertisingData.setName(source.name_);
     if (advertisingData.getPayload().length() == previousLength)
     {
-      owner_->setError(EspBleError::InvalidArgument, "name does not fit in legacy advertising payload");
-      return false;
+      return fail("name");
     }
   }
 
+  return true;
+}
+
+bool EspBleAdvertising::start(uint32_t durationSeconds)
+{
+  if (!owner_->initialized())
+  {
+    owner_->setError(EspBleError::InvalidState, "BLE stack is not initialized");
+    return false;
+  }
+  if (!owner_->preparePeripheral())
+  {
+    return false;
+  }
+
+  BLEAdvertising *backend = BLEDevice::getAdvertising();
+  backend->stop();
+  backend->reset();
+
+  // Where the device name goes. With scan response enabled and no explicit scan
+  // response payload, the name is moved there so it does not consume the
+  // advertising payload's 31 bytes -- the long-standing default. Any explicit
+  // scan response content takes over that placement entirely.
+  const bool autoNameInScanResponse =
+    scanResponseEnabled_ && scanResponseData_.isEmpty() && !data_.name_.isEmpty();
+
+  EspBleAdvertisingData primary = data_;
+  if (autoNameInScanResponse)
+  {
+    primary.name_ = "";
+  }
+
+  BLEAdvertisementData advertisingData;
+  if (!buildPayload(primary, advertisingData, true, "advertising"))
+  {
+    return false;
+  }
   if (!backend->setAdvertisementData(advertisingData))
   {
     owner_->setError(EspBleError::BackendFailure, "failed to set advertising data");
@@ -3549,21 +3665,34 @@ bool EspBleAdvertising::start(uint32_t durationSeconds)
   }
 
   backend->setScanResponse(scanResponseEnabled_);
-  if (scanResponseEnabled_ && !name_.isEmpty())
+  if (scanResponseEnabled_)
   {
-    BLEAdvertisementData scanResponseData;
-    scanResponseData.setName(name_);
-    if (scanResponseData.getPayload().isEmpty())
+    EspBleAdvertisingData responseSource = scanResponseData_;
+    if (autoNameInScanResponse)
     {
-      owner_->setError(EspBleError::InvalidArgument, "name does not fit in legacy scan response payload");
-      return false;
+      responseSource.setName(data_.name_.c_str());
     }
-    if (!backend->setScanResponseData(scanResponseData))
+    if (!responseSource.isEmpty())
     {
-      owner_->setError(EspBleError::BackendFailure, "failed to set scan response data");
-      return false;
+      BLEAdvertisementData scanResponsePayload;
+      if (!buildPayload(responseSource, scanResponsePayload, false, "scan response"))
+      {
+        return false;
+      }
+      if (!backend->setScanResponseData(scanResponsePayload))
+      {
+        owner_->setError(EspBleError::BackendFailure, "failed to set scan response data");
+        return false;
+      }
     }
   }
+
+  // Accept-list filtering: which peers may scan-request and connect.
+  backend->setScanFilter(
+    filterPolicy_ == EspBleAdvertisingFilterPolicy::ScanRequestFromAcceptList ||
+      filterPolicy_ == EspBleAdvertisingFilterPolicy::Both,
+    filterPolicy_ == EspBleAdvertisingFilterPolicy::ConnectionFromAcceptList ||
+      filterPolicy_ == EspBleAdvertisingFilterPolicy::Both);
 
   // Connectable (default) vs non-connectable (beacon / broadcaster) mode.
   backend->setAdvertisementType(
@@ -7048,6 +7177,12 @@ void EspBle::end()
   BLEDevice::deinit(false);
   initialized_ = false;
   gattServer_.resetBackend();
+  // deinit() drops the backend accept list, so drop the mirror with it.
+  for (size_t index = 0; index < acceptListCount_; ++index)
+  {
+    acceptList_[index] = EspBleBond();
+  }
+  acceptListCount_ = 0;
 
   delete impl_;
   impl_ = nullptr;
@@ -7614,6 +7749,149 @@ bool EspBle::requestSecurity(EspBleConnectionId connectionId)
     return false;
   }
   clearError();
+  return true;
+}
+
+bool EspBle::syncAcceptList()
+{
+  // The bundled wrapper's BLEDevice::whiteListAdd()/whiteListRemove() cannot be
+  // used: BLEDevice::m_whiteList is declared but never defined in the NimBLE
+  // build (a link error), and the wrapper reinterpret_casts BLEAddress to
+  // ble_addr_t even though their field order differs. The mirror kept here is
+  // authoritative instead, and ble_gap_wl_set() overwrites the controller's
+  // list with it in one call.
+  ble_addr_t entries[MaxAcceptListEntries];
+  for (size_t index = 0; index < acceptListCount_; ++index)
+  {
+    BLEAddress address(
+      acceptList_[index].peerAddress,
+      static_cast<uint8_t>(acceptList_[index].peerAddressType));
+    entries[index].type = static_cast<uint8_t>(acceptList_[index].peerAddressType);
+    // In the NimBLE build BLEAddress stores the address in NimBLE's inverse
+    // byte order, which is what ble_addr_t::val expects.
+    memcpy(entries[index].val, address.getNative(), sizeof(entries[index].val));
+  }
+  return ble_gap_wl_set(entries, static_cast<uint8_t>(acceptListCount_)) == 0;
+}
+
+bool EspBle::addToAcceptList(const char *address, EspBleAddressType addressType)
+{
+  if (!initialized_)
+  {
+    setError(EspBleError::InvalidState, "BLE stack is not initialized");
+    return false;
+  }
+  if (address == nullptr || address[0] == '\0')
+  {
+    setError(EspBleError::InvalidArgument, "accept list address is empty");
+    return false;
+  }
+  if (!isValidAddressType(addressType))
+  {
+    setError(EspBleError::InvalidArgument, "accept list address type is invalid");
+    return false;
+  }
+  for (size_t index = 0; index < acceptListCount_; ++index)
+  {
+    if (acceptList_[index].peerAddressType == addressType &&
+        acceptList_[index].peerAddress.equalsIgnoreCase(address))
+    {
+      clearError();
+      return true;
+    }
+  }
+  if (acceptListCount_ == MaxAcceptListEntries)
+  {
+    setError(EspBleError::ResourceExhausted, "accept list is full");
+    return false;
+  }
+
+  acceptList_[acceptListCount_].peerAddress = address;
+  acceptList_[acceptListCount_].peerAddressType = addressType;
+  ++acceptListCount_;
+  if (!syncAcceptList())
+  {
+    acceptList_[--acceptListCount_] = EspBleBond();
+    syncAcceptList();
+    setError(EspBleError::BackendFailure, "failed to write the accept list");
+    return false;
+  }
+  clearError();
+  return true;
+}
+
+bool EspBle::removeFromAcceptList(const char *address, EspBleAddressType addressType)
+{
+  if (!initialized_)
+  {
+    setError(EspBleError::InvalidState, "BLE stack is not initialized");
+    return false;
+  }
+  if (address == nullptr || address[0] == '\0')
+  {
+    setError(EspBleError::InvalidArgument, "accept list address is empty");
+    return false;
+  }
+  for (size_t index = 0; index < acceptListCount_; ++index)
+  {
+    if (acceptList_[index].peerAddressType != addressType ||
+        !acceptList_[index].peerAddress.equalsIgnoreCase(address))
+    {
+      continue;
+    }
+    const EspBleBond removed = acceptList_[index];
+    for (size_t next = index + 1; next < acceptListCount_; ++next)
+    {
+      acceptList_[next - 1] = acceptList_[next];
+    }
+    acceptList_[--acceptListCount_] = EspBleBond();
+    if (!syncAcceptList())
+    {
+      for (size_t back = acceptListCount_; back > index; --back)
+      {
+        acceptList_[back] = acceptList_[back - 1];
+      }
+      acceptList_[index] = removed;
+      ++acceptListCount_;
+      syncAcceptList();
+      setError(EspBleError::BackendFailure, "failed to write the accept list");
+      return false;
+    }
+    clearError();
+    return true;
+  }
+  setError(EspBleError::NotFound, "accept list entry was not found");
+  return false;
+}
+
+void EspBle::clearAcceptList()
+{
+  const size_t previousCount = acceptListCount_;
+  for (size_t index = 0; index < previousCount; ++index)
+  {
+    acceptList_[index] = EspBleBond();
+  }
+  acceptListCount_ = 0;
+  if (initialized_ && previousCount != 0)
+  {
+    // An empty list is written back so the controller stops matching the old
+    // entries. A restrictive filter policy then rejects every peer.
+    syncAcceptList();
+  }
+}
+
+size_t EspBle::acceptListCount() const
+{
+  return acceptListCount_;
+}
+
+bool EspBle::acceptListEntry(size_t index, EspBleBond &entry) const
+{
+  if (index >= acceptListCount_)
+  {
+    return false;
+  }
+  entry = acceptList_[index];
   return true;
 }
 
