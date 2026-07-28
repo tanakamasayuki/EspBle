@@ -1,0 +1,54 @@
+# ServiceData
+
+> 日本語版: [README.ja.md](README.ja.md)
+
+Advertises a Service Data block (AD type 0x16): a payload tagged with the service UUID it belongs to. This is the standard way for **a sensor to publish a reading without anyone connecting to it**.
+
+How it differs from the Manufacturer Data used by [Beacon](../Beacon/):
+
+| | Service Data | Manufacturer Data |
+|---|---|---|
+| Meaning | Defined by the spec of the service the UUID names | Vendor-specific; you need to know the company ID to interpret it |
+| Allocation needed | A SIG-assigned UUID (or your own 128-bit UUID) | A company ID assigned by the Bluetooth SIG |
+| Good for | Broadcasting values of standard services | Custom formats and vendor definitions such as iBeacon |
+
+This example broadcasts a temperature under the Environmental Sensing Service UUID (`0x181A`). The payload uses the same wire format as the GATT characteristic (signed 16-bit, 0.01 °C, little-endian), so a receiver can reuse the decoding it would use over a connection.
+
+## Hardware
+
+- 1 × ESP32-S3 running this sketch (broadcaster)
+- A receiver — the [Info/ScanDump](../../Info/ScanDump/) example on a second board, or a scanner app such as nRF Connect
+
+## What it does
+
+- Broadcasts a temperature as Service Data under the Environmental Sensing Service (`0x181A`)
+- Updates the value every 5 seconds. Legacy advertising cannot rewrite a payload in place, so the sketch does `stop()` → `setServiceData()` → `start()`
+- Runs as a non-connectable, non-scannable broadcaster
+
+## Key APIs
+
+- `ble.advertising().setServiceData(uuid, data, length)` — set the Service Data block; the AD type (0x16 / 0x20 / 0x21) follows the UUID size
+- `ble.advertising().addServiceUuid(uuid)` — also list the UUID so a receiver's `advertisesService()` matches
+- `ble.advertising().setConnectable(false)` / `setScanResponseEnabled(false)` — make it a pure broadcaster
+- Receiving side: `scanResult.serviceData` / `scanResult.serviceDataUuid` / `scanResult.hasServiceData()`
+
+## Notes
+
+- Service Data consumes the 31-byte legacy advertising budget. A 128-bit UUID alone takes 16 bytes, so a custom UUID leaves little room for the payload.
+- On the receiving side EspBle extracts **only the first** Service Data block. Keep that in mind for peers that advertise several.
+- The receiver's `serviceDataUuid` comes back in **full 128-bit form** (`0000181a-0000-1000-8000-00805f9b34fb`) even when the sender specified the 16-bit shorthand (`181A`). Compare UUIDs by value, as `advertisesService()` does, rather than by string.
+- Advertising stops and restarts on every update, so the broadcast has a brief gap each time. This is not suitable for updates every few hundred milliseconds.
+
+## Expected Serial output
+
+```
+Broadcasting 23.50 degC
+Broadcasting 23.75 degC
+Broadcasting 24.00 degC
+```
+
+On the [Info/ScanDump](../../Info/ScanDump/) side:
+
+```
+d0:cf:13:58:fd:95 type=0 rssi=-13 uuid=0000181a-0000-1000-8000-00805f9b34fb servicedata[0000181a-0000-1000-8000-00805f9b34fb][2]=c409
+```

@@ -1,22 +1,73 @@
 // en: ScanDump - diagnostic scanner that dumps every field EspBle extracts from each
-//     advertisement (UUID form, name presence, manufacturer data). Useful to see what a
-//     peripheral actually advertises before writing a scan filter.
+//     advertisement (UUID form, name presence, manufacturer data, service data) and
+//     decodes iBeacon payloads. Useful to see what a peripheral actually advertises
+//     before writing a scan filter.
 // ja: ScanDump - EspBleが各advertisementから取り出す全フィールド（UUID表記・nameの有無・
-//     Manufacturer Data）をダンプする診断用スキャナ。scan filterを書く前に相手が実際に
-//     何をadvertiseしているか確認するのに使う。
+//     Manufacturer Data・Service Data）をダンプし、iBeacon payloadはデコードする診断用
+//     スキャナ。scan filterを書く前に相手が実際に何をadvertiseしているか確認するのに使う。
 #include <EspBle.h>
+#include <EspBleIBeacon.h>
 
 EspBle ble;
+
+// en: Print a binary String as hex.
+// ja: バイナリのStringをhexで表示する。
+static void printHex(const String &data)
+{
+  for (size_t i = 0; i < data.length(); ++i)
+  {
+    Serial.printf("%02x", static_cast<uint8_t>(data[i]));
+  }
+}
 
 // en: Print manufacturer data as hex.
 // ja: Manufacturer Dataをhexで表示する。
 static void printManufacturerData(const EspBleScanResult &scanResult)
 {
   Serial.printf(" manufacturer[%u]=", static_cast<unsigned>(scanResult.manufacturerData.length()));
-  for (size_t i = 0; i < scanResult.manufacturerData.length(); ++i)
+  printHex(scanResult.manufacturerData);
+}
+
+// en: Service Data is a payload tagged with the service UUID it belongs to. EspBle
+//     surfaces the first block of an advertisement.
+// ja: Service Dataは、どのserviceの値かをUUIDで示したpayload。EspBleは
+//     advertisement中の最初の1ブロックを取り出す。
+static void printServiceData(const EspBleScanResult &scanResult)
+{
+  Serial.printf(
+    " servicedata[%s][%u]=",
+    scanResult.serviceDataUuid.c_str(),
+    static_cast<unsigned>(scanResult.serviceData.length()));
+  printHex(scanResult.serviceData);
+}
+
+// en: iBeacon is a specific Manufacturer Data layout (Apple company ID 0x004C).
+//     Decoding it here is what makes a beacon dump actually readable.
+// ja: iBeaconはManufacturer Dataの特定レイアウト（Apple company ID 0x004C）。
+//     ここでデコードすることでbeaconのダンプが読める形になる。
+static void printIBeacon(const EspBleScanResult &scanResult)
+{
+  EspBleIBeaconData beacon;
+  if (!espBleDecodeIBeacon(
+        reinterpret_cast<const uint8_t *>(scanResult.manufacturerData.c_str()),
+        scanResult.manufacturerData.length(),
+        beacon))
   {
-    Serial.printf("%02x", static_cast<uint8_t>(scanResult.manufacturerData[i]));
+    return;
   }
+
+  Serial.print(" ibeacon uuid=");
+  for (size_t i = 0; i < sizeof(beacon.uuid); ++i)
+  {
+    Serial.printf("%02x", beacon.uuid[i]);
+    // en: 8-4-4-4-12 grouping / ja: 8-4-4-4-12 の区切り
+    if (i == 3 || i == 5 || i == 7 || i == 9) Serial.print('-');
+  }
+  Serial.printf(
+    " major=%u minor=%u power=%d",
+    static_cast<unsigned>(beacon.major),
+    static_cast<unsigned>(beacon.minor),
+    static_cast<int>(beacon.measuredPower));
 }
 
 void setup()
@@ -47,9 +98,14 @@ void setup()
     {
       Serial.printf(" uuid=%s", scanResult.serviceUuids[i].c_str());
     }
+    if (scanResult.hasServiceData())
+    {
+      printServiceData(scanResult);
+    }
     if (scanResult.hasManufacturerData())
     {
       printManufacturerData(scanResult);
+      printIBeacon(scanResult);
     }
     Serial.println();
   });

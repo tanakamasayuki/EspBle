@@ -84,6 +84,9 @@ arduino-cli compile --profile esp32s3 examples/<path>
 | [Gap/Mtu](Gap/Mtu/) | Central | 希望MTUの交換とNotification payload上限 |
 | [Gap/Beacon](Gap/Beacon/) | Broadcaster | manufacturer data＋間隔制御のnon-connectable・non-scannable beacon |
 | [Gap/IBeacon](Gap/IBeacon/) | Broadcaster | Apple iBeacon（UUID / major / minor / measured power）をbroadcast |
+| [Gap/ServiceData](Gap/ServiceData/) | Broadcaster | Service Data（AD 0x16）で温度を放送。接続させずに値を配る |
+| [Gap/ScanResponse](Gap/ScanResponse/) | Peripheral | advertising payloadとscan responseの2面に分けて31byte制限を回避 |
+| [Gap/AcceptList](Gap/AcceptList/) | Peripheral | Filter Accept Listで接続できる相手を制限 |
 | [Gap/PrivateAddress](Gap/PrivateAddress/) | Peripheral | random static / resolvable private addressでadvertise |
 
 ### GATT — 基本（汎用の仕組み＋シリアル）

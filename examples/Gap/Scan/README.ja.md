@@ -2,7 +2,9 @@
 
 > English: [README.md](README.md)
 
-継続的なactive scanを実行し、受信したadvertisementのaddress、RSSI、（存在すれば）デバイス名を表示します。Central側の最小例です。2台目のボードで[Advertise](../Advertise/) exampleを動かして組み合わせるか、周囲のBLE機器の観察に使えます。
+継続的なactive scanを実行し、受信したadvertisementのaddress、RSSI、（存在すれば）デバイス名を表示します。Central側の**最小例**です。2台目のボードで[Advertise](../Advertise/) exampleを動かして組み合わせるか、周囲のBLE機器の観察に使えます。
+
+ここで表示するのは3項目だけです。Service UUID・Service Data・Manufacturer Data・iBeaconまで含めて**全フィールドを見たい場合は[Info/ScanDump](../../Info/ScanDump/)**を使ってください。このexampleは「スキャンを始めて結果を受け取る」最小の書き方を示すことに絞っています。
 
 ## 必要なもの
 

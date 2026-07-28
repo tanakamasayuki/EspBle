@@ -203,11 +203,37 @@ Flagsは自動付与（advertising payloadのみ、scan responseには不可）�
 
 | # | 項目 | 状況 |
 |---|---|---|
-| 2-1 | `Gap/ServiceData` 新規（API済・example無しの穴） | 未着手 |
-| 2-2 | [Info/ScanDump](../examples/Info/ScanDump/) 拡張（serviceData / serviceDataUuid の出力、`EspBleIBeacon.h` によるiBeaconデコード） | 未着手 |
-| 2-3 | [Gap/Scan](../examples/Gap/Scan/) の位置づけ整理（最小例として残す vs ScanDumpへ集約） | 未着手 |
-| 2-4 | [Gap/PrivateAddress](../examples/Gap/PrivateAddress/) にRPAモードの実演を追加 | 未着手 |
-| 2-5 | Appearance / Scan Response / Directed Advertising / 接続拒否 のexample（Advertise拡張か新規かは粒度次第） | 未着手 |
+| 2-1 | `Gap/ServiceData` 新規（API済・example無しの穴） | **完了（実機確認済み）** |
+| 2-2 | [Info/ScanDump](../examples/Info/ScanDump/) 拡張（serviceData / serviceDataUuid の出力、`EspBleIBeacon.h` によるiBeaconデコード） | **完了（実機確認済み）** |
+| 2-3 | [Gap/Scan](../examples/Gap/Scan/) の位置づけ整理 | **完了（最小例として維持＋ScanDumpへ相互リンク）** |
+| 2-4 | [Gap/PrivateAddress](../examples/Gap/PrivateAddress/) にRPAモードの実演を追加 | **完了** |
+| 2-5 | Appearance / Scan Response / 接続拒否 のexample | **完了（`Gap/ScanResponse` ＋ `Gap/AcceptList`）** |
+
+#### 追加・変更したexample
+
+| example | 内容 |
+|---|---|
+| `Gap/ServiceData`（新規） | Environmental Sensing（0x181A）のService Dataとして温度を放送。Manufacturer Dataとの使い分けを表で説明。5秒ごとに `stop()`→`setServiceData()`→`start()` で値を更新 |
+| `Gap/ScanResponse`（新規） | advertising payloadとscan responseの2面に分けて31byte制限を回避。各面のbyte内訳をコメントで明示。appearance / Tx Power もここで扱う |
+| `Gap/AcceptList`（新規） | Filter Accept Listで接続相手を制限。「BLEには接続要求を承認するcallbackが無い」ことと、3つの代替手段（accept list / 接続後に切断 / 属性を暗号化）を表で説明 |
+| `Info/ScanDump`（拡張） | Service Data（UUID＋長さ＋hex）の出力と、iBeacon payloadのデコード（UUID / major / minor / measured power）を追加 |
+| `Gap/PrivateAddress`（拡張） | `USE_RESOLVABLE_PRIVATE_ADDRESS` でRandomStatic / RPAを切り替え。RPAはbonding必須である点を表で明示。接続時にpeerアドレスとbonded状態を表示 |
+| `Gap/Scan`（説明追加） | 「最小例」であることを明記し、全フィールドを見たい場合はScanDumpへ誘導 |
+
+`examples/README.ja.md` / `README.md` のGAP表に3件を追加済み。
+
+#### 実機確認
+
+ScanDumpを受信側に置き、2台目で各exampleを動かして確認した。
+
+- `Gap/ServiceData` → `servicedata[0000181a-...][2]=c409`（= 0x09c4 = 25.00℃、little-endian）を受信
+- `Gap/IBeacon` → `ibeacon uuid=01020304-0506-0708-090a-0b0c0d0e0f10 major=100 minor=1 power=-59` とデコード
+- `Gap/ScanResponse` → active scanで `name="EspBle Scan Response" uuid=5266f727-... manufacturer[5]=ffff010203` がマージされて1件で届く
+
+**この過程で2点わかった**（いずれもexample側を修正済み）。
+
+1. 受信側の `serviceDataUuid` は、送信側が16bit表記で指定していても**128bitフル形**で返る。READMEに注意として追記した。
+2. `Gap/ScanResponse` の初版はscan responseにname＋appearance＋manufacturer＋Tx Powerを詰めて**36byteで31byte超過**していた。ライブラリは `start()` を `InvalidArgument` で正しく失敗させ、`lastErrorDetail()` が `name does not fit in the 31-byte scan response payload` と溢れたフィールド名を返した（Phase 1で入れたエラーメッセージが機能した形）。appearance / Tx Power をadvertising payload側へ移して解決。
 
 ### Phase 3 — ガイドのGAP章を執筆
 

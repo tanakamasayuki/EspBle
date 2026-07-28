@@ -2,7 +2,9 @@
 
 > 日本語版: [README.ja.md](README.ja.md)
 
-Runs a continuous active scan and prints every advertisement it receives: address, RSSI, and the device name when present. A minimal central example; pair it with the [Advertise](../Advertise/) example on a second board, or just observe nearby BLE devices.
+Runs a continuous active scan and prints every advertisement it receives: address, RSSI, and the device name when present. A **minimal** central example; pair it with the [Advertise](../Advertise/) example on a second board, or just observe nearby BLE devices.
+
+Those three fields are all it prints. To see **every field** — service UUIDs, service data, manufacturer data, decoded iBeacons — use [Info/ScanDump](../../Info/ScanDump/) instead. This example stays focused on the smallest way to start a scan and receive results.
 
 ## Hardware
 

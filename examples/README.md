@@ -85,6 +85,9 @@ Examples are grouped by area. Each standard-service directory holds a matching
 | [Gap/Mtu](Gap/Mtu/) | Central | Preferred-MTU exchange and notification payload limits |
 | [Gap/Beacon](Gap/Beacon/) | Broadcaster | Non-connectable, non-scannable beacon with manufacturer data and interval control |
 | [Gap/IBeacon](Gap/IBeacon/) | Broadcaster | Broadcast an Apple iBeacon (UUID / major / minor / measured power) |
+| [Gap/ServiceData](Gap/ServiceData/) | Broadcaster | Broadcast a temperature as Service Data (AD 0x16); publish values without a connection |
+| [Gap/ScanResponse](Gap/ScanResponse/) | Peripheral | Split the payload across advertising data and scan response to get past the 31-byte limit |
+| [Gap/AcceptList](Gap/AcceptList/) | Peripheral | Restrict who may connect with the Filter Accept List |
 | [Gap/PrivateAddress](Gap/PrivateAddress/) | Peripheral | Advertise with a random static / resolvable private address |
 
 ### GATT — Basics (generic mechanics + serial)
