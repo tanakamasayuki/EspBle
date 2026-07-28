@@ -83,6 +83,7 @@ Examples are grouped by area. Each standard-service directory holds a matching
 | [Gap/Scan](Gap/Scan/) | Central | Continuous active scan printing address / RSSI / name |
 | [Gap/Connect](Gap/Connect/) | Central | Scan for a service UUID and connect; async connect/disconnect/failure events |
 | [Gap/Mtu](Gap/Mtu/) | Central | Preferred-MTU exchange and notification payload limits |
+| [Gap/ConnectionParameters](Gap/ConnectionParameters/) | Central | Change interval / latency / timeout and the PHY after connecting |
 | [Gap/Beacon](Gap/Beacon/) | Broadcaster | Non-connectable, non-scannable beacon with manufacturer data and interval control |
 | [Gap/IBeacon](Gap/IBeacon/) | Broadcaster | Broadcast an Apple iBeacon (UUID / major / minor / measured power) |
 | [Gap/ServiceData](Gap/ServiceData/) | Broadcaster | Broadcast a temperature as Service Data (AD 0x16); publish values without a connection |
