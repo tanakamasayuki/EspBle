@@ -199,6 +199,14 @@ struct EspBleImpl
 
     void onConnect(BLEClient *client) override
     {
+      if (owner_->isAbandoned(client))
+      {
+        // update() already reported this attempt as failed after its timeout
+        // elapsed. Tear the late connection down instead of surfacing it.
+        client->disconnect();
+        owner_->retireClient(client, 0);
+        return;
+      }
       BLEAddress peerAddress = client->getPeerAddress();
       ble_gap_conn_desc description{};
       ble_gap_conn_find(client->getConnId(), &description);
@@ -795,13 +803,16 @@ struct EspBleImpl
     pushEvent(event);
   }
 
-  void pushFailure(const EspBleScanResult &target, const char *detail)
+  void pushFailure(
+    const EspBleScanResult &target,
+    const char *detail,
+    EspBleError error = EspBleError::BackendFailure)
   {
     std::lock_guard<std::mutex> lock(mutex);
     Event event;
     event.type = EventType::Failed;
     event.failure.peerAddress = target.address;
-    event.failure.error = EspBleError::BackendFailure;
+    event.failure.error = error;
     event.failure.detail = detail;
     pushEvent(event);
   }
@@ -949,6 +960,7 @@ struct EspBleImpl
         // must never also be freed by EspBle.
         std::lock_guard<std::mutex> lock(impl->mutex);
         impl->newestClient = client;
+        impl->connectClient = client;
       }
       client->setClientCallbacks(&impl->clientCallbacks);
       connected = client->connect(
@@ -956,6 +968,28 @@ struct EspBleImpl
         static_cast<uint8_t>(target.addressType),
         timeoutMilliseconds);
     }
+
+    bool abandoned = false;
+    {
+      std::lock_guard<std::mutex> lock(impl->mutex);
+      abandoned = impl->isAbandonedLocked(client);
+      if (abandoned)
+      {
+        impl->forgetAbandonedLocked(client);
+      }
+    }
+
+    if (abandoned)
+    {
+      // The failure was already reported when the timeout elapsed, and a late
+      // connection was torn down in ClientCallbacks::onConnect. Only the client
+      // still needs retiring; the connect slot was freed at abandonment, so
+      // connecting / connectTask belong to a newer attempt and must be left be.
+      impl->retireClient(client, 0);
+      vTaskDelete(nullptr);
+      return;
+    }
+
     if (!connected)
     {
       impl->pushFailure(target, client == nullptr ? "failed to create BLE client" : "BLE connection failed");
@@ -966,6 +1000,7 @@ struct EspBleImpl
       std::lock_guard<std::mutex> lock(impl->mutex);
       impl->connecting = false;
       impl->connectTask = nullptr;
+      impl->connectClient = nullptr;
     }
     vTaskDelete(nullptr);
   }
@@ -1361,6 +1396,47 @@ struct EspBleImpl
   uint32_t connectTimeoutMilliseconds = 10000;
   uint32_t connectStartMilliseconds = 0;
   bool connectCancelRequested = false;
+  // Client of the in-flight attempt, published by the worker as soon as it is
+  // created so update() can identify the attempt it gives up on.
+  BLEClient *connectClient = nullptr;
+  // Clients of attempts that update() abandoned once their requested timeout
+  // elapsed. Their workers are still blocked inside the backend (which does not
+  // honour the timeout and cannot be interrupted; see
+  // cancelExpiredConnectAttempt), so their eventual result is discarded and a
+  // late-arriving connection is torn down instead of being reported.
+  BLEClient *abandonedClients[RetiredClientCapacity] = {};
+  size_t abandonedClientCount = 0;
+
+  bool isAbandonedLocked(BLEClient *client) const
+  {
+    if (client == nullptr) return false;
+    for (size_t index = 0; index < abandonedClientCount; ++index)
+    {
+      if (abandonedClients[index] == client) return true;
+    }
+    return false;
+  }
+
+  bool isAbandoned(BLEClient *client)
+  {
+    std::lock_guard<std::mutex> lock(mutex);
+    return isAbandonedLocked(client);
+  }
+
+  void forgetAbandonedLocked(BLEClient *client)
+  {
+    for (size_t index = 0; index < abandonedClientCount; ++index)
+    {
+      if (abandonedClients[index] != client) continue;
+      for (size_t next = index + 1; next < abandonedClientCount; ++next)
+      {
+        abandonedClients[next - 1] = abandonedClients[next];
+      }
+      abandonedClients[--abandonedClientCount] = nullptr;
+      return;
+    }
+  }
+
   ClientCallbacks clientCallbacks;
   ServerCallbacks serverCallbacks;
   SecurityCallbacks securityCallbacks;
@@ -7097,7 +7173,9 @@ void EspBle::end()
       bool cancelConnect = false;
       {
         std::lock_guard<std::mutex> lock(impl_->mutex);
-        if (!impl_->connecting && !impl_->gattOperating)
+        // Abandoned attempts are waited out too: their worker is still inside
+        // the backend, so deinit() must not run underneath it.
+        if (!impl_->connecting && !impl_->gattOperating && impl_->abandonedClientCount == 0)
         {
           break;
         }
@@ -7310,21 +7388,41 @@ void EspBle::cancelExpiredConnectAttempt()
   }
 
   bool cancel = false;
+  EspBleScanResult target;
   {
     std::lock_guard<std::mutex> lock(impl_->mutex);
-    // The backend ignores the timeout argument of the NimBLE
-    // BLEClient::connect() overload and always waits its internal 30 second
-    // default, so the requested timeout is enforced here instead.
+    // The requested timeout is enforced here because the backend does not
+    // enforce it. Its NimBLE BLEClient::connect() goes through the Bluedroid
+    // compatibility layer (esp_ble_gattc_open), so the attempt is not a GAP
+    // procedure the host tracks: ble_gap_conn_cancel() answers BLE_HS_EALREADY
+    // and the worker stays blocked for the backend's own ~30 s regardless of
+    // the timeout passed to it (measured with the accept_list peer test).
+    // The attempt is therefore abandoned rather than cancelled: the failure is
+    // reported now and the connect slot is freed, so the application can retry
+    // immediately. The worker discards its result when it finally returns, and
+    // a connection that lands late is torn down in ClientCallbacks::onConnect.
     if (impl_->connecting && !impl_->connectCancelRequested &&
       (millis() - impl_->connectStartMilliseconds) >= impl_->connectTimeoutMilliseconds)
     {
       impl_->connectCancelRequested = true;
       cancel = true;
+      target = impl_->connectTarget;
+      if (impl_->connectClient != nullptr &&
+          impl_->abandonedClientCount < EspBleImpl::RetiredClientCapacity)
+      {
+        impl_->abandonedClients[impl_->abandonedClientCount++] = impl_->connectClient;
+      }
+      impl_->connectClient = nullptr;
+      impl_->connectTask = nullptr;
+      impl_->connecting = false;
     }
   }
   if (cancel)
   {
+    // Harmless when it answers BLE_HS_EALREADY, and it does abort the attempt
+    // on the paths where the host is genuinely mid-connect.
     ble_gap_conn_cancel();
+    impl_->pushFailure(target, "BLE connection timed out", EspBleError::Timeout);
   }
 }
 
@@ -7401,6 +7499,7 @@ bool EspBle::connect(const EspBleScanResult &scanResult, uint32_t timeoutMillise
     impl_->connectTimeoutMilliseconds = timeoutMilliseconds;
     impl_->connectStartMilliseconds = millis();
     impl_->connectCancelRequested = false;
+    impl_->connectClient = nullptr;
     impl_->connecting = true;
   }
 

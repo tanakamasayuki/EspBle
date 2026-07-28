@@ -12,12 +12,10 @@ def test_accept_list_blocks_and_admits_connections(dut, peers):
 
     dut.write("c")
     dut.expect_exact("SCAN_STARTED", timeout=10)
-    # 45 s, not the 4 s the sketch requests: when the peer's controller filters
-    # the connection request away, EspBle's own timeout cancel does not cut the
-    # attempt short and the failure only surfaces after the backend's internal
-    # 30 s. Measured at ~31 s. See DESIGN_DEBT.ja.md "connect() timeoutが
-    # filtered peerで効かない".
-    dut.expect("CENTRAL_CONNECT_FAILED", timeout=45)
+    # The sketch requests a 4 s connect timeout. The backend does not honour it
+    # (it stays blocked for ~30 s), so EspBle abandons the attempt and reports
+    # the failure itself. A 15 s budget passes only if that abandonment works.
+    dut.expect("CENTRAL_CONNECT_FAILED", timeout=15)
 
     # Opening the policy lets the same central through.
     peripheral.write("o")

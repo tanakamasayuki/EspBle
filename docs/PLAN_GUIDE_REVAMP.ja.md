@@ -184,11 +184,20 @@ Flagsは自動付与（advertising payloadのみ、scan responseには不可）�
 回帰確認（いずれもPASS）: `mtu` / `advertise_payload` / `advertise_scan` / `service_data` / `connect_disconnect` / `gatt_read_write` / `notify_indicate` / `hid_keyboard_nkro` / `beacon` / `ibeacon`。
 `tests/peer/mtu` が期待する `previous=23` は交換前の初期MTU（仕様上常に23）であり、既定値変更の影響を受けないことを実機でも確認した。
 
-#### 副産物として見つかった既存の不具合
+#### 副産物として見つかった既存の不具合 → 修正済み
 
-`accept_list` テスト作成中に、**`connect()` の timeout 引数が filtered peer に対して効かない**ことが判明した
-（4000 ms 指定に対し失敗検出まで実測約31秒＝backend既定の30秒）。Phase 1の変更とは無関係な既存の問題で、
-これまでどのテストも通っていなかった経路。[DESIGN_DEBT.ja.md](DESIGN_DEBT.ja.md) の「小粒」へ項目4として追加した。
+`accept_list` テスト作成中に、**`connect()` の timeout 引数が効いていない**ことが判明した
+（4000 ms 指定に対し失敗検出まで実測約31秒）。Phase 1の変更とは無関係な既存の問題で、
+これまでどのテストも通っていなかった経路。
+
+原因は、同梱wrapperのNimBLE `BLEClient::connect()` がBluedroid互換層の `esp_ble_gattc_open()` を使うため
+接続試行がホストの追跡するGAP手続きにならず、`ble_gap_conn_cancel()` が `BLE_HS_EALREADY` で空振りすること。
+外部から待ちを打ち切る手段がないため、**cancel前提をやめて「放棄」方式へ変更**した
+（失敗を即座に配送＋slot解放、遅れて戻ったworkerの結果は破棄、遅れて成立した接続は切断）。
+詳細は [DESIGN_DEBT.ja.md](DESIGN_DEBT.ja.md) の「小粒」項目4。
+
+回帰確認（いずれもPASS）: `connect_disconnect` / `gatt_read_write` / `notify_indicate` /
+`lifecycle_stress`（8件、再接続とヒープ） / `persistent_subscribe` / `stack_smoke` / `hid_keyboard_host`。
 
 ### Phase 2 — GAP examples（B + Phase 1の新API分）
 
