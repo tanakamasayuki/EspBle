@@ -246,7 +246,21 @@ struct Operation
   volatile bool done = false;
   int status = 0;
   String value;
+  // Task to wake when the host reports completion, so the worker resumes at
+  // once instead of on its next poll.
+  TaskHandle_t waiter = nullptr;
+  // Points at the ordering flag the worker publishes its completion through.
+  // Raised on the host task the moment this operation completes, so a
+  // notification the same operation triggered cannot be delivered ahead of it.
+  volatile bool *completionPending = nullptr;
 };
+
+inline void reportCompletion(Operation *operation)
+{
+  if (operation->completionPending != nullptr) *operation->completionPending = true;
+  operation->done = true;
+  if (operation->waiter != nullptr) xTaskNotifyGive(operation->waiter);
+}
 
 inline int readCallback(
   uint16_t connectionHandle, const struct ble_gatt_error *error,
@@ -271,7 +285,7 @@ inline int readCallback(
       }
     }
   }
-  operation->done = true;
+  reportCompletion(operation);
   return 0;
 }
 
@@ -281,17 +295,23 @@ inline int writeCallback(
 {
   Operation *operation = static_cast<Operation *>(argument);
   operation->status = error == nullptr ? 0 : error->status;
-  operation->done = true;
+  reportCompletion(operation);
   return 0;
 }
 
+// Block until the host reports completion. Returns false on timeout so a
+// silent stall cannot hang the worker task forever. The wake-up is a task
+// notification with a bounded wait, so a completion that lands before this
+// call (notifications latch) is not missed either.
 inline bool wait(Operation &operation, uint32_t timeoutMilliseconds)
 {
   const uint32_t deadline = millis() + timeoutMilliseconds;
   while (!operation.done)
   {
-    if (millis() >= deadline) return false;
-    delay(1);
+    const uint32_t now = millis();
+    if (now >= deadline) return false;
+    const uint32_t remaining = deadline - now;
+    ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(remaining > 20 ? 20 : remaining));
   }
   return true;
 }
@@ -1184,6 +1204,13 @@ struct EspBleImpl
   static constexpr size_t ClientSubscriptionCapacity = 8;
   ClientSubscription clientSubscriptions[ClientSubscriptionCapacity];
 
+  // Raised on the host task when a GATT operation completes, cleared once its
+  // result has been published. See queueClientNotification().
+  volatile bool gattCompletionPending = false;
+  static constexpr size_t DeferredNotificationCapacity = 4;
+  Event deferredNotifications[DeferredNotificationCapacity];
+  size_t deferredNotificationCount = 0;
+
   bool rememberSubscribedHandle(
     EspBleConnectionId connectionId,
     uint16_t connectionHandle,
@@ -1261,10 +1288,31 @@ struct EspBleImpl
         ? String()
         : String(reinterpret_cast<const char *>(data), length);
       event.notification.indication = indication;
+      // A GATT operation that has completed on the host task but whose result
+      // the worker has not published yet: on air the response came first, so
+      // hold the notification back rather than let it overtake. Peers commonly
+      // notify straight from the write they were asked to perform.
+      if (gattCompletionPending && deferredNotificationCount < DeferredNotificationCapacity)
+      {
+        deferredNotifications[deferredNotificationCount++] = event;
+        return true;
+      }
       pushEvent(event);
       return true;
     }
     return false;
+  }
+
+  // Publish notifications held back while a completion was in flight, in the
+  // order they arrived. Called with the mutex held, right after the completion.
+  void flushDeferredNotificationsLocked()
+  {
+    for (size_t index = 0; index < deferredNotificationCount; ++index)
+    {
+      pushEvent(deferredNotifications[index]);
+      deferredNotifications[index] = Event();
+    }
+    deferredNotificationCount = 0;
   }
 
   void queueServerSubscription(
@@ -1700,6 +1748,8 @@ struct EspBleImpl
         else
         {
           espble_raw::Operation operation;
+          operation.waiter = xTaskGetCurrentTaskHandle();
+          operation.completionPending = &impl->gattCompletionPending;
           switch (result.operation)
           {
           case EspBleGattOperation::Discover:
@@ -1939,6 +1989,9 @@ struct EspBleImpl
           impl->findDatabaseLocked(result.connectionId);
         if (database != nullptr) database->reset(result.connectionId);
       }
+      // The completion is out; anything held back behind it goes next.
+      impl->gattCompletionPending = false;
+      impl->flushDeferredNotificationsLocked();
       impl->gattOperating = false;
       impl->gattTask = nullptr;
     }
@@ -8006,6 +8059,7 @@ void EspBle::update()
   expireGattOperation();
   pumpGattQueue();
   pumpSendQueue();
+  releaseDeferredNotifications();
   drainPendingDisconnects();
   scanner_.dispatchPendingResults();
   dispatchConnectionEvents();
@@ -8016,6 +8070,19 @@ void EspBle::update()
   hidVendor_.dispatchPendingReports();
   hidCustom_.dispatchPendingReports();
   hidKeyboardHost_.dispatchPendingEvents();
+}
+
+// Backstop for the notification-ordering gate: with no GATT operation in
+// flight there is no completion left to order against, so anything still held
+// back is released. Needed because a completion callback that lands after its
+// operation timed out raises the flag with no worker left to clear it.
+void EspBle::releaseDeferredNotifications()
+{
+  if (impl_ == nullptr) return;
+  std::lock_guard<std::mutex> lock(impl_->mutex);
+  if (impl_->gattOperating || impl_->deferredNotificationCount == 0) return;
+  impl_->gattCompletionPending = false;
+  impl_->flushDeferredNotificationsLocked();
 }
 
 void EspBle::driveAutoReconnect()

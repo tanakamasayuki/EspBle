@@ -1700,6 +1700,7 @@ private:
   // update() so operations serialize behind whatever is currently running.
   void pumpGattQueue();
   void pumpSendQueue();
+  void releaseDeferredNotifications();
   void drainPendingDisconnects();
   // True when a HID discovery for connectionId is already queued or in flight.
   // Lets HID auto-rediscover avoid a second discovery when the app also asked.
