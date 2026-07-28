@@ -74,6 +74,20 @@ void setup()
       if (!info.characteristicUuid.equalsIgnoreCase(VALUE_UUID)) continue;
       if (targetCount < MaxTargets) targets[targetCount++] = info.handle;
     }
+    // Dump the whole database so the attribute table on air is visible.
+    for (size_t i = 0; i < ble.discoveredServiceCount(connectionId); ++i)
+    {
+      EspBleGattServiceInfo info;
+      if (ble.discoveredService(connectionId, i, info))
+        Serial.printf("SVC handle=%u uuid=%s\n", info.handle, info.serviceUuid.c_str());
+    }
+    for (size_t i = 0; i < ble.discoveredCharacteristicCount(connectionId); ++i)
+    {
+      EspBleGattCharacteristicInfo info;
+      if (ble.discoveredCharacteristic(connectionId, i, info))
+        Serial.printf("CHR handle=%u svc=%s uuid=%s\n",
+          info.handle, info.serviceUuid.c_str(), info.characteristicUuid.c_str());
+    }
     Serial.printf(
       "DISCOVERED services=%u characteristics=%u\n",
       static_cast<unsigned>(services),

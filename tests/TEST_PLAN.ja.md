@@ -169,6 +169,8 @@ pytest-embedded-cliの既存規約に従います。
 
 60. ✅ `local_identity`: 自分のアドレス取得・送信電力・切断理由指定の検証。Peripheralが`localAddress()`/`localAddressType()`で報告した値が、Centralがスキャンで観測したaddress/addressTypeと一致することを確認。`setTxPower(-12)`と`setTxPower(9)`で、無線が適用した値（`txPower()`）と、advertisingのTx Power Levelとして電波に出る値の両方が追従することを確認。最後に`disconnect(id, 0x16)`の理由コードが相手の`disconnectReason`へ0x16のまま届くこと（backendの0x200オフセットを正規化していること）を確認。
 
+61. ✅ `duplicate_uuid`: 同一UUIDの重複登録の契約を検証。Peripheralが同一UUIDのServiceを2つ登録して両方ハンドルを得ること、同一Service内で同一UUIDのCharacteristicを追加すると**無効ハンドルで拒否される**こと（同梱backendが新しい方をGATTに登録しないため）、別Serviceなら同一UUIDでも登録できることを確認。Centralからは同一UUID Serviceが1つしか列挙されない（wrapperのリモートService mapがUUIDキー）ことも併せて記録する。
+
 ## 合格条件
 
 - test codeがすべての入力を生成し、Serial assertionで結果を判定する。

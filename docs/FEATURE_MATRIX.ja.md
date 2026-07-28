@@ -20,7 +20,9 @@ EspUsbHost / EspUsbDeviceで扱っている機能のBLE版、およびBLEで一�
 | Scan Response payload | ✅ | `EspBleAdvertising::scanResponse()` がadvertising payloadと同じ builder を返し、31byteをもう1面使える。未設定かつscan response有効時はdevice nameを自動的にこちらへ配置。`scan_response` Peerで passive/active の差を検証済み |
 | Scanning（active/passive、値型Scan Result） | ✅ | `Gap/Scan`、`Info/ScanDump`。Scan Resultはaddress / addressType / rssi / connectable / scannable / name / serviceUuids / serviceData（最大4ブロック＋UUID検索） / manufacturerData / appearance / txPowerLevel を保持 |
 | Central接続 / Peripheral接続受け入れ / 切断 | ✅ | Scan Result/address直接接続、Connection ID管理、複数同時接続（同時接続数は同梱NimBLE controllerの上限=esp32s3で3）、auto-reconnect（`setAutoReconnect`、既定off） |
-| GATT Server（独自Service・Characteristic・Descriptor） | ✅ | 任意UUID、permission、binary-safeな値、Descriptor Write event |
+| GATT Server（独自Service・Characteristic・Descriptor） | ✅ | 任意UUID、permission、binary-safeな値、Descriptor Write event。登録は`addService()`→`addCharacteristic(service, …)`→`addDescriptor(characteristic, …)`のハンドル連鎖で、以降の値操作・送信・イベントもハンドルで識別する |
+| 同一UUIDのService複数登録 | ⚠️ | **Peripheral側は登録可**（`BLEServiceMap`が`BLEService*`キーのため両方GATTに出る。instance idはEspBleが自動付与）。**Central側は区別不可**で1つ目しか列挙できない（`BLEClient::m_servicesMap`がUUIDキーで2つ目を破棄）。`duplicate_uuid` Peerで検証済み |
+| 同一Service内の同一UUID Characteristic | ⚠️ | **Peripheral側は登録不可**: 同梱wrapperの`BLEService::addCharacteristic()`が既存を再利用して新しい方をGATTに登録しない。**Central側は区別可**（`m_characteristicMapByHandle`がハンドルキー。HID Reportの撃ち分けを`hid_custom` Peerで検証済み）。`addCharacteristic()`が明示的にInvalidArgumentで拒否する（黙って動かない状態を避ける）。報告案は[UPSTREAM_REQUEST_ARDUINO_ESP32_NIMBLE_WHITELIST.ja.md](UPSTREAM_REQUEST_ARDUINO_ESP32_NIMBLE_WHITELIST.ja.md)の補遺 |
 | GATT Client（一覧/既知UUID Discovery・Read・Write） | ✅ | 接続ごとのdiscovery snapshot、Descriptor操作、Write Without Response、操作単位timeout、操作の自動キュー |
 | Notify / Indicate（購読・解除・CCCD） | ✅ | `Gatt/Basics/NotifyServer`・`Gatt/Basics/IndicateServer`。persistent subscription（`EspBleConfig::persistentSubscriptions`、既定on）で再接続時に自動再購読 |
 | MTU交換 / payload上限検証 | ✅ | 既定`preferredMtu`は**247**（notify payload 244byte）。グローバルGAPイベント（`BLE_GAP_EVENT_MTU`）で両役割とも追跡し`onMtuChanged`へ配送。Central側の接続確立後のMTU交換も反映 |

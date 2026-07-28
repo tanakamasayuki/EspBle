@@ -58,3 +58,50 @@ EspBleは自前でaccept listのミラーを保持し、`ble_gap_wl_set()` を�
 上記が修正されればwrapper APIへ戻せますが、`ble_gap_wl_set()` が
 「一括上書き」のセマンティクスである以上、ミラー方式のほうが素直なため、
 EspBle側は修正後も現行実装を維持する可能性があります。
+
+---
+
+# 補遺: 同一UUIDの重複が扱えない
+
+上記とは別件ですが、同じ`libraries/BLE`で見つかった制約です。Bluetooth Core Specificationは、1つのデバイスが**同じUUIDのServiceやCharacteristicを複数**持つことを認めています（HIDのReport Characteristicが代表例）。同梱wrapperはこれを2箇所で扱えません。
+
+## 問題3: Server側 — 同一Service内の同一UUID Characteristicが登録できない
+
+`BLEService::addCharacteristic()`（`BLEService.cpp:252`付近）はNimBLEパスで次のように振る舞います。
+
+```cpp
+BLECharacteristic *pExisting = m_characteristicMap.getByUUID(pCharacteristic->getUUID());
+#if defined(CONFIG_NIMBLE_ENABLED)
+  if (pExisting != nullptr) {
+    pExisting->m_removed = 0;   // 既存を復活させるだけ
+  } else
+#endif
+  { m_characteristicMap.setByUUID(pCharacteristic, pCharacteristic->getUUID()); }
+```
+
+新しく渡された`BLECharacteristic`は**マップに入らず、GATTにも登録されず、解放もされません**（リーク）。`createCharacteristic()`の戻り値は有効なポインタなので、呼び出し側は成功したと誤解します。以降その characteristic への`notify()`等は宛先のない属性に対する操作になります。
+
+実機で確認: 1つのServiceに同一UUIDのCharacteristicを2つ作ると、Central側から見えるのは1つだけです。
+
+## 問題4: Client側 — 同一UUIDのリモートServiceが1つに潰れる
+
+`BLEClient::m_servicesMap` は `std::map<std::string, BLERemoteService *>` でUUID文字列がキーです（`BLEClient.h:166`）。discovery時の挿入は次のとおりです。
+
+```cpp
+// BLEClient.cpp:1055 付近
+client->m_servicesMap.insert(std::pair<std::string, BLERemoteService *>(
+  pRemoteService->getUUID().toString().c_str(), pRemoteService));
+```
+
+`std::map::insert` は**キーが既存なら何もしません**。したがって同一UUIDのServiceを複数公開している相手に接続すると、2つ目以降は破棄され（生成した`BLERemoteService`はリーク）、アプリケーションからは到達できません。
+
+なおCharacteristicについては`m_characteristicMapByHandle`にも登録されるため、**同一Service内の同一UUID Characteristicはハンドル経由で区別できます**（EspBleのHID Host はこの経路を使っています）。問題はServiceの方だけです。
+
+## 希望する修正
+
+1. `BLEService::addCharacteristic()` のNimBLEパスで、同一UUIDでも別インスタンスとして登録できるようにする（マップは既に`BLECharacteristic*`キーなので、`pExisting`による早期returnをやめれば足りるはずです）。
+2. `BLEClient::m_servicesMap` をハンドルキーにするか、`m_servicesMapByHandle`を併設して同一UUIDの複数Serviceへ到達できるようにする。
+
+## EspBle側の回避
+
+問題3は回避できないため、EspBleは`addCharacteristic()`が同一Service内の重複UUIDを**明示的に拒否**します（黙って動かない状態を避けるため）。問題4は、Server側が2つ公開していてもEspBle Centralからは1つしか見えない、という制約として文書化しています。

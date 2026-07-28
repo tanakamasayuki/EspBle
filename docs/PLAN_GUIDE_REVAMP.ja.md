@@ -289,9 +289,41 @@ GitHubがMarkdown内の ```mermaid フェンスをネイティブに描画する
 
 | # | 項目 | 状況 |
 |---|---|---|
-| 4-1 | `addService()` のハンドル化と同一UUID複数インスタンスの許可 | 未着手 |
-| 4-2 | 同一UUID Characteristic の複数登録許可 | 未着手 |
-| 4-3 | `MaxServices = 4` / `MaxCharacteristics = 16` の上限見直し | 未着手 |
+| 4-1 | `addService()` のハンドル化と同一UUID複数インスタンスの許可 | **完了** |
+| 4-2 | 同一UUID Characteristic の複数登録許可 | **完了（backend制約により「明示的に拒否」が結論）** |
+| 4-3 | `MaxServices` / `MaxCharacteristics` の上限見直し | **完了（4→8 / 16→32）** |
+
+#### 実装したAPI
+
+登録は3段のハンドル連鎖になり、以降の操作とイベントはすべてハンドルで対象を示す。UUID指定のAPIは残していない。
+
+```cpp
+const EspBleGattService service = ble.gattServer().addService("181A");
+EspBleGattCharacteristic chr = ble.gattServer().addCharacteristic(service, "2A6E", config);
+EspBleGattDescriptor desc = ble.gattServer().addDescriptor(chr, "2901");
+ble.gattServer().setValue(chr, value);
+ble.gattServer().notify(chr, value);
+```
+
+`EspBleGattWrite` / `EspBleGattDescriptorWrite` / `EspBleGattSubscription` / `EspBleGattSendResult` に対象ハンドルを追加。UUID文字列はログ用として残している。
+内部は UUIDキー → インデックス参照へ変更。`realize()` は同一UUID Serviceへ instance id を自動付与し、attribute handleの必要数もServiceごとに実測値から算出する（従来はbackend既定の15固定）。
+
+#### 実機で判明したbackendの制約
+
+`duplicate_uuid` Peerを作って属性テーブルをダンプしたところ、**同一UUIDの重複は同梱wrapperが2箇所で潰していた**。
+
+1. **同一Service内の同一UUID Characteristicは登録不可**: `BLEService::addCharacteristic()` がNimBLEパスで既存を再利用し、新しい`BLECharacteristic`をGATTに登録せず破棄する（リーク）。`createCharacteristic()` は有効なポインタを返すため、呼び出し側は成功したと誤解する。→ **EspBleは`addCharacteristic()`でこの重複を明示的に拒否する。** 無効ハンドルを返し、送信先のない属性へnotifyし続ける状態を防ぐ
+2. **同一UUIDのリモートServiceはClient側で1つに潰れる**: `BLEClient::m_servicesMap` がUUIDキーで、`std::map::insert` が2つ目を黙って捨てる。Server側は両方登録できているが、EspBle Centralからは1つ目しか列挙できない
+
+報告案は [UPSTREAM_REQUEST_ARDUINO_ESP32_NIMBLE_WHITELIST.ja.md](UPSTREAM_REQUEST_ARDUINO_ESP32_NIMBLE_WHITELIST.ja.md) の補遺（問題3・問題4）。
+
+なお**Client側で同一UUID Characteristicをハンドルで撃ち分ける経路は従来どおり動作する**（`m_characteristicMapByHandle`がハンドルキーのため）。HID Reportの撃ち分けは`hid_custom` Peerで検証済み。
+
+#### 移行と検証
+
+- MIDIプロファイルヘルパーと**スケッチ68本**を移行（移行スクリプト＋手作業1本）
+- **ビルド207ディレクトリ全PASS**
+- Peer実機 **26件PASS**: `gatt_read_write` / `notify_indicate` / `midi_device` / `midi_host` / `persistent_subscribe` / `glucose` / `fitness_machine` / `user_data` / `hid_keyboard_device` / `hid_custom` / `lifecycle_stress`（8件）/ `service_changed` / `battery_service` / `device_information` / `immediate_alert` / `duplicate_uuid`（新規）
 
 **影響範囲が広い**: HID / MIDI を含む全profile helper、`examples/Gatt/**` の全sketch、Peerテスト一式。Phase 1〜3とは独立しているため、別ブランチでの並行作業も可能。
 

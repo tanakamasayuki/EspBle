@@ -923,9 +923,11 @@ public:
   // Register a Service. Two calls with the same UUID create two independent
   // instances, as the spec allows. Returns an invalid handle on failure.
   EspBleGattService addService(const char *serviceUuid);
-  // Register a Characteristic inside a Service. Several characteristics in one
-  // service may share a UUID (HID Report characteristics do); the handle is what
-  // tells them apart afterwards.
+  // Register a Characteristic inside a Service and return its handle; every
+  // later operation takes that handle. Two characteristics in one service may
+  // not share a UUID: the spec permits it, but the bundled backend reuses the
+  // first entry instead of adding a second, so this is rejected rather than
+  // silently dropped. Two services may share a UUID (see addService).
   EspBleGattCharacteristic addCharacteristic(
     EspBleGattService service,
     const char *characteristicUuid,

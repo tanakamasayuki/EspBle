@@ -417,7 +417,27 @@ GATTでは、データが3階層で表現されます。
 
 それぞれがUUIDという識別子を持ちます（4章で詳しく説明します）。
 
-ただし**UUIDは「型」であって「どれか」ではありません。** 仕様上、同じUUIDのServiceやCharacteristicを1台が複数持てます。HIDキーボードが複数のReport Characteristicを同じUUIDで並べるのが典型例です。そのためServerを組み立てる側は、登録時に返る**ハンドル**で対象を指定します。`addService()` がServiceのハンドルを返し、それを `addCharacteristic()` へ渡すとCharacteristicのハンドルが返り、以降の値設定やNotifyはそのハンドルで行います。Client側も同様に、同じUUIDが複数あるときは属性ハンドルで撃ち分けます。
+ただし**UUIDは「型」であって「どれか」ではありません。** 仕様上、同じUUIDのServiceやCharacteristicを1台が複数持てます。HIDキーボードが複数のReport Characteristicを同じUUIDで並べるのが典型例です。
+
+そのためEspBleでは、**登録時に返るハンドルで対象を指定します**。`addService()` がServiceのハンドルを返し、それを `addCharacteristic()` へ渡すとCharacteristicのハンドルが返り、以降の値設定やNotifyはそのハンドルで行います。イベント（書き込み通知や購読状態の変化）にも対象のハンドルが入るので、UUIDが同じでもどれのことか分かります。
+
+Client側は、相手のCharacteristicを**属性ハンドル**で指定できます。同じUUIDのCharacteristicが並ぶHIDのReportを撃ち分けるのはこの方法です。
+
+#### 同一UUIDの重複はどこまで扱えるか
+
+仕様が認めている重複のうち、EspBleで実際に扱える範囲は**役割ごとに違い、しかも逆の軸で制限されます**。
+
+| | 同じUUIDの**Service**を複数持つ | 同じServiceの中に同じUUIDの**Characteristic**を複数持つ |
+|---|---|---|
+| **Peripheral（公開する側）** | できる | **できない** |
+| **Central（読む側）** | **区別できない**（1つ目しか見えない） | 区別できる（属性ハンドルで指定） |
+
+いずれも同梱backendの都合です。
+
+- Peripheralで**Characteristicを重複させられない**のは、backendがServiceへCharacteristicを追加する際、同じUUIDが既にあると新しい方を登録せず既存を再利用してしまうためです。EspBleは黙って動かない状態を避けるため、この登録を明示的にエラーにします
+- Centralで**Serviceを区別できない**のは、backendがリモートServiceをUUIDで管理しており、2つ目が破棄されるためです。相手が2つ公開していても、こちらからは1つ目にしか到達できません
+
+実用上いちばん多い「同じUUIDのHID Reportが並ぶ相手を読む」ケースは、右下（Central × Characteristic）にあたるので問題なく扱えます。
 
 値のやり取りには次の方法があります。
 

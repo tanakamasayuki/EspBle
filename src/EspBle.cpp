@@ -4139,10 +4139,24 @@ EspBleGattCharacteristic EspBleGattServer::addCharacteristic(
     return EspBleGattCharacteristic();
   }
 
-  // A repeated UUID is a second characteristic, not an error: HID Report
-  // characteristics are the everyday case. The returned handle is what tells
-  // them apart from here on.
   const size_t serviceIndex = static_cast<size_t>(service.id - 1);
+  for (size_t index = 0; index < impl_->characteristicCount; ++index)
+  {
+    const auto &existing = impl_->characteristics[index];
+    if (existing.serviceIndex != serviceIndex || !uuidEquals(existing.uuid, characteristicUuid))
+    {
+      continue;
+    }
+    // The spec allows one service to expose several characteristics with the
+    // same UUID, but the bundled backend cannot: its
+    // BLEService::addCharacteristic() reuses the existing entry and discards
+    // the new one, so the second would never reach the attribute table. Fail
+    // here rather than hand back a handle whose sends silently go nowhere.
+    owner_->setError(
+      EspBleError::InvalidArgument,
+      "the bundled backend cannot host two characteristics with the same UUID in one service");
+    return EspBleGattCharacteristic();
+  }
   const size_t index = impl_->characteristicCount++;
   auto &definition = impl_->characteristics[index];
   definition.serviceIndex = serviceIndex;

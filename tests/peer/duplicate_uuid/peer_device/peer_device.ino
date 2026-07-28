@@ -1,6 +1,6 @@
-// Peripheral for the duplicate_uuid peer test: expose two Services that share a
-// UUID, and two Characteristics that share a UUID inside one of them. This is
-// what the spec allows and what a UUID-keyed API cannot express.
+// Peripheral for the duplicate_uuid peer test: register two Services that share
+// a UUID (allowed), and attempt a second Characteristic with a UUID already used
+// in the same Service (rejected by the bundled backend, so EspBle refuses it).
 #include <EspBle.h>
 
 static constexpr const char *SERVICE_UUID = "5266f727-49d7-4eaf-a6f1-647570736572";
@@ -8,7 +8,7 @@ static constexpr const char *VALUE_UUID = "5266f728-49d7-4eaf-a6f1-647570636861"
 
 EspBle ble;
 EspBleGattCharacteristic firstValue;
-EspBleGattCharacteristic secondValue;
+EspBleGattCharacteristic duplicateValue;
 EspBleGattCharacteristic otherServiceValue;
 
 void setup()
@@ -21,24 +21,22 @@ void setup()
   config.readable = true;
   config.notifiable = true;
 
-  // Two instances of the same Service UUID.
+  // Two instances of the same Service UUID: each call yields its own handle.
   const EspBleGattService first = gattServer.addService(SERVICE_UUID);
   const EspBleGattService second = gattServer.addService(SERVICE_UUID);
 
-  // Two Characteristics sharing a UUID inside the first Service, plus one more
-  // with the same UUID in the second Service.
   firstValue = gattServer.addCharacteristic(first, VALUE_UUID, config);
-  secondValue = gattServer.addCharacteristic(first, VALUE_UUID, config);
+  // Same UUID in the same service: must be refused, not silently merged.
+  duplicateValue = gattServer.addCharacteristic(first, VALUE_UUID, config);
+  // Same UUID in a different service: fine.
   otherServiceValue = gattServer.addCharacteristic(second, VALUE_UUID, config);
 
-  // Distinct values prove the handles address distinct attributes.
   gattServer.setValue(firstValue, String("first"));
-  gattServer.setValue(secondValue, String("second"));
   gattServer.setValue(otherServiceValue, String("other"));
 
-  EspBleConfig config2;
-  config2.deviceName = "EspBle Duplicate UUID";
-  if (!ble.begin(config2))
+  EspBleConfig bleConfig;
+  bleConfig.deviceName = "EspBle Duplicate UUID";
+  if (!ble.begin(bleConfig))
   {
     Serial.printf("BLE_INIT_FAILED %s %s\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
     return;
@@ -64,8 +62,8 @@ void loop()
     else if (command == 'h')
     {
       Serial.printf(
-        "HANDLES first=%u second=%u other=%u\n",
-        firstValue.id, secondValue.id, otherServiceValue.id);
+        "HANDLES first=%u duplicate=%u other=%u\n",
+        firstValue.id, duplicateValue.id, otherServiceValue.id);
     }
   }
   ble.update();

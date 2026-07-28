@@ -1,31 +1,34 @@
 import re
 
-READ = re.compile(rb"READ handle=(\d+) value=(\S+)")
+HANDLES = re.compile(rb"HANDLES first=(\d+) duplicate=(\d+) other=(\d+)")
 
 
-def test_duplicate_uuids_are_addressable(dut, peers):
+def test_duplicate_uuid_registration(dut, peers):
+    """Two services may share a UUID; two characteristics in one service may not.
+
+    The bundled backend reuses an existing characteristic when a second one is
+    added with the same UUID in the same service, so EspBle rejects that instead
+    of returning a handle whose sends would go nowhere.
+    """
     peripheral = peers["device"]
 
-    # The peer registers two services with one UUID and three characteristics
-    # with another; the handles it got back must all differ.
     peripheral.write("h")
-    peripheral.expect(re.compile(rb"HANDLES first=(\d+) second=(\d+) other=(\d+)"), timeout=15)
+    match = peripheral.expect(HANDLES, timeout=15)
+    first, duplicate, other = (int(match.group(i)) for i in (1, 2, 3))
+    assert first != 0, "the first characteristic should register"
+    assert duplicate == 0, "a duplicate UUID in one service must be refused"
+    assert other != 0, "the same UUID in a second service should register"
+    assert first != other
+
     peripheral.write("?")
-    peripheral.expect_exact("ADVERTISING 1", timeout=15)
+    peripheral.expect_exact("ADVERTISING 1", timeout=10)
 
     dut.write("c")
     dut.expect_exact("SCAN_STARTED", timeout=10)
     dut.expect("CENTRAL_CONNECTED id=", timeout=20)
 
-    # A UUID-keyed server could not have created these at all.
-    dut.expect_exact("DISCOVERED services=2 characteristics=3", timeout=20)
-
-    values, handles = [], []
-    for _ in range(3):
-        match = dut.expect(READ, timeout=15)
-        handles.append(int(match.group(1)))
-        values.append(match.group(2).decode())
+    # The peer registered the service twice, but the bundled backend keys remote
+    # services by UUID on the client side, so only the first is enumerable here.
+    dut.expect_exact("DISCOVERED services=1 characteristics=1", timeout=20)
+    dut.expect_exact("READ handle=", timeout=15)
     dut.expect_exact("READ_DONE", timeout=10)
-
-    assert len(set(handles)) == 3, f"attribute handles are not distinct: {handles}"
-    assert sorted(values) == ["first", "other", "second"], f"unexpected values {values}"
