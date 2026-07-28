@@ -338,17 +338,18 @@ MTUを下げる理由があるとすれば、多数の同時接続でメモリ�
 sequenceDiagram
     participant C as Central
     participant P as Peripheral
-    Note over P: advertising().start()
-    loop アドバタイズ間隔ごと
-        P-->>C: アドバタイズ（誰宛でもない放送）
-    end
+    Note over P: advertising().start()<br/>以後、聞き手の有無に関わらず<br/>一定間隔で放送し続ける
     Note over C: scanner().start()
-    C->>P: Scan Request（Active Scanのみ）
-    P-->>C: Scan Response（残り31バイト）
-    Note over C: onResult<br/>UUID・名前・RSSIで<br/>目的の相手か判定
+    loop 目的の相手が見つかるまで
+        P-->>C: アドバタイズ（誰宛でもない放送）
+        C->>P: Scan Request（Active Scanのみ）
+        P-->>C: Scan Response（残り31バイト）
+        Note over C: onResult<br/>UUID・名前・RSSIで<br/>目的の相手か判定
+    end
+    Note over C: scanner().stop()
     C->>P: 接続要求
     Note over C,P: 接続確立（以後は1対1）
-    P->>C: 接続パラメータとMTUの交渉
+    Note over C,P: 接続パラメータとMTUの交渉
     Note over C: onConnected
     Note over P: onConnected
     Note over C,P: 以降はGATT（3章）
