@@ -86,9 +86,12 @@ def test_discovery_cycles_do_not_leak_heap(dut, peers):
     heaps = []
     cycles = 8
 
-    for _ in range(cycles):
-        peripheral.write("?")
-        peripheral.expect_exact("ADVERTISING 1", timeout=20)
+    peripheral.write("?")
+    peripheral.expect_exact("ADVERTISING 1", timeout=20)
+    for cycle in range(cycles):
+        if cycle != 0:
+            # The peer restarts advertising from its own disconnect handler.
+            peripheral.expect_exact("DEVICE_READVERTISING 1", timeout=20)
         dut.write("r")
         dut.expect_exact("REARMED", timeout=10)
         dut.write("s")

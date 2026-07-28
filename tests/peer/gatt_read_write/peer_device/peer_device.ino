@@ -87,6 +87,12 @@ void setup()
   slowCharacteristic->setCallbacks(new SlowReadCallbacks());
   slowService->start();
 
+  // Advertising does not restart by itself after a disconnect, so the
+  // reconnect-cycle test would find nothing on its second pass.
+  ble.onDisconnected([](const EspBleConnection &) {
+    Serial.printf("DEVICE_READVERTISING %u\n", ble.advertising().start() ? 1 : 0);
+  });
+
   auto &advertising = ble.advertising();
   advertising.setName("EspBle GATT Peer");
   advertising.addServiceUuid(TEST_SERVICE_UUID);

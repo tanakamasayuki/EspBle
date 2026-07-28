@@ -327,7 +327,7 @@ ble.gattServer().notify(chr, value);
 
 **影響範囲が広い**: HID / MIDI を含む全profile helper、`examples/Gatt/**` の全sketch、Peerテスト一式。Phase 1〜3とは独立しているため、別ブランチでの並行作業も可能。
 
-### Phase 4b — wrapper制約の回避（NimBLE直接呼び出し）
+### Phase 4b — wrapper依存の撤去（NimBLEホストAPIへ全面移行）
 
 EspBleのHID Deviceは、同梱wrapperを介さず `ble_gatt_svc_def` / `ble_gatt_chr_def` を自前で組み立て `ble_gatts_add_svcs()` を呼んでいる。だから**同一UUID（0x2A4D）のReport Characteristicを複数公開できている**。
 つまりこれまで「backendの制約」と記録してきたものの多くは**wrapperの制約であってNimBLEの制約ではない**。全件を洗い直した結果が次の表。
@@ -355,18 +355,50 @@ EspBleのHID Deviceは、同梱wrapperを介さず `ble_gatt_svc_def` / `ble_gat
 
 したがって「自前で広告を出す」には「自前でGATT Serverのイベントを処理する」ことがセットで必要になる。Directed Advertisingの用途（bonded peerへの高速再接続）は接続を伴うため、#1なしの#3には実用価値がない。
 
-#### 実施順（依存関係を反映）
+#### 方針: 個別回避ではなく、wrapperを全面的に外す
 
-| 順 | 項目 | 理由 |
-|---|---|---|
-| 1 | **#8**（接続単位indication） | **完了**。小さく独立 |
-| 2 | **#2**（自前discovery。#9はヒープ実測待ち） | **完了**。Client側で完結し、Server側の作業と独立。記録済みの2問題を同時に解決 |
-| 3 | **#1**（自前GATT Server） | 最大。#3の前提でもある |
-| 4 | **#3 ＋ #5**（自前adv start） | #1完了後に初めて成立 |
-| 5 | **#4**（自前scan） | Central側で独立。#2の自前discoveryと基盤を共有できる |
-| 6 | **#7**（真のconnect cancel） | 放棄方式で実害が消えているため最後 |
+当初は上表を1件ずつ回避する計画だったが、**同梱wrapper（`libraries/BLE`）への依存を全部外す**方針に切り替える。判断の根拠は3つ。
 
-#6のみ、ビルド構成に阻まれて手段がない。
+1. **半分だけ外すのが最も危険。** wrapperの `BLEServer` / `BLEClient` はadv開始時・connect時に渡したコールバックで当該接続の全GAPイベントを受け取る設計で、片方を自前にすると配線が二重になる。#2の実装中に出た「Notificationがwrite完了イベントを追い越す」バグはその境界で発生した（順序ゲートで修正済み）。全面移行すれば配線は1本になり、この種のバグのクラス自体が消える。過去にクラスタA/Bで実機退行したのも「wrapper machineryの一部だけ自前化」だった
+2. **スタックの乗り換えではない。** すでに同じNimBLEホストAPIを呼んでおり、間の薄い層を捨てるだけ。#2で汎用GATT Clientは移行済み、advertising payloadの組み立ても自前、グローバルGAPリスナも登録済み、HID Deviceは元から `ble_gatts_add_svcs()` を自前で呼んでいる
+3. **プリビルドライブラリにシンボルが揃っていることを確認した。** `esp32s3-libs/3.3.11/lib/libbt.a` に `nimble_port_init` / `nimble_port_freertos_init` / `ble_svc_gap_init` / `ble_svc_gatt_init` / `ble_store_config_init` / `ble_gap_adv_start` / `ble_gap_disc` / `ble_gap_connect` / `ble_gatts_add_svcs` / `ble_gap_security_initiate` / `ble_sm_inject_io` がすべて存在する（`ble_gap_ext_adv_start` のみ無し＝#6）。NimBLEヘッダもesp32-arduino-libsのグローバルinclude pathにあり、**BLEライブラリへの依存なしでincludeできる**。`CONFIG_BT_NIMBLE_NVS_PERSIST=y` なのでbond永続化も自前で成立する
+
+兄弟ライブラリ [EspBleBluedroid] も同時期に同じ方針転換（ESP-IDFのBLEスタックを直接呼び、BLEクラス依存を外す）を行った。相互接続テストの前提が揃う。
+
+#### 移行の全体像（wrapper API → 置き換え先）
+
+| サブシステム | 現在のwrapper API | 置き換え先 | 規模 | 同時に解決するもの |
+|---|---|---|---|---|
+| 汎用GATT Client | — | `ble_gattc_*` 直呼び | **完了** | #2・#9 |
+| init / deinit | `BLEDevice::init/deinit/getInitialized` | `nimble_port_init()` → `ble_hs_cfg` 設定 → `ble_store_config_init()` → `nimble_port_freertos_init()` → sync待ち | 小 | |
+| MTU | `BLEDevice::setMTU()` | `ble_att_set_preferred_mtu()` | 極小 | |
+| アドレス / privacy | `setOwnAddr()` / `setOwnAddrType()` / `getAddress()` | `ble_hs_id_set_rnd()` ＋ own_addr_type引数 ＋ `ble_hs_id_copy_addr()` | 小 | |
+| Tx Power | `setPower()` / `getPower()` | `esp_ble_tx_power_set()` / `_get()`（**現在もIDF API直呼びで、wrapper非依存**） | 0 | |
+| Security | `BLESecurity` / `setSecurityCallbacks()` | `ble_hs_cfg.sm_*` ＋ `BLE_GAP_EVENT_PASSKEY_ACTION` ＋ `ble_sm_inject_io()` | 中 | **SMコールバックのhost task 30秒block、passkey表示の接続attribution推定**（現在DESIGN_DEBTで「修正不能」扱いの2件） |
+| Advertising | `BLEAdvertising` / `BLEAdvertisementData` | `ble_gap_adv_set_data()` / `ble_gap_adv_rsp_set_data()` / `ble_gap_adv_start()`（payload生成は既に自前） | 中 | #3・#5 |
+| Scan | `BLEScan` / `BLEAdvertisedDevice` | `ble_gap_disc()` ＋ AD構造のパーサ自前 | 中 | #4 |
+| Central接続 | `BLEClient::connect()` / `BLEClientCallbacks` | `ble_gap_connect()` ＋ 自前GAPコールバック | 中 | #7。`abandonedClients` / `retireClient` 機構が不要になる |
+| GATT Server | `BLEServer` / `BLEService` / `BLECharacteristic` / `BLEDescriptor` | `ble_gatts_count_cfg()` ＋ `ble_gatts_add_svcs()` ＋ access callback ＋ 値保持 | **大**（HID Deviceに前例） | #1。**access callbackが `conn_handle` を受け取るのでDescriptor Write eventの接続ID欠落も解消** |
+| HID Host | `BLEClient` / `BLERemoteService` / `BLERemoteCharacteristic` | #2で作った自前スナップショット＋ハンドル指定操作へ寄せる | 中 | discovery経路の一本化 |
+
+#### 移行後も変わらないもの（プリビルドのビルド構成由来）
+
+- **Extended / Periodic Advertising**（#6）: `ble_gap_ext_adv_start` がライブラリに存在しない
+- 最大3接続（`CONFIG_BT_NIMBLE_MAX_CONNECTIONS=3`）、`MAX_BONDS=3`、`MAX_CCCDS=8`、whitelist 12件
+
+#### 実施順
+
+| 順 | 段階 | 内容 | 状況 |
+|---|---|---|---|
+| 1 | **S0** | #8 接続単位indication | **完了** |
+| 2 | **S1** | #2 汎用GATT Client（discovery・read/write・descriptor・購読・notification受信） | **完了** |
+| 3 | **S2** | **GATT Server自前化**（#1）。ここでPeripheral側のGAPイベントを完全に引き取る。S3の前提 | **完了** |
+| 4 | **S3** | **Advertising自前化**（#3・#5） | 未着手 |
+| 5 | **S4** | **Scan自前化**（#4） | 未着手 |
+| 6 | **S5** | **接続・Security・init/address/MTU自前化**（#7、SMブロッキング解消） | 未着手 |
+| 7 | **S6** | HID Hostを自前Client経路へ移行、wrapperの `#include` を全削除、`library.properties`・ドキュメント更新 | 未着手 |
+
+各段階の完了条件は**peerテスト全件PASS**。段階の途中でビルドが通らない期間は許容する（合意済み）。
 
 #### #2 の実施結果（#9はヒープ実測待ち）
 
@@ -393,6 +425,34 @@ EspBleのHID Deviceは、同梱wrapperを介さず `ble_gatt_svc_def` / `ble_gat
 - 購読テーブルは8件（`ClientSubscriptionCapacity`）。溢れたら `ResourceExhausted` で失敗させる
 
 実機確認（2ボード）: `peer/duplicate_uuid` を拡張し、同一UUIDの2つのCharacteristicへ**ハンドル指定でread・subscribeし、それぞれのNotificationを取り違えずに受信**するところまで検証した。HID Host / MIDI Host は自前のdiscovery経路を持つため、この変更の対象外。
+
+#### S2 の実施結果
+
+**汎用GATT Serverの属性テーブルを自前で組むようにした。** `BLEServer` / `BLEService` / `BLECharacteristic` / `BLEDescriptor` は汎用サーバから外れた。
+
+| 項目 | 実装 |
+|---|---|
+| 登録 | `ble_gatts_count_cfg()` ＋ `ble_gatts_add_svcs()`。`ble_gatt_svc_def` / `chr_def` / `dsc_def` の表はサーバ実装が保持する（ホストがポインタを持ち続けるため） |
+| 対象の識別 | ホストがaccess callbackへ渡す `ctxt->chr` / `ctxt->dsc` のポインタ同一性。UUIDでは区別できない重複も、これなら一意 |
+| 値 | 読み出しは保持している値を `os_mbuf_append()`。書き込みは値を差し替えてイベントを積む |
+| CCCD | ホストが自動で付与・管理する（`BLE_GATT_CHR_F_NOTIFY` / `_INDICATE`）。アプリが 0x2902 を自分で `addDescriptor()` するのは**明示的に拒否**する（ホストの管理を二重化してしまうため） |
+| 購読状態 | グローバルGAPリスナの `BLE_GAP_EVENT_SUBSCRIBE`。(接続ハンドル, 値ハンドル) で12件まで保持し、切断で破棄 |
+| 送信 | notify/indicateはどちらも `ble_gatts_notify_custom()` / `ble_gatts_indicate_custom()`。broadcastは購読中の接続を1件ずつ回る形になった |
+
+得られたもの:
+
+- **#1が解決した。同一Service内に同一UUIDのCharacteristicを複数置ける**。`addCharacteristic()` の拒否を撤去した
+- **Descriptor Write eventが接続IDを持つようになった**（access callbackが `conn_handle` を受け取る）。DESIGN_DEBTで「backendが非公開」としていた項目が消える
+- broadcast送信のMTU判定が接続単位になった（wrapperの最小MTU一括判定を通らない）
+
+副作用として決めたこと:
+
+- 購読テーブルは12件（`SubscriptionCapacity`）。溢れたら記録できないので `droppedEventCount()` に計上する（黙って配送されなくなるのを避けるため）
+- Descriptorへの書き込みが `maximumLength` を超えたら `BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN` で拒否する（切り詰めない）
+
+実機確認（2ボード）: `peer/duplicate_uuid` を「1つのServiceに同一UUIDのCharacteristic 2つ＋同一UUIDのService 2つ」へ拡張し、**3つすべてをハンドル指定でread・subscribeし、Notificationを取り違えずに受信**するところまで検証した。
+
+`ble_gatts_start()` はまだwrapperの `BLEAdvertising::start()` 経由で呼ばれている。S3で自前の広告開始に移すときに引き取る。
 
 ### Phase 5 — GATT examples のコード＋README充実
 

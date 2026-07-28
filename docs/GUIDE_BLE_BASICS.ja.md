@@ -425,20 +425,18 @@ Client側は、相手のCharacteristicを**属性ハンドル**で指定でき�
 
 #### 同一UUIDの重複はどこまで扱えるか
 
-仕様が認めている重複のうち、EspBleで実際に扱える範囲は**役割で1箇所だけ違います**。
+仕様が認めている重複は、**どちらの役割でも扱えます**。
 
 | | 同じUUIDの**Service**を複数持つ | 同じServiceの中に同じUUIDの**Characteristic**を複数持つ |
 |---|---|---|
-| **Peripheral（公開する側）** | できる | **できない** |
+| **Peripheral（公開する側）** | できる | できる |
 | **Central（読む側）** | 区別できる（属性ハンドルで指定） | 区別できる（属性ハンドルで指定） |
 
-Central側は、相手がどう重複させていても属性ハンドルで撃ち分けられます。discoveryを`ble_gattc_disc_all_svcs()`などBLEスタックのAPIで自前に行い、read / write / 購読（CCCDへの書き込み）もすべて属性ハンドルに対して直接発行するためです。Notificationも、どのハンドルから来たかで対応付けます。
+Peripheral側は、`addService()` / `addCharacteristic()` が返すハンドルが対象を表します。EspBleはBLEスタックのAPI（`ble_gatts_add_svcs()`）で属性テーブルを直接組み立て、読み書きの通知もスタックが渡す「どの定義か」の情報で判別するので、UUIDが同じでも取り違えません。
 
-唯一できないのは、**Peripheralが1つのServiceの中に同じUUIDのCharacteristicを2つ置くこと**です。Arduino-ESP32同梱のBLEラッパーがServiceへCharacteristicを追加する際、同じUUIDが既にあると新しい方を登録せず既存を再利用してしまうためで、黙って動かない状態を避けるためEspBleはこの登録を明示的にエラーにします。BLEの仕様やチップの制約ではありません。
+Central側は、相手がどう重複させていても属性ハンドルで撃ち分けられます。discoveryを`ble_gattc_disc_all_svcs()`などのAPIで自前に行い、read / write / 購読（CCCDへの書き込み）もすべて属性ハンドルに対して直接発行するためです。Notificationも、どのハンドルから来たかで対応付けます。
 
-その証拠に、EspBleのHID Deviceは同一UUID（`0x2A4D`）のReport Characteristicを複数公開しています。ラッパーを介さずBLEスタックのAPIを直接呼んで属性テーブルを組み立てているためです。**制限はラッパー側にあり、スタック自体にはありません。**
-
-なお再接続時の購読自動復元だけは、UUIDが一意なCharacteristicに限られます。復元は相手のアドレスとUUIDを手掛かりに行うため、同じUUIDが複数あると「どれを購読していたか」を言えないからです。該当する場合は、再接続後に自分でハンドルを指定して購読し直してください。
+ひとつだけ制限があります。**再接続時の購読自動復元は、UUIDが一意なCharacteristicに限られます。** 復元は相手のアドレスとUUIDを手掛かりに行うため、同じUUIDが複数あると「どれを購読していたか」を言えないからです。該当する場合は、再接続後に自分でハンドルを指定して購読し直してください。
 
 値のやり取りには次の方法があります。
 

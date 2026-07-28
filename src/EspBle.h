@@ -501,6 +501,7 @@ struct EspBleGattWrite
 
 struct EspBleGattDescriptorWrite
 {
+  EspBleConnectionId connectionId = 0;
   EspBleGattDescriptor descriptor;
   String serviceUuid;
   String characteristicUuid;
@@ -779,6 +780,15 @@ struct EspBleHidKeyboardHostImpl;
 // EspBle::addToAcceptList(); with an empty accept list, a restricted policy
 // rejects everyone. Enforced by the controller, so a rejected peer never
 // reaches the application.
+// Advertising channels, as a bit mask for EspBleAdvertising::setChannelMap().
+enum EspBleAdvertisingChannel : uint8_t
+{
+  EspBleAdvertisingChannel37 = 0x01,
+  EspBleAdvertisingChannel38 = 0x02,
+  EspBleAdvertisingChannel39 = 0x04,
+  EspBleAdvertisingChannelAll = 0x07,
+};
+
 enum class EspBleAdvertisingFilterPolicy : uint8_t
 {
   Any = 0,                  // anyone may scan-request and connect (default)
@@ -860,6 +870,23 @@ public:
   // default). The BLE spec requires >= 100 ms for non-connectable advertising.
   void setConnectable(bool connectable);
   bool setInterval(uint16_t minMilliseconds, uint16_t maxMilliseconds);
+  // Directed advertising: address one known peer instead of broadcasting to
+  // everyone. The payload is not sent at all -- a directed advertisement
+  // carries only the two addresses -- so name, service UUIDs and the rest are
+  // ignored while a target is set, and only that peer may connect.
+  // highDuty repeats every 3.75 ms for at most 1.28 s, for the fastest possible
+  // reconnection; otherwise the configured interval applies and advertising
+  // continues until stopped. Pass the peer's identity address: a peer using a
+  // Resolvable Private Address is reached through the bond, so it must be
+  // bonded first. clearDirectedTarget() returns to normal advertising.
+  bool setDirectedTarget(
+    const char *address, EspBleAddressType addressType, bool highDuty = false);
+  void clearDirectedTarget();
+  // Which of the three advertising channels (37, 38, 39) to use, as a bit mask
+  // of EspBleAdvertisingChannel values. Restricting the set can avoid a channel
+  // that overlaps a busy Wi-Fi band, at the cost of taking longer to be found.
+  // Zero restores all three.
+  bool setChannelMap(uint8_t channelMask);
   bool start(uint32_t durationSeconds = 0);
   bool stop();
   bool isAdvertising() const;
@@ -869,11 +896,19 @@ private:
 
   explicit EspBleAdvertising(EspBle *owner);
 
-  // Render one payload into the backend container, reporting an error through
-  // owner_ when a field does not fit in the 31-byte legacy budget.
+  // One rendered legacy payload: 31 bytes of AD structures.
+  struct Payload
+  {
+    static constexpr size_t Capacity = 31;
+    uint8_t bytes[Capacity] = {};
+    size_t length = 0;
+  };
+
+  // Render one payload, reporting an error through owner_ when a field does not
+  // fit in the 31-byte legacy budget.
   bool buildPayload(
     const EspBleAdvertisingData &source,
-    BLEAdvertisementData &destination,
+    Payload &destination,
     bool includeFlags,
     const char *payloadName) const;
 
@@ -885,6 +920,11 @@ private:
   bool connectable_ = true;
   uint16_t intervalMinMs_ = 0;
   uint16_t intervalMaxMs_ = 0;
+  bool directed_ = false;
+  bool directedHighDuty_ = false;
+  String directedAddress_;
+  EspBleAddressType directedAddressType_ = EspBleAddressType::Public;
+  uint8_t channelMask_ = 0;
 };
 
 class EspBleScanner
@@ -1700,6 +1740,7 @@ private:
   // update() so operations serialize behind whatever is currently running.
   void pumpGattQueue();
   void pumpSendQueue();
+  bool startGattServer();
   void releaseDeferredNotifications();
   void drainPendingDisconnects();
   // True when a HID discovery for connectionId is already queued or in flight.

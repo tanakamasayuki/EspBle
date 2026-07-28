@@ -14,14 +14,17 @@
 #include <BLESecurity.h>
 #include <BLEUtils.h>
 #include <host/ble_gap.h>
+#include <host/ble_uuid.h>
 #include <host/ble_hs_id.h>
 #include <host/ble_hs_mbuf.h>
+#include <services/gap/ble_svc_gap.h>
 #include <services/gatt/ble_svc_gatt.h>
 #include <host/ble_store.h>
 #include <os/os_mbuf.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <cctype>
+#include <cinttypes>
 #include <cstring>
 #include <map>
 #include <mutex>
@@ -29,6 +32,7 @@
 #include <utility>
 
 #include "EspBleHidReportMap.h"
+#include "EspBleUuid.h"
 
 
 namespace
@@ -47,6 +51,70 @@ constexpr size_t BondCapacity = CONFIG_BT_NIMBLE_MAX_BONDS;
 constexpr size_t BondCapacity = 16;
 #endif
 
+// UUID conversions between the library's text form and the stack's types. The
+// text codec itself lives in EspBleUuid.h so it can be unit tested on the host.
+bool parseUuid(const char *text, ble_uuid_any_t &out)
+{
+  EspBleUuidValue value;
+  if (!espBleParseUuid(text, value)) return false;
+  memset(&out, 0, sizeof(out));
+  if (value.bitSize == 16)
+  {
+    out.u.type = BLE_UUID_TYPE_16;
+    out.u16.value = static_cast<uint16_t>(espBleUuidShortValue(value));
+  }
+  else if (value.bitSize == 32)
+  {
+    out.u.type = BLE_UUID_TYPE_32;
+    out.u32.value = espBleUuidShortValue(value);
+  }
+  else
+  {
+    out.u.type = BLE_UUID_TYPE_128;
+    memcpy(out.u128.value, value.bytes, 16);
+  }
+  return true;
+}
+
+EspBleUuidValue uuidValueOf(const ble_uuid_t *uuid)
+{
+  EspBleUuidValue value;
+  if (uuid == nullptr) return value;
+  char text[16];
+  if (uuid->type == BLE_UUID_TYPE_16)
+  {
+    snprintf(text, sizeof(text), "%04x", reinterpret_cast<const ble_uuid16_t *>(uuid)->value);
+    espBleParseUuid(text, value);
+    return value;
+  }
+  if (uuid->type == BLE_UUID_TYPE_32)
+  {
+    snprintf(
+      text, sizeof(text), "%08" PRIx32, reinterpret_cast<const ble_uuid32_t *>(uuid)->value);
+    espBleParseUuid(text, value);
+    return value;
+  }
+  memcpy(value.bytes, reinterpret_cast<const ble_uuid128_t *>(uuid)->value, 16);
+  value.bitSize = 128;
+  return value;
+}
+
+// Always the 128-bit form: a 16-bit UUID expanded onto the Bluetooth base UUID.
+// Every EspBle surface reports UUIDs this way, so one spelling is comparable
+// everywhere (NimBLE's own ble_uuid_to_str() would print "0x180f").
+String uuidToString(const ble_uuid_t *uuid)
+{
+  if (uuid == nullptr) return String();
+  char text[37];
+  espBleFormatUuid(uuidValueOf(uuid), text, sizeof(text));
+  return String(text);
+}
+
+String uuidToString(const ble_uuid_any_t &uuid)
+{
+  return uuidToString(&uuid.u);
+}
+
 bool uuidEquals(const String &left, const char *right)
 {
   if (right == nullptr || right[0] == '\0' || left.isEmpty())
@@ -57,7 +125,39 @@ bool uuidEquals(const String &left, const char *right)
   {
     return true;
   }
-  return BLEUUID(left.c_str()).equals(BLEUUID(right));
+  EspBleUuidValue leftValue;
+  EspBleUuidValue rightValue;
+  if (!espBleParseUuid(left.c_str(), leftValue) || !espBleParseUuid(right, rightValue))
+  {
+    return false;
+  }
+  return espBleUuidEquals(leftValue, rightValue);
+}
+
+// "aa:bb:cc:dd:ee:ff", most significant byte first -- the spelling the whole
+// API uses. ble_addr_t::val holds the bytes the other way round.
+String formatAddress(const uint8_t value[6])
+{
+  char text[18];
+  snprintf(
+    text, sizeof(text), "%02x:%02x:%02x:%02x:%02x:%02x",
+    value[5], value[4], value[3], value[2], value[1], value[0]);
+  return String(text);
+}
+
+bool parseAddress(const char *text, uint8_t out[6])
+{
+  if (text == nullptr || strlen(text) != 17) return false;
+  for (size_t index = 0; index < 6; ++index)
+  {
+    const size_t position = index * 3;
+    if (index != 0 && text[position - 1] != ':') return false;
+    const int high = espBleHexDigitValue(text[position]);
+    const int low = espBleHexDigitValue(text[position + 1]);
+    if (high < 0 || low < 0) return false;
+    out[5 - index] = static_cast<uint8_t>((high << 4) | low);
+  }
+  return true;
 }
 
 bool isValidBleAddress(const char *address)
@@ -139,13 +239,7 @@ struct DescriptorContext : Waiter
   size_t count = 0;
 };
 
-// Render through BLEUUID so discovery reports UUIDs in the same 128-bit form as
-// the rest of the library (ble_uuid_to_str() would print "0x180f" for a 16-bit
-// UUID, which no other EspBle surface does).
-inline String uuidToString(const ble_uuid_any_t &uuid)
-{
-  return BLEUUID(uuid).toString();
-}
+using ::uuidToString;
 
 inline int serviceCallback(
   uint16_t connectionHandle, const struct ble_gatt_error *error,
@@ -324,6 +418,14 @@ inline bool wait(Operation &operation, uint32_t timeoutMilliseconds)
 // event listener above needs it.
 void espBleConfirmIndication(
   EspBle *owner, uint16_t connectionHandle, uint16_t attributeHandle, int status);
+
+// Track a peer turning Notification/Indication on or off for one of the local
+// server's characteristics, and drop its state when the connection ends. Both
+// are reached from the global GAP listener; defined once the server impl is.
+void espBleHandleServerSubscribe(
+  EspBle *owner, uint16_t connectionHandle, uint16_t attributeHandle, bool notifications,
+  bool indications);
+void espBleForgetServerSubscriptions(EspBle *owner, uint16_t connectionHandle);
 
 
 struct EspBleImpl
@@ -729,6 +831,43 @@ struct EspBleImpl
     }
   }
 
+  // GAP callback for advertising we started ourselves. It owns the peripheral
+  // side of a connection's life cycle; everything else about the connection
+  // (MTU, PHY, security, indication confirmations) arrives on the global
+  // listener, which sees these events too.
+  static int advertisingGapEvent(ble_gap_event *event, void *argument)
+  {
+    EspBleImpl *impl = static_cast<EspBleImpl *>(argument);
+    if (event->type == BLE_GAP_EVENT_CONNECT)
+    {
+      if (event->connect.status != 0) return 0; // the attempt failed; nothing was set up
+      ble_gap_conn_desc description{};
+      if (ble_gap_conn_find(event->connect.conn_handle, &description) != 0) return 0;
+      if (!impl->addConnection(
+            event->connect.conn_handle,
+            formatAddress(description.peer_ota_addr.val),
+            static_cast<EspBleAddressType>(description.peer_ota_addr.type),
+            EspBleRole::Peripheral,
+            ble_att_mtu(event->connect.conn_handle),
+            description.sec_state.encrypted,
+            description.sec_state.authenticated,
+            description.sec_state.bonded,
+            description.sec_state.key_size,
+            nullptr))
+      {
+        // No slot left: refuse the connection rather than hold one the
+        // application can never see.
+        ble_gap_terminate(event->connect.conn_handle, BLE_ERR_REM_USER_CONN_TERM);
+      }
+      return 0;
+    }
+    if (event->type == BLE_GAP_EVENT_DISCONNECT)
+    {
+      impl->removeServerConnection(event->disconnect.conn.conn_handle);
+    }
+    return 0;
+  }
+
   static int gapEventListenerEntry(ble_gap_event *event, void *argument)
   {
     EspBleImpl *impl = static_cast<EspBleImpl *>(argument);
@@ -736,6 +875,15 @@ struct EspBleImpl
     {
       impl->stampDisconnectReason(
         event->disconnect.conn.conn_handle, event->disconnect.reason);
+      espBleForgetServerSubscriptions(impl->owner, event->disconnect.conn.conn_handle);
+    }
+    else if (event->type == BLE_GAP_EVENT_SUBSCRIBE)
+    {
+      // CCCD change for a local characteristic. The host reports the current
+      // state, so this is both subscribe and unsubscribe.
+      espBleHandleServerSubscribe(
+        impl->owner, event->subscribe.conn_handle, event->subscribe.attr_handle,
+        event->subscribe.cur_notify != 0, event->subscribe.cur_indicate != 0);
     }
     else if (event->type == BLE_GAP_EVENT_CONN_UPDATE)
     {
@@ -1133,6 +1281,7 @@ struct EspBleImpl
   }
 
   void queueServerDescriptorWrite(
+    uint16_t connectionHandle,
     EspBleGattDescriptor descriptor,
     const String &serviceUuid,
     const String &characteristicUuid,
@@ -1142,6 +1291,7 @@ struct EspBleImpl
     std::lock_guard<std::mutex> lock(mutex);
     Event event;
     event.type = EventType::ServerDescriptorWrite;
+    event.serverWrite.connectionId = findPeripheralConnectionId(connectionHandle);
     event.serverDescriptor = descriptor;
     event.serverWrite.serviceUuid = serviceUuid;
     event.serverWrite.characteristicUuid = characteristicUuid;
@@ -1678,7 +1828,7 @@ struct EspBleImpl
               {
                 if (info.handle != result.handle) continue;
               }
-              // Compared through BLEUUID: a caller may name a 16-bit UUID as
+              // Compared through the UUID codec: a caller may name a 16-bit UUID as
               // "2a19" while discovery records the 128-bit form.
               else if (!uuidEquals(info.serviceUuid, result.serviceUuid.c_str()) ||
                        !uuidEquals(info.characteristicUuid, result.characteristicUuid.c_str()))
@@ -2008,6 +2158,11 @@ struct EspBleImpl
   // the Disconnected event.
   ble_gap_event_listener gapEventListener = {};
   bool gapEventListenerRegistered = false;
+  // Own address type passed to every GAP procedure we start (public, random
+  // static or RPA), chosen at begin() from EspBleConfig::ownAddressType.
+  uint8_t ownAddressType = BLE_OWN_ADDR_PUBLIC;
+  // Set once ble_gatts_start() has run; the attribute table cannot change after.
+  bool gattServerStarted = false;
   ConnectionSlot connections[ConnectionCapacity];
   RetiredClient retiredClients[RetiredClientCapacity];
   size_t retiredClientCount = 0;
@@ -2335,7 +2490,9 @@ struct EspBleGattServerImpl
   struct ServiceDefinition
   {
     String uuid;
-    BLEService *backend = nullptr;
+    ble_uuid_any_t nativeUuid{};
+    // Entry in the NimBLE service table; null until realize() registers it.
+    ble_gatt_svc_def *def = nullptr;
   };
 
   struct CharacteristicDefinition
@@ -2343,9 +2500,13 @@ struct EspBleGattServerImpl
     size_t serviceIndex = 0;
     String serviceUuid;
     String uuid;
+    ble_uuid_any_t nativeUuid{};
     EspBleGattCharacteristicConfig config;
     String value;
-    BLECharacteristic *backend = nullptr;
+    ble_gatt_chr_def *def = nullptr;
+    // Attribute handle of the value, filled in by the host when the GATT server
+    // starts (ble_gatt_chr_def::val_handle points here).
+    uint16_t valueHandle = 0;
   };
 
   struct DescriptorDefinition
@@ -2354,167 +2515,267 @@ struct EspBleGattServerImpl
     String serviceUuid;
     String characteristicUuid;
     String uuid;
+    ble_uuid_any_t nativeUuid{};
     EspBleGattDescriptorConfig config;
     String value;
-    BLEDescriptor *backend = nullptr;
+    ble_gatt_dsc_def *def = nullptr;
   };
 
-  class BackendCallbacks : public BLECharacteristicCallbacks
+  // CCCD state per (connection, characteristic). The host reports every change
+  // as a GAP subscribe event; a broadcast notify goes only to the peers listed
+  // here. Matched by attribute handle, which stays correct when a UUID repeats.
+  struct SubscriptionSlot
   {
-  public:
-    explicit BackendCallbacks(EspBleGattServerImpl *owner) : owner_(owner) {}
+    bool used = false;
+    uint16_t connectionHandle = 0xffff;
+    uint16_t valueHandle = 0;
+    bool notifications = false;
+    bool indications = false;
+  };
+  static constexpr size_t SubscriptionCapacity = 12;
 
-    void onWrite(BLECharacteristic *characteristic, ble_gap_conn_desc *description) override
+  // Attribute access on the NimBLE host task. `argument` is this server, and
+  // the definition is identified by the ble_gatt_chr_def / ble_gatt_dsc_def the
+  // host passes back: pointer identity works where a UUID would be ambiguous.
+  static int accessCallback(
+    uint16_t connectionHandle,
+    uint16_t attributeHandle,
+    ble_gatt_access_ctxt *context,
+    void *argument)
+  {
+    return static_cast<EspBleGattServerImpl *>(argument)->handleAccess(
+      connectionHandle, attributeHandle, context);
+  }
+
+  int handleAccess(
+    uint16_t connectionHandle, uint16_t, ble_gatt_access_ctxt *context)
+  {
+    if (context->op == BLE_GATT_ACCESS_OP_READ_CHR ||
+        context->op == BLE_GATT_ACCESS_OP_READ_DSC)
     {
-      EspBleGattCharacteristic handle;
-      String serviceUuid;
-      String characteristicUuid;
-      String value;
+      // Values are written from the loop task; hold the mutex so a read on the
+      // host task cannot observe a half-updated String.
+      std::lock_guard<std::mutex> lock(mutex);
+      const String *value = findValueLocked(context);
+      if (value == nullptr) return BLE_ATT_ERR_UNLIKELY;
+      if (value->length() == 0) return 0;
+      return os_mbuf_append(
+               context->om, value->c_str(), static_cast<uint16_t>(value->length())) == 0
+        ? 0
+        : BLE_ATT_ERR_INSUFFICIENT_RES;
+    }
+    if (context->op != BLE_GATT_ACCESS_OP_WRITE_CHR &&
+        context->op != BLE_GATT_ACCESS_OP_WRITE_DSC)
+    {
+      return BLE_ATT_ERR_UNLIKELY;
+    }
+
+    const uint16_t length = context->om == nullptr ? 0 : OS_MBUF_PKTLEN(context->om);
+    String value;
+    if (length != 0)
+    {
+      std::unique_ptr<char[]> buffer(new (std::nothrow) char[length]);
+      if (buffer == nullptr) return BLE_ATT_ERR_INSUFFICIENT_RES;
+      uint16_t copied = 0;
+      if (ble_hs_mbuf_to_flat(context->om, buffer.get(), length, &copied) != 0)
       {
-        std::lock_guard<std::mutex> lock(owner_->mutex);
-        for (size_t index = 0; index < owner_->characteristicCount; ++index)
-        {
-          CharacteristicDefinition &definition = owner_->characteristics[index];
-          if (definition.backend == characteristic)
-          {
-            definition.value = characteristic->getValue();
-            handle.id = static_cast<uint16_t>(index + 1);
-            serviceUuid = definition.serviceUuid;
-            characteristicUuid = definition.uuid;
-            value = definition.value;
-            break;
-          }
-        }
+        return BLE_ATT_ERR_UNLIKELY;
       }
-      if (handle.valid() && owner_->server->owner_->impl_ != nullptr)
+      value = String(buffer.get(), copied);
+    }
+
+    EspBleGattCharacteristic characteristicHandle;
+    EspBleGattDescriptor descriptorHandle;
+    String serviceUuid;
+    String characteristicUuid;
+    String descriptorUuid;
+    {
+      std::lock_guard<std::mutex> lock(mutex);
+      if (context->op == BLE_GATT_ACCESS_OP_WRITE_CHR)
       {
-        owner_->server->owner_->impl_->queueServerWrite(
-          description->conn_handle,
-          handle,
-          serviceUuid,
-          characteristicUuid,
+        for (size_t index = 0; index < characteristicCount; ++index)
+        {
+          CharacteristicDefinition &definition = characteristics[index];
+          if (definition.def == nullptr || definition.def != context->chr) continue;
+          definition.value = value;
+          characteristicHandle.id = static_cast<uint16_t>(index + 1);
+          serviceUuid = definition.serviceUuid;
+          characteristicUuid = definition.uuid;
+          break;
+        }
+        if (!characteristicHandle.valid()) return BLE_ATT_ERR_UNLIKELY;
+      }
+      else
+      {
+        for (size_t index = 0; index < descriptorCount; ++index)
+        {
+          DescriptorDefinition &definition = descriptors[index];
+          if (definition.def == nullptr || definition.def != context->dsc) continue;
+          // The configured maximum is what the application sized its storage
+          // for, so refuse anything longer instead of truncating silently.
+          if (value.length() > definition.config.maximumLength)
+          {
+            return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
+          }
+          definition.value = value;
+          descriptorHandle.id = static_cast<uint16_t>(index + 1);
+          serviceUuid = definition.serviceUuid;
+          characteristicUuid = definition.characteristicUuid;
+          descriptorUuid = definition.uuid;
+          break;
+        }
+        if (!descriptorHandle.valid()) return BLE_ATT_ERR_UNLIKELY;
+      }
+    }
+
+    EspBleImpl *ownerImpl = server->owner_->impl_;
+    if (ownerImpl != nullptr)
+    {
+      if (characteristicHandle.valid())
+      {
+        ownerImpl->queueServerWrite(
+          connectionHandle, characteristicHandle, serviceUuid, characteristicUuid, value);
+      }
+      else
+      {
+        ownerImpl->queueServerDescriptorWrite(
+          connectionHandle, descriptorHandle, serviceUuid, characteristicUuid, descriptorUuid,
           value);
       }
     }
-
-    void onSubscribe(
-      BLECharacteristic *characteristic,
-      ble_gap_conn_desc *description,
-      uint16_t subscriptionValue) override
-    {
-      EspBleGattCharacteristic handle;
-      String serviceUuid;
-      String characteristicUuid;
-      {
-        std::lock_guard<std::mutex> lock(owner_->mutex);
-        for (size_t index = 0; index < owner_->characteristicCount; ++index)
-        {
-          CharacteristicDefinition &definition = owner_->characteristics[index];
-          if (definition.backend == characteristic)
-          {
-            handle.id = static_cast<uint16_t>(index + 1);
-            serviceUuid = definition.serviceUuid;
-            characteristicUuid = definition.uuid;
-            break;
-          }
-        }
-      }
-      if (handle.valid() && owner_->server->owner_->impl_ != nullptr)
-      {
-        owner_->server->owner_->impl_->queueServerSubscription(
-          description->conn_handle,
-          handle,
-          serviceUuid,
-          characteristicUuid,
-          subscriptionValue);
-      }
-    }
-
-    void onStatus(
-      BLECharacteristic *characteristic,
-      BLECharacteristicCallbacks::Status status,
-      uint32_t code) override
-    {
-      std::lock_guard<std::mutex> lock(owner_->mutex);
-      if (owner_->sending && owner_->sendBackend == characteristic)
-      {
-        // Arduino-ESP32 3.3.10's NimBLE path reports SUCCESS_INDICATE from
-        // BLE_GAP_EVENT_NOTIFY_TX, but its synchronous wrapper can emit a
-        // second timeout because the confirmation semaphore is not released.
-        // Preserve the actual controller confirmation already observed.
-        if (owner_->sendStatusReceived &&
-            owner_->sendStatus == BLECharacteristicCallbacks::Status::SUCCESS_INDICATE &&
-            status == BLECharacteristicCallbacks::Status::ERROR_INDICATE_TIMEOUT)
-        {
-          return;
-        }
-        owner_->sendStatus = status;
-        owner_->sendStatusCode = code;
-        owner_->sendStatusReceived = true;
-      }
-    }
-
-  private:
-    EspBleGattServerImpl *owner_;
-  };
-
-  class DescriptorCallbacks : public BLEDescriptorCallbacks
-  {
-  public:
-    explicit DescriptorCallbacks(EspBleGattServerImpl *owner) : owner_(owner) {}
-
-    void onWrite(BLEDescriptor *descriptor) override
-    {
-      EspBleGattDescriptor handle;
-      String serviceUuid;
-      String characteristicUuid;
-      String descriptorUuid;
-      String value;
-      {
-        std::lock_guard<std::mutex> lock(owner_->mutex);
-        for (size_t index = 0; index < owner_->descriptorCount; ++index)
-        {
-          DescriptorDefinition &definition = owner_->descriptors[index];
-          if (definition.backend == descriptor)
-          {
-            handle.id = static_cast<uint16_t>(index + 1);
-            const uint8_t *data = descriptor->getValue();
-            definition.value = descriptor->getLength() == 0
-              ? String()
-              : String(reinterpret_cast<const char *>(data), descriptor->getLength());
-            serviceUuid = definition.serviceUuid;
-            characteristicUuid = definition.characteristicUuid;
-            descriptorUuid = definition.uuid;
-            value = definition.value;
-            break;
-          }
-        }
-      }
-      if (handle.valid() && owner_->server->owner_->impl_ != nullptr)
-      {
-        owner_->server->owner_->impl_->queueServerDescriptorWrite(
-          handle, serviceUuid, characteristicUuid, descriptorUuid, value);
-      }
-    }
-
-  private:
-    EspBleGattServerImpl *owner_;
-  };
-
-  explicit EspBleGattServerImpl(EspBleGattServer *server)
-      : server(server), callbacks(this), descriptorCallbacks(this)
-  {
+    return 0;
   }
 
+  // Held value behind the attribute the host is reading. Call with the mutex.
+  const String *findValueLocked(const ble_gatt_access_ctxt *context) const
+  {
+    if (context->op == BLE_GATT_ACCESS_OP_READ_CHR)
+    {
+      for (size_t index = 0; index < characteristicCount; ++index)
+      {
+        const CharacteristicDefinition &definition = characteristics[index];
+        if (definition.def != nullptr && definition.def == context->chr)
+        {
+          return &definition.value;
+        }
+      }
+      return nullptr;
+    }
+    for (size_t index = 0; index < descriptorCount; ++index)
+    {
+      const DescriptorDefinition &definition = descriptors[index];
+      if (definition.def != nullptr && definition.def == context->dsc)
+      {
+        return &definition.value;
+      }
+    }
+    return nullptr;
+  }
+
+  // A peer turned Notification or Indication on or off for one of our
+  // characteristics. Called from the global GAP listener on the host task.
+  void handleSubscribe(
+    uint16_t connectionHandle, uint16_t attributeHandle, bool notifications, bool indications)
+  {
+    EspBleGattCharacteristic handle;
+    String serviceUuid;
+    String characteristicUuid;
+    {
+      std::lock_guard<std::mutex> lock(mutex);
+      for (size_t index = 0; index < characteristicCount; ++index)
+      {
+        const CharacteristicDefinition &definition = characteristics[index];
+        if (definition.valueHandle == 0 || definition.valueHandle != attributeHandle) continue;
+        handle.id = static_cast<uint16_t>(index + 1);
+        serviceUuid = definition.serviceUuid;
+        characteristicUuid = definition.uuid;
+        break;
+      }
+      if (!handle.valid()) return; // not one of ours (HID and the GAP service have their own)
+      recordSubscriptionLocked(connectionHandle, attributeHandle, notifications, indications);
+    }
+    if (server->owner_->impl_ != nullptr)
+    {
+      const uint16_t subscriptionValue =
+        static_cast<uint16_t>((notifications ? 0x0001 : 0) | (indications ? 0x0002 : 0));
+      server->owner_->impl_->queueServerSubscription(
+        connectionHandle, handle, serviceUuid, characteristicUuid, subscriptionValue);
+    }
+  }
+
+  void recordSubscriptionLocked(
+    uint16_t connectionHandle, uint16_t valueHandle, bool notifications, bool indications)
+  {
+    SubscriptionSlot *free = nullptr;
+    for (SubscriptionSlot &slot : subscriptions)
+    {
+      if (slot.used && slot.connectionHandle == connectionHandle &&
+          slot.valueHandle == valueHandle)
+      {
+        if (!notifications && !indications)
+        {
+          slot = SubscriptionSlot();
+          return;
+        }
+        slot.notifications = notifications;
+        slot.indications = indications;
+        return;
+      }
+      if (!slot.used && free == nullptr) free = &slot;
+    }
+    if (!notifications && !indications) return;
+    // Out of slots: the peer is subscribed on air but we cannot remember it, so
+    // its broadcasts would silently go nowhere. Count it like a dropped event.
+    if (free == nullptr)
+    {
+      if (server->owner_->impl_ != nullptr) ++server->owner_->impl_->droppedEvents;
+      return;
+    }
+    free->used = true;
+    free->connectionHandle = connectionHandle;
+    free->valueHandle = valueHandle;
+    free->notifications = notifications;
+    free->indications = indications;
+  }
+
+  void forgetSubscriptions(uint16_t connectionHandle)
+  {
+    std::lock_guard<std::mutex> lock(mutex);
+    for (SubscriptionSlot &slot : subscriptions)
+    {
+      if (slot.used && slot.connectionHandle == connectionHandle) slot = SubscriptionSlot();
+    }
+  }
+
+  bool subscribed(uint16_t connectionHandle, uint16_t valueHandle, bool indication) const
+  {
+    std::lock_guard<std::mutex> lock(mutex);
+    for (const SubscriptionSlot &slot : subscriptions)
+    {
+      if (!slot.used || slot.connectionHandle != connectionHandle ||
+          slot.valueHandle != valueHandle)
+      {
+        continue;
+      }
+      return indication ? slot.indications : slot.notifications;
+    }
+    return false;
+  }
+
+  explicit EspBleGattServerImpl(EspBleGattServer *server) : server(server) {}
+
+  // One send. The value handle identifies the attribute; connectionId 0 means
+  // "every subscribed peer". Runs on its own task because an indication waits
+  // for the peer's confirmation.
   static void sendTaskEntry(void *argument)
   {
     EspBleGattServerImpl *impl = static_cast<EspBleGattServerImpl *>(argument);
-    BLECharacteristic *backend = nullptr;
     EspBleGattSendResult result;
+    uint16_t valueHandle = 0;
     EspBleConnectionId targetConnectionId = 0;
     {
       std::lock_guard<std::mutex> lock(impl->mutex);
-      backend = impl->sendBackend;
+      valueHandle = impl->sendValueHandle;
       result.connectionId = impl->sendConnectionId;
       result.characteristic = impl->sendCharacteristic;
       result.serviceUuid = impl->sendServiceUuid;
@@ -2522,172 +2783,76 @@ struct EspBleGattServerImpl
       result.value = impl->sendValue;
       result.indication = impl->sendIndication;
       targetConnectionId = impl->sendConnectionId;
-      impl->sendStatusReceived = false;
     }
 
-    if (targetConnectionId != 0)
+    // Collect the peripheral connections this send targets.
+    uint16_t connectionHandles[ConnectionCapacity];
+    size_t connectionCount = 0;
+    bool anyPeripheral = false;
+    EspBle *owner = impl->server->owner_;
+    if (owner->impl_ != nullptr)
     {
-      // Connection-scoped send. The bundled BLECharacteristic::notify()
-      // broadcasts to every subscriber and confirms indications per
-      // characteristic, so target a single connection through the low-level
-      // primitives instead. A notification is fire-and-forget; an indication
-      // waits for the peer's confirmation, which the global GAP listener
-      // reports as BLE_GAP_EVENT_NOTIFY_TX for this connection and attribute.
-      uint16_t connectionHandle = 0xffff;
-      bool connected = false;
-      EspBle *owner = impl->server->owner_;
-      if (owner->impl_ != nullptr)
+      std::lock_guard<std::mutex> lock(owner->impl_->mutex);
+      for (const EspBleImpl::ConnectionSlot &slot : owner->impl_->connections)
       {
-        std::lock_guard<std::mutex> lock(owner->impl_->mutex);
-        for (const EspBleImpl::ConnectionSlot &slot : owner->impl_->connections)
+        if (!slot.used || slot.connection.localRole != EspBleRole::Peripheral) continue;
+        anyPeripheral = true;
+        if (targetConnectionId != 0 && slot.connection.id != targetConnectionId) continue;
+        if (connectionCount < ConnectionCapacity)
         {
-          if (slot.used && slot.connection.localRole == EspBleRole::Peripheral &&
-              slot.connection.id == targetConnectionId)
-          {
-            connectionHandle = slot.connection.handle;
-            connected = true;
-            break;
-          }
+          connectionHandles[connectionCount++] = slot.connection.handle;
         }
       }
-      // Keep the readable characteristic value in step with the last payload
-      // handed to notify(), matching the broadcast path.
-      backend->setValue(
-        reinterpret_cast<const uint8_t *>(result.value.c_str()),
-        result.value.length());
-      if (!connected)
-      {
-        result.success = false;
-        result.error = EspBleError::NotFound;
-        result.detail = "target connection is not connected";
-      }
-      else
-      {
-        os_mbuf *value = ble_hs_mbuf_from_flat(
-          reinterpret_cast<const uint8_t *>(result.value.c_str()), result.value.length());
-        if (value == nullptr)
-        {
-          result.success = false;
-          result.error = EspBleError::ResourceExhausted;
-          result.detail = "failed to allocate notify buffer";
-        }
-        else if (!result.indication)
-        {
-          const int backendCode =
-            ble_gatts_notify_custom(connectionHandle, backend->getHandle(), value);
-          result.success = backendCode == 0;
-          if (!result.success)
-          {
-            result.error = EspBleError::BackendFailure;
-            result.detail =
-              String("connection-scoped notify failed with backend code ") + backendCode;
-          }
-        }
-        else
-        {
-          {
-            std::lock_guard<std::mutex> lock(impl->mutex);
-            impl->indicateConnectionHandle = connectionHandle;
-            impl->indicateAttributeHandle = backend->getHandle();
-            impl->indicateConfirmed = false;
-            impl->indicateStatus = 0;
-          }
-          const int backendCode =
-            ble_gatts_indicate_custom(connectionHandle, backend->getHandle(), value);
-          if (backendCode != 0)
-          {
-            result.success = false;
-            result.error = EspBleError::BackendFailure;
-            result.detail =
-              String("connection-scoped indicate failed with backend code ") + backendCode;
-          }
-          else
-          {
-            // The peer has 30 s to confirm per the spec; give up a little after
-            // that rather than holding the send queue forever.
-            const uint32_t deadline = millis() + 31000;
-            bool confirmed = false;
-            int status = 0;
-            while (millis() < deadline)
-            {
-              {
-                std::lock_guard<std::mutex> lock(impl->mutex);
-                confirmed = impl->indicateConfirmed;
-                status = impl->indicateStatus;
-              }
-              if (confirmed) break;
-              delay(1);
-            }
-            result.success = confirmed && status == 0;
-            if (!result.success)
-            {
-              result.error = confirmed ? EspBleError::BackendFailure : EspBleError::Timeout;
-              result.detail = confirmed
-                ? String("indication confirmation failed with status ") + status
-                : String("indication confirmation timed out");
-            }
-          }
-          {
-            std::lock_guard<std::mutex> lock(impl->mutex);
-            impl->indicateConnectionHandle = 0xffff;
-            impl->indicateAttributeHandle = 0;
-          }
-        }
-      }
+    }
+
+    if (valueHandle == 0)
+    {
+      result.success = false;
+      result.error = EspBleError::NotFound;
+      result.detail = "GATT characteristic was not registered";
+    }
+    else if (connectionCount == 0)
+    {
+      result.success = false;
+      result.error = EspBleError::NotFound;
+      result.detail = targetConnectionId != 0
+        ? (anyPeripheral ? "target connection is not connected" : "no connected GATT Client")
+        : "no connected GATT Client";
     }
     else
     {
-      // Broadcast notify or indicate: every subscriber receives it, and the
-      // backend confirms an indication per characteristic.
-      backend->setValue(
-        reinterpret_cast<const uint8_t *>(result.value.c_str()),
-        result.value.length());
-      backend->notify(!result.indication);
-
-      BLECharacteristicCallbacks::Status status = BLECharacteristicCallbacks::Status::ERROR_GATT;
-      uint32_t statusCode = 0;
-      bool statusReceived = false;
+      size_t sent = 0;
+      size_t skipped = 0;
+      for (size_t index = 0; index < connectionCount && result.detail.length() == 0; ++index)
       {
-        std::lock_guard<std::mutex> lock(impl->mutex);
-        status = impl->sendStatus;
-        statusCode = impl->sendStatusCode;
-        statusReceived = impl->sendStatusReceived;
-      }
-
-      result.success = statusReceived &&
-        ((!result.indication && status == BLECharacteristicCallbacks::Status::SUCCESS_NOTIFY) ||
-         (result.indication && status == BLECharacteristicCallbacks::Status::SUCCESS_INDICATE));
-      if (!result.success)
-      {
-        result.error = EspBleError::BackendFailure;
-        switch (status)
+        const uint16_t connectionHandle = connectionHandles[index];
+        // A broadcast reaches whoever subscribed. A connection-scoped send is an
+        // explicit instruction, so it is not filtered.
+        if (targetConnectionId == 0 &&
+            !impl->subscribed(connectionHandle, valueHandle, result.indication))
         {
-        case BLECharacteristicCallbacks::Status::ERROR_NO_CLIENT:
-          result.detail = "no connected GATT Client";
-          break;
-        case BLECharacteristicCallbacks::Status::ERROR_NO_SUBSCRIBER:
-          result.detail = "no subscribed GATT Client";
-          break;
-        case BLECharacteristicCallbacks::Status::ERROR_NOTIFY_DISABLED:
-          result.detail = "notifications are disabled";
-          break;
-        case BLECharacteristicCallbacks::Status::ERROR_INDICATE_DISABLED:
-          result.detail = "indications are disabled";
-          break;
-        case BLECharacteristicCallbacks::Status::ERROR_INDICATE_TIMEOUT:
-          result.detail = "indication confirmation timed out";
-          break;
-        case BLECharacteristicCallbacks::Status::ERROR_INDICATE_FAILURE:
-          result.detail = "indication confirmation failed";
-          break;
-        default:
-          result.detail = statusReceived
-            ? String("GATT send failed with backend code ") + statusCode
-            : String("GATT send completed without status");
-          break;
+          ++skipped;
+          continue;
+        }
+        impl->sendOne(connectionHandle, valueHandle, result);
+        if (result.detail.length() != 0) break;
+        ++sent;
+      }
+      if (result.detail.length() == 0)
+      {
+        if (sent != 0)
+        {
+          result.success = true;
+        }
+        else
+        {
+          result.success = false;
+          result.error = EspBleError::InvalidState;
+          result.detail = skipped != 0 ? "no subscribed GATT Client" : "no connected GATT Client";
         }
       }
     }
+
     // Queue the result before clearing the busy flag: end() tears the stack
     // down as soon as sending is observed false.
     if (impl->server->owner_->impl_ != nullptr)
@@ -2702,6 +2867,83 @@ struct EspBleGattServerImpl
     vTaskDelete(nullptr);
   }
 
+  // Notify or indicate one connection. Fills result.error/detail on failure and
+  // leaves them untouched on success, which is what the caller loops on.
+  void sendOne(uint16_t connectionHandle, uint16_t valueHandle, EspBleGattSendResult &result)
+  {
+    os_mbuf *value = ble_hs_mbuf_from_flat(
+      reinterpret_cast<const uint8_t *>(result.value.c_str()), result.value.length());
+    if (value == nullptr)
+    {
+      result.success = false;
+      result.error = EspBleError::ResourceExhausted;
+      result.detail = "failed to allocate notify buffer";
+      return;
+    }
+    if (!result.indication)
+    {
+      const int backendCode = ble_gatts_notify_custom(connectionHandle, valueHandle, value);
+      if (backendCode != 0)
+      {
+        result.success = false;
+        result.error = EspBleError::BackendFailure;
+        result.detail = String("notify failed with backend code ") + backendCode;
+      }
+      return;
+    }
+
+    {
+      std::lock_guard<std::mutex> lock(mutex);
+      indicateConnectionHandle = connectionHandle;
+      indicateAttributeHandle = valueHandle;
+      indicateConfirmed = false;
+      indicateStatus = 0;
+    }
+    const int backendCode = ble_gatts_indicate_custom(connectionHandle, valueHandle, value);
+    if (backendCode != 0)
+    {
+      result.success = false;
+      result.error = EspBleError::BackendFailure;
+      result.detail = String("indicate failed with backend code ") + backendCode;
+    }
+    else
+    {
+      // The peer has 30 s to confirm per the spec; give up a little after that
+      // rather than holding the send queue forever. The confirmation arrives as
+      // BLE_GAP_EVENT_NOTIFY_TX on the global GAP listener.
+      const uint32_t deadline = millis() + 31000;
+      bool confirmed = false;
+      int status = 0;
+      while (millis() < deadline)
+      {
+        {
+          std::lock_guard<std::mutex> lock(mutex);
+          confirmed = indicateConfirmed;
+          status = indicateStatus;
+        }
+        if (confirmed) break;
+        delay(1);
+      }
+      if (!confirmed)
+      {
+        result.success = false;
+        result.error = EspBleError::Timeout;
+        result.detail = "indication confirmation timed out";
+      }
+      else if (status != 0)
+      {
+        result.success = false;
+        result.error = EspBleError::BackendFailure;
+        result.detail = String("indication confirmation failed with status ") + status;
+      }
+    }
+    {
+      std::lock_guard<std::mutex> lock(mutex);
+      indicateConnectionHandle = 0xffff;
+      indicateAttributeHandle = 0;
+    }
+  }
+
   EspBleGattServer *server;
   mutable std::mutex mutex;
   ServiceDefinition services[EspBleGattServer::MaxServices];
@@ -2710,12 +2952,20 @@ struct EspBleGattServerImpl
   size_t characteristicCount = 0;
   DescriptorDefinition descriptors[EspBleGattServer::MaxDescriptors];
   size_t descriptorCount = 0;
-  BackendCallbacks callbacks;
-  DescriptorCallbacks descriptorCallbacks;
+  // NimBLE keeps pointers to these tables for as long as the GATT server runs,
+  // so they live here rather than on realize()'s stack. Each service's
+  // characteristic run and each characteristic's descriptor run is terminated by
+  // a zeroed entry, hence the extra slots.
+  ble_gatt_svc_def serviceDefs[EspBleGattServer::MaxServices + 1] = {};
+  ble_gatt_chr_def characteristicDefs[EspBleGattServer::MaxCharacteristics +
+                                      EspBleGattServer::MaxServices] = {};
+  ble_gatt_dsc_def descriptorDefs[EspBleGattServer::MaxDescriptors +
+                                  EspBleGattServer::MaxCharacteristics] = {};
+  SubscriptionSlot subscriptions[SubscriptionCapacity];
   bool realized = false;
   bool sending = false;
   TaskHandle_t sendTask = nullptr;
-  BLECharacteristic *sendBackend = nullptr;
+  uint16_t sendValueHandle = 0;
   EspBleGattCharacteristic sendCharacteristic;
   // Connection-scoped indication in flight: the confirmation arrives as a
   // BLE_GAP_EVENT_NOTIFY_TX on the global GAP listener, which matches on these.
@@ -2727,9 +2977,6 @@ struct EspBleGattServerImpl
   String sendCharacteristicUuid;
   String sendValue;
   bool sendIndication = false;
-  BLECharacteristicCallbacks::Status sendStatus = BLECharacteristicCallbacks::Status::ERROR_GATT;
-  uint32_t sendStatusCode = 0;
-  bool sendStatusReceived = false;
 
   // Internal send FIFO: notify()/indicate() enqueue here instead of rejecting
   // when a send is already in flight. EspBle::pumpSendQueue() dequeues one at a
@@ -2738,7 +2985,7 @@ struct EspBleGattServerImpl
   struct SendRequest
   {
     EspBleConnectionId connectionId = 0;
-    BLECharacteristic *backend = nullptr;
+    uint16_t valueHandle = 0;
     EspBleGattCharacteristic characteristic;
     String serviceUuid;
     String characteristicUuid;
@@ -2751,6 +2998,22 @@ struct EspBleGattServerImpl
   size_t sendQueueCount = 0;
   EspBleConnectionId sendConnectionId = 0;
 };
+
+void espBleHandleServerSubscribe(
+  EspBle *owner, uint16_t connectionHandle, uint16_t attributeHandle, bool notifications,
+  bool indications)
+{
+  EspBleGattServerImpl *server = EspBleImpl::serverImplOf(owner);
+  if (server == nullptr) return;
+  server->handleSubscribe(connectionHandle, attributeHandle, notifications, indications);
+}
+
+void espBleForgetServerSubscriptions(EspBle *owner, uint16_t connectionHandle)
+{
+  EspBleGattServerImpl *server = EspBleImpl::serverImplOf(owner);
+  if (server == nullptr) return;
+  server->forgetSubscriptions(connectionHandle);
+}
 
 void espBleConfirmIndication(
   EspBle *owner, uint16_t connectionHandle, uint16_t attributeHandle, int status)
@@ -4370,9 +4633,25 @@ bool EspBleAdvertising::setInterval(uint16_t minMilliseconds, uint16_t maxMillis
   return true;
 }
 
+namespace
+{
+// AD types used by the payload builder (Core Specification Supplement, Part A).
+constexpr uint8_t AdTypeFlags = 0x01;
+constexpr uint8_t AdTypeServiceUuids16 = 0x03;
+constexpr uint8_t AdTypeServiceUuids32 = 0x05;
+constexpr uint8_t AdTypeServiceUuids128 = 0x07;
+constexpr uint8_t AdTypeCompleteLocalName = 0x09;
+constexpr uint8_t AdTypeTxPowerLevel = 0x0a;
+constexpr uint8_t AdTypeServiceData16 = 0x16;
+constexpr uint8_t AdTypeAppearance = 0x19;
+constexpr uint8_t AdTypeServiceData32 = 0x20;
+constexpr uint8_t AdTypeServiceData128 = 0x21;
+constexpr uint8_t AdTypeManufacturerData = 0xff;
+} // namespace
+
 bool EspBleAdvertising::buildPayload(
   const EspBleAdvertisingData &source,
-  BLEAdvertisementData &advertisingData,
+  Payload &destination,
   bool includeFlags,
   const char *payloadName) const
 {
@@ -4385,91 +4664,96 @@ bool EspBleAdvertising::buildPayload(
     return false;
   };
 
-  size_t previousLength = advertisingData.getPayload().length();
+  // One AD structure: length, type, value. Fails when the 31-byte budget is
+  // exhausted, which is what the caller reports per field.
+  const auto append =
+    [&destination](uint8_t type, const uint8_t *value, size_t valueLength) {
+      if (valueLength > 254) return false;
+      if (destination.length + 2 + valueLength > Payload::Capacity) return false;
+      destination.bytes[destination.length++] = static_cast<uint8_t>(valueLength + 1);
+      destination.bytes[destination.length++] = type;
+      if (valueLength != 0)
+      {
+        memcpy(destination.bytes + destination.length, value, valueLength);
+        destination.length += valueLength;
+      }
+      return true;
+    };
+
   if (includeFlags)
   {
     // Flags are only valid in the advertising payload, never in a scan response.
-    advertisingData.setFlags(0x06); // General Discoverable, BR/EDR not supported.
-    if (advertisingData.getPayload().length() == previousLength)
-    {
-      return fail("flags");
-    }
+    const uint8_t flags = 0x06; // General Discoverable, BR/EDR not supported.
+    if (!append(AdTypeFlags, &flags, 1)) return fail("flags");
   }
   if (source.txPowerIncluded_)
   {
-    previousLength = advertisingData.getPayload().length();
-    advertisingData.addTxPower();
-    if (advertisingData.getPayload().length() == previousLength)
-    {
-      return fail("Tx Power Level");
-    }
+    const int8_t power = owner_->txPower();
+    const uint8_t value = static_cast<uint8_t>(power == INT8_MIN ? 0 : power);
+    if (!append(AdTypeTxPowerLevel, &value, 1)) return fail("Tx Power Level");
   }
   if (source.appearance_ != 0)
   {
-    previousLength = advertisingData.getPayload().length();
-    advertisingData.setAppearance(source.appearance_);
-    if (advertisingData.getPayload().length() == previousLength)
-    {
-      return fail("appearance");
-    }
+    const uint8_t value[2] = {
+      static_cast<uint8_t>(source.appearance_ & 0xff),
+      static_cast<uint8_t>(source.appearance_ >> 8)};
+    if (!append(AdTypeAppearance, value, sizeof(value))) return fail("appearance");
   }
   if (source.serviceUuidCount_ > 0)
   {
     // CSS Part A 1.1: a data type must not occur more than once in a payload,
     // so all UUIDs of one size share a single "Complete List" AD structure.
-    String uuids16;
-    String uuids32;
-    String uuids128;
+    uint8_t uuids16[EspBleAdvertisingData::MaxServiceUuids * 2];
+    uint8_t uuids32[EspBleAdvertisingData::MaxServiceUuids * 4];
+    uint8_t uuids128[EspBleAdvertisingData::MaxServiceUuids * 16];
+    size_t length16 = 0;
+    size_t length32 = 0;
+    size_t length128 = 0;
     for (size_t index = 0; index < source.serviceUuidCount_; ++index)
     {
-      BLEUUID uuid(source.serviceUuids_[index].c_str());
-      switch (uuid.bitSize())
+      EspBleUuidValue uuid;
+      if (!espBleParseUuid(source.serviceUuids_[index].c_str(), uuid))
       {
-      case 16:
-        uuids16 += String(
-          reinterpret_cast<const char *>(&uuid.getNative()->u16.value), 2);
-        break;
-      case 32:
-        uuids32 += String(
-          reinterpret_cast<const char *>(&uuid.getNative()->u32.value), 4);
-        break;
-      default:
-        uuids128 += String(
-          reinterpret_cast<const char *>(uuid.getNative()->u128.value), 16);
-        break;
+        owner_->setError(EspBleError::InvalidArgument, "advertised service UUID is malformed");
+        return false;
+      }
+      // Every list is little-endian, and the expanded value already holds the
+      // short forms in that order.
+      if (uuid.bitSize == 16)
+      {
+        memcpy(uuids16 + length16, uuid.bytes + 12, 2);
+        length16 += 2;
+      }
+      else if (uuid.bitSize == 32)
+      {
+        memcpy(uuids32 + length32, uuid.bytes + 12, 4);
+        length32 += 4;
+      }
+      else
+      {
+        memcpy(uuids128 + length128, uuid.bytes, 16);
+        length128 += 16;
       }
     }
-    previousLength = advertisingData.getPayload().length();
-    size_t expectedLength = previousLength;
-    const struct
+    if (length16 != 0 && !append(AdTypeServiceUuids16, uuids16, length16))
     {
-      const String *uuids;
-      char type;
-    } lists[] = {
-      {&uuids16, 0x03},  // Complete List of 16-bit Service UUIDs
-      {&uuids32, 0x05},  // Complete List of 32-bit Service UUIDs
-      {&uuids128, 0x07}, // Complete List of 128-bit Service UUIDs
-    };
-    for (const auto &list : lists)
-    {
-      if (list.uuids->isEmpty())
-      {
-        continue;
-      }
-      const char header[2] = {static_cast<char>(list.uuids->length() + 1), list.type};
-      advertisingData.addData(String(header, 2) + *list.uuids);
-      expectedLength += 2 + list.uuids->length();
+      return fail("service UUIDs");
     }
-    if (advertisingData.getPayload().length() != expectedLength)
+    if (length32 != 0 && !append(AdTypeServiceUuids32, uuids32, length32))
+    {
+      return fail("service UUIDs");
+    }
+    if (length128 != 0 && !append(AdTypeServiceUuids128, uuids128, length128))
     {
       return fail("service UUIDs");
     }
   }
   if (!source.manufacturerData_.isEmpty())
   {
-    previousLength = advertisingData.getPayload().length();
-    advertisingData.setManufacturerData(source.manufacturerData_);
-    if (advertisingData.getPayload().length() == previousLength)
+    if (!append(
+          AdTypeManufacturerData,
+          reinterpret_cast<const uint8_t *>(source.manufacturerData_.c_str()),
+          source.manufacturerData_.length()))
     {
       return fail("manufacturer data");
     }
@@ -4477,23 +4761,82 @@ bool EspBleAdvertising::buildPayload(
   for (size_t index = 0; index < source.serviceDataCount_; ++index)
   {
     const EspBleServiceData &block = source.serviceData_[index];
-    previousLength = advertisingData.getPayload().length();
-    advertisingData.setServiceData(BLEUUID(block.uuid.c_str()), block.data);
-    if (advertisingData.getPayload().length() == previousLength)
+    EspBleUuidValue uuid;
+    if (!espBleParseUuid(block.uuid.c_str(), uuid))
     {
-      return fail("service data");
+      owner_->setError(EspBleError::InvalidArgument, "service data UUID is malformed");
+      return false;
     }
+    // The UUID leads the block, little-endian, and its size picks the AD type.
+    uint8_t value[16 + 24];
+    size_t uuidLength = 16;
+    uint8_t type = AdTypeServiceData128;
+    if (uuid.bitSize == 16)
+    {
+      uuidLength = 2;
+      type = AdTypeServiceData16;
+      memcpy(value, uuid.bytes + 12, 2);
+    }
+    else if (uuid.bitSize == 32)
+    {
+      uuidLength = 4;
+      type = AdTypeServiceData32;
+      memcpy(value, uuid.bytes + 12, 4);
+    }
+    else
+    {
+      memcpy(value, uuid.bytes, 16);
+    }
+    const size_t dataLength = block.data.length();
+    if (uuidLength + dataLength > sizeof(value)) return fail("service data");
+    memcpy(value + uuidLength, block.data.c_str(), dataLength);
+    if (!append(type, value, uuidLength + dataLength)) return fail("service data");
   }
   if (!source.name_.isEmpty())
   {
-    previousLength = advertisingData.getPayload().length();
-    advertisingData.setName(source.name_);
-    if (advertisingData.getPayload().length() == previousLength)
+    if (!append(
+          AdTypeCompleteLocalName,
+          reinterpret_cast<const uint8_t *>(source.name_.c_str()),
+          source.name_.length()))
     {
       return fail("name");
     }
   }
+  return true;
+}
 
+bool EspBleAdvertising::setDirectedTarget(
+  const char *address, EspBleAddressType addressType, bool highDuty)
+{
+  if (!isValidBleAddress(address))
+  {
+    owner_->setError(EspBleError::InvalidArgument, "peer address is malformed");
+    return false;
+  }
+  directed_ = true;
+  directedHighDuty_ = highDuty;
+  directedAddress_ = address;
+  directedAddressType_ = addressType;
+  owner_->clearError();
+  return true;
+}
+
+void EspBleAdvertising::clearDirectedTarget()
+{
+  directed_ = false;
+  directedHighDuty_ = false;
+  directedAddress_ = String();
+}
+
+bool EspBleAdvertising::setChannelMap(uint8_t channelMask)
+{
+  if ((channelMask & ~static_cast<uint8_t>(EspBleAdvertisingChannelAll)) != 0)
+  {
+    owner_->setError(EspBleError::InvalidArgument, "advertising channel mask is invalid");
+    return false;
+  }
+  channelMask_ = channelMask;
+  owner_->clearError();
   return true;
 }
 
@@ -4508,80 +4851,132 @@ bool EspBleAdvertising::start(uint32_t durationSeconds)
   {
     return false;
   }
-
-  BLEAdvertising *backend = BLEDevice::getAdvertising();
-  backend->stop();
-  backend->reset();
-
-  // Where the device name goes. With scan response enabled and no explicit scan
-  // response payload, the name is moved there so it does not consume the
-  // advertising payload's 31 bytes. Any explicit scan response content takes
-  // over that placement entirely.
-  const bool autoNameInScanResponse =
-    scanResponseEnabled_ && scanResponseData_.isEmpty() && !data_.name_.isEmpty();
-
-  EspBleAdvertisingData primary = data_;
-  if (autoNameInScanResponse)
-  {
-    primary.name_ = "";
-  }
-
-  BLEAdvertisementData advertisingData;
-  if (!buildPayload(primary, advertisingData, true, "advertising"))
+  // The attribute table is fixed once the GATT server runs, so start it before
+  // the first advertisement rather than at begin(): services may be registered
+  // up to that point.
+  if (!owner_->startGattServer())
   {
     return false;
   }
-  if (!backend->setAdvertisementData(advertisingData))
-  {
-    owner_->setError(EspBleError::BackendFailure, "failed to set advertising data");
-    return false;
-  }
 
-  backend->setScanResponse(scanResponseEnabled_);
-  if (scanResponseEnabled_)
+  ble_gap_adv_stop();
+
+  ble_addr_t directTarget{};
+  if (directed_)
   {
-    EspBleAdvertisingData responseSource = scanResponseData_;
+    directTarget.type = static_cast<uint8_t>(directedAddressType_);
+    if (!parseAddress(directedAddress_.c_str(), directTarget.val))
+    {
+      owner_->setError(EspBleError::InvalidArgument, "peer address is malformed");
+      return false;
+    }
+  }
+  else
+  {
+    // Where the device name goes. With scan response enabled and no explicit
+    // scan response payload, the name is moved there so it does not consume the
+    // advertising payload's 31 bytes. Any explicit scan response content takes
+    // over that placement entirely.
+    const bool autoNameInScanResponse =
+      scanResponseEnabled_ && scanResponseData_.isEmpty() && !data_.name_.isEmpty();
+
+    EspBleAdvertisingData primary = data_;
     if (autoNameInScanResponse)
     {
-      responseSource.setName(data_.name_.c_str());
+      primary.name_ = "";
     }
-    if (!responseSource.isEmpty())
+
+    Payload advertisingPayload;
+    if (!buildPayload(primary, advertisingPayload, true, "advertising"))
     {
-      BLEAdvertisementData scanResponsePayload;
-      if (!buildPayload(responseSource, scanResponsePayload, false, "scan response"))
+      return false;
+    }
+    if (ble_gap_adv_set_data(advertisingPayload.bytes, advertisingPayload.length) != 0)
+    {
+      owner_->setError(EspBleError::BackendFailure, "failed to set advertising data");
+      return false;
+    }
+
+    Payload responsePayload;
+    if (scanResponseEnabled_)
+    {
+      EspBleAdvertisingData responseSource = scanResponseData_;
+      if (autoNameInScanResponse)
+      {
+        responseSource.setName(data_.name_.c_str());
+      }
+      if (!responseSource.isEmpty() &&
+          !buildPayload(responseSource, responsePayload, false, "scan response"))
       {
         return false;
       }
-      if (!backend->setScanResponseData(scanResponsePayload))
-      {
-        owner_->setError(EspBleError::BackendFailure, "failed to set scan response data");
-        return false;
-      }
+    }
+    // Always written, so a payload left over from a previous start() is cleared.
+    if (ble_gap_adv_rsp_set_data(responsePayload.bytes, responsePayload.length) != 0)
+    {
+      owner_->setError(EspBleError::BackendFailure, "failed to set scan response data");
+      return false;
     }
   }
 
-  // Accept-list filtering: which peers may scan-request and connect.
-  backend->setScanFilter(
-    filterPolicy_ == EspBleAdvertisingFilterPolicy::ScanRequestFromAcceptList ||
-      filterPolicy_ == EspBleAdvertisingFilterPolicy::Both,
-    filterPolicy_ == EspBleAdvertisingFilterPolicy::ConnectionFromAcceptList ||
-      filterPolicy_ == EspBleAdvertisingFilterPolicy::Both);
-
-  // Connectable (default) vs non-connectable (beacon / broadcaster) mode.
-  backend->setAdvertisementType(
-    connectable_ ? BLE_GAP_CONN_MODE_UND : BLE_GAP_CONN_MODE_NON);
-  // Advertising interval: convert milliseconds to 0.625 ms units.
+  ble_gap_adv_params parameters{};
+  if (directed_)
+  {
+    parameters.conn_mode = BLE_GAP_CONN_MODE_DIR;
+    parameters.high_duty_cycle = directedHighDuty_ ? 1 : 0;
+  }
+  else if (connectable_)
+  {
+    parameters.conn_mode = BLE_GAP_CONN_MODE_UND;
+  }
+  else
+  {
+    // Scannable when a scan response is configured, plain broadcast otherwise.
+    parameters.conn_mode = BLE_GAP_CONN_MODE_NON;
+  }
+  parameters.disc_mode = BLE_GAP_DISC_MODE_GEN;
+  // Advertising interval: convert milliseconds to 0.625 ms units. A directed
+  // high duty cycle advertisement has its timing fixed by the controller.
   if (intervalMinMs_ != 0 && intervalMaxMs_ != 0)
   {
-    backend->setMinInterval(static_cast<uint16_t>(
-      (static_cast<uint32_t>(intervalMinMs_) * 8) / 5));
-    backend->setMaxInterval(static_cast<uint16_t>(
-      (static_cast<uint32_t>(intervalMaxMs_) * 8) / 5));
+    parameters.itvl_min =
+      static_cast<uint16_t>((static_cast<uint32_t>(intervalMinMs_) * 8) / 5);
+    parameters.itvl_max =
+      static_cast<uint16_t>((static_cast<uint32_t>(intervalMaxMs_) * 8) / 5);
+  }
+  parameters.channel_map = channelMask_;
+  switch (filterPolicy_)
+  {
+  case EspBleAdvertisingFilterPolicy::ScanRequestFromAcceptList:
+    parameters.filter_policy = BLE_HCI_ADV_FILT_SCAN;
+    break;
+  case EspBleAdvertisingFilterPolicy::ConnectionFromAcceptList:
+    parameters.filter_policy = BLE_HCI_ADV_FILT_CONN;
+    break;
+  case EspBleAdvertisingFilterPolicy::Both:
+    parameters.filter_policy = BLE_HCI_ADV_FILT_BOTH;
+    break;
+  case EspBleAdvertisingFilterPolicy::Any:
+  default:
+    parameters.filter_policy = BLE_HCI_ADV_FILT_NONE;
+    break;
   }
 
-  if (!backend->start(durationSeconds))
+  const int32_t duration = durationSeconds == 0
+    ? BLE_HS_FOREVER
+    : static_cast<int32_t>(durationSeconds * 1000);
+  const int backendCode = ble_gap_adv_start(
+    owner_->impl_->ownAddressType,
+    directed_ ? &directTarget : nullptr,
+    duration,
+    &parameters,
+    EspBleImpl::advertisingGapEvent,
+    owner_->impl_);
+  if (backendCode != 0)
   {
-    owner_->setError(EspBleError::BackendFailure, "failed to start advertising");
+    owner_->setError(
+      EspBleError::BackendFailure,
+      (String("failed to start advertising, backend code ") + backendCode).c_str());
     return false;
   }
 
@@ -4596,7 +4991,9 @@ bool EspBleAdvertising::stop()
     owner_->setError(EspBleError::InvalidState, "BLE stack is not initialized");
     return false;
   }
-  if (!BLEDevice::getAdvertising()->stop())
+  const int backendCode = ble_gap_adv_stop();
+  // BLE_HS_EALREADY simply means it was not advertising.
+  if (backendCode != 0 && backendCode != BLE_HS_EALREADY)
   {
     owner_->setError(EspBleError::BackendFailure, "failed to stop advertising");
     return false;
@@ -4607,7 +5004,7 @@ bool EspBleAdvertising::stop()
 
 bool EspBleAdvertising::isAdvertising() const
 {
-  return owner_->initialized() && BLEDevice::getAdvertising()->isAdvertising();
+  return owner_->initialized() && ble_gap_adv_active() != 0;
 }
 
 EspBleScanner::EspBleScanner(EspBle *owner) : owner_(owner) {}
@@ -4826,24 +5223,10 @@ EspBleGattCharacteristic EspBleGattServer::addCharacteristic(
     return EspBleGattCharacteristic();
   }
 
+  // One service may expose several characteristics with the same UUID, as the
+  // spec allows (HID Reports are the everyday case): the attribute table is
+  // built here, and every operation names its target by handle.
   const size_t serviceIndex = static_cast<size_t>(service.id - 1);
-  for (size_t index = 0; index < impl_->characteristicCount; ++index)
-  {
-    const auto &existing = impl_->characteristics[index];
-    if (existing.serviceIndex != serviceIndex || !uuidEquals(existing.uuid, characteristicUuid))
-    {
-      continue;
-    }
-    // The spec allows one service to expose several characteristics with the
-    // same UUID, but the bundled backend cannot: its
-    // BLEService::addCharacteristic() reuses the existing entry and discards
-    // the new one, so the second would never reach the attribute table. Fail
-    // here rather than hand back a handle whose sends silently go nowhere.
-    owner_->setError(
-      EspBleError::InvalidArgument,
-      "the bundled backend cannot host two characteristics with the same UUID in one service");
-    return EspBleGattCharacteristic();
-  }
   const size_t index = impl_->characteristicCount++;
   auto &definition = impl_->characteristics[index];
   definition.serviceIndex = serviceIndex;
@@ -4874,6 +5257,19 @@ EspBleGattDescriptor EspBleGattServer::addDescriptor(
   if (!config.readable && !config.writable)
   {
     owner_->setError(EspBleError::InvalidArgument, "GATT descriptor has no access permissions");
+    return EspBleGattDescriptor();
+  }
+  // The Client Characteristic Configuration Descriptor is owned by the stack: it
+  // is added automatically for a notifiable or indicatable characteristic, and it
+  // tracks each peer's subscription. A second, application-managed copy would
+  // shadow it, so set config.notifiable / config.indicatable instead.
+  if (uuidEquals(String(EspBle::ClientCharacteristicConfigurationUuid), descriptorUuid) ||
+      uuidEquals(String("2902"), descriptorUuid))
+  {
+    owner_->setError(
+      EspBleError::InvalidArgument,
+      "the Client Characteristic Configuration Descriptor is managed by the stack; "
+      "use notifiable / indicatable instead");
     return EspBleGattDescriptor();
   }
   if ((config.encryptedRead || config.authenticatedRead) && !config.readable)
@@ -4954,12 +5350,6 @@ bool EspBleGattServer::setValue(
   auto &definition = impl_->characteristics[characteristic.id - 1];
   definition.value =
     length == 0 ? String() : String(reinterpret_cast<const char *>(data), length);
-  if (definition.backend != nullptr)
-  {
-    definition.backend->setValue(
-      reinterpret_cast<const uint8_t *>(definition.value.c_str()),
-      definition.value.length());
-  }
   owner_->clearError();
   return true;
 }
@@ -5013,12 +5403,6 @@ bool EspBleGattServer::setDescriptorValue(
   }
   definition.value =
     length == 0 ? String() : String(reinterpret_cast<const char *>(data), length);
-  if (definition.backend != nullptr)
-  {
-    definition.backend->setValue(
-      reinterpret_cast<const uint8_t *>(definition.value.c_str()),
-      definition.value.length());
-  }
   owner_->clearError();
   return true;
 }
@@ -5193,7 +5577,7 @@ bool EspBleGattServer::send(
     }
     EspBleGattServerImpl::CharacteristicDefinition *found =
       &impl_->characteristics[characteristic.id - 1];
-    if (found->backend == nullptr)
+    if (found->def == nullptr)
     {
       owner_->setError(EspBleError::NotFound, "GATT characteristic was not registered");
       return false;
@@ -5221,7 +5605,7 @@ bool EspBleGattServer::send(
       (impl_->sendQueueHead + impl_->sendQueueCount) % EspBleGattServerImpl::SendQueueCapacity;
     EspBleGattServerImpl::SendRequest &request = impl_->sendQueue[tail];
     request.connectionId = connectionId;
-    request.backend = found->backend;
+    request.valueHandle = found->valueHandle;
     request.characteristic = characteristic;
     request.serviceUuid = found->serviceUuid;
     request.characteristicUuid = found->uuid;
@@ -5245,7 +5629,7 @@ void EspBle::pumpSendQueue()
     if (impl->sending || impl->sendQueueCount == 0) return;
     EspBleGattServerImpl::SendRequest &request = impl->sendQueue[impl->sendQueueHead];
     impl->sendConnectionId = request.connectionId;
-    impl->sendBackend = request.backend;
+    impl->sendValueHandle = request.valueHandle;
     impl->sendCharacteristic = request.characteristic;
     impl->sendServiceUuid = request.serviceUuid;
     impl->sendCharacteristicUuid = request.characteristicUuid;
@@ -5411,120 +5795,130 @@ bool EspBleGattServer::realize()
   }
 
   std::lock_guard<std::mutex> lock(impl_->mutex);
-  BLEServer *server = owner_->impl_->server;
+
+  // Build the NimBLE attribute table directly. Two services may share a UUID and
+  // so may two characteristics, and only pointer identity distinguishes them, so
+  // every definition gets its own table entry that the access callback matches on.
+  size_t characteristicSlot = 0;
+  size_t descriptorSlot = 0;
   for (size_t serviceIndex = 0; serviceIndex < impl_->serviceCount; ++serviceIndex)
   {
     auto &serviceDefinition = impl_->services[serviceIndex];
-    // Two services may share a UUID, so each repetition needs its own instance
-    // id: the backend keys its service map on (UUID, instance id) and a second
-    // service created with the default id would collide with the first.
-    uint8_t instanceId = 0;
-    for (size_t prior = 0; prior < serviceIndex; ++prior)
+    if (!parseUuid(serviceDefinition.uuid.c_str(), serviceDefinition.nativeUuid))
     {
-      if (uuidEquals(impl_->services[prior].uuid, serviceDefinition.uuid.c_str()))
-      {
-        ++instanceId;
-      }
-    }
-    // Size the attribute-handle budget from what this service actually holds
-    // instead of the backend's fixed default: the service declaration, two
-    // handles per characteristic, one per descriptor, and one more for the CCCD
-    // that a notifiable or indicatable characteristic gets automatically.
-    uint32_t handleCount = 1;
-    for (size_t index = 0; index < impl_->characteristicCount; ++index)
-    {
-      const auto &characteristic = impl_->characteristics[index];
-      if (characteristic.serviceIndex != serviceIndex) continue;
-      handleCount += 2;
-      if (characteristic.config.notifiable || characteristic.config.indicatable)
-      {
-        ++handleCount;
-      }
-      for (size_t descriptorIndex = 0; descriptorIndex < impl_->descriptorCount; ++descriptorIndex)
-      {
-        if (impl_->descriptors[descriptorIndex].characteristicIndex == index) ++handleCount;
-      }
-    }
-    serviceDefinition.backend = server->createService(
-      BLEUUID(serviceDefinition.uuid.c_str()), handleCount, instanceId);
-    if (serviceDefinition.backend == nullptr)
-    {
-      owner_->setError(EspBleError::BackendFailure, "failed to create GATT service");
+      owner_->setError(EspBleError::InvalidArgument, "GATT service UUID is malformed");
       return false;
     }
+    ble_gatt_svc_def &service = impl_->serviceDefs[serviceIndex];
+    service.type = BLE_GATT_SVC_TYPE_PRIMARY;
+    service.uuid = &serviceDefinition.nativeUuid.u;
+    service.includes = nullptr;
+    serviceDefinition.def = &service;
+
+    const size_t firstCharacteristic = characteristicSlot;
+    size_t serviceCharacteristics = 0;
     for (size_t characteristicIndex = 0;
          characteristicIndex < impl_->characteristicCount;
          ++characteristicIndex)
     {
       auto &characteristicDefinition = impl_->characteristics[characteristicIndex];
       // Match by index, not UUID: two services may carry the same UUID.
-      if (characteristicDefinition.serviceIndex != serviceIndex)
+      if (characteristicDefinition.serviceIndex != serviceIndex) continue;
+      if (!parseUuid(characteristicDefinition.uuid.c_str(), characteristicDefinition.nativeUuid))
       {
-        continue;
-      }
-
-      uint32_t properties = 0;
-      const auto &config = characteristicDefinition.config;
-      if (config.readable) properties |= BLECharacteristic::PROPERTY_READ;
-      if (config.writable) properties |= BLECharacteristic::PROPERTY_WRITE;
-      if (config.writableWithoutResponse) properties |= BLECharacteristic::PROPERTY_WRITE_NR;
-      if (config.notifiable) properties |= BLECharacteristic::PROPERTY_NOTIFY;
-      if (config.indicatable) properties |= BLECharacteristic::PROPERTY_INDICATE;
-      if (config.encryptedRead) properties |= BLECharacteristic::PROPERTY_READ_ENC;
-      if (config.encryptedWrite) properties |= BLECharacteristic::PROPERTY_WRITE_ENC;
-      if (config.authenticatedRead) properties |= BLECharacteristic::PROPERTY_READ_AUTHEN;
-      if (config.authenticatedWrite) properties |= BLECharacteristic::PROPERTY_WRITE_AUTHEN;
-
-      characteristicDefinition.backend = serviceDefinition.backend->createCharacteristic(
-        characteristicDefinition.uuid.c_str(), properties);
-      if (characteristicDefinition.backend == nullptr)
-      {
-        owner_->setError(EspBleError::BackendFailure, "failed to create GATT characteristic");
+        owner_->setError(EspBleError::InvalidArgument, "GATT characteristic UUID is malformed");
         return false;
       }
-      characteristicDefinition.backend->setCallbacks(&impl_->callbacks);
-      characteristicDefinition.backend->setValue(
-        reinterpret_cast<const uint8_t *>(characteristicDefinition.value.c_str()),
-        characteristicDefinition.value.length());
 
+      ble_gatt_chr_def &characteristic = impl_->characteristicDefs[characteristicSlot++];
+      ++serviceCharacteristics;
+      const auto &config = characteristicDefinition.config;
+      ble_gatt_chr_flags flags = 0;
+      if (config.readable) flags |= BLE_GATT_CHR_F_READ;
+      if (config.writable) flags |= BLE_GATT_CHR_F_WRITE;
+      if (config.writableWithoutResponse) flags |= BLE_GATT_CHR_F_WRITE_NO_RSP;
+      // Notify and Indicate make the host add and manage the CCCD itself.
+      if (config.notifiable) flags |= BLE_GATT_CHR_F_NOTIFY;
+      if (config.indicatable) flags |= BLE_GATT_CHR_F_INDICATE;
+      if (config.encryptedRead) flags |= BLE_GATT_CHR_F_READ_ENC;
+      if (config.encryptedWrite) flags |= BLE_GATT_CHR_F_WRITE_ENC;
+      if (config.authenticatedRead) flags |= BLE_GATT_CHR_F_READ_AUTHEN;
+      if (config.authenticatedWrite) flags |= BLE_GATT_CHR_F_WRITE_AUTHEN;
+      characteristic.uuid = &characteristicDefinition.nativeUuid.u;
+      characteristic.access_cb = EspBleGattServerImpl::accessCallback;
+      characteristic.arg = impl_;
+      characteristic.flags = flags;
+      characteristic.min_key_size = 0;
+      characteristic.val_handle = &characteristicDefinition.valueHandle;
+      characteristicDefinition.valueHandle = 0;
+      characteristicDefinition.def = &characteristic;
+
+      const size_t firstDescriptor = descriptorSlot;
+      size_t characteristicDescriptors = 0;
       for (size_t descriptorIndex = 0;
            descriptorIndex < impl_->descriptorCount;
            ++descriptorIndex)
       {
         auto &descriptorDefinition = impl_->descriptors[descriptorIndex];
-        if (descriptorDefinition.characteristicIndex != characteristicIndex)
+        if (descriptorDefinition.characteristicIndex != characteristicIndex) continue;
+        if (!parseUuid(descriptorDefinition.uuid.c_str(), descriptorDefinition.nativeUuid))
         {
-          continue;
-        }
-        descriptorDefinition.backend = new BLEDescriptor(
-          descriptorDefinition.uuid.c_str(), descriptorDefinition.config.maximumLength);
-        if (descriptorDefinition.backend == nullptr)
-        {
-          owner_->setError(EspBleError::ResourceExhausted, "failed to create GATT descriptor");
+          owner_->setError(EspBleError::InvalidArgument, "GATT descriptor UUID is malformed");
           return false;
         }
-        uint16_t permissions = 0;
+        ble_gatt_dsc_def &descriptor = impl_->descriptorDefs[descriptorSlot++];
+        ++characteristicDescriptors;
         const EspBleGattDescriptorConfig &descriptorConfig = descriptorDefinition.config;
-        if (descriptorConfig.readable) permissions |= ESP_GATT_PERM_READ;
-        if (descriptorConfig.writable) permissions |= ESP_GATT_PERM_WRITE;
-        if (descriptorConfig.encryptedRead) permissions |= ESP_GATT_PERM_READ_ENCRYPTED;
-        if (descriptorConfig.encryptedWrite) permissions |= ESP_GATT_PERM_WRITE_ENCRYPTED;
-        if (descriptorConfig.authenticatedRead) permissions |= ESP_GATT_PERM_READ_ENC_MITM;
-        if (descriptorConfig.authenticatedWrite) permissions |= ESP_GATT_PERM_WRITE_ENC_MITM;
-        descriptorDefinition.backend->setAccessPermissions(permissions);
-        descriptorDefinition.backend->setCallbacks(&impl_->descriptorCallbacks);
-        descriptorDefinition.backend->setValue(
-          reinterpret_cast<const uint8_t *>(descriptorDefinition.value.c_str()),
-          descriptorDefinition.value.length());
-        characteristicDefinition.backend->addDescriptor(descriptorDefinition.backend);
+        uint8_t attributeFlags = 0;
+        if (descriptorConfig.readable) attributeFlags |= BLE_ATT_F_READ;
+        if (descriptorConfig.writable) attributeFlags |= BLE_ATT_F_WRITE;
+        if (descriptorConfig.encryptedRead) attributeFlags |= BLE_ATT_F_READ_ENC;
+        if (descriptorConfig.encryptedWrite) attributeFlags |= BLE_ATT_F_WRITE_ENC;
+        if (descriptorConfig.authenticatedRead) attributeFlags |= BLE_ATT_F_READ_AUTHEN;
+        if (descriptorConfig.authenticatedWrite) attributeFlags |= BLE_ATT_F_WRITE_AUTHEN;
+        descriptor.uuid = &descriptorDefinition.nativeUuid.u;
+        descriptor.att_flags = attributeFlags;
+        descriptor.min_key_size = 0;
+        descriptor.access_cb = EspBleGattServerImpl::accessCallback;
+        descriptor.arg = impl_;
+        descriptorDefinition.def = &descriptor;
+      }
+      if (characteristicDescriptors != 0)
+      {
+        // Terminator for this characteristic's descriptor run.
+        impl_->descriptorDefs[descriptorSlot++] = ble_gatt_dsc_def{};
+        characteristic.descriptors = &impl_->descriptorDefs[firstDescriptor];
+      }
+      else
+      {
+        characteristic.descriptors = nullptr;
       }
     }
-    if (!serviceDefinition.backend->start())
+    if (serviceCharacteristics != 0)
     {
-      owner_->setError(EspBleError::BackendFailure, "failed to start GATT service");
-      return false;
+      impl_->characteristicDefs[characteristicSlot++] = ble_gatt_chr_def{};
+      service.characteristics = &impl_->characteristicDefs[firstCharacteristic];
+    }
+    else
+    {
+      service.characteristics = nullptr;
     }
   }
+  impl_->serviceDefs[impl_->serviceCount] = ble_gatt_svc_def{};
+
+  int backendCode = ble_gatts_count_cfg(impl_->serviceDefs);
+  if (backendCode == 0)
+  {
+    backendCode = ble_gatts_add_svcs(impl_->serviceDefs);
+  }
+  if (backendCode != 0)
+  {
+    owner_->setError(
+      EspBleError::BackendFailure,
+      (String("failed to register GATT services, backend code ") + backendCode).c_str());
+    return false;
+  }
+
   impl_->realized = true;
   return true;
 }
@@ -5538,15 +5932,20 @@ void EspBleGattServer::resetBackend()
   std::lock_guard<std::mutex> lock(impl_->mutex);
   for (size_t index = 0; index < impl_->serviceCount; ++index)
   {
-    impl_->services[index].backend = nullptr;
+    impl_->services[index].def = nullptr;
   }
   for (size_t index = 0; index < impl_->characteristicCount; ++index)
   {
-    impl_->characteristics[index].backend = nullptr;
+    impl_->characteristics[index].def = nullptr;
+    impl_->characteristics[index].valueHandle = 0;
   }
   for (size_t index = 0; index < impl_->descriptorCount; ++index)
   {
-    impl_->descriptors[index].backend = nullptr;
+    impl_->descriptors[index].def = nullptr;
+  }
+  for (EspBleGattServerImpl::SubscriptionSlot &slot : impl_->subscriptions)
+  {
+    slot = EspBleGattServerImpl::SubscriptionSlot();
   }
   impl_->realized = false;
 }
@@ -6023,7 +6422,10 @@ bool EspBleHidKeyboard::realize()
       (String("failed to register HID services, backend code ") + backendCode).c_str());
     return false;
   }
-  owner_->impl_->server->start();
+  if (!owner_->startGattServer())
+  {
+    return false;
+  }
   bool handlesRegistered = true;
   for (uint8_t index = 0; index < EspBleHidDeviceManagerImpl::ProfileCount; ++index)
   {
@@ -7762,6 +8164,9 @@ bool EspBle::begin(const EspBleConfig &config)
     setError(EspBleError::BackendFailure, "BLEDevice::init failed");
     return false;
   }
+  // Recorded here because starting the GATT server restores the GAP device
+  // name, and that can happen while begin() is still running (HID realize).
+  activeDeviceName_ = deviceName;
   if (BLEDevice::setMTU(config.preferredMtu) != ESP_OK)
   {
     BLEDevice::deinit(false);
@@ -7806,6 +8211,11 @@ bool EspBle::begin(const EspBleConfig &config)
     }
   }
 
+  impl_->ownAddressType = config.ownAddressType == EspBleOwnAddressType::Public
+    ? BLE_OWN_ADDR_PUBLIC
+    : (config.ownAddressType == EspBleOwnAddressType::RandomStatic
+         ? BLE_OWN_ADDR_RANDOM
+         : BLE_OWN_ADDR_RPA_RANDOM_DEFAULT);
   impl_->securityEnabled = config.security.enabled;
   impl_->persistentSubscriptionsEnabled = config.persistentSubscriptions;
   impl_->autoReconnectEnabled = autoReconnect_;
@@ -7915,11 +8325,12 @@ void EspBle::end()
   }
   if (advertising_.isAdvertising())
   {
-    BLEDevice::getAdvertising()->stop();
+    ble_gap_adv_stop();
   }
 
   if (impl_ != nullptr)
   {
+    impl_->gattServerStarted = false;
     while (true)
     {
       bool cancelConnect = false;
@@ -9686,6 +10097,34 @@ void EspBle::pumpGattQueue()
   }
 }
 
+// Start the GATT server exactly once. ble_svc_gap_init() (run when the backend
+// server object is created) resets the GAP device name to the sdkconfig default,
+// and ble_gatts_start() is what commits the attribute table, so the name is
+// restored afterwards.
+bool EspBle::startGattServer()
+{
+  if (impl_ == nullptr)
+  {
+    setError(EspBleError::InvalidState, "connection state is unavailable");
+    return false;
+  }
+  if (impl_->gattServerStarted) return true;
+  const int backendCode = ble_gatts_start();
+  if (backendCode != 0)
+  {
+    setError(
+      EspBleError::BackendFailure,
+      (String("failed to start the GATT server, backend code ") + backendCode).c_str());
+    return false;
+  }
+  impl_->gattServerStarted = true;
+  if (activeDeviceName_.length() != 0)
+  {
+    ble_svc_gap_device_name_set(activeDeviceName_.c_str());
+  }
+  return true;
+}
+
 bool EspBle::preparePeripheral()
 {
   if (impl_ == nullptr)
@@ -9849,6 +10288,7 @@ void EspBle::dispatchConnectionEvents()
     case EspBleImpl::EventType::ServerDescriptorWrite:
     {
       EspBleGattDescriptorWrite write;
+      write.connectionId = event.serverWrite.connectionId;
       write.serviceUuid = event.serverWrite.serviceUuid;
       write.characteristicUuid = event.serverWrite.characteristicUuid;
       write.descriptor = event.serverDescriptor;

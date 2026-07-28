@@ -106,10 +106,11 @@ HID Host の `discover()` が汎用queueエンジンに乗らず、別経路に�
 
 - SMコールバック（passkey要求 / Numeric Comparison確認）が同期でhost taskを最大30秒block（NimBLEの `onPassKeyRequest()`/`onConfirmPIN()` がinline戻り必須）。
 - passkey表示 / Numeric Comparisonの接続attributionが「最初の未暗号化接続」の推定（backend callbackにconn handle無し、DECISIONS Security#8）。
-- Descriptor Write eventに接続ID無し（backendが非公開）。
 - GATT client discoveryのheap leak（約2.6 KB/discovery）。ただし**汎用GATT Clientはこの経路を通らなくなった**: discoveryもread/write/購読もNimBLEホストAPIへ直接発行し、wrapperの `BLEClient` のremoteオブジェクトを作らない（[PLAN_GUIDE_REVAMP.ja.md](PLAN_GUIDE_REVAMP.ja.md) Phase 4b #2）。残る利用箇所はHID Host / MIDI Hostの自前discovery経路で、そこは未変更。
 - client側MTU変更callback無し（接続時snapshotのみ）。
 - Extended/Periodic Advertising、動的service追加、`connect()` のtimeout引数無視、最大3接続（同梱NimBLEビルド構成）。
+
+> **解決済み（自前GATT Server化）**: Descriptor Write eventの接続ID欠落は、属性テーブルを`ble_gatts_add_svcs()`で自前に組むようにして解消した。ホストのaccess callbackは`conn_handle`を受け取るため、`EspBleGattDescriptorWrite::connectionId`を埋められる（[PLAN_GUIDE_REVAMP.ja.md](PLAN_GUIDE_REVAMP.ja.md) Phase 4b S2）。
 
 > **解決済み（3.3.10 → 3.3.11）**: 3.3.10では `ble.begin()` のBTコントローラ初期化中に `ipc0` タスク（`CONFIG_ESP_IPC_TASK_STACK_SIZE=1024`）でスタック超過→再起動ループが**マージナルに**発生した（`btdm_intr_alloc → heap_caps_malloc` へISRがネストしスタックcanary watchpointが発火。`hid_boot_keyboard` peer で顕在化、バイナリ配置依存）。arduino-esp32 3.3.11でipcタスクスタックが拡張され根治（開発/テストは3.3.11で実施し、当該peerを含め全PASS）。
 

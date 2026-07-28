@@ -1,6 +1,7 @@
-// Peripheral for the duplicate_uuid peer test: register two Services that share
-// a UUID (allowed), and attempt a second Characteristic with a UUID already used
-// in the same Service (rejected by the bundled backend, so EspBle refuses it).
+// Peripheral for the duplicate_uuid peer test: expose every duplication the
+// Bluetooth spec allows -- two Services with the same UUID, and two
+// Characteristics with the same UUID inside one Service. Each registration
+// returns its own handle, which is what tells them apart.
 #include <EspBle.h>
 
 static constexpr const char *SERVICE_UUID = "5266f727-49d7-4eaf-a6f1-647570736572";
@@ -26,9 +27,9 @@ void setup()
   const EspBleGattService second = gattServer.addService(SERVICE_UUID);
 
   firstValue = gattServer.addCharacteristic(first, VALUE_UUID, config);
-  // Same UUID in the same service: must be refused, not silently merged.
+  // Same UUID inside the same service.
   duplicateValue = gattServer.addCharacteristic(first, VALUE_UUID, config);
-  // Same UUID in a different service: fine.
+  // Same UUID in a different service.
   otherServiceValue = gattServer.addCharacteristic(second, VALUE_UUID, config);
 
   gattServer.onSubscriptionChanged([](const EspBleGattSubscription &subscription) {
@@ -38,6 +39,7 @@ void setup()
   });
 
   gattServer.setValue(firstValue, String("first"));
+  gattServer.setValue(duplicateValue, String("dup"));
   gattServer.setValue(otherServiceValue, String("other"));
 
   EspBleConfig bleConfig;
@@ -74,6 +76,12 @@ void loop()
         ble.gattServer().notify(firstValue, String("ping-first")) ? 1 : 0);
     }
     else if (command == '2')
+    {
+      Serial.printf(
+        "NOTIFIED dup=%u\n",
+        ble.gattServer().notify(duplicateValue, String("ping-dup")) ? 1 : 0);
+    }
+    else if (command == '3')
     {
       Serial.printf(
         "NOTIFIED other=%u\n",
