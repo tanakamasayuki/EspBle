@@ -1,9 +1,11 @@
 // en: StaticPasskeyClient - central-side counterpart of StaticPasskeyServer: the keyboard
-//     side (KeyboardOnly) that "types" the passkey. This trial API passes a preconfigured
-//     passkey to the stack instead of waiting for runtime input. After MITM-authenticated
-//     pairing it reads the protected characteristic.
+//     side (KeyboardOnly) that "types" the passkey. The passkey is fixed in the sketch
+//     and handed to the stack up front, so nothing is typed at runtime; see
+//     Security/RuntimePasskeyClient for the form where the user enters it. After
+//     MITM-authenticated pairing it reads the protected characteristic.
 // ja: StaticPasskeyClient - StaticPasskeyServerのCentral側。passkeyを「入力する」側
-//     （KeyboardOnly）。現在の試行APIは実行時入力を待つ代わりに事前設定passkeyをスタックへ渡す。
+//     （KeyboardOnly）。passkeyはsketchに固定して事前にスタックへ渡すため、実行時の入力は
+//     伴わない。利用者が打ち込む形は Security/RuntimePasskeyClient を参照。
 //     MITM認証Pairing完了後、保護されたCharacteristicをReadする。
 #include <EspBle.h>
 

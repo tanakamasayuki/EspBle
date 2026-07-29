@@ -1,6 +1,7 @@
 # UserDataClient
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 User Data Service（0x181C）へ接続し、Database Change IncrementのNotificationを購読、AgeをRead、新しいFirst NameとAgeをWriteします。書き込むたびにincrementが増え、Notificationとして届きます。
 

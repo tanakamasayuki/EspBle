@@ -1,6 +1,7 @@
 # CyclingPowerServer
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 標準Cycling Power Service（0x1818）のPeripheralです。Cycling Power Measurement（0x2A63）を16bit flagsと符号付き16bit instantaneous power（ワット）でNotifyし、Cycling Power Feature（0x2A65）とSensor Location（0x2A5D）はReadできます。
 

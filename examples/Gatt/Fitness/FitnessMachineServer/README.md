@@ -1,6 +1,7 @@
 # FitnessMachineServer
 
 > 日本語版: [README.ja.md](README.ja.md)
+> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 4, "GATT" (Japanese)
 
 Standard Fitness Machine Service (0x1826) peripheral, as used by smart trainers and indoor bikes. Indoor Bike Data (0x2AD2) is **notified** with 16-bit flags followed by instantaneous speed (0.01 km/h), cadence (0.5 /min), and signed power (W); Fitness Machine Feature (0x2ACC) is a readable 8-byte pair of feature bitmaps.
 

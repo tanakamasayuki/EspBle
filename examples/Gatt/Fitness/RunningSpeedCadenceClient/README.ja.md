@@ -1,6 +1,7 @@
 # RunningSpeedCadenceClient
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 Running Speed and Cadence Service（0x1814）のCentral / GATT Clientです。Sensor Location（0x2A5D）をReadし、RSC Measurement（0x2A53）のNotificationを購読して、speed・cadenceと任意のstride length・total distanceをデコードします。
 

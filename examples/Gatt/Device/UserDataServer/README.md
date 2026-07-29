@@ -1,6 +1,7 @@
 # UserDataServer
 
 > 日本語版: [README.ja.md](README.ja.md)
+> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 4, "GATT" (Japanese)
 
 Standard User Data Service (0x181C) peripheral. Age (0x2A80) is a read/write uint8, First Name (0x2A8A) is a read/write utf8s, and Database Change Increment (0x2A99) is a read/write/**notify** uint32. Each write to Age or First Name bumps the increment and notifies it.
 

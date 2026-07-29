@@ -2,33 +2,21 @@
 
 > English: [README.md](README.md)
 
-## BLEとは
+## 概念はガイドにまとまっています
 
-Bluetooth Low Energy（BLE）は、小さなデータを低消費電力でやり取りするための無線規格です。名前は似ていますが、イヤホンやSPP（Serial Port Profile）で使われてきた**Bluetooth Classicとは別物の通信方式**で、互換性はありません。
+BLEの仕組み——Bluetooth Classicとの違い、GAP（探してつながる）、セキュリティ（ペアリングとボンディング）、GATT（データのやり取り）、UUID——は[BLE通信の入門ガイド](../docs/GUIDE_BLE_BASICS.ja.md)で説明しています。用語はすべてその中で定義しています。
 
-- **Bluetooth Classic**: 常時接続のストリーム通信。音声（A2DP/HFP）やシリアル（SPP）向け。消費電力が大きい。
-- **BLE**: 必要なときだけ短く通信するイベント指向。センサー値、キー入力、設定値など「小さいデータのやり取り」向け。ボタン電池で年単位の動作を狙える。
+| 知りたいこと | ガイドの章 | 対応するexample |
+|---|---|---|
+| BLEとは何か、Classicとの違い | 1章 | — |
+| Advertising・Scan・接続・アドレス | 2章 GAP編 | [Gap/](Gap/) |
+| ペアリング・ボンディング・認証方式 | 3章 セキュリティ編 | [Security/](Security/) |
+| Service・Characteristic・Read/Write・Notify | 4章 GATT編 | [Gatt/](Gatt/) |
+| UUIDの標準形と独自形 | 5章 | — |
 
-EspBleはArduino-ESP32同梱のNimBLE backendを使う**BLE専用ライブラリ**です。Bluetooth ClassicのA2DP/HFP/**SPPは使えません**。「BLEでシリアル通信っぽいことをしたい」場合は、[NUS互換Server](Gatt/Basics/NusServer/) / [Client](Gatt/Basics/NusClient/)のようなGATTベースの手法を使います。
+各exampleのREADMEはそれ単体で読めるように書いてあるので、ガイドを読まずに個別のexampleから入っても構いません。
 
-### GAP — 相手を見つける・つながる
-
-GAP（Generic Access Profile）は「発見と接続」の層です。
-
-- **Advertising**: Peripheral（周辺機器）が「ここにいるよ」と名前やService UUIDを電波で放送する。
-- **Scanning**: Central（親機）が周囲の放送を受信して相手を探す。
-- **接続**: CentralがScan結果から相手を選んで接続する。接続後はどちらの役割でも双方向にデータを送れる。
-
-ESP32は1台で**CentralとPeripheralを同時に**こなせます（例: キーボードから入力を受けつつ、PCへキーボードとして見せる）。
-
-### GATT — データのやり取り
-
-GATT（Generic Attribute Profile）は接続後のデータ構造です。データは**Service**（機能のまとまり、例: Battery Service）と、その中の**Characteristic**（個々の値、例: Battery Level）として公開されます。
-
-- **GATT Server**: 値を持っている側。Read/Writeに応え、値の変化を**Notification/Indication**で購読者へ配信できる。
-- **GATT Client**: 値を利用する側。UUIDを指定してRead/Write/購読を行う。
-
-「Peripheral=Server、Central=Client」が典型ですが、GATTの役割はlink roleとは独立した概念です。
+以下はガイドに章がまだ無い2分野の概要です。
 
 ### HID — キーボードやマウス
 
@@ -45,16 +33,6 @@ BLE MIDIは、メッセージごとに13-bitミリ秒timestampを付けて単一
 - **MIDI Host**（`EspBleMidiHost`）: BLE MIDI Peripheralへ接続・購読し、デコード済みメッセージ（running statusやSystem Real-Timeも処理）を受信します。
 
 APIは[EspUsbDevice](https://github.com/tanakamasayuki/EspUsbDevice) / [EspUsbHost](https://github.com/tanakamasayuki/EspUsbHost)のMIDIクラスに揃えており、USBとBLEでコードを移植できます。
-
-### Security — Pairing・Bonding・暗号化
-
-BLEのセキュリティは接続ごとに確立します。
-
-- **Pairing**: 鍵を交換してlinkを暗号化する手続き。確認なしの**Just Works**と、6桁passkeyで相手を確認する**MITM認証**（passkey entry）がある。
-- **Bonding**: 交換した鍵を保存し、次回から自動で暗号化する。
-- **属性の保護**: Characteristicごとに「暗号化必須」「認証必須」を宣言でき、満たさないアクセスはエラーになる（HIDキーボードは暗号化必須が標準）。
-
-EspBleでは`EspBleConfig::security`で有効化し、Characteristic側は`encryptedRead/Write`・`authenticatedRead/Write`で宣言します。[Security/JustWorksServer](Security/JustWorksServer/)と[Security/StaticPasskeyServer](Security/StaticPasskeyServer/)が最小構成です。
 
 ## ビルド方法
 

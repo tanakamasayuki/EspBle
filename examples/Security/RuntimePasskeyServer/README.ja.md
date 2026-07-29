@@ -1,6 +1,7 @@
 # RuntimePasskeyServer
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../docs/GUIDE_BLE_BASICS.ja.md) 3章「セキュリティ編」
 
 Passkey Entryの**表示側**（`DisplayOnly`）です。passkeyをsketchに固定せず、**Pairingのたびにスタックが新しい6桁を生成**します。相手側は[RuntimePasskeyClient](../RuntimePasskeyClient/)です。
 

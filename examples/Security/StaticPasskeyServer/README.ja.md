@@ -1,6 +1,7 @@
 # StaticPasskeyServer
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../docs/GUIDE_BLE_BASICS.ja.md) 3章「セキュリティ編」
 
 静的6桁passkeyによるMITM認証Pairingを要求するGATT Server（Peripheral）です。このボードは表示側（`DisplayOnly`）で、passkeyをSerialへ表示し、接続するCentralがそれを入力します。[StaticPasskeyClient](../StaticPasskeyClient/) example（passkey入力側）と接続します。
 

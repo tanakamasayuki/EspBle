@@ -1,6 +1,7 @@
 # WeightScaleServer
 
 > 日本語版: [README.ja.md](README.ja.md)
+> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 4, "GATT" (Japanese)
 
 Standard Weight Scale Service (0x181D) peripheral. Weight Measurement (0x2A9D) is **indicated** as a uint16 weight at 0.005 kg resolution; Weight Scale Feature (0x2A9E) is a readable uint32.
 

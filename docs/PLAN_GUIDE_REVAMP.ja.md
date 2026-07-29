@@ -578,7 +578,21 @@ Phase 4後のAPIで、`Gatt/Basics/*` を中心に「概念はガイド、使い
 | 5-2 | `Gatt/Basics/Client` — 連鎖の説明と、要求時生成値のRead | **完了。** callbackの連鎖を図として示し、「イベントは操作の種類ごとに1つで対象ごとには分かれない」ことを説明。Read Long（長い値の自動分割読み取り）とWriteが分割されないことの非対称もREADMEへ |
 | 5-3 | `Gatt/Basics/NotifyServer` / `SubscribeClient` — CCCDの説明 | **完了。** 「購読者がいないと送れない」「CCCDは接続ごとのスイッチ」「送信は失敗しない、届く先が無いだけ」をServer側へ、購読がCCCD書き込みであること・`onNotification()`がIndicationも受けること・再接続で自動復元されることをClient側へ追加 |
 | 5-4 | `Gatt/Basics` の残り（`IndicateServer` / `IndicateClient` / `NusServer` / `NusClient` / `AutoReconnectClient`） | **確認済み・変更不要。** Notification/Indicationの使い分け、CCCDのビット、persistent subscriptionがそれぞれ既に説明されている |
-| 5-5 | profile別example（`Gatt/Health` / `Fitness` / `Alerts` / `Device` / `Time` / `Sensors`） | **未着手。** 今回のパスでは見ていない |
+| 5-5 | profile別example（`Gatt/Health` / `Fitness` / `Alerts` / `Device` / `Time` / `Sensors`） | **一括監査を実施。個別の書き直しは不要と判断。** 下記のとおり |
+
+#### 5-5 の監査結果
+
+profile別exampleを1つずつ読み直す前に、機械的に確認できる項目を全exampleへ一括でかけた。
+
+| 観点 | 結果 |
+|---|---|
+| README節構成（`必要なもの` / `動作` / `主なAPI` / `期待されるSerial出力`） | 91 example すべてが4節を備える。欠落なし |
+| 日英の対応 | 91 example すべてに両言語のREADMEがあり、英語側も4節を備える。`Gap/DirectedAdvertise` の見出しの大文字表記のみ不統一だったので修正 |
+| 廃止したラッパへの言及・「Discussion参照」・履歴的表現 | `Security/StaticPasskeyClient` の**sketch冒頭コメントに「現在の試行API」という古い記述が残っていた**（READMEは先に修正済みだった）ので、実行時入力版への参照を含む形へ修正 |
+| index（`examples/README`）への掲載漏れ | 両言語とも漏れなし（91/91） |
+| 相対リンクの健全性 | Phase 7-3 のとおり1件修正、現在0件 |
+
+以上より、profile別exampleは**形式・整合性の面では手を入れる必要がない**。内容面（各標準Serviceのバイト並びの説明の厚さ）はPeerテストで動作が裏付けられており、個別の増補は必要になった時点で行う。
 
 ### Phase 6 — ガイドのGATT章を執筆
 
@@ -604,6 +618,14 @@ Service / Characteristic / Descriptor、UUIDとハンドルの使い分け、Ser
 ### Phase 7 — 用語解説の集約とリンク整備
 
 [examples/README.ja.md](../examples/README.ja.md) の「BLEとは / GAP / GATT / HID / Security」節をガイドへ吸収し、各example READMEからガイドへの導線を張る。ガイドが安定してから最後に実施する。
+
+**完了。**
+
+| # | 項目 | 内容 |
+|---|---|---|
+| 7-1 | examples/README の概念節の集約 | 「BLEとは / GAP / GATT / Security」の4節を削除し、**どの章に何が書いてあるかの対応表**へ置き換えた（両言語）。ガイドと二重に持つと必ず食い違うため（実際に同一UUID重複の記述が食い違っていた）。**HIDとMIDIの節は残した**——ガイドにまだ章が無く、削ると情報が失われるため。ガイドに章を設けた時点で同じ形へ移す |
+| 7-2 | 各example READMEからガイドへの導線 | `Gap` / `Security` / `Gatt` / `Info` 配下の全example READMEに、言語切り替え行の直下へ**該当章を名指しした1行**を挿入（156ファイル）。`Hid` / `Midi` / `CompileSmoke` は該当章が無いため付けていない |
+| 7-3 | リンク健全性の確認 | コードフェンス内を除いた相対リンクを機械的に検査。**壊れていたリンク1件を修正**（`Gap/DirectedAdvertise` が存在しない `Security/Bonding` を参照していた → `Security/JustWorksServer`）。現在は0件 |
 
 ### Phase 8 — 英語版と周辺文書
 

@@ -1,6 +1,7 @@
 # HeartRateServer
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 標準Heart Rate Service（0x180D）のPeripheral。Heart Rate Measurement（0x2A37）は**Notify専用**で8-bit心拍数と1つのRR-Intervalを含み、Body Sensor Location（0x2A38）はReadできます（値1 = Chest）。
 

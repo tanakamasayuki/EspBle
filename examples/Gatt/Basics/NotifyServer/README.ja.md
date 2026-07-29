@@ -1,6 +1,7 @@
 # NotifyServer
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 1秒ごとにカウンタ値をNotificationで送るGATT Serverです。ただしNotificationを購読しているClientが1つ以上いる間だけ送信します。[Gatt/SubscribeClient](../SubscribeClient/) exampleと組み合わせて使います。
 

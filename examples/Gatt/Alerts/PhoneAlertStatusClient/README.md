@@ -1,6 +1,7 @@
 # PhoneAlertStatusClient
 
 > 日本語版: [README.ja.md](README.ja.md)
+> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 4, "GATT" (Japanese)
 
 Connects to a Phone Alert Status Service (0x180E), reads Alert Status, subscribes to Ringer Setting, and drives the Ringer Control Point (**Write Without Response**) to set Silent Mode then cancel it, printing the notified Ringer Setting each time.
 

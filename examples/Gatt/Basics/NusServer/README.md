@@ -1,6 +1,7 @@
 # NusServer
 
 > 日本語版: [README.ja.md](README.ja.md)
+> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 4, "GATT" (Japanese)
 
 Implements the Nordic UART Service (NUS) UUID layout with the generic GATT server API (peripheral): RX (`6e400002-…`) accepts writes and TX (`6e400003-…`) sends notifications, under service `6e400001-…`. Received RX data is echoed back to subscribed TX clients.
 

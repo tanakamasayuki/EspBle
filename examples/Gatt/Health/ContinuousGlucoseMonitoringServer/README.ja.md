@@ -1,6 +1,7 @@
 # ContinuousGlucoseMonitoringServer
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 標準Continuous Glucose Monitoring Service（0x181F）のPeripheral。CGM Feature（0x2AA8）はEnd-to-End CRCで保護されたread値、CGM Measurement（0x2AA7）はSFLOAT血糖値、time offset、末尾のE2E-CRC付きで**Notify**します。
 

@@ -1,6 +1,7 @@
 # ProximityClient
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 Proximityプロファイルの**Monitor**役。Proximity Reporterへ接続し、Tx Power Level（0x2A07、signed int8）をRead、Link Loss Alert Level（0x2A06）をRead、そしてLink Loss Alert Levelを書き込んで、後でリンクが切れたときReporterが鳴動するようにします。
 

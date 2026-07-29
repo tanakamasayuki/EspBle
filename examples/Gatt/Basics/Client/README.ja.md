@@ -1,6 +1,7 @@
 # Client
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 [Gatt/Server](../Server/) exampleへ接続し、CentralのGATT Clientフローを一通り実行します: database一覧Discovery → 既知UUIDのDiscovery → Read → 応答あり/なしWrite → Descriptor Read/Write → 要求時に作られる値のRead。各要求は直ちに`bool`を返し、完了は`ble.update()`からのイベントとして後から届きます。
 

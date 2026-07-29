@@ -1,6 +1,7 @@
 # ConnectionParameters
 
 > 日本語版: [README.ja.md](README.ja.md)
+> Concepts: [BLE communication beginner guide](../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 2, "GAP" (Japanese)
 
 Tunes a connection that is already established.
 

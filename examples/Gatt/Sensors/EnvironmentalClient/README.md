@@ -1,6 +1,7 @@
 # EnvironmentalClient
 
 > 日本語版: [README.ja.md](README.ja.md)
+> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 4, "GATT" (Japanese)
 
 Central / GATT client for the Environmental Sensing Service (0x181A). It sequentially reads and decodes Temperature (0x2A6E), Humidity (0x2A6F), and Pressure (0x2A6D), then subscribes to Temperature notifications.
 

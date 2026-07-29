@@ -1,6 +1,7 @@
 # NumericComparisonClient
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../docs/GUIDE_BLE_BASICS.ja.md) 3章「セキュリティ編」
 
 **Numeric Comparison** PairingのCentral側です。相手側は[NumericComparisonServer](../NumericComparisonServer/)で、設定は**Server側とまったく同じ**（`DisplayYesNo` ＋ MITM要求）です。両側が同じ申告をすることが、この方式が選ばれる条件そのものです。
 

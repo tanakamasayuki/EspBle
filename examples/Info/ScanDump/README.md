@@ -1,6 +1,7 @@
 # ScanDump
 
 > 日本語版: [README.ja.md](README.ja.md)
+> Concepts: [BLE communication beginner guide](../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 2, "GAP" (Japanese)
 
 Diagnostic scanner that dumps every field EspBle extracts from each advertisement: address and address type, RSSI, connectable/scannable flags, name, every advertised service UUID, the service data, and the manufacturer data as hex. iBeacon payloads are decoded into UUID / major / minor / measured power. Use it to see what a peripheral actually advertises before writing a scan filter, or to debug why `advertisesService()` does not match.
 

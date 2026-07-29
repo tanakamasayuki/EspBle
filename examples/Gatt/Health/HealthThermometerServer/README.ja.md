@@ -1,6 +1,7 @@
 # HealthThermometerServer
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 標準Health Thermometer Service（0x1809）のPeripheral。Temperature Measurement（0x2A1C）をIEEE-11073 32-bit FLOATで**Indicate**し、Temperature Type（0x2A1D）はReadできます。
 

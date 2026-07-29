@@ -1,6 +1,7 @@
 # LocationNavigationClient
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 Location and Navigation Service（0x1819）のCentral / GATT Clientです。LN Feature（0x2A6A）をReadし、Location and Speed（0x2A67）のNotificationを購読して、Instantaneous SpeedとLocationの緯度・経度をデコードします。
 

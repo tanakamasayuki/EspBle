@@ -1,6 +1,7 @@
 # PulseOximeterClient
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 Pulse Oximeter Service（0x1822）へ接続し、PLX FeaturesをRead、PLX Spot-Check MeasurementのIndicationを購読して、SpO2とpulse rateのSFLOATをデコードします。
 

@@ -1,6 +1,7 @@
 # ContinuousGlucoseMonitoringServer
 
 > 日本語版: [README.ja.md](README.ja.md)
+> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 4, "GATT" (Japanese)
 
 Standard Continuous Glucose Monitoring Service (0x181F) peripheral. CGM Feature (0x2AA8) is a readable value protected by an End-to-End CRC; CGM Measurement (0x2AA7) is **notified** with an SFLOAT glucose concentration, a time offset, and an appended E2E-CRC.
 

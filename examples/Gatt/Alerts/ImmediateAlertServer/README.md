@@ -1,6 +1,7 @@
 # ImmediateAlertServer
 
 > 日本語版: [README.ja.md](README.ja.md)
+> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 4, "GATT" (Japanese)
 
 Standard Immediate Alert Service (0x1802) peripheral — the Find Me profile **target** role. Alert Level (0x2A06) is a single **Write Without Response** uint8 (0 = No Alert, 1 = Mild, 2 = High).
 

@@ -1,6 +1,7 @@
 # ServiceData
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../docs/GUIDE_BLE_BASICS.ja.md) 2章「GAP編 — 探してつながる」
 
 Service Data（AD type 0x16）を載せたadvertisingを行う例です。Service Dataは「どのserviceの値か」をUUIDで示したpayloadで、**センサーが接続させずに値を配る**ときの標準的な方法です。
 

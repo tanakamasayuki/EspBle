@@ -1,6 +1,7 @@
 # PulseOximeterServer
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 標準Pulse Oximeter Service / PLX（0x1822）のPeripheral。PLX Spot-Check Measurement（0x2A5E）をSpO2とpulse rateのIEEE-11073 16-bit SFLOATで**Indicate**し、PLX Features（0x2A60）はReadできます。
 

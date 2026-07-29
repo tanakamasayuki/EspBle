@@ -1,6 +1,7 @@
 # HeartRateClient
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 標準Heart Rate Service（0x180D）をAdvertiseするPeripheralへ接続し、Body Sensor LocationをReadして、Heart Rate MeasurementのNotificationを購読します。
 

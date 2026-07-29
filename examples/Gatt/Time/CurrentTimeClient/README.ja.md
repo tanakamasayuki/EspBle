@@ -1,6 +1,7 @@
 # CurrentTimeClient
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 Current Time Service（0x1805）へ接続し、10バイトのCurrent Time（0x2A2B）をReadしてdecodeした後、Notificationを購読して各更新をdecodeします。
 

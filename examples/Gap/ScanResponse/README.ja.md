@@ -1,6 +1,7 @@
 # ScanResponse
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../docs/GUIDE_BLE_BASICS.ja.md) 2章「GAP編 — 探してつながる」
 
 広告データを **advertising payload** と **scan response payload** の2面に分ける例です。
 

@@ -1,6 +1,7 @@
 # WeightScaleServer
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 標準Weight Scale Service（0x181D）のPeripheral。Weight Measurement（0x2A9D）を0.005 kg分解能のuint16で**Indicate**し、Weight Scale Feature（0x2A9E）はuint32としてReadできます。
 

@@ -1,6 +1,7 @@
 # EnvironmentalServer
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 標準Environmental Sensing Service（0x181A）のPeripheralです。Temperature（0x2A6E）、Humidity（0x2A6F）、Pressure（0x2A6D）を仕様のlittle-endian整数スケール（0.01 ℃、0.01 %、0.1 Pa）で公開します。TemperatureはRead / Notify可能、humidityとpressureはRead専用です。
 

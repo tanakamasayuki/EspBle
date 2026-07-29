@@ -1,6 +1,7 @@
 # AcceptList
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../docs/GUIDE_BLE_BASICS.ja.md) 2章「GAP編 — 探してつながる」
 
 1つの **Filter Accept List**（旧称 white list）を**2通りに使う**例です。**接続してくる相手を制限する**（advertising側）のと、**スキャンで報告される相手を絞り込む**（scan側）の両方を、同じリストで行います。
 

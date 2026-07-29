@@ -1,6 +1,7 @@
 # IndicateServer
 
 > 日本語版: [README.ja.md](README.ja.md)
+> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 4, "GATT" (Japanese)
 
 Indication variant of [NotifyServer](../NotifyServer/): the server sends a counter value every two seconds, and each delivery is acknowledged by the client at the ATT layer. The confirmation result arrives asynchronously via `onSent()`. Pair with [Gatt/IndicateClient](../IndicateClient/).
 

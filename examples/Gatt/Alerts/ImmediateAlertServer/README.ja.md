@@ -1,6 +1,7 @@
 # ImmediateAlertServer
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 標準Immediate Alert Service（0x1802）のPeripheral — Find Meプロファイルの**ターゲット**役。Alert Level（0x2A06）は**Write Without Response**のuint8（0 = No Alert、1 = Mild、2 = High）1つだけです。
 

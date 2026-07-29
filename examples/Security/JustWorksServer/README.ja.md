@@ -1,6 +1,7 @@
 # JustWorksServer
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../docs/GUIDE_BLE_BASICS.ja.md) 3章「セキュリティ編」
 
 暗号化されたlinkを要求するCharacteristicを持つGATT Server（Peripheral）です。PairingはJust Works（passkeyなし、LE Secure Connections）+ Bondingで、接続時に自動開始します。任意のBLE Central（nRF Connectなどのスマートフォンアプリ、または別ボード）と接続できます。
 

@@ -1,6 +1,7 @@
 # ConnectionParameters
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../docs/GUIDE_BLE_BASICS.ja.md) 2章「GAP編 — 探してつながる」
 
 確立済みの接続を調整する例です。
 

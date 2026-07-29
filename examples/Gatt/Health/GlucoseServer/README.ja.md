@@ -1,6 +1,7 @@
 # GlucoseServer
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 **Record Access Control Point（RACP）**手続きを持つ標準Glucose Service（0x1808）のPeripheral。Clientが「Report Stored Records（all）」を書き込むと、Glucose Measurementを1件Notifyし、続けてRACP応答をIndicateします。
 

@@ -1,6 +1,7 @@
 # PhoneAlertStatusServer
 
 > 日本語版: [README.ja.md](README.ja.md)
+> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 4, "GATT" (Japanese)
 
 Standard Phone Alert Status Service (0x180E) peripheral. Alert Status (0x2A3F) and Ringer Setting (0x2A41) are read/**notify** uint8 values; the Ringer Control Point (0x2A40) is **Write Without Response**.
 

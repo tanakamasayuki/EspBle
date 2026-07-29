@@ -1,6 +1,7 @@
 # BatteryClient
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 標準Battery Service（`0x180F`）をscanし、Battery Level（`0x2A19`）をReadしてから、そのNotificationを購読するCentralです。
 

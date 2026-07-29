@@ -1,6 +1,7 @@
 # AlertNotificationClient
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 Alert Notification Service（0x1811）へ接続し、Supported New Alert CategoryをRead、New Alertを購読、Control Pointへ「Notify New Alert Immediately」コマンドをWriteして、発火したNew Alert（category、count、text）をデコードします。
 

@@ -1,6 +1,7 @@
 # IndicateServer
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 [NotifyServer](../NotifyServer/)のIndication版です。2秒ごとにカウンタ値を送信し、各配信はClientがATT層で確認応答します。確認結果は`onSent()`へ非同期に届きます。[Gatt/IndicateClient](../IndicateClient/)と組み合わせて使います。
 

@@ -1,6 +1,7 @@
 # NusServer
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 Nordic UART Service（NUS）のUUID構成を汎用GATT Server APIで実装します（Peripheral）。Service `6e400001-…` のもとで、RX（`6e400002-…`）はWriteを受け取り、TX（`6e400003-…`）はNotificationを送ります。受信したRXデータは購読中のTX Clientへechoします。
 

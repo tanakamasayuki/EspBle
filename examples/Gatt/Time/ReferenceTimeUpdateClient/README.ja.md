@@ -1,6 +1,7 @@
 # ReferenceTimeUpdateClient
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 Reference Time Update Service（0x1806）へ接続し、Time Update StateをRead、Time Update Control Point（**Write Without Response**）でreference update要求→キャンセルを行い、毎回stateを再readします。
 

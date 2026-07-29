@@ -1,6 +1,7 @@
 # Advertise
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../docs/GUIDE_BLE_BASICS.ja.md) 2章「GAP編 — 探してつながる」
 
 デバイス名と16-bit Service UUID（HID、`1812`）を載せたconnectableなLegacy Advertisingを開始します。Peripheral側の最小例です。汎用BLEスキャナアプリか、2台目のボードで組み合わせる[Scan](../Scan/) exampleで確認できます。
 

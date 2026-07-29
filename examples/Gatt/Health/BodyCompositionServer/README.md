@@ -1,6 +1,7 @@
 # BodyCompositionServer
 
 > 日本語版: [README.ja.md](README.ja.md)
+> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 4, "GATT" (Japanese)
 
 Standard Body Composition Service (0x181B) peripheral. Body Composition Measurement (0x2A9C) is **indicated** with uint16 flags, the mandatory Body Fat Percentage (0.1 %/LSB), and optional fields; Body Composition Feature (0x2A9B) is a readable uint32.
 

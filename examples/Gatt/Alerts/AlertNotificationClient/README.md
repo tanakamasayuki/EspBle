@@ -1,6 +1,7 @@
 # AlertNotificationClient
 
 > 日本語版: [README.ja.md](README.ja.md)
+> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 4, "GATT" (Japanese)
 
 Connects to an Alert Notification Service (0x1811), reads Supported New Alert Category, subscribes to New Alert, and writes the Control Point "Notify New Alert Immediately" command; then decodes the New Alert (category, count, text) it triggers.
 

@@ -1,6 +1,7 @@
 # StaticPasskeyServer
 
 > 日本語版: [README.ja.md](README.ja.md)
+> Concepts: [BLE communication beginner guide](../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 3, "Security" (Japanese)
 
 A GATT server (peripheral) requiring MITM-authenticated pairing with a static 6-digit passkey. This board is the display side (`DisplayOnly`): it prints the passkey and the connecting central types it. Pairs with the [StaticPasskeyClient](../StaticPasskeyClient/) example (the passkey-input side).
 

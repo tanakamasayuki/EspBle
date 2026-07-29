@@ -2,33 +2,21 @@
 
 > 日本語版: [README.ja.md](README.ja.md)
 
-## What is BLE?
+## The concepts are covered in the guide
 
-Bluetooth Low Energy (BLE) is a radio standard for exchanging small amounts of data at very low power. Despite the similar name, it is **a different protocol from Bluetooth Classic** (used by headsets and SPP) and the two are not compatible.
+How BLE works — the difference from Bluetooth Classic, GAP (finding and connecting), security (pairing and bonding), GATT (exchanging data), and UUIDs — is explained in the [BLE communication beginner guide](../docs/GUIDE_BLE_BASICS.ja.md) (Japanese; an English edition is planned). Every term is defined there.
 
-- **Bluetooth Classic**: always-connected stream transport for audio (A2DP/HFP) and serial (SPP). Comparatively power-hungry.
-- **BLE**: event-oriented, short bursts of communication — sensor values, key input, configuration data. Designed for battery-powered devices.
+| What you want to know | Guide chapter | Matching examples |
+|---|---|---|
+| What BLE is, and how it differs from Classic | 1 | — |
+| Advertising, scanning, connecting, addresses | 2 (GAP) | [Gap/](Gap/) |
+| Pairing, bonding, authentication methods | 3 (Security) | [Security/](Security/) |
+| Services, characteristics, read/write, notify | 4 (GATT) | [Gatt/](Gatt/) |
+| Standard and custom UUID forms | 5 | — |
 
-EspBle is a **BLE-only library** built on the NimBLE backend bundled with Arduino-ESP32. Bluetooth Classic A2DP/HFP/**SPP are not available**. For a serial-like BLE link, use a GATT-based approach such as the NUS-compatible [server](Gatt/Basics/NusServer/) and [client](Gatt/Basics/NusClient/) examples.
+Each example's README is written to stand on its own, so starting from an individual example without reading the guide works fine.
 
-### GAP — discovering and connecting
-
-GAP (Generic Access Profile) is the discovery-and-connection layer.
-
-- **Advertising**: a peripheral broadcasts its name and service UUIDs ("I'm here").
-- **Scanning**: a central listens for those broadcasts to find devices.
-- **Connecting**: the central picks a scan result and connects. After that, data flows both ways regardless of role.
-
-One ESP32 can act as **central and peripheral at the same time** (e.g. receive input from a keyboard while presenting itself as a keyboard to a PC).
-
-## GATT — exchanging data
-
-GATT (Generic Attribute Profile) is the data model used after connecting. Data is exposed as **services** (functional groups, e.g. Battery Service) containing **characteristics** (individual values, e.g. Battery Level).
-
-- **GATT server**: owns the values; answers reads/writes and pushes value changes to subscribers via **notifications/indications**.
-- **GATT client**: uses the values; reads, writes, and subscribes by UUID.
-
-"Peripheral = server, central = client" is the typical combination, but GATT roles are independent of the link role.
+The two areas below have no guide chapter yet, so they are summarised here.
 
 ### HID — keyboards and mice
 
@@ -45,16 +33,6 @@ BLE MIDI carries MIDI messages over a single GATT characteristic with a 13-bit m
 - **MIDI Host** (`EspBleMidiHost`): connect to a BLE MIDI peripheral, subscribe, and receive decoded messages (running status and System Real-Time handled).
 
 The API mirrors the [EspUsbDevice](https://github.com/tanakamasayuki/EspUsbDevice) / [EspUsbHost](https://github.com/tanakamasayuki/EspUsbHost) MIDI classes so code ports across USB and BLE.
-
-### Security — pairing, bonding, encryption
-
-BLE security is established per connection.
-
-- **Pairing**: the key exchange that encrypts the link — **Just Works** (no confirmation) or **MITM-authenticated** passkey entry (6-digit code).
-- **Bonding**: stores the exchanged keys so reconnections encrypt automatically.
-- **Attribute protection**: each characteristic can require an encrypted or authenticated link; insufficient security is rejected at the ATT layer (HID keyboards require encryption by specification).
-
-In EspBle, enable security via `EspBleConfig::security` and declare per-characteristic requirements with `encryptedRead/Write` / `authenticatedRead/Write`. [Security/JustWorksServer](Security/JustWorksServer/) and [Security/StaticPasskeyServer](Security/StaticPasskeyServer/) are the minimal setups.
 
 ## Building
 

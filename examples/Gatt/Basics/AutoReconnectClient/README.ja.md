@@ -1,6 +1,7 @@
 # AutoReconnectClient
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 [Gatt/NotifyServer](../NotifyServer/) exampleへ接続し、一度だけ購読します。auto-reconnectを有効にすると、persistent subscription（既定on）と併せて、想定外の切断後にリンクと購読が自動復元され、追加コードなしでNotificationが再開します。
 

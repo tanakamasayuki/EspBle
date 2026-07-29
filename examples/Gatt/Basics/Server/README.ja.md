@@ -1,6 +1,7 @@
 # Server
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 Read/Write可能なCharacteristicとDescriptorを1つずつ持つ独自GATT Serviceを登録し、advertiseします。Characteristicは応答あり/なし両方のWriteに対応します。あわせて、**読まれた瞬間に値を作る**Characteristicも1つ持ちます。
 

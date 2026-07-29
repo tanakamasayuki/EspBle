@@ -1,6 +1,7 @@
 # Connect
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../docs/GUIDE_BLE_BASICS.ja.md) 2章「GAP編 — 探してつながる」
 
 特定のService UUIDをadvertiseするPeripheralを探し、Centralとして接続します。非同期の接続モデルを示すexampleです: `connect()`は要求の受理だけを返し、完了（または失敗）は後から`ble.update()`経由のイベントとして届きます。
 

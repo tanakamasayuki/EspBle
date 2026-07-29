@@ -1,6 +1,7 @@
 # ReferenceTimeUpdateServer
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 標準Reference Time Update Service（0x1806）のPeripheral。Time Update Control Point（0x2A16）は**Write Without Response**（1 = Get Reference Update、2 = Cancel Reference Update）、Time Update State（0x2A17）はread可能な2バイト値（Current State＋Result）です。
 

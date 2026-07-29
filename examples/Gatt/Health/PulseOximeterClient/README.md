@@ -1,6 +1,7 @@
 # PulseOximeterClient
 
 > 日本語版: [README.ja.md](README.ja.md)
+> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 4, "GATT" (Japanese)
 
 Connects to a Pulse Oximeter Service (0x1822), reads PLX Features, subscribes to PLX Spot-Check Measurement indications, and decodes the SpO2 and pulse rate SFLOATs.
 

@@ -1,6 +1,7 @@
 # NusClient
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 汎用GATT Client APIの組合せでNordic UART Service（NUS）Serverと通信するCentralです。Service `6e400001-…` のもとで、TX Notification（`6e400003-…`）を購読し、Serialへ入力された各行をWrite Without ResponseでRX（`6e400002-…`）へ送ります。
 

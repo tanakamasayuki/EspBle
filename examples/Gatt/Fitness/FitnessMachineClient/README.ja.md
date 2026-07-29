@@ -1,6 +1,7 @@
 # FitnessMachineClient
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 Fitness Machine Service（0x1826）へ接続し、Fitness Machine Feature（0x2ACC）をRead、Indoor Bike Data（0x2AD2）を購読して、flagsに従うinstantaneous speed・cadence・powerをデコードします。
 

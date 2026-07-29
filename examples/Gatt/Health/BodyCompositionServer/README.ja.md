@@ -1,6 +1,7 @@
 # BodyCompositionServer
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 標準Body Composition Service（0x181B）のPeripheral。Body Composition Measurement（0x2A9C）をuint16 flags、必須のBody Fat Percentage（0.1 %/LSB）、任意フィールド付きで**Indicate**し、Body Composition Feature（0x2A9B）はuint32としてReadできます。
 

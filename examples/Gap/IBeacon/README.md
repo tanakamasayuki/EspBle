@@ -1,6 +1,7 @@
 # IBeacon
 
 > 日本語版: [README.ja.md](README.ja.md)
+> Concepts: [BLE communication beginner guide](../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 2, "GAP" (Japanese)
 
 Broadcasts an Apple iBeacon: a non-connectable, non-scannable advertisement whose manufacturer data carries a proximity UUID, major, minor, and measured power. The layout is built by the backend-independent `EspBleIBeacon.h` codec.
 

@@ -1,6 +1,7 @@
 # WeightScaleClient
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 Weight Scale Service（0x181D）へ接続し、Weight Scale FeatureをRead、Weight MeasurementのIndicationを購読して、0.005 kg分解能のuint16体重をデコードします。
 

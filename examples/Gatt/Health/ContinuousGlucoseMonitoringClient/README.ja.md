@@ -1,6 +1,7 @@
 # ContinuousGlucoseMonitoringClient
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 Continuous Glucose Monitoring Service（0x181F）へ接続し、CGM FeatureをReadしてE2E-CRC検証、CGM Measurementを購読、各測定値のE2E-CRCを検証し、SFLOAT血糖値とtime offsetをデコードします。
 

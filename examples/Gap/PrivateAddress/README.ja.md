@@ -1,6 +1,7 @@
 # PrivateAddress
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../docs/GUIDE_BLE_BASICS.ja.md) 2章「GAP編 — 探してつながる」
 
 `EspBleConfig::ownAddressType`で選択し、工場出荷のpublic addressの代わりにprivate addressでadvertiseします。connectableなPeripheralの例です。2台目のボードで組み合わせる[Scan](../Scan/) exampleでaddress typeを確認できます。
 

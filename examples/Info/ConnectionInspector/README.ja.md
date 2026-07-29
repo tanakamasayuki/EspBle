@@ -1,6 +1,7 @@
 # ConnectionInspector
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../docs/GUIDE_BLE_BASICS.ja.md) 2章「GAP編 — 探してつながる」
 
 対話式の診断ツールです。周囲のconnectableな機器を番号つきで一覧表示し、選んだ相手へ接続してConnection snapshotをすべてダンプします: connection ID、backend handle、peer addressと種別、local role、交換済みMTU（とNotification payload上限）、security状態（encrypted / authenticated / bonded / 鍵長）。Bond storeと診断カウンタのダンプもできます。
 

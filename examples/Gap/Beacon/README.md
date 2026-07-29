@@ -1,6 +1,7 @@
 # Beacon
 
 > 日本語版: [README.ja.md](README.ja.md)
+> Concepts: [BLE communication beginner guide](../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 2, "GAP" (Japanese)
 
 Broadcasts a non-connectable, non-scannable beacon carrying manufacturer data. Unlike [Advertise](../Advertise/) (a connectable peripheral), this is a pure broadcaster: no central can connect to or scan it, so it only transmits its advertising payload on the configured interval.
 

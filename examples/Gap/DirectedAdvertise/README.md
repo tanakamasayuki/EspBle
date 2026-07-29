@@ -1,6 +1,7 @@
 # DirectedAdvertise
 
 > 日本語版: [README.ja.md](README.ja.md)
+> Concepts: [BLE communication beginner guide](../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 2, "GAP" (Japanese)
 
 A peripheral-side example that **advertises to exactly one peer**.
 
@@ -31,12 +32,12 @@ Replace `TARGET_CENTRAL` in the sketch with **the address of the central to adve
 ## Notes
 
 - **No payload is sent.** Not the name, not service UUIDs, not manufacturer data. This is the BLE specification, not a library limitation.
-- **If the peer uses an RPA (Resolvable Private Address), give its identity address.** Resolution goes through the bond, so the peer **must be bonded first** (see [Gap/PrivateAddress](../PrivateAddress/) and [Security/Bonding](../../Security/Bonding/)).
+- **If the peer uses an RPA (Resolvable Private Address), give its identity address.** Resolution goes through the bond, so the peer **must be bonded first** (see [Gap/PrivateAddress](../PrivateAddress/) and [Security/JustWorksServer](../../Security/JustWorksServer/)).
 - **High Duty Cycle (third argument `true`) stops by itself after 1.28 s.** It advertises every 3.75 ms, which reconnects to a known peer as fast as possible, but it cannot run for long. The default `false` follows `setInterval()` and advertises until `stop()`.
 - **Advertising stops once a connection is established.** Call `start()` again from `onDisconnected` to keep going.
 - If you only want to restrict who may connect and do not need the fast reconnection, ordinary advertising plus [Gap/AcceptList](../AcceptList/) is easier to work with — the peer can still find this device by scanning.
 
-## Expected serial output
+## Expected Serial output
 
 ```
 Advertising as d0:cf:13:58:fd:94. Send 'd' to direct it at aa:bb:cc:dd:ee:ff.

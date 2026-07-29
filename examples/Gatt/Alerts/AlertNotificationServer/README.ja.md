@@ -1,6 +1,7 @@
 # AlertNotificationServer
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 標準Alert Notification Service（0x1811）のPeripheral。Supported New Alert Category（0x2A47）はreadableなuint16 bitmask、New Alert（0x2A46）はCategory ID＋count＋text付きの**Notification**、Alert Notification Control Point（0x2A44）はwritableです。
 

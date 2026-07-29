@@ -1,6 +1,7 @@
 # RuntimePasskeyClient
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../docs/GUIDE_BLE_BASICS.ja.md) 3章「セキュリティ編」
 
 Passkey Entryの**入力側**（`KeyboardOnly`）です。相手が表示した6桁を**実行時に受け取って** `providePasskey()` で渡します。相手側は[RuntimePasskeyServer](../RuntimePasskeyServer/)です。
 

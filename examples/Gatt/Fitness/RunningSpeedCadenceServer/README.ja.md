@@ -1,6 +1,7 @@
 # RunningSpeedCadenceServer
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 標準Running Speed and Cadence Service（0x1814）のPeripheralです。RSC Measurement（0x2A53）を瞬間speed・cadenceと任意のstride length・total distanceでNotifyし、RSC Feature（0x2A54）とSensor Location（0x2A5D）はReadできます。
 

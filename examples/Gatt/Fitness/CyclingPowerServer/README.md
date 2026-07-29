@@ -1,6 +1,7 @@
 # CyclingPowerServer
 
 > 日本語版: [README.ja.md](README.ja.md)
+> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 4, "GATT" (Japanese)
 
 Standard Cycling Power Service (0x1818) peripheral. Cycling Power Measurement (0x2A63) is notified with 16-bit flags and a signed 16-bit instantaneous power (watts); Cycling Power Feature (0x2A65) and Sensor Location (0x2A5D) are readable.
 

@@ -1,6 +1,7 @@
 # HeartRateClient
 
 > 日本語版: [README.ja.md](README.ja.md)
+> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 4, "GATT" (Japanese)
 
 Connects to a peripheral advertising the standard Heart Rate Service (0x180D), reads Body Sensor Location, and subscribes to Heart Rate Measurement notifications.
 

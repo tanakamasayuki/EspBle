@@ -1,6 +1,7 @@
 # SubscribeClient
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 [Gatt/NotifyServer](../NotifyServer/) exampleへ接続し、Notification Characteristicを購読して受信値をすべて表示します。
 

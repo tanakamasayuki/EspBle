@@ -1,6 +1,7 @@
 # ImmediateAlertClient
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 Find Meプロファイルの**locator**役。Immediate Alert Service（0x1802）へ接続し、Alert Level（0x2A06）へ**Write Without Response**で書き込んでターゲットを鳴動させます。
 

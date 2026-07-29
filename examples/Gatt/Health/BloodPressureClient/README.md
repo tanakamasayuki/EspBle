@@ -1,6 +1,7 @@
 # BloodPressureClient
 
 > 日本語版: [README.ja.md](README.ja.md)
+> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 4, "GATT" (Japanese)
 
 Connects to a Blood Pressure Service (0x1810), reads Blood Pressure Feature, subscribes to Blood Pressure Measurement indications, and decodes the systolic/diastolic/mean IEEE-11073 SFLOAT values.
 

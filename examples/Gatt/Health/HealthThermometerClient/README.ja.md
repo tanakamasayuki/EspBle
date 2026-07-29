@@ -1,6 +1,7 @@
 # HealthThermometerClient
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 Health Thermometer Service（0x1809）へ接続し、Temperature TypeをRead、Temperature MeasurementのIndicationを購読して、IEEE-11073 32-bit FLOATの温度をデコードします。
 

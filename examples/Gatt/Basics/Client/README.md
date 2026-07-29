@@ -1,6 +1,7 @@
 # Client
 
 > 日本語版: [README.ja.md](README.ja.md)
+> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 4, "GATT" (Japanese)
 
 Connects to the [Gatt/Server](../Server/) example and walks through the central GATT client flow: database enumeration → known-UUID discovery → read → writes with and without response → descriptor read/write → reading a value the server builds on demand. Each request returns `bool` immediately and completes later as an event from `ble.update()`.
 

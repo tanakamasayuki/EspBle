@@ -1,6 +1,7 @@
 # CyclingSpeedCadenceClient
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 Cycling Speed and Cadence Service（0x1816）のCentral / GATT Clientです。Sensor Location（0x2A5D）をReadし、CSC Measurement（0x2A5B）のNotificationを購読して、累積wheel/crank回転数フィールドをデコードします。
 

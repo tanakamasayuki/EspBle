@@ -1,6 +1,7 @@
 # CurrentTimeServer
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 標準Current Time Service（0x1805）のPeripheral。Current Time（0x2A2B）はread/**notify**のCharacteristicで、10バイトの標準wire形式（year LE、month、day、hours、minutes、seconds、weekday、fraction256、adjust reason）を保持します。
 

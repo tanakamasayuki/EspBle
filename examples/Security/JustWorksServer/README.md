@@ -1,6 +1,7 @@
 # JustWorksServer
 
 > 日本語版: [README.ja.md](README.ja.md)
+> Concepts: [BLE communication beginner guide](../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 3, "Security" (Japanese)
 
 A GATT server (peripheral) whose characteristic requires an encrypted link. Pairing uses Just Works (no passkey, LE Secure Connections) with bonding, started automatically on connection. Pairs with any BLE central (smartphone app such as nRF Connect, or another board).
 

@@ -1,6 +1,7 @@
 # CyclingSpeedCadenceServer
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 標準Cycling Speed and Cadence Service（0x1816）のPeripheralです。CSC Measurement（0x2A5B）を累積wheel/crank回転数と直近イベント時刻でNotifyし、CSC Feature（0x2A5C）とSensor Location（0x2A5D）はReadできます。
 

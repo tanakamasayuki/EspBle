@@ -1,6 +1,7 @@
 # AutoReconnectClient
 
 > 日本語版: [README.ja.md](README.ja.md)
+> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 4, "GATT" (Japanese)
 
 Connects to the [Gatt/NotifyServer](../NotifyServer/) example and subscribes once. With auto-reconnect enabled and persistent subscriptions (on by default), the link and the subscription are restored automatically after an unexpected disconnect — notifications resume with no extra code.
 

@@ -1,6 +1,7 @@
 # EnvironmentalServer
 
 > 日本語版: [README.ja.md](README.ja.md)
+> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 4, "GATT" (Japanese)
 
 Standard Environmental Sensing Service (0x181A) peripheral. It publishes Temperature (0x2A6E), Humidity (0x2A6F), and Pressure (0x2A6D) using the standard little-endian integer scales: 0.01 °C, 0.01 %, and 0.1 Pa. Temperature is readable and notifiable; humidity and pressure are read-only.
 

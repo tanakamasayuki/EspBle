@@ -1,6 +1,7 @@
 # CyclingSpeedCadenceClient
 
 > 日本語版: [README.ja.md](README.ja.md)
+> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 4, "GATT" (Japanese)
 
 Central / GATT client for the Cycling Speed and Cadence Service (0x1816). It reads Sensor Location (0x2A5D), subscribes to CSC Measurement (0x2A5B) notifications, and decodes the cumulative wheel/crank revolution fields.
 

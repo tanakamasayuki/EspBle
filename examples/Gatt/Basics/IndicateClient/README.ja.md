@@ -1,6 +1,7 @@
 # IndicateClient
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 [Gatt/IndicateServer](../IndicateServer/) exampleへ接続し、Indicationを購読します。[SubscribeClient](../SubscribeClient/)とのAPI上の違いは`subscribe()`の最終引数だけで、`false`を渡すとCCCDへNotificationビットではなくIndicationビット（0x0002）を書き込みます。受信した各値はスタックが自動で確認応答し、これによってServer側の`onSent()`が「配信確認済み」を報告します。
 

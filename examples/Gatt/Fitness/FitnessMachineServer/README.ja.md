@@ -1,6 +1,7 @@
 # FitnessMachineServer
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 スマートトレーナーや屋内バイクで使われる標準Fitness Machine Service（0x1826）のPeripheralです。Indoor Bike Data（0x2AD2）を16bit flags＋instantaneous speed（0.01 km/h）・cadence（0.5/min）・符号付きpower（W）で**Notify**し、Fitness Machine Feature（0x2ACC）は8byteのfeature bitmap対をReadできます。
 

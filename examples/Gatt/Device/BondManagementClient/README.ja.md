@@ -1,6 +1,7 @@
 # BondManagementClient
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 Bond Management Service（0x181E）へ接続し、Bond Management Feature bit fieldをRead、Bond Management Control Pointへ「Delete bond of requesting device（LE）」（0x03）を応答ありWriteします。
 

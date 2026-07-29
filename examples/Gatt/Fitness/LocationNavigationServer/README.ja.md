@@ -1,6 +1,7 @@
 # LocationNavigationServer
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 標準Location and Navigation Service（0x1819）のPeripheralです。Location and Speed（0x2A67）をuint16 flagsフィールド＋flagsで選ばれるデータフィールドでNotifyし、LN Feature（0x2A6A）はuint32としてReadできます。
 

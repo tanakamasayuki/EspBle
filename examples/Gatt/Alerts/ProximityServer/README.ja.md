@@ -1,6 +1,7 @@
 # ProximityServer
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 Proximityプロファイルの**Reporter**役。2つの標準Serviceを同時にホストします: Link Loss Service（0x1803、read/writeのAlert Level 0x2A06）と、Tx Power Service（0x1804、read専用のsigned int8 Tx Power Level 0x2A07）。
 

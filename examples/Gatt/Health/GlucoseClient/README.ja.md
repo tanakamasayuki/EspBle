@@ -1,6 +1,7 @@
 # GlucoseClient
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 Glucose Service（0x1808）へ接続し、Glucose MeasurementのNotificationとRecord Access Control Point（RACP）のIndicationを購読し、「Report Stored Records（all）」を書き込んで、デコードしたレコードとRACP応答を表示します。
 

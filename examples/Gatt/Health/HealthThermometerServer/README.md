@@ -1,6 +1,7 @@
 # HealthThermometerServer
 
 > 日本語版: [README.ja.md](README.ja.md)
+> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 4, "GATT" (Japanese)
 
 Standard Health Thermometer Service (0x1809) peripheral. Temperature Measurement (0x2A1C) is **indicated** as an IEEE-11073 32-bit FLOAT; Temperature Type (0x2A1D) is readable.
 

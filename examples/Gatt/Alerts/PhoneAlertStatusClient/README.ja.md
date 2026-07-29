@@ -1,6 +1,7 @@
 # PhoneAlertStatusClient
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 Phone Alert Status Service（0x180E）へ接続し、Alert StatusをRead、Ringer Settingを購読、Ringer Control Point（**Write Without Response**）でSilent Mode設定→解除を行い、NotifyされたRinger Settingを毎回表示します。
 

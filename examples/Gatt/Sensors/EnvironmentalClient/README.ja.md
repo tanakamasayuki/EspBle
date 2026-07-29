@@ -1,6 +1,7 @@
 # EnvironmentalClient
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 Environmental Sensing Service（0x181A）のCentral / GATT Clientです。Temperature（0x2A6E）、Humidity（0x2A6F）、Pressure（0x2A6D）を順番にReadしてデコードし、その後Temperature Notificationを購読します。
 

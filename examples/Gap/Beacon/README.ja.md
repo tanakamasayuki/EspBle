@@ -1,6 +1,7 @@
 # Beacon
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../docs/GUIDE_BLE_BASICS.ja.md) 2章「GAP編 — 探してつながる」
 
 manufacturer dataを載せたnon-connectable・non-scannableなbeaconをbroadcastします。connectableなPeripheralである[Advertise](../Advertise/)と違い、これは純粋なbroadcasterです。Centralから接続もscanもされず、設定した間隔でadvertising payloadを送信するだけです。
 

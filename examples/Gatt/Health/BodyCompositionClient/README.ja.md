@@ -1,6 +1,7 @@
 # BodyCompositionClient
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 Body Composition Service（0x181B）へ接続し、Body Composition FeatureをRead、Body Composition MeasurementのIndicationを購読して、Body Fat Percentage（0.1 %/LSB）と任意のWeightフィールドをデコードします。
 

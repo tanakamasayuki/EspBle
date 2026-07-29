@@ -1,6 +1,7 @@
 # BloodPressureClient
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../../docs/GUIDE_BLE_BASICS.ja.md) 4章「GATT編 — データをやり取りする」
 
 Blood Pressure Service（0x1810）へ接続し、Blood Pressure FeatureをRead、Blood Pressure MeasurementのIndicationを購読して、systolic/diastolic/meanのIEEE-11073 SFLOATをデコードします。
 

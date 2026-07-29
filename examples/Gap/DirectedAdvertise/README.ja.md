@@ -1,6 +1,7 @@
 # DirectedAdvertise
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../docs/GUIDE_BLE_BASICS.ja.md) 2章「GAP編 — 探してつながる」
 
 **相手を1台に限定してadvertiseする**Peripheral側の例です。
 
@@ -31,7 +32,7 @@ sketch内の `TARGET_CENTRAL` を**advertise先Centralのアドレス**に、`TA
 ## 注意
 
 - **payloadは送信されません。** 名前・Service UUID・Manufacturer Dataのいずれも載りません。BLEの仕様であり、ライブラリの制限ではありません。
-- **相手がRPA（Resolvable Private Address）を使う場合は、識別用アドレスを指定します。** 解決はボンド情報を使って行われるため、**先にbondingが必要**です（[Gap/PrivateAddress](../PrivateAddress/)、[Security/Bonding](../../Security/Bonding/)参照）。
+- **相手がRPA（Resolvable Private Address）を使う場合は、識別用アドレスを指定します。** 解決はボンド情報を使って行われるため、**先にbondingが必要**です（[Gap/PrivateAddress](../PrivateAddress/)、[Security/JustWorksServer](../../Security/JustWorksServer/)参照）。
 - **High Duty Cycle（第3引数 `true`）は1.28秒で自動的に止まります。** 3.75ミリ秒間隔で送出するため、既知の相手へ最速で再接続できる代わりに、長く出し続けることはできません。既定の `false` なら `setInterval()` の設定に従い、`stop()` するまで続きます。
 - **接続が成立するとadvertisingは止まります。** 続けるなら `onDisconnected` で `start()` を呼び直してください。
 - 「特定の相手だけを接続させる」だけが目的で、再接続の速さが不要なら、通常のadvertisingに[Gap/AcceptList](../AcceptList/)を組み合わせる方が扱いやすくなります。相手はスキャンでこのデバイスを見つけられます。
