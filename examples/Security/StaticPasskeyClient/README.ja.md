@@ -4,6 +4,8 @@
 
 [StaticPasskeyServer](../StaticPasskeyServer/)のCentral側、MITM認証Pairingでpasskeyを「入力する」側（`KeyboardOnly`）です。Pairing成功後、認証済みlinkを要求するCharacteristicをDiscovery→Readします。
 
+passkeyをsketchに固定するため、実行時の入力を伴いません。**利用者が実際に打ち込む形**は[RuntimePasskeyClient](../RuntimePasskeyClient/)を参照してください。
+
 ## 必要なもの
 
 - 1 × ESP32-S3（このsketch。Central、passkey入力側）
@@ -26,7 +28,7 @@
 
 ## メモ
 
-- 現在の試行APIは実行時入力を待つ代わりに事前設定passkeyをスタックへ渡すため、ここの`STATIC_PASSKEY`はServerが表示する値と一致させる必要があります。
+- 固定passkeyはスタックへ事前に渡されるため、ここの`STATIC_PASSKEY`はServerが表示する値と一致させる必要があります。**値がsketchに焼き込まれる以上、ソースを読める相手には秘密になりません。** 実運用では[RuntimePasskeyServer](../RuntimePasskeyServer/) / [RuntimePasskeyClient](../RuntimePasskeyClient/)の形を選んでください。
 - `authenticatedRead`のCharacteristicはMITM Pairing完了後にのみReadできます。それ以前のReadはATTのsecurityエラーで失敗します。
 
 ## 期待されるSerial出力

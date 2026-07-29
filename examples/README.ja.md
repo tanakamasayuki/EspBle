@@ -207,6 +207,10 @@ arduino-cli compile --profile esp32s3 examples/<path>
 | [Security/JustWorksServer](Security/JustWorksServer/) | Peripheral | Just Works Pairing + Bondingと暗号化Characteristic |
 | [Security/StaticPasskeyServer](Security/StaticPasskeyServer/) | Peripheral | 静的passkeyによるMITM認証Characteristic（表示側） |
 | [Security/StaticPasskeyClient](Security/StaticPasskeyClient/) | Central | passkey入力側。`requestSecurity()`と認証必須Read |
+| [Security/RuntimePasskeyServer](Security/RuntimePasskeyServer/) | Peripheral | Pairingごとに生成されるpasskeyの表示側 |
+| [Security/RuntimePasskeyClient](Security/RuntimePasskeyClient/) | Central | `providePasskey()`で実行時にpasskeyを入力する側 |
+| [Security/NumericComparisonServer](Security/NumericComparisonServer/) | Peripheral | 両側に出た6桁の一致を確認するPairing（Peripheral側） |
+| [Security/NumericComparisonClient](Security/NumericComparisonClient/) | Central | 同上のCentral側 |
 
 ### 診断
 
@@ -224,6 +228,8 @@ arduino-cli compile --profile esp32s3 examples/<path>
 - Gatt/Basics/NusServer ↔ Gatt/Basics/NusClient
 - 各`Gatt/<カテゴリ>/<名前>Server` ↔ 対応する`…Client`（Device、Time、Sensors、Health、Fitness、Alerts）
 - Security/StaticPasskeyServer ↔ Security/StaticPasskeyClient
+- Security/RuntimePasskeyServer ↔ Security/RuntimePasskeyClient
+- Security/NumericComparisonServer ↔ Security/NumericComparisonClient
 - Hid/KeyboardDevice / Hid/CompositeKeyboardMouse / Hid/KeyboardNkro ↔ Hid/KeyboardHost
 - Hid/VendorDevice ↔ Hid/VendorHost
 - Hid/CustomDevice ↔ Hid/CustomClient

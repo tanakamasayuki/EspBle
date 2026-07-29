@@ -8717,7 +8717,7 @@ bool EspBle::begin(const EspBleConfig &config)
   {
     setError(
       EspBleError::InvalidArgument,
-      "MITM requires DisplayOnly or KeyboardOnly capability");
+      "MITM requires DisplayOnly, KeyboardOnly or DisplayYesNo capability");
     return false;
   }
   if (!config.security.mitm &&

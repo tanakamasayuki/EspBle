@@ -30,7 +30,7 @@ BLEを理解する最初の鍵は、**GAPとGATTという2つの層がまった�
 | 扱うもの | アドバタイズ、スキャン、接続、アドレス | Service、Characteristic、値の読み書き |
 | いつ使うか | 接続が成立するまで | 接続が成立した後 |
 
-一言でいえば、**探して繋ぐまでがGAP、繋がった後の会話がGATT**です。この文書は2章でGAP、3章でGATTを扱います。
+一言でいえば、**探して繋ぐまでがGAP、繋がった後の会話がGATT**です。この文書は2章でGAP、4章でGATTを扱い、その間の3章でリンクの保護（セキュリティ）を扱います。
 
 ### 1.2 4つの役割 — 2つの独立した軸
 
@@ -240,6 +240,7 @@ AppearanceとTx Power Levelも、載っていれば `appearance` と `txPowerLev
 |---|---|
 | [Gap/Scan](../examples/Gap/Scan/) | アドレス・RSSI・名前を表示する最小のスキャン |
 | [Info/ScanDump](../examples/Info/ScanDump/) | 取り出せる全フィールドの表示とiBeaconのデコード |
+| [Gap/AcceptList](../examples/Gap/AcceptList/) | 同じ許可リストを接続制限とスキャンの絞り込みの両方に使う |
 
 接続の必要がない用途——ビーコンの受信——は、ここで完結します。
 
@@ -273,7 +274,7 @@ BLEには「接続要求が来ました、承認しますか？」という問�
 |---|---|---|
 | **Filter Accept List** | 許可リストに載っていない相手の接続要求をコントローラが黙って捨てる。最も確実 | `addToAcceptList()` ＋ `advertising().setFilterPolicy()` |
 | **接続後に切断する** | 相手を見て切断する。一度は接続が成立してしまう | `onConnected()` の中で `disconnect()` |
-| **属性を暗号化で守る** | 接続は許すが、値の読み書きにペアリングを要求する | Characteristicの `encryptedRead` / `encryptedWrite` |
+| **属性を暗号化で守る** | 接続は許すが、値の読み書きにペアリングを要求する（3章） | Characteristicの `encryptedRead` / `encryptedWrite` |
 
 なお拒否された相手に「拒否された」とは伝わりません。Link Layerに拒否を返すPDUが存在せず、要求が無視されるだけだからです。相手側からは応答のないタイムアウトに見えます。
 
@@ -302,7 +303,7 @@ MTUの仕様上の最小値は23バイトです。このうち3バイトはプ�
 | example | 内容 |
 |---|---|
 | [Gap/Connect](../examples/Gap/Connect/) | Service UUIDで絞り込んで接続し、接続・切断・失敗を受け取る |
-| [Gap/AcceptList](../examples/Gap/AcceptList/) | Filter Accept Listで接続できる相手を制限する |
+| [Gap/AcceptList](../examples/Gap/AcceptList/) | Filter Accept Listで接続できる相手を制限する（スキャン側の絞り込みも同じリスト） |
 | [Gap/Mtu](../examples/Gap/Mtu/) | MTUの交換と、1回で送れるサイズの確認 |
 | [Info/ConnectionInspector](../examples/Info/ConnectionInspector/) | 接続パラメータやPHYの観察 |
 
@@ -322,7 +323,7 @@ BLEはこれに対して3種類のアドレスを用意しています。
 
 RPAは一定時間ごとにアドレスを変えるので、外から見ると別の機器になります。しかしそれでは**正規の相手も見失ってしまいます**。
 
-これを解決するのが**ボンディング**（bonding）です。ペアリング時に**IRK**（Identity Resolving Key）という鍵を交換しておくと、相手はその鍵でRPAを計算し、「これはあのときの機器だ」と復元できます。鍵を持たない第三者には、ただの変化するアドレスにしか見えません。
+これを解決するのが**ボンディング**（bonding）です。ペアリングで作った鍵を保存しておく仕組みで、詳しくは3.2節で扱います。このとき**IRK**（Identity Resolving Key）という鍵も交換され、相手はその鍵でRPAを計算し、「これはあのときの機器だ」と復元できます。鍵を持たない第三者には、ただの変化するアドレスにしか見えません。
 
 つまり**RPAはボンディングとセットでのみ意味を持ちます**。ボンディングなしでRPAを使うと、相手は再接続できなくなります。
 
@@ -354,7 +355,7 @@ MTUを下げる理由があるとすれば、多数の同時接続でメモリ�
 
 **送信電力**は `setTxPower(dBm)` で変更でき、実際に適用された値は `txPower()` で読めます。上げれば距離が伸び、下げれば消費電流が減ります。無線が対応するのは飛び飛びの値（同梱ビルドでは-12〜+9 dBmの3 dB刻み）で、指定した値に最も近いものが適用されます。これは初期化時に限らずいつでも変更でき、アドバタイズ・スキャン・接続のすべてに効きます。アドバタイズにTx Power Levelを載せている場合、その値も追従します。
 
-セキュリティ（`security`）については、次の3章でまとめて扱います。
+セキュリティ（`security`）は指定できる項目が多いため、次の3章でまとめて扱います。
 
 関連するexample: [Gap/Mtu](../examples/Gap/Mtu/)
 
@@ -380,7 +381,7 @@ sequenceDiagram
     Note over C,P: 接続パラメータとMTUの交渉
     Note over C: onConnected
     Note over P: onConnected
-    Note over C,P: 以降はGATT（3章）
+    Note over C,P: 以降はGATT（4章）
 ```
 
 接続の必要がないビーコン用途では、`onResult` までで完結します。
@@ -405,11 +406,147 @@ BLE 5.0で追加された、255バイトまでのペイロードを扱う仕組�
 
 ---
 
-## 3. GATT編 — データをやり取りする
+## 3. セキュリティ編 — つながった相手をどこまで信頼するか
+
+接続しただけでは、相手が誰なのかも、やり取りが盗み見られていないかも分かりません。それを決めるのがこの章です。
+
+BLEでは**GAP・GATTと並ぶ独立した層**として**SMP**（Security Manager Protocol）がこれを担当します。GAPが「つながる」、SMPが「どこまで信頼するかを決める」、GATTが「その信頼を属性ごとに要求する」という分担です。この章はリンク単位の方針を扱い、属性ごとの要求は4章で扱います。
+
+### 3.1 何から守るのか
+
+「セキュリティを有効にする」と一括りにされがちですが、守る対象は3つあり、**それぞれ対策が違います**。
+
+| 脅威 | 内容 | 対策 |
+|---|---|---|
+| **盗聴** | 電波を傍受して中身を読まれる | **暗号化**。ペアリングすれば得られる |
+| **なりすまし（MITM）** | 通信の間に割り込み、両者になりすます | **認証つきペアリング**。passkeyなどで「同じ相手を見ている」ことを確かめる |
+| **追跡** | 変わらないアドレスから個体を追われる | **RPA**（2.4節）。ボンディングとセットで使う |
+
+重要なのは、**暗号化されていても、なりすましは防げない**ことです。passkeyを使わないペアリング（Just Works）は、鍵交換の相手が本物かを確かめる手段を持ちません。中間者が両側とそれぞれペアリングしてしまえば、両方の通信は正しく暗号化されたまま素通しされます。
+
+EspBleではこの区別が結果にそのまま現れます。`onSecurityChanged` で届く接続情報の `encrypted` が盗聴対策、`authenticated` がなりすまし対策です。Just Worksでは `encrypted=1, authenticated=0` になります。
+
+### 3.2 ペアリングとボンディング
+
+この2つは混同されがちですが、別のものです。
+
+- **ペアリング**（pairing） — その場で鍵を作り、リンクを暗号化する手続き。切断すれば鍵は消える
+- **ボンディング**（bonding） — ペアリングで作った鍵を**両者が保存**し、次の接続で再利用できるようにすること
+
+ボンディングすると、2回目以降は鍵交換をやり直しません。接続してすぐ、保存済みの鍵で暗号化が始まります。passkeyの入力も一度きりで済みます。**「一度ペアリングしたら次からは何もしなくていい」という体験は、ボンディングがあって初めて成立します。**
+
+保存されるのは暗号鍵だけではありません。**IRK**（Identity Resolving Key）も交換され、これがRPAの解決に使われます（2.4節）。RPAがボンディングとセットでしか意味を持たないのはこのためです。
+
+ボンド情報は電源を切っても残ります（NVSに保存されます）。したがって**消す手段が必要**で、`deleteBond()` / `deleteAllBonds()` がそれにあたります。相手側だけがボンドを消した状態で再接続すると、鍵の食い違いでペアリングがやり直しになるか、失敗します。片側だけ消さないでください。
+
+### 3.3 ペアリング方式はIO能力で決まる
+
+どの方式でペアリングするかを**アプリケーションが直接指定することはできません**。両者が「自分は何を表示できて、何を入力できるか」（**IO能力**）と「MITM保護が要るか」を申告し、その組み合わせから方式が**自動的に決まります**。
+
+| 方式 | 成立条件 | ユーザー操作 | `authenticated` |
+|---|---|---|---|
+| **Just Works** | どちらかがMITMを要求しない、または一方のIO能力が `None` | なし | 0 |
+| **Passkey Entry** | 片方が表示（`DisplayOnly`）、もう片方が入力（`KeyboardOnly`） | 6桁の数字を表示 → もう一方が入力 | 1 |
+| **Numeric Comparison** | 両方が `DisplayYesNo` かつMITM要求 | 両方に同じ6桁が出る → 一致を確認 | 1 |
+
+ここから導かれる実用上の結論があります。**ボタンも画面も無い機器は、原理的にMITM保護を得られません。** 入力も表示もできない以上、人間が「同じ相手を見ている」ことを確かめる手段が無いからです。IO能力を偽って `DisplayOnly` を申告しても、表示できないpasskeyを相手が入力できないので、ペアリングは失敗するだけです。
+
+もう1つの注意点として、**Numeric Comparisonは両方がLE Secure Connectionsに対応している場合にのみ使えます**。EspBleは常にLE Secure Connectionsで動作するため、相手がBLE 4.2より古い場合は選ばれません。
+
+### 3.4 いつ暗号化が始まるか
+
+タイミングは3通りあり、どれを使うかで設計が変わります。
+
+**1. 接続と同時に開始する（`pairOnConnect`）**
+
+接続が成立したらすぐペアリングを始めます。以降のやり取りはすべて暗号化された状態で行われるため、一番分かりやすい形です。EspBleの既定です。
+
+**2. アプリケーションが明示的に開始する（`requestSecurity()`）**
+
+条件を見てから暗号化したい場合に使います。Central側から呼びます。
+
+**3. 保護された属性に触れた瞬間に開始する**
+
+Characteristicに `encryptedRead` などを付けておくと、暗号化されていないリンクからの読み書きはATT層でエラー（insufficient encryption）になります。多くのOSはこのエラーを受けて**自動的にペアリングを始めます**。「必要になったときだけ認証を求める」形はこれで実現できます。
+
+いずれの場合も、結果は `onSecurityChanged` に届きます。**このコールバックが来るまで、保護された属性は読めません。** 接続直後にReadを投げる作りにすると、1と3のどちらでも競合します。
+
+```mermaid
+sequenceDiagram
+    participant C as Central
+    participant P as Peripheral
+    Note over C,P: 接続確立（2章）
+    C->>P: Pairing Request（IO能力・MITM要求・鍵の種類）
+    P-->>C: Pairing Response
+    Note over C,P: 方式が決まる（3.3節）
+    Note over C: onPasskeyDisplayed / onNumericComparison<br/>（方式によっては人間の操作を待つ）
+    C->>P: 鍵の交換（LE Secure Connections）
+    Note over C,P: リンクが暗号化される
+    C->>P: IRKなどの配布（bonding時）
+    Note over C: onSecurityChanged
+    Note over P: onSecurityChanged
+    Note over C,P: 保護された属性が読み書きできるようになる
+```
+
+### 3.5 EspBleでの設定
+
+方針は `EspBleConfig::security` にまとめて指定し、`begin()` へ渡します。**接続ごとに変えることはできません。**
+
+| フィールド | 既定 | 内容 |
+|---|---|---|
+| `enabled` | `false` | セキュリティ機能全体の有効化。これが `false` なら他の設定は指定できない |
+| `bonding` | `true` | 鍵を保存して次回に備えるか（3.2節） |
+| `pairOnConnect` | `true` | 接続と同時にペアリングを開始するか（3.4節の1） |
+| `mitm` | `false` | なりすまし対策を要求するか。`true` にはIO能力が必要 |
+| `ioCapability` | `None` | `None` / `DisplayOnly` / `KeyboardOnly` / `DisplayYesNo`（3.3節） |
+| `staticPasskeyEnabled`／`staticPasskey` | `false`／`0` | passkeyを実行時に扱わず固定値にする |
+
+矛盾した組み合わせは `begin()` が `InvalidArgument` で弾きます。「`enabled=false` なのにMITMを指定した」「MITMなのにIO能力が `None`」「MITMでないのにpasskeyを指定した」などです。**黙って無視して弱い設定で動き出すことはありません。**
+
+固定passkeyは配線が単純ですが、**値がスケッチに焼き込まれる以上、秘密にはなりません**。ソースを読める相手には無防備です。実運用では実行時に決める方（`onPasskeyDisplayed` で表示された値を人間が伝える）を選んでください。
+
+対応するコールバックとAPIは次のとおりです。
+
+| API | 役割 |
+|---|---|
+| `onSecurityChanged(cb)` | ペアリングの成否と、その結果のセキュリティ状態 |
+| `onPasskeyDisplayed(cb)` | 自分が表示側のとき、表示すべき6桁が届く |
+| `onNumericComparison(cb)` ＋ `confirmNumericComparison(bool)` | 両方に出た6桁の一致を人間が確認して答える |
+| `providePasskey(uint32_t)` | 自分が入力側（`KeyboardOnly`）のとき、受け取った6桁を渡す |
+| `requestSecurity(id)` | ペアリングを明示的に開始する（3.4節の2） |
+| `bondCount()` / `bond(i, out)` / `deleteBond()` / `deleteAllBonds()` | 保存済みボンドの列挙と削除 |
+
+ボンドを削除するときは**すべて切断してから**行ってください。使用中のボンドを消すと、リンクの鍵と保存内容が食い違います。
+
+### 3.6 制限
+
+理由とあわせて挙げます。
+
+- **保存できるボンドは3件まで** — 同梱NimBLEが `CONFIG_BT_NIMBLE_MAX_BONDS=3` でビルドされており、Arduinoライブラリ側から変更する手段がありません。4台目とボンディングすると古いものが押し出されます。多数の相手を覚える用途には向きません
+- **passkeyの応答中、BLEホストは停止します** — passkeyの入力（`providePasskey`）とNumeric Comparisonの確認（`confirmNumericComparison`）は、SMPが答えを待つ間ホストタスクを止めます。仕様上ペアリングは応答を待って進む手続きで、途中で他の処理を挟めないためです。**30秒で打ち切り、ペアリングは失敗します**。`loop()` の中で長く待たせる作りにしないでください
+- **OOB（Out Of Band）ペアリングは使えません** — NFCなど別経路で鍵を渡す方式です。渡す経路そのものがESP32側に無いため対応していません
+- **署名付き書き込み（CSRK）は使えません** — 暗号化せず署名だけで完全性を守る仕組みです。交換する鍵を暗号鍵とIRKに限っており、実運用でこれを使う機器がほぼ存在しないためです
+- **ペアリング方式を直接指定することはできません** — 3.3節のとおり仕様がIO能力から導出するもので、BLEにそのようなAPIがありません
+
+### 3.7 関連するexample
+
+| example | 内容 |
+|---|---|
+| [Security/JustWorksServer](../examples/Security/JustWorksServer/) | 暗号化を要求するCharacteristicと、Just Works＋ボンディング |
+| [Security/StaticPasskeyServer](../examples/Security/StaticPasskeyServer/) | 表示側（`DisplayOnly`）。MITM認証つきペアリング |
+| [Security/StaticPasskeyClient](../examples/Security/StaticPasskeyClient/) | 入力側（`KeyboardOnly`）。認証後に保護された値を読む |
+| [Security/RuntimePasskeyServer](../examples/Security/RuntimePasskeyServer/) | passkeyをPairingごとに生成して表示する（固定値を使わない形） |
+| [Security/RuntimePasskeyClient](../examples/Security/RuntimePasskeyClient/) | 表示された値を実行時に `providePasskey()` で渡す |
+| [Security/NumericComparisonServer](../examples/Security/NumericComparisonServer/) | 両側に出た6桁の一致を確認する（Peripheral側） |
+| [Security/NumericComparisonClient](../examples/Security/NumericComparisonClient/) | 同上のCentral側 |
+
+---
+
+## 4. GATT編 — データをやり取りする
 
 接続が成立したら、ここからはGATTの領域です。
 
-### 3.1 GATTの構造
+### 4.1 GATTの構造
 
 GATTでは、データが3階層で表現されます。
 
@@ -417,7 +554,7 @@ GATTでは、データが3階層で表現されます。
 - **Characteristic** — 個々の値。「電池残量」「心拍数」など。Serviceの中に複数入る
 - **Descriptor** — Characteristicに付随する補足情報。単位や説明、通知の有効・無効の設定など
 
-それぞれがUUIDという識別子を持ちます（4章で詳しく説明します）。
+それぞれがUUIDという識別子を持ちます（5章で詳しく説明します）。
 
 ただし**UUIDは「型」であって「どれか」ではありません。** 仕様上、同じUUIDのServiceやCharacteristicを1台が複数持てます。HIDキーボードが複数のReport Characteristicを同じUUIDで並べるのが典型例です。
 
@@ -453,13 +590,13 @@ NotifyとIndicateは、Clientが事前に**購読**（subscribe）したもの�
 
 使い分けの基準は**取りこぼしが許されるか**です。秒間何度も更新されるセンサー値ならNotify（1つ落ちても次が来る）、確実に届けたい設定変更の結果ならIndicateです。
 
-### 3.2 Client側の手順
+### 4.2 Client側の手順
 
 Clientは相手のデータ構造を知りません。そこでまず**Discovery**（探索）を行い、目的のServiceとCharacteristicがどこにあるかを調べます。その後にRead・Write・購読を行います。
 
 1.3節で説明したとおり、これらはすべて非同期です。「Discoveryを頼む → 完了イベントの中でReadを頼む → 完了イベントの中でWriteを頼む」という連鎖で書きます。
 
-### 3.3 時系列で見る全体像
+### 4.3 時系列で見る全体像
 
 ```mermaid
 sequenceDiagram
@@ -486,7 +623,7 @@ sequenceDiagram
 
 すべてのイベントは `loop()` の `ble.update()` から配送されます。要求を出した直後ではなく、**次に `update()` を呼んだとき**にコールバックが呼ばれます。
 
-### 3.4 関連するexample
+### 4.4 関連するexample
 
 | example | 内容 |
 |---|---|
@@ -498,9 +635,9 @@ sequenceDiagram
 
 ---
 
-## 4. UUIDを理解する
+## 5. UUIDを理解する
 
-### 4.1 UUIDは「機能の型」を表す名札
+### 5.1 UUIDは「機能の型」を表す名札
 
 ServiceやCharacteristicが何であるかは、**UUID**（Universally Unique IDentifier）で表されます。128ビット（16バイト）の、世界で一意な識別子です。
 
@@ -512,12 +649,12 @@ ServiceやCharacteristicが何であるかは、**UUID**（Universally Unique ID
 
 UUIDは名前ではなく**型（種類）を表す名札**だと考えてください。
 
-### 4.2 標準UUIDと独自UUID
+### 5.2 標準UUIDと独自UUID
 
 - **標準UUID** — Bluetooth SIGが割り当てたもの。電池、心拍計、HIDなど、仕様で決まった機能に対応する
 - **独自UUID** — 自分のアプリ専用。ランダムに128ビットを生成して使う
 
-### 4.3 フル形と短縮形
+### 5.3 フル形と短縮形
 
 標準UUIDには**16ビットの短縮形**があります。たとえば電池サービスは `180F` です。
 
@@ -533,7 +670,7 @@ Base UUID:  0000____-0000-1000-8000-00805F9B34FB
 
 ただし**文字列としては別物**です。スキャン結果に入っているUUIDを自分で文字列比較するのではなく、値として比較する仕組みを使ってください。
 
-### 4.4 気をつける点
+### 5.4 気をつける点
 
 1. **独自サービスは必ず128ビットのフル形で書く。** 短縮形はSIGが割り当てた標準UUID専用の表記です。自作サービスに勝手に16ビット値を使ってはいけません。
 2. **桁とハイフンの位置は正確に。** 大文字小文字は無視されますが、`8-4-4-4-12` の形が崩れると別のUUIDになります。

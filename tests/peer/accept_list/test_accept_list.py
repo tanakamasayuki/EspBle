@@ -71,3 +71,44 @@ def test_scanner_accept_list_filters_advertisers(dut, peers):
 
     dut.write("x")
     dut.expect_exact("CENTRAL_ACCEPT_LIST added=0 count=0", timeout=10)
+
+
+def test_accept_list_entries_can_be_read_back_and_removed(dut, peers):
+    """Coverage for the other direction: acceptListEntry() reports what was
+    added, and removeFromAcceptList() takes it out so filtering stops matching."""
+    peripheral = peers["device"]
+
+    peripheral.write("o")
+    peripheral.expect_exact("POLICY open entries=1", timeout=15)
+    peripheral.write("?")
+    peripheral.expect_exact("ADVERTISING 1", timeout=10)
+
+    dut.write("x")
+    dut.expect_exact("CENTRAL_ACCEPT_LIST added=0 count=0", timeout=10)
+    dut.write("s")
+    dut.expect_exact("OBSERVE_STARTED", timeout=10)
+    time.sleep(3)
+    dut.write("n")
+    match = dut.expect(r"OBSERVED target=1 address=([0-9a-f:]{17})", timeout=10)
+    address = match.group(1).decode()
+
+    dut.write("a")
+    dut.expect_exact("CENTRAL_ACCEPT_LIST added=1 count=1", timeout=10)
+
+    # The entry is readable through the public accessor, and reports the address
+    # that was added rather than a placeholder.
+    dut.write("e")
+    dut.expect_exact("CENTRAL_ACCEPT_LIST_DUMP count=1", timeout=10)
+    dut.expect_exact(f"CENTRAL_ACCEPT_LIST_ENTRY index=0 address={address}", timeout=10)
+
+    # Removing it empties the list, and the filtered scan stops matching again.
+    dut.write("m")
+    dut.expect_exact("CENTRAL_ACCEPT_LIST removed=1 count=0", timeout=10)
+    dut.write("e")
+    dut.expect_exact("CENTRAL_ACCEPT_LIST_DUMP count=0", timeout=10)
+
+    dut.write("f")
+    dut.expect_exact("OBSERVE_STARTED", timeout=10)
+    time.sleep(3)
+    dut.write("n")
+    dut.expect_exact("OBSERVED target=0", timeout=10)

@@ -31,8 +31,8 @@ EspUsbHost / EspUsbDeviceで扱っている機能のBLE版、およびBLEで一�
 | 複数Serviceの合成（composite） | ✅ | HID+DIS+Battery合成を実装済み |
 | Just Works Pairing / Bonding | ✅ | LE Secure Connections |
 | 静的passkey / MITM認証 / 暗号化・認証permission | ✅ | `Security/*` example |
-| 実行時passkey入力 | ✅ | 静的passkeyなしのKeyboardOnly + MITMで、`providePasskey()`によりpairing中に実行時入力。表示側は静的passkeyなしのDisplayOnlyで動的passkey生成→`onPasskeyDisplayed`。Peer検証済み |
-| Numeric Comparison | ✅ | LE Secure Connections、両側DisplayYesNo + MITM。`onNumericComparison`で比較値を提示し`confirmNumericComparison()`で確認。Peer検証済み |
+| 実行時passkey入力 | ✅ | 静的passkeyなしのKeyboardOnly + MITMで、`providePasskey()`によりpairing中に実行時入力。表示側は静的passkeyなしのDisplayOnlyで動的passkey生成→`onPasskeyDisplayed`。応答待ちは30秒で打ち切り。Peer検証済み、`Security/RuntimePasskey{Server,Client}` example |
+| Numeric Comparison | ✅ | LE Secure Connections、両側DisplayYesNo + MITM。`onNumericComparison`で比較値を提示し`confirmNumericComparison()`で確認。応答待ちは30秒で打ち切り。Peer検証済み、`Security/NumericComparison{Server,Client}` example |
 | Privacy（own address type: Public / Random static / RPA） | ✅ | `EspBleConfig::ownAddressType`。RandomStaticは固定random static、ResolvablePrivateはcontroller回転RPA（`CONFIG_BT_NIMBLE_RPA_TIMEOUT`＝900秒、bonding併用時にpeerがIRKで解決）。`address_privacy` Peerでrandom static advertisingを検証済み |
 
 ## HIDプロファイル（USBとの対比が濃い領域）

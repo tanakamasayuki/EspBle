@@ -92,6 +92,34 @@ void loop()
       Serial.printf("CENTRAL_ACCEPT_LIST added=%u count=%u\n",
         added ? 1 : 0, static_cast<unsigned>(ble.acceptListCount()));
     }
+    else if (command == 'e')
+    {
+      // Read the list back through the public accessor, so the entries the
+      // controller holds are observable and not just implied by the filtering.
+      Serial.printf("CENTRAL_ACCEPT_LIST_DUMP count=%u\n",
+        static_cast<unsigned>(ble.acceptListCount()));
+      for (size_t index = 0; index < ble.acceptListCount(); ++index)
+      {
+        EspBleBond entry;
+        if (!ble.acceptListEntry(index, entry))
+        {
+          Serial.printf("CENTRAL_ACCEPT_LIST_ENTRY index=%u error=1\n",
+            static_cast<unsigned>(index));
+          continue;
+        }
+        Serial.printf("CENTRAL_ACCEPT_LIST_ENTRY index=%u address=%s type=%u\n",
+          static_cast<unsigned>(index),
+          entry.peerAddress.c_str(),
+          static_cast<unsigned>(entry.peerAddressType));
+      }
+    }
+    else if (command == 'm')
+    {
+      const bool removed = targetAddress.length() > 0 &&
+        ble.removeFromAcceptList(targetAddress.c_str(), targetAddressType);
+      Serial.printf("CENTRAL_ACCEPT_LIST removed=%u count=%u\n",
+        removed ? 1 : 0, static_cast<unsigned>(ble.acceptListCount()));
+    }
     else if (command == 'x')
     {
       ble.clearAcceptList();

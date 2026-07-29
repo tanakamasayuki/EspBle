@@ -516,15 +516,24 @@ Phase 1〜4bでGAP側のAPIが増えた。テスト・example・ガイドのど�
 | # | 機能 | テスト | example | ガイド | 残作業 |
 |---|---|---|---|---|---|
 | a | Directed Advertising（`setDirectedTarget`） | ✅ `directed_advertising` | ✅ `Gap/DirectedAdvertise` | ✅ 2.1 | なし |
-| b | Advertisingチャネルマップ（`setChannelMap`） | ✅ `directed_advertising`（ch39のみで接続） | ⚠️ `Gap/Advertise` に1行 | ✅ 2.1 | 単独のexampleは作らない（1つの設定値のため）。現状維持でよいか最終判断 |
-| c | スキャン側Filter Accept List（`acceptListOnly`） | ✅ `accept_list` | ❌ READMEの注記のみ | ✅ 2.2 | **exampleが無い**。`Gap/AcceptList` を「同じ許可リストを接続制限とスキャン絞り込みの両方に使う」形へ拡張する（新設より、1つのリストの2つの使い道を1箇所で見せる方が概念が繋がる） |
+| b | Advertisingチャネルマップ（`setChannelMap`） | ✅ `directed_advertising`（ch39のみで接続） | ✅ `Gap/Advertise` に1行 | ✅ 2.1 | **完了。現状維持と判断した。** 設定値1つで、動作の観察にはスペクトラムアナライザか受信側の統計が要る。単独exampleを作っても「読んで分かる」以上のものにならない |
+| c | スキャン側Filter Accept List（`acceptListOnly`） | ✅ `accept_list` | ✅ `Gap/AcceptList` | ✅ 2.2 | **完了。** `Gap/AcceptList` に `f`（絞り込みscan）/ `a`（全件scan）を追加し、1つのリストの2つの使い道を1箇所で見せる形にした。README両言語も更新 |
 | d | GATT Serverの読み取りフック（`onRead`） | ⚠️ `gatt_read_write` の計測用sketchのみ | ❌ | ❌ | **公開APIなのに実演が無い**。`Gatt/Basics/Server` に「読まれた瞬間に値を作る」節を足す（Phase 5と同時でよい） |
-| e | MTUは接続後に決まる（`onConnected`時点は23） | ✅ `mtu` | ✅ `Gap/Mtu` README | ⚠️ 2.5にMTUの説明はあるが順序に触れていない | ガイド2.5に1段落追加 |
+| e | MTUは接続後に決まる（`onConnected`時点は23） | ✅ `mtu` | ✅ `Gap/Mtu` README | ✅ 2.5 | **完了。** |
 | f | MTU超の値のRead（Read Long） | ✅ `hid_keyboard_host`（Report Map）ほか | — | ❌ | GATT章（Phase 6）で「長い値は分割して読まれる」として触れる |
 
-#### 4c-2 公開APIとテストの突き合わせ
+#### 4c-2 公開APIとテストの突き合わせ（実施済み）
 
-上表は「今回増えた分」だけを見ている。**公開ヘッダのAPIを1つずつ、対応するPeerテストがあるか機械的に突き合わせる**作業を別途行う。`clearDirectedTarget()` や `acceptListOnly` の解除方向のように、片道しか検証していないものが他にもあるはず。結果はこの表に追記する。
+`src/EspBle.h` のpublicメンバ関数を機械的に列挙し、Peerテスト・examples・手動テストのsketch内での呼び出しと突き合わせた。単純なgetter（`configured()` / `layout()` / `isScanning()` / `filterPolicy()` / `initialized()` / `clearError()` など）は除外し、動作を伴うものだけを挙げる。
+
+| # | 対象 | 状況 | 判断 |
+|---|---|---|---|
+| 2-a | **多重リスナAPI** — `EspBleCallbackList`、`EspBle::add*Listener()` 8種、`removeGattListener()`、`EspBleGattServer::addWrittenListener()` ほか、`EspBleHidHost::add*Listener()` 7種 | 発見時点では**Peer・unit・手動・examplesのいずれにも呼び出しが無かった** | **対応済み。** Peerテスト `multi_listener` を新設し、primary＋listener 2件への同時配送、`removeListener()` / `removeGattListener()` が1件だけを外すこと、未登録idの削除が失敗すること、上限4件で追加が拒否されること（既存を追い出さない）を、`EspBleGattServer` 側と `EspBle` 側の両方で実機検証した。HID Host側の `add*Listener()` はHID章の作業で同様に扱う |
+| 2-b | `removeFromAcceptList()` / `acceptListEntry()` | 発見時点ではPeerテストに呼び出しが無かった（追加方向のみ検証） | **対応済み。** `accept_list` に列挙と削除方向のテストを追加し、削除後に絞り込みscanが再び一致しなくなることまで実機検証した |
+| 2-c | HIDデバイス入力の一部 — `pressKey()` / `tapKey()` / `tapUsage()` / `setLayout()` / `wheel()` / `sendUsage()` / `addFeatureReport()` / `sendRawReport()` / `sendVendorReport()` | Peerテストに呼び出しが無い | HID章（Phase 9以降）の作業に含める。`write()` と `click()` はexamplesで使われている |
+| 2-d | `autoReconnect()` / `EspBleHidHost::autoRediscover()` / `keyboardLayout()` の各getter | setter側は検証済み、getterは未呼び出し | 影響が小さいため、2-aのテストへ相乗りで確認する |
+| 2-e | `droppedPersistentSubscriptionCount()` | 未検証 | 上限8件を超える購読を作る必要があり、Peerテストで作りにくい。**不足として記録し、当面は保留** |
+| 2-f | `requestSecurity()` / `bond()` / `deleteBond()` | examplesのみ（`deleteAllBonds()` はPeer済み） | セキュリティ章の作業に合わせ、`security_bond` テストへ列挙と個別削除を足す |
 
 #### 4c-3 ガイドにセキュリティ章を新設する（決定）
 
@@ -556,8 +565,8 @@ Phase 1〜4bでGAP側のAPIが増えた。テスト・example・ガイドのど�
 
 | # | 項目 | 状況 |
 |---|---|---|
-| 4c-3a | セキュリティ章の執筆と、GAP章2.3・2.4・2.5からの整理・リンク | 未着手 |
-| 4c-3b | `Security/*` example 3つ（JustWorksServer / StaticPasskeyServer / StaticPasskeyClient）の内容確認と、Numeric Comparison・実行時passkey入力のexample不足の判断 | 未着手 |
+| 4c-3a | セキュリティ章の執筆と、GAP章2.3・2.4・2.5からの整理・リンク | **完了。** 3.1〜3.7として新設し、GATT章を4章、UUID章を5章へ繰り下げた。2.3の表・2.4のボンディング・2.5のsecurity行から3章へリンク |
+| 4c-3b | `Security/*` example の内容確認と、Numeric Comparison・実行時passkey入力のexample不足の判断 | **完了。exampleを4つ追加した。** `providePasskey()` と `onNumericComparison()` / `confirmNumericComparison()` はPeerテストがあるのにexampleが無く、`acceptListOnly` と同じ穴だった。`RuntimePasskeyServer` / `RuntimePasskeyClient` / `NumericComparisonServer` / `NumericComparisonClient` を追加。あわせて `StaticPasskeyClient` READMEの「現在の試行APIは実行時入力を待たない」という記述が実装に追いついていなかったので訂正した |
 
 ### Phase 5 — GATT examples のコード＋README充実
 

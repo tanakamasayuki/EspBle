@@ -208,6 +208,10 @@ Examples are grouped by area. Each standard-service directory holds a matching
 | [Security/JustWorksServer](Security/JustWorksServer/) | Peripheral | Encrypted characteristic with Just Works pairing + bonding |
 | [Security/StaticPasskeyServer](Security/StaticPasskeyServer/) | Peripheral | MITM-authenticated characteristic with a static passkey (display side) |
 | [Security/StaticPasskeyClient](Security/StaticPasskeyClient/) | Central | Passkey input side: `requestSecurity()` and authenticated reads |
+| [Security/RuntimePasskeyServer](Security/RuntimePasskeyServer/) | Peripheral | Display side of a passkey generated per pairing |
+| [Security/RuntimePasskeyClient](Security/RuntimePasskeyClient/) | Central | Input side, supplying the passkey at runtime with `providePasskey()` |
+| [Security/NumericComparisonServer](Security/NumericComparisonServer/) | Peripheral | Pairing by confirming the 6 digits shown on both sides (peripheral) |
+| [Security/NumericComparisonClient](Security/NumericComparisonClient/) | Central | The central half of the same |
 
 ### Diagnostics
 
@@ -225,6 +229,8 @@ Examples are grouped by area. Each standard-service directory holds a matching
 - Gatt/Basics/NusServer ↔ Gatt/Basics/NusClient
 - Each `Gatt/<Category>/<Name>Server` ↔ its `…Client` (Device, Time, Sensors, Health, Fitness, Alerts)
 - Security/StaticPasskeyServer ↔ Security/StaticPasskeyClient
+- Security/RuntimePasskeyServer ↔ Security/RuntimePasskeyClient
+- Security/NumericComparisonServer ↔ Security/NumericComparisonClient
 - Hid/KeyboardDevice / Hid/CompositeKeyboardMouse / Hid/KeyboardNkro ↔ Hid/KeyboardHost
 - Hid/VendorDevice ↔ Hid/VendorHost
 - Hid/CustomDevice ↔ Hid/CustomClient

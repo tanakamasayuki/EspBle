@@ -793,11 +793,6 @@ struct EspBleGattServerImpl;
 struct EspBleHidDeviceManagerImpl;
 struct EspBleHidKeyboardHostImpl;
 
-// Which peers are allowed to scan-request and connect while advertising. Any
-// policy other than Any consults the accept list managed through
-// EspBle::addToAcceptList(); with an empty accept list, a restricted policy
-// rejects everyone. Enforced by the controller, so a rejected peer never
-// reaches the application.
 // Advertising channels, as a bit mask for EspBleAdvertising::setChannelMap().
 enum EspBleAdvertisingChannel : uint8_t
 {
@@ -807,6 +802,12 @@ enum EspBleAdvertisingChannel : uint8_t
   EspBleAdvertisingChannelAll = 0x07,
 };
 
+// Which peers are allowed to scan-request and connect while advertising. Any
+// policy other than Any consults the accept list managed through
+// EspBle::addToAcceptList(); with an empty accept list, a restricted policy
+// rejects everyone. Enforced by the controller, so a rejected peer never
+// reaches the application. EspBleScanConfig::acceptListOnly applies the same
+// list to the scanning side.
 enum class EspBleAdvertisingFilterPolicy : uint8_t
 {
   Any = 0,                  // anyone may scan-request and connect (default)

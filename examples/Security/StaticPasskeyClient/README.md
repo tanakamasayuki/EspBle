@@ -4,6 +4,8 @@
 
 Central-side counterpart of [StaticPasskeyServer](../StaticPasskeyServer/): the passkey-input side (`KeyboardOnly`) of MITM-authenticated pairing. After pairing succeeds it discovers and reads the characteristic that requires an authenticated link.
 
+Because the passkey is fixed in the sketch, nothing is typed at runtime. For the form where **the user actually types it**, see [RuntimePasskeyClient](../RuntimePasskeyClient/).
+
 ## Hardware
 
 - 1 × ESP32-S3 running this sketch (central, passkey input side)
@@ -26,7 +28,7 @@ Central-side counterpart of [StaticPasskeyServer](../StaticPasskeyServer/): the 
 
 ## Notes
 
-- The current trial API passes the preconfigured passkey to the stack instead of waiting for runtime input, so `STATIC_PASSKEY` here must match the value the server displays.
+- The static passkey is handed to the stack up front, so `STATIC_PASSKEY` here must match the value the server displays. **It is compiled into the sketch and is therefore no secret from anyone who can read the source.** For production, prefer the [RuntimePasskeyServer](../RuntimePasskeyServer/) / [RuntimePasskeyClient](../RuntimePasskeyClient/) form.
 - `authenticatedRead` characteristics are only readable after MITM pairing completes; a read before that fails with an ATT security error.
 
 ## Expected Serial output
