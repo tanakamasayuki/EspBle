@@ -532,7 +532,7 @@ Phase 1〜4bでGAP側のAPIが増えた。テスト・example・ガイドのど�
 | 2-b | `removeFromAcceptList()` / `acceptListEntry()` | 発見時点ではPeerテストに呼び出しが無かった（追加方向のみ検証） | **対応済み。** `accept_list` に列挙と削除方向のテストを追加し、削除後に絞り込みscanが再び一致しなくなることまで実機検証した |
 | 2-c | HIDデバイス入力の一部 — `pressKey()` / `tapKey()` / `tapUsage()` / `setLayout()` / `wheel()` / `sendUsage()` / `addFeatureReport()` / `sendRawReport()` / `sendVendorReport()` | 発見時点ではPeerテストに呼び出しが無かった（`write()` と `click()` はexamplesのみ） | **対応済み（Phase 10）。** Peerテスト `hid_convenience` を新設して便利入力APIをすべて実機検証し、`addFeatureReport()` は `hid_custom` の拡張で検証した。`sendRawReport()`（keyboard）と `sendVendorReport()`（HID Host）は**publicではなく内部API**で、公開経路は `EspBleHidVendor::sendInput()` / `EspBleHidCustom::sendInput()` / `sendVendorOutput()` / `sendVendorFeature()`。いずれも既存の `hid_keyboard_host` / `hid_custom` で検証済みのため、この行の対象から外した |
 | 2-d | `autoReconnect()` / `EspBleHidHost::autoRediscover()` / `keyboardLayout()` の各getter | setter側は検証済み、getterは未呼び出し | 影響が小さいため、2-aのテストへ相乗りで確認する |
-| 2-e | `droppedPersistentSubscriptionCount()` | 未検証 | 上限は16件（当初「8件」と記録したのは誤り。8はaccept listとCCCD storeの値）。1接続では超えられないが、**2台の常設構成のまま自動テストで作れる**見込み（Public address → `RandomStatic` で同一Peripheralを別peerとして数えさせる）。手順と根拠は[tests/TEST_PLAN.ja.md](../tests/TEST_PLAN.ja.md)の「未実装scenarioのメモ」に記載。**今回は実装せず、メモのみ** |
+| 2-e | `droppedPersistentSubscriptionCount()` | 発見時点では未検証 | 上限は16件（当初「8件」と記録したのは誤り。8はaccept listとCCCD storeの値）。**対応済み（Phase 11）。** 見込みどおり2台の常設構成のまま自動テストで成立した（Public address → `RandomStatic` で同一Peripheralを別peerとして数えさせる）。Peerテスト `persistent_subscription_overflow` |
 | 2-f | `requestSecurity()` / `bond()` / `deleteBond()` | examplesのみ（`deleteAllBonds()` はPeer済み） | セキュリティ章の作業に合わせ、`security_bond` テストへ列挙と個別削除を足す |
 
 #### 4c-3 ガイドにセキュリティ章を新設する（決定）
@@ -685,8 +685,20 @@ Phase 4c-2の監査で見つかった最後の穴。HIDの**便利入力API**（
 
 作業中に見つけて記録した設計上の穴: **handle指定の `readDescriptor()` / `writeDescriptor()` が無い。** characteristic側にはhandle overloadがあるのに、descriptor側はUUID指定しかない。HIDのReport Reference（0x2908）は同一UUIDのReport characteristicが並ぶ**まさにhandle overloadを用意した状況**なので、アプリからは特定Reportのdescriptorを読めない。[DESIGN_DEBT.ja.md](DESIGN_DEBT.ja.md) に記載した。今回のテストはcharacteristicのflagsで見分けたため回避できている。
 
+---
+
+### Phase 11 — persistent subscription overflowの実機検証
+
+計画外に残っていた最後の1件。`droppedPersistentSubscriptionCount()` は実装済みだったが**カウンタ自体が未検証**だった。
+
+**完了。** Peerテスト `persistent_subscription_overflow` を新設。Phase 4c-2の2-eで見込みとして書いた「Public address → `RandomStatic` で同一Peripheralを別peerとして数えさせる」経路がそのまま成立し、**3台目を必要とせず2台の自動テストで賄えた**。
+
+なぜ回り道が必要かをテスト自身に書いた: 1つのアドレスからは埋められない（centralのアクティブ購読表も16件で先に埋まり、そこで拒否された`subscribe()`はCCCD書き込みへ進まないのでレコードも作られない）。同じアドレスへ再接続しても自動復元がアクティブ表を埋め直すので同じ。
+
+**17件目の`subscribe()`自体は成功し、失われるのはレコードだけ**——これがカウンタが存在する理由そのもの——という点も同時にassertしている。
+
+作業中に判明した実装上の制約: **GATT操作queueは実行中1件＋8件（`GattQueueCapacity`）。** 12件の`subscribe()`を一度に投げると9件目以降が`ResourceExhausted`で電波に出る前に拒否される。テストがregistryではなくqueueの話になってしまうため、購読は1件ずつ直列に発行している。「自動キューされるので失敗しない」という[STATUS.md](STATUS.md)の記述は**上限までは**という条件付きであることが実機で確認できた。
+
 ## 未決事項
 
-**Phase 0〜10はすべて完了。** この計画に残っている作業は無い。着手時に未決だった項目の結末は各Phaseの表に記録してある（Phase 2の2-3、Phase 1の1-5、調査時のcore版差など）。
-
-計画外で残っている既知の穴は1件だけ: **persistent subscriptionの上限超過（`droppedPersistentSubscriptionCount()`）の実機検証**。2台で成立させる手順は[tests/TEST_PLAN.ja.md](../tests/TEST_PLAN.ja.md)の「未実装scenarioのメモ」にある。
+**Phase 0〜11はすべて完了。この計画に残っている作業は無い。** 着手時に未決だった項目の結末は各Phaseの表に記録してある。

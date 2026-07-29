@@ -84,7 +84,7 @@ HID Host の `discover()` が汎用queueエンジンに乗らず、別経路に�
 
 1. **persistent-subscription registryの無言overflow**: `free==nullptr` で黙って記録しない（容量16）。既定onのため、再接続時に復元されないことにアプリが気づけない。→ **完了**: `droppedPersistentSubscriptions` カウンタを追加、overflow時に加算し、公開 `EspBle::droppedPersistentSubscriptionCount()` で露出（`droppedEventCount()` に倣う）。
 
-**カウンタ自体は未検証**（overflowを起こすには17件の異なる（peer, service, characteristic）が必要で、centralのアクティブ購読表も16件のため1接続では到達できない）。成立させる手順とその根拠は[tests/TEST_PLAN.ja.md](../tests/TEST_PLAN.ja.md)の「未実装scenarioのメモ」に記載した。**状況: 実装は完了、overflow経路のテストは未実施**
+**カウンタも実機検証済み**（Peerテスト `persistent_subscription_overflow`）。overflowには17件の異なる（peer, service, characteristic）が必要だが、centralのアクティブ購読表も16件で先に埋まるため1接続では到達できない。同じアドレスへ再接続しても自動復元がアクティブ表を埋め直すので同じ。**Peripheralが`end()`＋`begin()`でownAddressTypeをPublicから`RandomStatic`へ変え、別peerとして数えさせる**ことで2台のまま成立させた。17件目の`subscribe()`自体は成功し失われるのはレコードだけ——カウンタが必要な理由そのもの——であることも同時に確認している。**状況: 完了（実機検証済み）**
 2. **切断時のqueue未purge＋GATT op中の `disconnect()` reject**: `removeConnection` が `gattQueue` を触らず、切断済み接続のqueue済みopが残って生存接続を遅延させる。`disconnect()` はGATT op中false。→ **完了**: `removeConnection` が `purgeQueuedGattOpsLocked(connectionId)` で当該接続のqueue済みopをdrop（generic opは失敗GattResultを配送して完了contractを維持、queued HidDiscoverはHID Host切断処理に委ねて静かにdrop、実行中opは無干渉）。`disconnect()` はGATT op中に**rejectせず deferred**（`ConnectionSlot::pendingDisconnect`＋`update()` の `drainPendingDisconnects()` でop完了後に実行）。**状況: 完了（要実機再確認）**
 3. **NKROのMTU下限未引き上げ**: `enableNkro()` はフラグとreport長29のみ設定し `preferredMtu`（既定23）を触らないため、29-byte notifyが送信時に無言失敗。→ **完了**: ライブラリの明示エラー方針に合わせ、`begin()` で「NKRO keyboard configured かつ `preferredMtu < 32`」を `InvalidArgument` で拒否（無言失敗より明示エラー。silentにMTUを上書きしない）。**状況: 完了（要実機再確認）**
 
