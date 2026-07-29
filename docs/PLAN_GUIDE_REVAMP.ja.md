@@ -507,13 +507,65 @@ wrapper撤去で踏んだ2つの罠:
 
 判明した挙動その3: **Centralの `ENC_CHANGE` をグローバルリスナで拾うと、セキュリティ確立イベントが二重に上がる**。wrapperのセキュリティコールバックが同じことを報告するためで、アプリがそこでdiscoveryを走らせていると2回走り、HID Hostがキャッシュしていた `BLERemoteCharacteristic` が入れ替わってLED（Output Report）書き込みが失敗した。リスナ側の `ENC_CHANGE` はPeripheral接続に限定し、Central接続はwrapperの経路に任せる。Peripheral側を自前化したときは「引き取り漏れ」だけでなく「二重計上」も出る、という形の失敗。
 
+### Phase 4c — GAPで増えた機能の追い付きと、セキュリティ章の新設
+
+Phase 1〜4bでGAP側のAPIが増えた。テスト・example・ガイドのどれかが欠けているものを埋め、あわせてガイドのセキュリティ記述を整理する。**GATT章（Phase 6）へ進む前にここを片付ける。**
+
+#### 4c-1 追い付きが必要なもの
+
+| # | 機能 | テスト | example | ガイド | 残作業 |
+|---|---|---|---|---|---|
+| a | Directed Advertising（`setDirectedTarget`） | ✅ `directed_advertising` | ✅ `Gap/DirectedAdvertise` | ✅ 2.1 | なし |
+| b | Advertisingチャネルマップ（`setChannelMap`） | ✅ `directed_advertising`（ch39のみで接続） | ⚠️ `Gap/Advertise` に1行 | ✅ 2.1 | 単独のexampleは作らない（1つの設定値のため）。現状維持でよいか最終判断 |
+| c | スキャン側Filter Accept List（`acceptListOnly`） | ✅ `accept_list` | ❌ READMEの注記のみ | ✅ 2.2 | **exampleが無い**。`Gap/AcceptList` を「同じ許可リストを接続制限とスキャン絞り込みの両方に使う」形へ拡張する（新設より、1つのリストの2つの使い道を1箇所で見せる方が概念が繋がる） |
+| d | GATT Serverの読み取りフック（`onRead`） | ⚠️ `gatt_read_write` の計測用sketchのみ | ❌ | ❌ | **公開APIなのに実演が無い**。`Gatt/Basics/Server` に「読まれた瞬間に値を作る」節を足す（Phase 5と同時でよい） |
+| e | MTUは接続後に決まる（`onConnected`時点は23） | ✅ `mtu` | ✅ `Gap/Mtu` README | ⚠️ 2.5にMTUの説明はあるが順序に触れていない | ガイド2.5に1段落追加 |
+| f | MTU超の値のRead（Read Long） | ✅ `hid_keyboard_host`（Report Map）ほか | — | ❌ | GATT章（Phase 6）で「長い値は分割して読まれる」として触れる |
+
+#### 4c-2 公開APIとテストの突き合わせ
+
+上表は「今回増えた分」だけを見ている。**公開ヘッダのAPIを1つずつ、対応するPeerテストがあるか機械的に突き合わせる**作業を別途行う。`clearDirectedTarget()` や `acceptListOnly` の解除方向のように、片道しか検証していないものが他にもあるはず。結果はこの表に追記する。
+
+#### 4c-3 ガイドにセキュリティ章を新設する（決定）
+
+**現状の問題**: セキュリティの説明が3箇所に散っている。2.3の表に「属性を暗号化で守る」の1行、2.4にボンディングとIRK、2.5の設定表に1段落。**ペアリングとは何か、なぜボンディングするのか、passkeyはどう決まるのかを説明した箇所が無い**まま、2.4で「ボンディング済みなら」と前提として登場する。前後関係が破綻している。
+
+**決定: GAP章とGATT章の間に独立した章を置く。**
+
+理由は2つ。BLEの層構成としてSMPはGAP・GATTと並ぶ独立した層であり、GAPの一節に押し込むと「どの属性を守るか」というGATT側の話と繋がらない。そして読者の作業順が「つながる → どこまで信頼するかを決める → 属性に要求を書く」なので、GAPとGATTの間が素直に収まる。
+
+**役割分担**（memoの「GAPで方針を決めてGATTで必要な場所を決める」に沿う）:
+
+- **セキュリティ章** — リンク単位の方針。ペアリング / ボンディング / 認証方式 / いつ暗号化されるか
+- **GATT章** — 属性単位の要求。`encryptedRead` / `authenticatedWrite` などをどこに書くか
+- **GAP章 2.4** — RPAの解決にIRKが要る、という文脈に絞って残す（削らない。RPAの説明にボンディングは不可欠なため）。詳細はセキュリティ章へリンク
+
+「セキュリティは後述」で飛ばすのは採らない。examplesと同じく、ガイドもその場で完結して読めることを優先する。
+
+**章立て**（現行の3章＝GATT、4章＝UUIDが1つずつ繰り下がる）:
+
+```
+3. セキュリティ編 — つながった相手をどこまで信頼するか
+   3.1 何から守るのか（盗聴 / なりすまし / 追跡の3つ。それぞれ対策が違う）
+   3.2 ペアリングとボンディング（その場限りの暗号化と、鍵を保存して次回に備えること）
+   3.3 ペアリング方式はIO能力で決まる（Just Works / Passkey Entry / Numeric Comparison の対応表）
+   3.4 いつ暗号化が始まるか（接続直後か、保護された属性に触れた時か）
+   3.5 EspBleでの設定（EspBleSecurityConfig と、対応するcallback）
+   3.6 制限（ボンド最大3件、passkey応答中はスタックが止まる、など理由まで）
+```
+
+| # | 項目 | 状況 |
+|---|---|---|
+| 4c-3a | セキュリティ章の執筆と、GAP章2.3・2.4・2.5からの整理・リンク | 未着手 |
+| 4c-3b | `Security/*` example 3つ（JustWorksServer / StaticPasskeyServer / StaticPasskeyClient）の内容確認と、Numeric Comparison・実行時passkey入力のexample不足の判断 | 未着手 |
+
 ### Phase 5 — GATT examples のコード＋README充実
 
 Phase 4後のAPIで、`Gatt/Basics/*` を中心に「概念はガイド、使い方はここ」の粒度へ書き直す。
 
 ### Phase 6 — ガイドのGATT章を執筆
 
-Service / Characteristic / Descriptor、UUIDとハンドルの使い分け、Server・Client並記。既存のUUID解説（ガイド172行目以降）は流用する。
+Service / Characteristic / Descriptor、UUIDとハンドルの使い分け、Server・Client並記。既存のUUID解説は流用する。属性単位のセキュリティ要求（`encryptedRead` など）はこの章に置き、リンク単位の方針はセキュリティ章（Phase 4c）へ譲る。Read Long（4c-1 f）もここで触れる。
 
 ### Phase 7 — 用語解説の集約とリンク整備
 

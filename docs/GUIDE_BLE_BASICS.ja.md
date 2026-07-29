@@ -350,11 +350,13 @@ GAPの締めくくりとして、通信を始める前に決めておく設定�
 
 MTUを下げる理由があるとすれば、多数の同時接続でメモリを節約したい場合です。逆に既定の247で困ることは通常ありません。
 
+**MTUが決まるのは接続が成立した「後」です。** 交換は接続直後に行われるため、`onConnected` の時点では両者ともまだ既定の23で、交渉結果は `onMtuChanged` で届きます。CentralとPeripheralのどちらも同じ順序です。接続直後に大きなデータを送る処理を書くときは、`onConnected` ではなく `onMtuChanged` を待ってください。
+
 **送信電力**は `setTxPower(dBm)` で変更でき、実際に適用された値は `txPower()` で読めます。上げれば距離が伸び、下げれば消費電流が減ります。無線が対応するのは飛び飛びの値（同梱ビルドでは-12〜+9 dBmの3 dB刻み）で、指定した値に最も近いものが適用されます。これは初期化時に限らずいつでも変更でき、アドバタイズ・スキャン・接続のすべてに効きます。アドバタイズにTx Power Levelを載せている場合、その値も追従します。
 
-セキュリティには、確認なしでリンクを暗号化する**Just Works**と、6桁の数字で相手を確認する**Passkey認証**があります。目的が「盗聴を防ぐ」だけならJust Worksで足り、「意図しない相手との接続を防ぐ」までを求めるならPasskey認証が必要です。
+セキュリティ（`security`）については、次の3章でまとめて扱います。
 
-関連するexample: [Gap/Mtu](../examples/Gap/Mtu/)、[Security/JustWorksServer](../examples/Security/JustWorksServer/)、[Security/StaticPasskeyServer](../examples/Security/StaticPasskeyServer/)
+関連するexample: [Gap/Mtu](../examples/Gap/Mtu/)
 
 ### 2.6 時系列で見る全体像（GAP）
 

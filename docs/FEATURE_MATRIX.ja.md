@@ -25,7 +25,9 @@ EspUsbHost / EspUsbDeviceで扱っている機能のBLE版、およびBLEで一�
 | 同一Service内の同一UUID Characteristic | ✅ | **Peripheral側も登録可**: 属性テーブルを`ble_gatts_add_svcs()`で自前に組み、対象はaccess callbackが渡す定義ポインタで識別する（同梱wrapperの`BLEService::addCharacteristic()`は既存を再利用して新しい方をGATTに登録しないため使わない）。**Central側も区別可**（自前discoveryが属性ハンドル単位で列挙し、操作もハンドル指定）。`duplicate_uuid` Peerで、1つのServiceに同一UUIDのCharacteristic 2つ＋同一UUIDのService 2つを公開し、3つすべてへのread・subscribe・notifyを検証済み。wrapper側の問題の報告案は[UPSTREAM_REQUEST_ARDUINO_ESP32_NIMBLE_WHITELIST.ja.md](UPSTREAM_REQUEST_ARDUINO_ESP32_NIMBLE_WHITELIST.ja.md)の補遺 |
 | GATT Client（一覧/既知UUID Discovery・Read・Write） | ✅ | 接続ごとのdiscovery snapshot、Descriptor操作、Write Without Response、操作単位timeout、操作の自動キュー。汎用Client操作は同梱wrapperのremoteオブジェクトを使わずNimBLEホストAPIへ直接発行する（UUID重複への対応とdiscoveryのヒープリーク解消のため） |
 | Notify / Indicate（購読・解除・CCCD） | ✅ | `Gatt/Basics/NotifyServer`・`Gatt/Basics/IndicateServer`。persistent subscription（`EspBleConfig::persistentSubscriptions`、既定on）で再接続時に自動再購読。復元はpeerアドレスとUUIDで引くため、**UUIDが一意なCharacteristicに限る**（重複時はどれを購読していたか特定できないので記録しない） |
-| MTU交換 / payload上限検証 | ✅ | 既定`preferredMtu`は**247**（notify payload 244byte）。グローバルGAPイベント（`BLE_GAP_EVENT_MTU`）で両役割とも追跡し`onMtuChanged`へ配送。Central側の接続確立後のMTU交換も反映 |
+| MTU交換 / payload上限検証 | ✅ | 既定`preferredMtu`は**247**（notify payload 244byte）。Central側は接続成立直後に`ble_gattc_exchange_mtu()`で交換を開始する。結果は`BLE_GAP_EVENT_MTU`で両役割とも追跡し`onMtuChanged`へ配送するため、**`onConnected`時点の`connection.mtu`は両役割とも23**（既定値）である |
+| MTUを超える値のRead | ✅ | Characteristic / Descriptor のReadは`ble_gattc_read_long()`で発行し、1 MTUに収まらない値も最後まで読む（HID Report Mapのような数百byteの値が黙って切り詰められない）。短い値は最初の応答で完結するので往復は増えない |
+| GATT Serverの読み取りフック | ✅ | `EspBleGattServer::onRead()`。peerがCharacteristicを読んだ瞬間に呼ばれ、その場で`setValue()`した値が返る（センサー値を都度作る用途）。**BLEスタックタスク上で実行される**ため、重い処理を書くとスタックが止まりpeer側はreadがtimeoutする |
 | 複数Serviceの合成（composite） | ✅ | HID+DIS+Battery合成を実装済み |
 | Just Works Pairing / Bonding | ✅ | LE Secure Connections |
 | 静的passkey / MITM認証 / 暗号化・認証permission | ✅ | `Security/*` example |
