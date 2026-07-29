@@ -520,7 +520,7 @@ Phase 1〜4bでGAP側のAPIが増えた。テスト・example・ガイドのど�
 | c | スキャン側Filter Accept List（`acceptListOnly`） | ✅ `accept_list` | ✅ `Gap/AcceptList` | ✅ 2.2 | **完了。** `Gap/AcceptList` に `f`（絞り込みscan）/ `a`（全件scan）を追加し、1つのリストの2つの使い道を1箇所で見せる形にした。README両言語も更新 |
 | d | GATT Serverの読み取りフック（`onRead`） | ✅ `gatt_read_write` | ✅ `Gatt/Basics/Server` | Phase 6 | **完了。** `Gatt/Basics/Server` に読み取り時に `millis()` を返すCharacteristicを追加し、READMEへ「読まれた瞬間に値を作る」節（スタックタスクで走るため短く保つ・`loop()`と同時に走る・`onRead`は1つだけ）を追加。対になる `Gatt/Basics/Client` もその値を読む形へ延長した |
 | e | MTUは接続後に決まる（`onConnected`時点は23） | ✅ `mtu` | ✅ `Gap/Mtu` README | ✅ 2.5 | **完了。** |
-| f | MTU超の値のRead（Read Long） | ✅ `hid_keyboard_host`（Report Map）ほか | — | ❌ | GATT章（Phase 6）で「長い値は分割して読まれる」として触れる |
+| f | MTU超の値のRead（Read Long） | ✅ `hid_keyboard_host`（Report Map）ほか | ✅ `Gatt/Basics/Client` README | ✅ 4.6 | **完了。** ガイド4.6節を「値の大きさとMTU」として設け、Readは自動分割・Writeは分割しないという非対称を理由つきで記述した |
 
 #### 4c-2 公開APIとテストの突き合わせ（実施済み）
 
@@ -583,6 +583,23 @@ Phase 4後のAPIで、`Gatt/Basics/*` を中心に「概念はガイド、使い
 ### Phase 6 — ガイドのGATT章を執筆
 
 Service / Characteristic / Descriptor、UUIDとハンドルの使い分け、Server・Client並記。既存のUUID解説は流用する。属性単位のセキュリティ要求（`encryptedRead` など）はこの章に置き、リンク単位の方針はセキュリティ章（Phase 4c）へ譲る。Read Long（4c-1 f）もここで触れる。
+
+**完了（日本語版）。** 4.1〜4.10へ構成し直した。
+
+```
+4.1 GATTの構造（既存を維持。同一UUID重複の扱いを含む）
+4.2 4つの操作（Read / Write / Notify / Indicate、購読とCCCD、使い分け）
+4.3 属性ごとに保護を宣言する（encryptedRead ほか。3章から引き継ぐ属性単位の話）
+4.4 Server側 — 公開するものを先に全部決める（begin()前、ハンドル連鎖、setValue と onRead、上限）
+4.5 Client側の手順（Discovery 2種、連鎖、同時1件、snapshotの寿命）
+4.6 値の大きさとMTU（Read Longは自動、Writeは分割しない）
+4.7 時系列で見る全体像（既存）
+4.8 標準Serviceと独自Service（専用クラスはHIDとBLE MIDIだけ、その理由）
+4.9 GATTで対応していないこと
+4.10 関連するexample
+```
+
+判断として記録しておくもの: **標準Serviceに専用クラスを置かない方針の理由を4.8節に書いた**（標準の側にあるのはUUIDとバイト並びの決まりだけで、GATTの仕組みとしては独自Serviceと違わない。専用クラスを増やすと仕様の一部だけを実装した抽象がその数だけ増える）。例外がHIDとBLE MIDIである理由（Report Descriptorという別の記述言語、13ビットタイムスタンプとrunning status）も併記した。英語版はPhase 8。
 
 ### Phase 7 — 用語解説の集約とリンク整備
 

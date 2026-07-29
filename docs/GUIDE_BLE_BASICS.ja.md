@@ -577,6 +577,8 @@ Central側は、相手がどう重複させていても属性ハンドルで撃�
 
 ひとつだけ制限があります。**再接続時の購読自動復元は、UUIDが一意なCharacteristicに限られます。** 復元は相手のアドレスとUUIDを手掛かりに行うため、同じUUIDが複数あると「どれを購読していたか」を言えないからです。該当する場合は、再接続後に自分でハンドルを指定して購読し直してください。
 
+### 4.2 4つの操作
+
 値のやり取りには次の方法があります。
 
 | 操作 | 向き | 説明 |
@@ -586,17 +588,83 @@ Central側は、相手がどう重複させていても属性ハンドルで撃�
 | **Notify** | Server → Client | 値の変化を送りつける。確認応答なし |
 | **Indicate** | Server → Client | 同上だが、Clientの確認応答を待つ |
 
-NotifyとIndicateは、Clientが事前に**購読**（subscribe）したものだけが届きます。購読の状態はDescriptorに記録されます。
+**要求を出せるのはClient側だけです。** Serverは自分から読み書きを求められません。Serverから能動的に送れるのはNotifyとIndicateだけで、それも次に述べる購読が前提です。
 
-使い分けの基準は**取りこぼしが許されるか**です。秒間何度も更新されるセンサー値ならNotify（1つ落ちても次が来る）、確実に届けたい設定変更の結果ならIndicateです。
+#### 購読 — 送っていいかを決めるのはClient
 
-### 4.2 Client側の手順
+NotifyとIndicateは、Clientが事前に**購読**（subscribe）したものだけが届きます。購読の状態は、Notify / Indicate可能なCharacteristicに自動的に付く**CCCD**（Client Characteristic Configuration Descriptor）というDescriptorに記録されます。Clientがそこへビットを書くと購読が始まります。
+
+重要なのは**CCCDが接続ごとに独立している**ことです。3台が繋がっていれば3つの状態があり、1台だけが購読していることも普通です。Server側は購読している接続へだけ送り、購読していない接続には何も送りません。**送信が失敗するわけではなく、届く先が無いだけ**です。
+
+購読は切断で消えます。ただしEspBleのClient側は既定で購読を記憶し、同じ相手へ再接続したときに**自動で復元します**（`EspBleConfig::persistentSubscriptions`）。アプリケーションは再購読を書かなくて済みます。
+
+#### NotifyとIndicateの使い分け
+
+基準は**取りこぼしが許されるか**です。秒間何度も更新されるセンサー値ならNotify（1つ落ちても次が来る）、確実に届けたい設定変更の結果ならIndicateです。
+
+Indicateは1件ずつ確認応答を待つため、**同時に1件しか飛ばせません**。連続して送りたい場合は前の確認を待つ必要があり、そのぶんスループットは落ちます。EspBleでは送信の結果が `onSent()` に届き、Indicateではそれが「Clientが受け取ったこと」を意味します。
+
+### 4.3 属性ごとに保護を宣言する
+
+3章で決めたリンクの方針を、**どの値に適用するか**をここで書きます。Characteristic（およびDescriptor）の設定に、次のフラグがあります。
+
+| フラグ | 要求すること |
+|---|---|
+| `encryptedRead` / `encryptedWrite` | リンクが暗号化されていること（ペアリング済み） |
+| `authenticatedRead` / `authenticatedWrite` | さらにMITM認証されていること（passkeyなどを経ていること） |
+
+フラグを立てた属性へ、条件を満たさないリンクから読み書きが来ると、**ATT層がエラーを返します**（insufficient encryption / insufficient authentication）。アプリケーションのコードは呼ばれません。多くのOSはこのエラーを受けて自動的にペアリングを始めるので、「必要になったときだけ認証を求める」形がこれで書けます。
+
+読みと書きは別に指定できます。「誰でも読めるが、書き換えるには認証が必要」という設定は、`authenticatedWrite` だけを立てれば作れます。
+
+**保護は属性ごとであって、Serviceごとではありません。** 同じServiceの中に、無条件に読める値と認証を要求する値を混在させられます。
+
+### 4.4 Server側 — 公開するものを先に全部決める
+
+GATT Serverの構成は、**`begin()` より前にすべて登録します**。`begin()` の時点で属性テーブルが確定して動き出すため、あとからServiceを足すことはできません（`InvalidState` で失敗します）。
+
+登録は**3段のハンドル連鎖**です。
+
+```cpp
+service = gattServer.addService(SERVICE_UUID);
+characteristic = gattServer.addCharacteristic(service, CHAR_UUID, config);
+descriptor = gattServer.addDescriptor(characteristic, DESC_UUID, descriptorConfig);
+```
+
+以降の値の設定・送信・イベント判定はすべてこのハンドルで行います。4.1節のとおり、UUIDでは「どれか」を指せないからです。**イベントは操作の種類ごとに1つ**（全Characteristic共通）なので、複数登録している場合はハンドルで対象を判定します。
+
+値の持たせ方は2通りあります。
+
+- **`setValue()` で先に置く** — こちらが値の変化を知っている場合。読み取りにはスタックがその値を返します
+- **`onRead()` で読まれた瞬間に作る** — センサーのように「読まれた時点の値」を返したい場合。コールバックの中で `setValue()` した値がそのまま相手へ返ります。誰も読まなければ値を作る処理は走りません
+
+`onRead()` には他と違う制約があります。**このコールバックだけは `update()` ではなくBLEスタックのタスクで走ります。** ATTの応答を返す前に値が必要で、後回しにできる場所がないためです。したがって短く保つ必要があり（待たせるとスタック全体が止まり、相手には読み取りのタイムアウトに見えます）、`loop()` と同時に走るので共有変数には排他制御が要ります。
+
+1台が公開できる上限はEspBle側の固定配列で決まっており、**Service 8個、Characteristic 32個、Descriptor 16個**です。Notify / Indicateに付くCCCDはスタックが自動で用意するもので、この16個には含まれません。
+
+### 4.5 Client側の手順
 
 Clientは相手のデータ構造を知りません。そこでまず**Discovery**（探索）を行い、目的のServiceとCharacteristicがどこにあるかを調べます。その後にRead・Write・購読を行います。
 
 1.3節で説明したとおり、これらはすべて非同期です。「Discoveryを頼む → 完了イベントの中でReadを頼む → 完了イベントの中でWriteを頼む」という連鎖で書きます。
 
-### 4.3 時系列で見る全体像
+そのうえでもう1つ制約があります。**Central側のGATT操作は同時に1件だけです。** 実行中に2つ目を要求すると、その場で `InvalidState` として同期的に失敗します。手続きを上から並べて書くことはできず、必ず連鎖の形になります。
+
+Discoveryには2通りあります。
+
+- **一覧Discovery**（`discoverServices()`）— 相手のGATT database全体を列挙し、**接続ごとのsnapshot**として保持します。切断するか次の一覧Discoveryを行うまで有効で、`discoveredService*()` などの照会は無線を使いません
+- **既知UUIDのDiscovery**（`discoverCharacteristic()`）— 目的のUUIDだけを解決します。何が必要か分かっている場合はこちらが速く、軽いです
+
+### 4.6 値の大きさとMTU
+
+1回のやり取りで運べるのはMTU − 3バイトです（2.3節）。既定のMTU 247なら244バイトです。これを超える値の扱いは、**読みと書きで非対称**です。
+
+- **Readは自動で分割されます。** 1回の応答に収まらない値は、Clientが続きを要求して結合します（**Read Long**）。EspBleは常にこの読み方をするため、`result.value` には結合後の全体が入ります。アプリケーション側で組み立てる必要はありません。逆にこれを行わないと長い値が黙って途中で切れます
+- **Writeは分割されません。** 書き込みはATTの1回の要求として送られ、Long Write（複数回に分けて書く手続き）は行いません。分割の可否が相手側の実装にも依存するためです
+
+Notify / Indicateも1回に載る分だけで、分割されません。実際に送れるバイト数は `maximumNotificationPayload()` で確認できます。**MTUが確定するのは接続の後**なので（2.5節）、大きなデータを送る処理は `onMtuChanged` を待ってから始めてください。
+
+### 4.7 時系列で見る全体像
 
 ```mermaid
 sequenceDiagram
@@ -621,9 +689,32 @@ sequenceDiagram
     C->>P: 確認応答
 ```
 
-すべてのイベントは `loop()` の `ble.update()` から配送されます。要求を出した直後ではなく、**次に `update()` を呼んだとき**にコールバックが呼ばれます。
+すべてのイベントは `loop()` の `ble.update()` から配送されます。要求を出した直後ではなく、**次に `update()` を呼んだとき**にコールバックが呼ばれます（`onRead()` だけは例外で、4.4節のとおりスタックのタスクで走ります）。
 
-### 4.4 関連するexample
+### 4.8 標準Serviceと独自Service
+
+UUIDには、Bluetooth SIGが用途を定めた**標準UUID**と、自分で決める**独自UUID**があります（5章）。心拍計・体温計・電池残量といった一般的な機能には標準のServiceとCharacteristicが定義されていて、値のバイト並びまで決まっています。これに従えば、相手のアプリを作らなくてもスマートフォンの汎用アプリや対応機器がそのまま読めます。
+
+**標準Serviceのほとんどに専用クラスはありません。** 心拍計・体温計・電池残量・フィットネス機器などは、どれも4.4節の汎用API（`addService()` / `addCharacteristic()`）で組み立てます。標準の側にあるのは「UUIDとバイト並びの決まり」だけで、GATTの仕組みとしては独自Serviceと何も違わないからです。専用クラスを増やすと、仕様の一部だけを実装した中途半端な抽象がその数だけ増えます。
+
+そのぶん、バイト並びを作るところは自分で書きます。`examples/Gatt/Health` や `examples/Gatt/Fitness` の各exampleが、実際の標準Serviceをその形で実装した例です。医療系の値が使う特殊な浮動小数点やCRCの計算といった、**判断の余地がない変換だけ**はヘッダで提供しています（`EspBleMedicalFloat.h`、`EspBleCgmCrc.h` など）。
+
+専用クラスがあるのは**HIDとBLE MIDIの2つだけ**です。この2つは「UUIDとバイト並び」で終わらないためです。HIDはReport Descriptorという別の記述言語を組み立てる必要があり、Boot Protocolとの切り替えもあります。BLE MIDIは13ビットのタイムスタンプ付けとrunning statusの扱いがpacketごとに要ります。どちらも定型作業の量が多く、間違えても黙って動かないだけなので、抽象を置く価値があります。
+
+なおこれらの専用クラスは、汎用イベントを `add*Listener()` の追加リスナとして受け取ります。**専用クラスを使いながら、同じイベントに自分のコールバックを併設できる**のはそのためです（`on*()` の主コールバックは奪われません）。
+
+独自の機能には独自UUIDを使ってください。**標準UUIDを別の意味で使い回すと、汎用アプリが誤って解釈します。**
+
+### 4.9 GATTで対応していないこと
+
+| 機能 | 理由 |
+|---|---|
+| **Long Write**（分割書き込み） | 4.6節のとおり、1回のATT要求として送ります。分割の可否が相手側の実装にも依存し、確実に成立させられないためです |
+| **署名付き書き込み（CSRK）** | 暗号化せず署名だけで完全性を守る仕組みです。交換する鍵を暗号鍵とIRKに限っており、実運用でこれを使う機器がほぼ存在しないためです（3.6節） |
+| **`onRead()` の多重登録** | 他のイベントと違い1つだけです。「返す値を決める」責任を持てるのは1箇所だけだからです |
+| **同一UUID Characteristicの購読自動復元** | 4.1節のとおり、復元はアドレスとUUIDを手掛かりに行うため、同じUUIDが複数あるとどれを購読していたか言えません。該当する場合はハンドルを指定して再購読してください |
+
+### 4.10 関連するexample
 
 | example | 内容 |
 |---|---|
@@ -632,6 +723,9 @@ sequenceDiagram
 | [Gatt/Basics/NotifyServer](../examples/Gatt/Basics/NotifyServer/) / [SubscribeClient](../examples/Gatt/Basics/SubscribeClient/) | Notifyの送出と購読 |
 | [Gatt/Basics/IndicateServer](../examples/Gatt/Basics/IndicateServer/) / [IndicateClient](../examples/Gatt/Basics/IndicateClient/) | 確認応答つきのIndicate |
 | [Gatt/Basics/NusServer](../examples/Gatt/Basics/NusServer/) / [NusClient](../examples/Gatt/Basics/NusClient/) | シリアル通信に相当するやり取り |
+| [Gatt/Basics/AutoReconnectClient](../examples/Gatt/Basics/AutoReconnectClient/) | 切断後に購読ごと自動復元させる（4.2節） |
+| [Gatt/Device/BatteryServer](../examples/Gatt/Device/BatteryServer/) ほか | 標準Serviceを汎用APIで実装する最小例（4.8節） |
+| [Gatt/Health](../examples/Gatt/Health/) / [Gatt/Fitness](../examples/Gatt/Fitness/) | 実際の標準Serviceのバイト並びと手続き |
 
 ---
 

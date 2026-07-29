@@ -65,7 +65,7 @@ gattServer.onRead([](const EspBleGattReadRequest &request) {
 ## 注意
 
 - **コールバックは全Characteristic共通です。** 複数登録している場合は `write.characteristic == myHandle` で対象を判定してください。イベントにはUUID文字列も入っていますが、同じUUIDが複数あると区別できないため、ハンドルで比べるのが確実です。
-- **1つのServiceの中に同じUUIDのCharacteristicを2つ置くことはできません。** 同梱backendがGATTへ登録せず既存を再利用してしまうため、`addCharacteristic()` が無効なハンドルを返して拒否します。黙って送信が届かない状態を避けるための挙動です。
+- **1つのServiceの中に同じUUIDのCharacteristicを複数置けます。** 仕様が認めている重複で、HIDのReportがその典型です。属性テーブルをBLEスタックのAPIで直接組み立て、操作もイベントもハンドルで対象を名指しするため取り違えません。ただし**再接続時の購読自動復元だけはUUIDを手掛かりにする**ため、同じUUIDが複数ある場合は復元されません（再接続後にハンドルを指定して購読し直してください）。
 - **`onRead()` は1つだけです。** 他のイベントのように `add*Listener()` で複数登録することはできません。「返す値を作る」責任を持てるのは1箇所だけだからです。
 - **MTUを超える値は分割して読まれます。** ATTの1回の応答に収まらない場合、Clientは続きを要求します（Read Long）。Server側は値を置くだけで、分割はスタックが扱います。
 - 登録はすべて `begin()` より前に行う必要があります。`begin()` 後の `addService()` は `InvalidState` で失敗します。

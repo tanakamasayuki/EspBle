@@ -179,7 +179,7 @@ pytest-embedded-cliの既存規約に従います。
 
 60. ✅ `local_identity`: 自分のアドレス取得・送信電力・切断理由指定の検証。Peripheralが`localAddress()`/`localAddressType()`で報告した値が、Centralがスキャンで観測したaddress/addressTypeと一致することを確認。`setTxPower(-12)`と`setTxPower(9)`で、無線が適用した値（`txPower()`）と、advertisingのTx Power Levelとして電波に出る値の両方が追従することを確認。最後に`disconnect(id, 0x16)`の理由コードが相手の`disconnectReason`へ0x16のまま届くこと（backendの0x200オフセットを正規化していること）を確認。
 
-61. ✅ `duplicate_uuid`: 同一UUIDの重複登録の契約を検証。Peripheralが同一UUIDのServiceを2つ登録して両方ハンドルを得ること、同一Service内で同一UUIDのCharacteristicを追加すると**無効ハンドルで拒否される**こと（同梱backendが新しい方をGATTに登録しないため）、別Serviceなら同一UUIDでも登録できることを確認。Centralからは同一UUID Serviceが1つしか列挙されない（wrapperのリモートService mapがUUIDキー）ことも併せて記録する。
+61. ✅ `duplicate_uuid`: 同一UUIDの重複登録の契約を検証。**仕様が認めている重複がどちらの役割でも扱えること**を確認する。Peripheralは同一UUIDのServiceを2つ、同一Service内に同一UUIDのCharacteristicを2つ登録し、いずれも別々のハンドルを得る（属性テーブルをNimBLEホストAPIで直接組むため）。Centralは一覧Discoveryで`services=2 characteristics=3`を列挙し、3つすべてを属性ハンドル指定でRead・購読でき、Notificationが正しいハンドルへ対応付くことを確認する。
 
 62. ✅ `directed_advertising`: Directed Advertisingとadvertisingチャネル選択の検証。Peripheralが`setDirectedTarget(address, type)`でCentralを名指しし、Centralがそのadvertisement（ペイロード無し・connectable=1・scannable=0）だけを受け取って接続できること、`clearDirectedTarget()`で通常のadvertisingへ戻ることを確認。あわせて`setChannelMap(EspBleAdvertisingChannel39)`でch39のみへ絞った状態でも接続が成立することを確認。
 

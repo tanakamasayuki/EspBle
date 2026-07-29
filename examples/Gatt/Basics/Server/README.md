@@ -65,7 +65,7 @@ Whatever the callback passes to `setValue()` is what the peer receives. No perio
 ## Notes
 
 - **One callback serves every characteristic.** With more than one registered, check `write.characteristic == myHandle`. The event also carries UUID strings, but those cannot tell apart characteristics that share a UUID, so comparing handles is the reliable test.
-- **Two characteristics in one service may not share a UUID.** The bundled backend reuses the existing entry instead of registering the second, so `addCharacteristic()` refuses it and returns an invalid handle rather than leaving sends silently undelivered.
+- **Several characteristics in one service may share a UUID.** The spec allows it and HID Reports are the everyday case. The attribute table is built through the BLE stack's own API, and both operations and events name their target by handle, so nothing is confused. The one exception is **automatic subscription restore after a reconnect, which keys on the UUID** — with duplicates it cannot say which one was subscribed, so re-subscribe by handle after reconnecting.
 - **There is only one `onRead()`.** It cannot be multiplexed with `add*Listener()` like the other events, because only one place can own the decision of what value to return.
 - **A value larger than the MTU is read in pieces.** When it does not fit one ATT response, the client asks for the rest (Read Long). The server only stores the value; the splitting is the stack's job.
 - All registration must happen before `begin()`; `addService()` afterwards fails with `InvalidState`.
