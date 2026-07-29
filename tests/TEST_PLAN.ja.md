@@ -185,6 +185,10 @@ pytest-embedded-cliの既存規約に従います。
 
 63. ✅ `multi_listener`: 1イベントに対する複数observerの配送・解除・上限の検証。`on*()`のprimaryに加え`add*Listener()`で2件を登録し、1回の書き込みで3者すべてが呼ばれることを、`EspBleGattServer`側（`onWritten` + `addWrittenListener`）と`EspBle`側（`onCharacteristicWritten` + `addCharacteristicWrittenListener`）の両方で確認。続いて`removeListener()` / `removeGattListener()`が**指定した1件だけ**を外し、primaryと残りのlistenerには影響しないことを確認。未登録idの削除が`false`を返すこと、listenerが上限4件で頭打ちになり、それ以上のaddが既存を追い出さずに拒否されることも確認。
 
+## 未実装scenarioのメモ
+
+- **persistent subscriptionの上限超過（`droppedPersistentSubscriptionCount()`）** — 永続レコードの上限は16件（`PersistentSubscriptionCapacity`）。1接続では超えられない。centralのアクティブ購読表も16件（`ClientSubscriptionCapacity`）で、そこが埋まると`subscribe()`はCCCD書き込み前に`ResourceExhausted`で失敗し、失敗した購読はレコードにも残らないため必ず16件で止まる（加えてPeripheral側のCCCD追跡は12件＝`SubscriptionCapacity`）。アクティブ表は切断で解放されるがレコードは残るので、**切断を挟んで別のpeer addressへ購読する**しかない。3台（central + peer 2台）なら素直だが、**2台の自動テストで成立させられる**見込み: レコードのキーはcentralが観測したpeer addressなので、同じPeripheralが1回目をPublic address、2回目を`RandomStatic`で出せば別レコードとして数えられ、アドレス種別が違うので「同じアドレスを数え直しただけ」という取り違えも起きない。手順は「12件購読 → 切断 → peer側で再initしてaddress種別を変更 → 再接続して5件購読 → 17件目で`droppedPersistentSubscriptionCount()`が1」。同時接続では3台でもアクティブ表16件が先に埋まるため届かない。
+
 ## 合格条件
 
 - test codeがすべての入力を生成し、Serial assertionで結果を判定する。

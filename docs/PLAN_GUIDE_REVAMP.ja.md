@@ -532,7 +532,7 @@ Phase 1〜4bでGAP側のAPIが増えた。テスト・example・ガイドのど�
 | 2-b | `removeFromAcceptList()` / `acceptListEntry()` | 発見時点ではPeerテストに呼び出しが無かった（追加方向のみ検証） | **対応済み。** `accept_list` に列挙と削除方向のテストを追加し、削除後に絞り込みscanが再び一致しなくなることまで実機検証した |
 | 2-c | HIDデバイス入力の一部 — `pressKey()` / `tapKey()` / `tapUsage()` / `setLayout()` / `wheel()` / `sendUsage()` / `addFeatureReport()` / `sendRawReport()` / `sendVendorReport()` | Peerテストに呼び出しが無い | HID章（Phase 9以降）の作業に含める。`write()` と `click()` はexamplesで使われている |
 | 2-d | `autoReconnect()` / `EspBleHidHost::autoRediscover()` / `keyboardLayout()` の各getter | setter側は検証済み、getterは未呼び出し | 影響が小さいため、2-aのテストへ相乗りで確認する |
-| 2-e | `droppedPersistentSubscriptionCount()` | 未検証 | 上限8件を超える購読を作る必要があり、Peerテストで作りにくい。**不足として記録し、当面は保留** |
+| 2-e | `droppedPersistentSubscriptionCount()` | 未検証 | 上限は16件（当初「8件」と記録したのは誤り。8はaccept listとCCCD storeの値）。1接続では超えられないが、**2台の常設構成のまま自動テストで作れる**見込み（Public address → `RandomStatic` で同一Peripheralを別peerとして数えさせる）。手順と根拠は[tests/TEST_PLAN.ja.md](../tests/TEST_PLAN.ja.md)の「未実装scenarioのメモ」に記載。**今回は実装せず、メモのみ** |
 | 2-f | `requestSecurity()` / `bond()` / `deleteBond()` | examplesのみ（`deleteAllBonds()` はPeer済み） | セキュリティ章の作業に合わせ、`security_bond` テストへ列挙と個別削除を足す |
 
 #### 4c-3 ガイドにセキュリティ章を新設する（決定）
