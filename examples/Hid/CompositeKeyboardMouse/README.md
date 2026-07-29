@@ -1,6 +1,7 @@
 # CompositeKeyboardMouse
 
 > 日本語版: [README.ja.md](README.ja.md)
+> Concepts: [BLE communication beginner guide](../../../docs/GUIDE_BLE_BASICS.md) — chapter 6, "HID"
 
 A composite BLE HID device over GATT (HOGP) that is both a keyboard and a mouse. Configuring both profiles before `begin()` composes a single HID service (`0x1812`) with fixed Report IDs 1 (keyboard) and 2 (mouse). Input is triggered by Serial commands.
 

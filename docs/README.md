@@ -26,7 +26,7 @@ The design documents are written in Japanese. This guide lists them and shows th
 | Settled decisions and their rationale | [DECISIONS.ja.md](DECISIONS.ja.md) |
 | Pre-1.0.0 design-flaw audit and remediation plan | [DESIGN_DEBT.ja.md](DESIGN_DEBT.ja.md) |
 | HID spec (Device / Host) | [HID_DEVICE_SPEC.ja.md](HID_DEVICE_SPEC.ja.md) / [HID_HOST_SPEC.ja.md](HID_HOST_SPEC.ja.md) |
-| BLE communication beginner guide: GAP / security / GATT / UUID | [GUIDE_BLE_BASICS.md](GUIDE_BLE_BASICS.md) |
+| BLE communication beginner guide: GAP / security / GATT / UUID / HID / BLE MIDI | [GUIDE_BLE_BASICS.md](GUIDE_BLE_BASICS.md) |
 | Test strategy and coverage | [../tests/TEST_PLAN.ja.md](../tests/TEST_PLAN.ja.md) |
 | Release checks | [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) |
 | Arduino-ESP32 upstream request draft (Japanese) | [UPSTREAM_REQUEST_ARDUINO_ESP32_DESCRIPTOR_CONTEXT.ja.md](UPSTREAM_REQUEST_ARDUINO_ESP32_DESCRIPTOR_CONTEXT.ja.md) |

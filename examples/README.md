@@ -4,7 +4,7 @@
 
 ## The concepts are covered in the guide
 
-How BLE works — the difference from Bluetooth Classic, GAP (finding and connecting), security (pairing and bonding), GATT (exchanging data), and UUIDs — is explained in the [BLE communication beginner guide](../docs/GUIDE_BLE_BASICS.md). Every term is defined there.
+How BLE works — the difference from Bluetooth Classic, GAP (finding and connecting), security (pairing and bonding), GATT (exchanging data), UUIDs, HID and BLE MIDI — is explained in the [BLE communication beginner guide](../docs/GUIDE_BLE_BASICS.md). Every term is defined there.
 
 | What you want to know | Guide chapter | Matching examples |
 |---|---|---|
@@ -13,26 +13,10 @@ How BLE works — the difference from Bluetooth Classic, GAP (finding and connec
 | Pairing, bonding, authentication methods | 3 (Security) | [Security/](Security/) |
 | Services, characteristics, read/write, notify | 4 (GATT) | [Gatt/](Gatt/) |
 | Standard and custom UUID forms | 5 | — |
+| Acting as a keyboard or mouse, or receiving their input | 6 (HID) | [Hid/](Hid/) |
+| BLE MIDI instruments | 7 (BLE MIDI) | [Midi/](Midi/) |
 
 Each example's README is written to stand on its own, so starting from an individual example without reading the guide works fine.
-
-The two areas below have no guide chapter yet, so they are summarised here.
-
-### HID — keyboards and mice
-
-HID over GATT (HOGP) carries the same HID model as USB keyboards/mice over BLE. EspBle provides both sides:
-
-- **HID Device**: keyboard, mouse, consumer/system control, and gamepad profiles can be composed in one HID Service.
-- **HID Host**: one `hidHost()` receives all supported report types; keyboard input is also layout-converted to Unicode/ASCII (19 layouts).
-
-### MIDI — BLE MIDI instruments
-
-BLE MIDI carries MIDI messages over a single GATT characteristic with a 13-bit millisecond timestamp per message. EspBle provides both sides on top of the packet codec in `EspBleMidi.h`:
-
-- **MIDI Device** (`EspBleMidiDevice`): advertise a BLE MIDI peripheral and send Note On/Off, Control Change, and other messages.
-- **MIDI Host** (`EspBleMidiHost`): connect to a BLE MIDI peripheral, subscribe, and receive decoded messages (running status and System Real-Time handled).
-
-The API mirrors the [EspUsbDevice](https://github.com/tanakamasayuki/EspUsbDevice) / [EspUsbHost](https://github.com/tanakamasayuki/EspUsbHost) MIDI classes so code ports across USB and BLE.
 
 ## Building
 

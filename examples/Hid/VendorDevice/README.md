@@ -1,6 +1,7 @@
 # VendorDevice
 
 > 日本語版: [README.ja.md](README.ja.md)
+> Concepts: [BLE communication beginner guide](../../../docs/GUIDE_BLE_BASICS.md) — chapter 6, "HID"
 
 A BLE HID device over GATT (HOGP) exposing a vendor-defined report (fixed Report ID 6) for arbitrary Input / Output / Feature data. Advertises the HID service `0x1812`; Input is sent on a Serial command, and host writes are printed. The report size is configurable from 1 to 64 bytes (8 here).
 

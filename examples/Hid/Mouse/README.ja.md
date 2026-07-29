@@ -1,6 +1,7 @@
 # Mouse
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../docs/GUIDE_BLE_BASICS.ja.md) 6章「HID編 — キーボードやマウスとして振る舞う」
 
 標準的な相対移動ポインタとボタンを公開するBLE HID mouse（HID over GATT / HOGP）です。HID Service `0x1812` をadvertiseし、移動やクリックはSerialコマンドで発生させます。
 

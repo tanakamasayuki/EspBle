@@ -1,6 +1,7 @@
 # VendorHost
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../docs/GUIDE_BLE_BASICS.ja.md) 6章「HID編 — キーボードやマウスとして振る舞う」
 
 vendor定義のHIDデバイス向けBLE HID Host（Central）です。HID Service `0x1812` をscanし、Pairing・Discovery後にVendor Input Reportを受信し、Vendor Output / Feature Reportを書き込みます。security完了後の `discover()` フローはほかのHID種別とすべて同じです。
 

@@ -32,7 +32,7 @@ The first key to understanding BLE is that **GAP and GATT do completely differen
 | Deals with | Advertising, scanning, connections, addresses | Services, characteristics, reading and writing values |
 | When it applies | Until the connection is established | After the connection is established |
 
-In one line: **GAP is everything up to being connected, GATT is the conversation afterwards.** This document covers GAP in chapter 2 and GATT in chapter 4, with chapter 3 in between covering how the link is protected (security).
+In one line: **GAP is everything up to being connected, GATT is the conversation afterwards.** This document covers GAP in chapter 2 and GATT in chapter 4, with chapter 3 in between covering how the link is protected (security). Chapter 5 is about UUIDs, and chapters 6 and 7 cover the standard profiles that stand on GATT: HID and BLE MIDI.
 
 ### 1.2 Four roles — two independent axes
 
@@ -773,3 +773,151 @@ So **the short form and the full form are two spellings of the same UUID**. EspB
 3. **Not advertised does not mean not present.** Because of the 31-byte limit, not every service UUID fits in an advertisement. When you need to be sure, check with discovery after connecting.
 4. **Some devices advertise no service UUID at all.** A device carrying only manufacturer data, such as an iBeacon, cannot be filtered by UUID; identify it by address or by the contents of the manufacturer data.
 5. **A short form only means something for values registered with the SIG.** An unregistered 16-bit value has no defined meaning.
+
+---
+
+## 6. HID — acting as a keyboard or a mouse
+
+This chapter is about building a keyboard or mouse over BLE, or receiving input from an off-the-shelf one. It stands on the GATT of chapter 4, so read that first.
+
+### 6.1 What HID over GATT is
+
+**HID** (Human Interface Device) is the mechanism behind input devices — keyboards, mice, gamepads — and it originated with USB. **HOGP** (HID over GATT Profile), also just called BLE HID, is that mechanism carried over BLE.
+
+The benefit is that **no dedicated application is needed on the OS side**. Build to the HID conventions and a PC or a phone recognises "a keyboard has connected" and types characters straight away. Doing the same over a custom service means writing the receiving application yourself.
+
+Structurally it is the GATT of chapter 4, unchanged: inside the HID service (`0x1812`) sit the characteristics that carry input (input reports, `0x2A4D`), and the host subscribes to them. **Key presses travel as notifications.**
+
+### 6.2 The Report Descriptor is a separate language
+
+What sets HID apart from other standard services is that **the device declares, in machine-readable form, what kind of input device it is**. That declaration is the **Report Descriptor** (in BLE, the **report map**, `0x2A4B`), which is a small description language expressed as a byte string.
+
+```
+"this is a keyboard"
+"the 8 bits of byte 1 are modifiers (Ctrl, Shift, …)"
+"the next 6 bytes are the numbers of the keys held down"
+```
+
+That kind of content, laid out in a dedicated format. Only after reading it can the host interpret the meaning of the bytes that arrive. **The agreement on byte layout does not live with the value; the device declares it** — that is HID's defining characteristic.
+
+This is why EspBle has a dedicated class for HID (4.8). Other standard services only follow an agreement on UUIDs and byte layout, so the generic API suffices; HID additionally requires assembling a Report Descriptor, and a mistake there **does not produce an error — the device is simply not recognised**, which leaves no clue when you wrote it yourself.
+
+### 6.3 The device side — composing profiles
+
+EspBle has six profiles, and **you configure only the ones you need, before `begin()`**.
+
+```cpp
+ble.hidKeyboard().configure();
+ble.hidMouse().configure();
+ble.begin(config);
+```
+
+That puts **a keyboard and a mouse together inside one HID service**. The OS sees a single device that is both.
+
+| Entry point | Report ID | Contents |
+|---|---:|---|
+| `hidKeyboard()` | 1 | 6KRO 8 bytes / NKRO 29 bytes |
+| `hidMouse()` | 2 | Buttons, X, Y, wheel |
+| `hidGamepad()` | 3 | 6 axes, hat, 32 buttons |
+| `hidConsumerControl()` | 4 | Media keys (16-bit usages) |
+| `hidSystemControl()` | 5 | Power and similar (8-bit usages) |
+| `hidVendor()` | 6 | Your own 1–64 bytes |
+
+**The fixed report IDs are deliberate.** With several profiles sharing one HID service, a number is needed to tell which profile a notification came from; deriving it from the configuration order would mean adding one profile shifts the others' numbers.
+
+To write your own Report Descriptor, use `ble.hidCustom()`. It composes into the same HID service as the built-in profiles, but **avoid the reserved IDs (1–6)** and there is a maximum of four per device.
+
+The Battery Service and Device Information Service are registered automatically when HID is configured, because operating systems expect a battery level and a product name.
+
+### 6.4 The host side — cross-service discovery and per-kind events
+
+The host (central) side is handled entirely through `ble.hidHost()`.
+
+```cpp
+ble.hidHost().onKeyboard([](const EspBleHidKeyboardEvent &event) { /* ... */ });
+ble.hidHost().discover(connectionId);
+```
+
+`discover()` reads the peer's HID service report map and **subscribes to every input report it supports**. If the peer is a composite device, the keyboard and the mouse are both subscribed in one go. From then on events are dispatched to per-kind callbacks (`onKeyboard`, `onMouse`, `onConsumerControl`, `onSystemControl`, `onGamepad`, `onVendorInput`).
+
+**`discover()` must be called explicitly per connection.** With security in use, call it after `onSecurityChanged` succeeds, because touching a HID characteristic before encryption produces an ATT error (6.6). If calling it again on every reconnection is tedious, `setAutoRediscover(true)` automates it (off by default).
+
+Each kind takes one primary callback plus up to four more registered with `add*Listener()`. That exists because you may want **your own layer on top of the library while the application still observes the same input**.
+
+### 6.5 Working with keyboards
+
+Keyboards carry the most detail, so they get their own section.
+
+**6KRO and NKRO** — the standard 8-byte report holds **at most six** simultaneous keys (modifiers are separate). Beyond that it cannot express which keys are down. **NKRO** (N-key rollover) holds the pressed state as a bitmap and can express every key at once. Call `enableNkro()` before `configure()` to switch.
+
+An NKRO report is 29 bytes, so **the MTU has to be 32 or more**. Configuring it with an insufficient `preferredMtu` makes `begin()` refuse with `InvalidArgument`, because an explicit error beats sends that silently fail.
+
+**Layouts and Unicode** — HID carries not characters but **the physical position number of a key** (a usage). The same number is a different character on a JIS layout and a US layout. EspBle carries conversion tables for 19 layouts: the device side maps a character such as `write("あ")` back to a usage, and the host side converts an incoming usage to a character. **Pick the wrong table and only the symbols come out wrong.**
+
+**LEDs go the other way** — the Caps Lock LED and friends are sent from the host to the device (an output report), the opposite direction from key input. The device side receives them at `onOutputReport()`.
+
+**Stuck keys on disconnect** — if the link drops while a key is held, the host is left believing it is still down. EspBle's host side **synthesises an all-released state on disconnect**, so this does not happen.
+
+### 6.6 Limits
+
+- **Encryption is mandatory.** With security enabled, HID attributes get HOGP Security Mode 1 Level 2 (encryption required) and no input is sent over an unencrypted link. The specification requires it, so that key presses never travel in the clear
+- **The Boot Protocol is off by default.** It is a simplified mode (`0x2A4E` and others) for restricted hosts such as a BIOS, opted into with `EspBleHidKeyboardConfig::bootProtocol`. Most hosts are satisfied by Report Protocol Mode, and extra characteristics make discovery heavier for every host. It currently covers the keyboard only; the mouse boot report (`0x2A33`) is not supported
+- **Gamepad array inputs are not interpreted.** Variable inputs in the report map are decomposed and delivered, but vendor-specific array representations are not interpreted. The raw bytes are always available if you want to interpret them yourself
+- **The report map parser has limits.** Short items, at most 8 reports, at most 64 parsed fields, and the first 40 fields are delivered to host events
+- **Notifications whose length does not match are not delivered.** Anything that differs from the length computed from the report map is dropped and counted in `invalidInputReportCount()`, because counting is safer than interpreting corrupt data
+
+### 6.7 Related examples
+
+| Example | Contents |
+|---|---|
+| [Hid/KeyboardDevice](../examples/Hid/KeyboardDevice/) | The minimal example of acting as a keyboard |
+| [Hid/KeyboardNkro](../examples/Hid/KeyboardNkro/) | Enabling NKRO and raising the MTU |
+| [Hid/Mouse](../examples/Hid/Mouse/) / [ConsumerControl](../examples/Hid/ConsumerControl/) | A mouse and media keys |
+| [Hid/CompositeKeyboardMouse](../examples/Hid/CompositeKeyboardMouse/) | Composing into one HID service |
+| [Hid/KeyboardHost](../examples/Hid/KeyboardHost/) | The host side: cross-service discovery and per-kind events |
+| [Hid/CustomDevice](../examples/Hid/CustomDevice/) / [CustomClient](../examples/Hid/CustomClient/) | Writing your own Report Descriptor |
+| [Hid/VendorDevice](../examples/Hid/VendorDevice/) / [VendorHost](../examples/Hid/VendorHost/) | Custom byte strings as input / output / feature |
+
+---
+
+## 7. BLE MIDI — connecting as an instrument
+
+### 7.1 What BLE MIDI is
+
+MIDI is the standard protocol for electronic instruments, sending short messages such as "play this note" and "stop this note". **BLE MIDI** carries it over BLE and, like HID, **needs no dedicated application on the OS side**: iOS and macOS recognise a MIDI device on connection alone.
+
+The structure is simple: **every MIDI message flows through one characteristic**. As GATT it is just "notify to send, write to receive". The complexity lives in the bytes packed inside.
+
+### 7.2 Timestamps and running status
+
+Two things differ from plain MIDI.
+
+**Timestamps** — because BLE can only communicate at intervals, several messages end up in one transmission. As-is, **there is no way to tell whether they sounded together or in sequence**. BLE MIDI therefore attaches a **13-bit millisecond timestamp** to each message, and the receiver uses it to reconstruct the original timing. That is what lets a chord be distinguished from an arpeggio.
+
+**Running status** — a MIDI compression rule that lets the byte identifying the message kind be omitted when the same kind repeats. In a BLE packet that holds only 31 bytes the saving is significant, but **a receiver that does not remember the omitted kind cannot interpret what follows**.
+
+Both are the kind of difficulty where a mistake raises no exception: the timing is just off, or nothing sounds. That is why EspBle has a dedicated class for BLE MIDI alongside HID (4.8).
+
+### 7.3 Device and host
+
+Both sides exist.
+
+- **`EspBleMidiDevice`** — the instrument side (peripheral). Send with `noteOn()`, `noteOff()`, `controlChange()` and so on
+- **`EspBleMidiHost`** — the receiving side (central). Connect, subscribe, and receive decoded messages at `onMidiMessage()`
+
+The API matches the USB siblings ([EspUsbDevice](https://github.com/tanakamasayuki/EspUsbDevice) / [EspUsbHost](https://github.com/tanakamasayuki/EspUsbHost)) so that **code ports between USB MIDI and BLE MIDI**.
+
+These helpers take the generic GATT events they need as additional listeners through `add*Listener()` (4.8). **You can install your own callback for the same event while using a MIDI helper.**
+
+### 7.4 Limits
+
+- **SysEx is limited to 320 bytes per message.** It is split across and reassembled from several BLE packets in both directions, but that is the ceiling
+- **Only one SysEx transmission can be in progress at a time**, because only one split-in-progress state is held
+- **Timestamps derive from `millis()`**, generated to match BLE MIDI's 13-bit millisecond clock
+
+### 7.5 Related examples
+
+| Example | Contents |
+|---|---|
+| [Midi/MidiDevice](../examples/Midi/MidiDevice/) | Sending notes as an instrument |
+| [Midi/MidiHost](../examples/Midi/MidiHost/) | Connecting to a BLE MIDI device and receiving messages |

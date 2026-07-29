@@ -1,6 +1,7 @@
 # CustomClient
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../docs/GUIDE_BLE_BASICS.ja.md) 6章「HID編 — キーボードやマウスとして振る舞う」
 
 **汎用GATTクライアント**（Central）でCustom HIDデバイスの任意Report Descriptorを読み、Reportを駆動します。[CustomDevice](../CustomDevice/) exampleとペアです。HIDデバイスは同一UUID `0x2A4D` のReport characteristicを複数持つため、この例はHID Service（`0x1812`）をdiscoverして各Reportを個別の **attribute handle** へ解決し、入力Reportをhandleで購読、出力Reportをhandleで書き込みます。
 

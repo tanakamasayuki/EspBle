@@ -1,6 +1,7 @@
 # ConsumerControl
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../docs/GUIDE_BLE_BASICS.ja.md) 6章「HID編 — キーボードやマウスとして振る舞う」
 
 音量や再生を操作するメディアキー、BLE HID Consumer Control device（HID over GATT / HOGP）です。HID Service `0x1812` をadvertiseし、キーはSerialコマンドで発生させます。
 

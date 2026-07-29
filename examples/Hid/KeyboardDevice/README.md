@@ -1,6 +1,7 @@
 # KeyboardDevice
 
 > 日本語版: [README.ja.md](README.ja.md)
+> Concepts: [BLE communication beginner guide](../../../docs/GUIDE_BLE_BASICS.md) — chapter 6, "HID"
 
 Turns the board into a BLE HID keyboard over GATT (HOGP, fixed 6-key rollover) that advertises the HID service `0x1812`. Paired from a PC or phone it types like a real keyboard; keystrokes are triggered by Serial commands, and it also receives the host's LED output report. HID Boot Protocol is enabled so BIOS-class hosts are supported.
 

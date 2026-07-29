@@ -178,7 +178,7 @@
 1. **ガイドはGAP → セキュリティ → GATT → UUIDの順の5章構成とする。** SMPはGAP・GATTと並ぶ独立した層であり、読者の作業順も「つながる → どこまで信頼するかを決める → 属性に要求を書く」であるため、セキュリティをGAP章の一節に押し込まない。役割分担はセキュリティ章がリンク単位の方針、GATT章が属性単位の要求（`encryptedRead` など）。
 2. **「後述」で概念説明を飛ばさない。** examplesと同じく、ガイドもその場で完結して読めることを優先する。
 3. **標準Serviceに専用クラスを置かない。** 標準の側にあるのはUUIDとバイト並びの決まりだけで、GATTの仕組みとしては独自Serviceと違わない。専用クラスを増やすと仕様の一部だけを実装した抽象がその数だけ増える。例外はHIDとBLE MIDIの2つで、Report Descriptorという別の記述言語や13ビットタイムスタンプ・running statusのように「UUIDとバイト並び」で終わらないため抽象を置く価値がある。判断の余地がない変換（IEEE-11073 medical float、CGMのE2E-CRC）はヘッダで共有する。
-4. **概念説明はガイドに一本化する。** `examples/README` の概念節はガイドへの対応表に置き換える。二重に持つと必ず食い違う（実際に同一UUID重複の記述が食い違っていた）。ガイドに章が無い分野（HID / MIDI）だけは `examples/README` に残し、章を設けた時点で移す。
+4. **概念説明はガイドに一本化する。** `examples/README` の概念節はガイドへの対応表に置き換える。二重に持つと必ず食い違う（実際に同一UUID重複の記述が食い違っていた）。HID / BLE MIDIも6章・7章を設けて移したので、概念説明はガイドだけにある。
 5. **利用者が読む文書は日本語と英語を同期させる。** 対象は root `README`、`docs/README`、`docs/GUIDE_BLE_BASICS`、`docs/STATUS`、`docs/FEATURE_MATRIX`、`docs/RELEASE_CHECKLIST`、`examples/README` と各example README。設計・計画文書（`API_DESIGN` / `CORE_DESIGN` / `DECISIONS` / `DESIGN_DEBT` / `REQUIREMENTS` / `PLAN_*` / `HID_*_SPEC` / `TERMINOLOGY` / `UPSTREAM_*` / `TEST_PLAN`）は日本語のみとし、`README.md` にその旨を明記する。
 6. **exampleの `sketch.yaml` の fqbn は `esp32:esp32:esp32s3`（オプション指定なし）に統一する。** `USBMode=default` はUSB系ライブラリから持ち込まれた値で、BLEしか使わないexampleには無関係。オプションを付けないことでIDEでボードを選んだままの既定値と一致し、`tools/version_matrix.py` が持つ esp32s3 の fqbn とも一致する。テスト側の `sketch.yaml` も同じ値に揃えた（全77 Peerテストで検証済み）。
 

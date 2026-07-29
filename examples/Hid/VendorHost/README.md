@@ -1,6 +1,7 @@
 # VendorHost
 
 > 日本語版: [README.ja.md](README.ja.md)
+> Concepts: [BLE communication beginner guide](../../../docs/GUIDE_BLE_BASICS.md) — chapter 6, "HID"
 
 A BLE HID host (central) for a vendor-defined HID device: scans for the HID service `0x1812`, pairs, discovers, receives Vendor Input reports, and writes Vendor Output / Feature reports. Uses the same post-security `discover()` flow as every other HID report type.
 

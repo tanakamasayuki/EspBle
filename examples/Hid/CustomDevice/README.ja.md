@@ -1,6 +1,7 @@
 # CustomDevice
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../docs/GUIDE_BLE_BASICS.ja.md) 6章「HID編 — キーボードやマウスとして振る舞う」
 
 `ble.hidCustom()` で**任意のReport Descriptor**を持つBLE HID device（HID over GATT / HOGP）を作ります。raw HID Report Mapを自分で与えて各Reportを宣言するので任意のデバイス形状を表現でき、カスタムReportは同じHID Service（`0x1812`）に合成されて `hidKeyboard()`/`hidMouse()` とも共存できます。この例はvendor定義の「コントロールパネル」（vendor usage page `0xFF00`、Report ID 1）で、2byteの入力Report（符号付きダイヤル差分＋ボタンbit）と1byteの出力Report（HostがLED状態を書き込む）を持ちます。
 

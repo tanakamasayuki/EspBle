@@ -1,6 +1,7 @@
 # MidiHost
 
 > 日本語版: [README.ja.md](README.ja.md)
+> Concepts: [BLE communication beginner guide](../../../docs/GUIDE_BLE_BASICS.md) — chapter 7, "BLE MIDI"
 
 Connects to a BLE MIDI peripheral as a central: scan the BLE MIDI service → connect → discover → subscribe → print decoded MIDI. Send a note from Serial. Pairs with the [MidiDevice](../MidiDevice/) example or a commercial BLE MIDI instrument.
 

@@ -623,7 +623,7 @@ Service / Characteristic / Descriptor、UUIDとハンドルの使い分け、Ser
 
 | # | 項目 | 内容 |
 |---|---|---|
-| 7-1 | examples/README の概念節の集約 | 「BLEとは / GAP / GATT / Security」の4節を削除し、**どの章に何が書いてあるかの対応表**へ置き換えた（両言語）。ガイドと二重に持つと必ず食い違うため（実際に同一UUID重複の記述が食い違っていた）。**HIDとMIDIの節は残した**——ガイドにまだ章が無く、削ると情報が失われるため。ガイドに章を設けた時点で同じ形へ移す |
+| 7-1 | examples/README の概念節の集約 | 「BLEとは / GAP / GATT / Security」の4節を削除し、**どの章に何が書いてあるかの対応表**へ置き換えた（両言語）。ガイドと二重に持つと必ず食い違うため（実際に同一UUID重複の記述が食い違っていた）。HIDとMIDIの節は一旦残したが、**Phase 9で6章・7章を設けたので同じ対応表へ移した**。概念説明はガイドに一本化された |
 | 7-2 | 各example READMEからガイドへの導線 | `Gap` / `Security` / `Gatt` / `Info` 配下の全example READMEに、言語切り替え行の直下へ**該当章を名指しした1行**を挿入（156ファイル）。`Hid` / `Midi` / `CompileSmoke` は該当章が無いため付けていない |
 | 7-3 | リンク健全性の確認 | コードフェンス内を除いた相対リンクを機械的に検査。**壊れていたリンク1件を修正**（`Gap/DirectedAdvertise` が存在しない `Security/Bonding` を参照していた → `Security/JustWorksServer`）。現在は0件 |
 
@@ -640,6 +640,33 @@ Service / Characteristic / Descriptor、UUIDとハンドルの使い分け、Ser
 | 8-5 | [RELEASE_CHECKLIST.ja.md](RELEASE_CHECKLIST.ja.md) との整合確認 | **完了。** 英語版が増えた文書を確認項目へ反映し、「利用者向け文書の日英が同期している」という項目を日英双方のチェックリストへ追加 |
 
 ---
+
+### Phase 9 — ガイドのHID章とBLE MIDI章
+
+Phase 7で「ガイドに章が無いためexamples/READMEに残す」とした2分野を、ガイドへ移す。
+
+**完了（日英同時）。** 6章「HID編」と7章「BLE MIDI編」を追加し、[GUIDE_BLE_BASICS.ja.md](GUIDE_BLE_BASICS.ja.md) / [GUIDE_BLE_BASICS.md](GUIDE_BLE_BASICS.md) はともに923行、章・節番号が完全一致。
+
+```
+6. HID編 — キーボードやマウスとして振る舞う
+   6.1 HID over GATTとは（OS側に専用アプリが要らないという利点）
+   6.2 Report Descriptorという別の言語（専用クラスを持つ理由）
+   6.3 Device側 — profileを合成する（Report ID固定の理由、上限）
+   6.4 Host側 — 横断Discoveryと種別別イベント
+   6.5 キーボードの扱い（6KRO/NKRO、レイアウトとUnicode、LEDは逆方向、stuck key）
+   6.6 制限（暗号化必須、Boot Protocol、array input、parser上限、長さ不一致）
+   6.7 関連するexample
+7. BLE MIDI編 — 楽器としてつながる
+   7.1 BLE MIDIとは
+   7.2 タイムスタンプとrunning status（和音とアルペジオの区別）
+   7.3 DeviceとHost（USB姉妹ライブラリとのAPI一致）
+   7.4 制限（SysEx 320バイト、同時1件、millis()由来）
+   7.5 関連するexample
+```
+
+判断として記録しておくもの: **HIDとBLE MIDIが専用クラスを持つ理由を、4.8節の一般則（標準Serviceに専用クラスを置かない）の例外として両章の冒頭に書いた。** どちらも「間違えてもエラーにならず、認識されない／音がずれるだけ」という失敗の仕方をするため、自分で書くと原因が分からない——という点を理由の中心に置いた。
+
+あわせて `Hid` / `Midi` 配下の全example README（24ファイル）へ該当章への導線を追加した。導線の対象外は `CompileSmoke` のみ（対応する章が無い）。
 
 ## 未決事項
 

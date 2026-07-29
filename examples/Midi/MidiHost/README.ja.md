@@ -1,6 +1,7 @@
 # MidiHost
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../docs/GUIDE_BLE_BASICS.ja.md) 7章「BLE MIDI編 — 楽器としてつながる」
 
 CentralとしてBLE MIDI Peripheralへ接続します。BLE MIDI Serviceをscan → 接続 → Discovery → 購読 → デコード済みMIDIを表示。Serial入力でノートを送信します。[MidiDevice](../MidiDevice/) exampleや市販BLE MIDI楽器と接続できます。
 

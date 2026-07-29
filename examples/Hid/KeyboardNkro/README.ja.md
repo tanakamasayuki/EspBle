@@ -1,6 +1,7 @@
 # KeyboardNkro
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../docs/GUIDE_BLE_BASICS.ja.md) 6章「HID編 — キーボードやマウスとして振る舞う」
 
 固定6キーReportの代わりに29-byteのNKRO（Nキーロールオーバー）ビットマップInput Reportを使うBLE HID keyboard（HID over GATT / HOGP）です。任意個数のキーを同時に報告でき、HID Service `0x1812` をadvertiseします。キー入力はSerialコマンドで発生させます。
 

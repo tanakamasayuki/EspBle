@@ -1,6 +1,7 @@
 # KeyboardHost
 
 > 日本語版: [README.ja.md](README.ja.md)
+> Concepts: [BLE communication beginner guide](../../../docs/GUIDE_BLE_BASICS.md) — chapter 6, "HID"
 
 Connects to a BLE keyboard as a HID host (central): scans for the HID service `0x1812`, pairs, discovers the HID reports, and prints key events. The single `hidHost()` object also dispatches mouse, consumer-control, system-control, and gamepad reports, so it works with commercial BLE keyboards and with the [KeyboardDevice](../KeyboardDevice/), [KeyboardNkro](../KeyboardNkro/), or [CompositeKeyboardMouse](../CompositeKeyboardMouse/) example on a second board.
 

@@ -1,6 +1,7 @@
 # Mouse
 
 > 日本語版: [README.ja.md](README.ja.md)
+> Concepts: [BLE communication beginner guide](../../../docs/GUIDE_BLE_BASICS.md) — chapter 6, "HID"
 
 A BLE HID mouse over GATT (HOGP) exposing a standard relative-motion pointer with buttons. Advertises the HID service `0x1812`; motion and clicks are triggered by Serial commands.
 

@@ -1,6 +1,7 @@
 # KeyboardDevice
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../docs/GUIDE_BLE_BASICS.ja.md) 6章「HID編 — キーボードやマウスとして振る舞う」
 
 ボードをBLE HID keyboard（HID over GATT / HOGP、固定6キーロールオーバー）にし、HID Service `0x1812` をadvertiseします。PCやスマートフォンからPairingすると実際のキーボードとして入力でき、キー入力はSerialコマンドで発生させます。Host側からのLED Output Reportも受信します。HID Boot Protocolを有効化しているためBIOS等のboot hostにも対応します。
 

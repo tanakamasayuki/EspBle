@@ -1,6 +1,7 @@
 # VendorDevice
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../docs/GUIDE_BLE_BASICS.ja.md) 6章「HID編 — キーボードやマウスとして振る舞う」
 
 任意のInput / Output / Featureデータ用に、vendor定義のReport（固定Report ID 6）を公開するBLE HID device（HID over GATT / HOGP）です。HID Service `0x1812` をadvertiseし、InputはSerialコマンドで送信、Hostからの書込みは表示します。Report sizeは1〜64 bytesで構成でき、ここでは8を使います。
 

@@ -4,7 +4,7 @@
 
 ## 概念はガイドにまとまっています
 
-BLEの仕組み——Bluetooth Classicとの違い、GAP（探してつながる）、セキュリティ（ペアリングとボンディング）、GATT（データのやり取り）、UUID——は[BLE通信の入門ガイド](../docs/GUIDE_BLE_BASICS.ja.md)で説明しています。用語はすべてその中で定義しています。
+BLEの仕組み——Bluetooth Classicとの違い、GAP（探してつながる）、セキュリティ（ペアリングとボンディング）、GATT（データのやり取り）、UUID、HID、BLE MIDI——は[BLE通信の入門ガイド](../docs/GUIDE_BLE_BASICS.ja.md)で説明しています。用語はすべてその中で定義しています。
 
 | 知りたいこと | ガイドの章 | 対応するexample |
 |---|---|---|
@@ -13,26 +13,10 @@ BLEの仕組み——Bluetooth Classicとの違い、GAP（探してつながる
 | ペアリング・ボンディング・認証方式 | 3章 セキュリティ編 | [Security/](Security/) |
 | Service・Characteristic・Read/Write・Notify | 4章 GATT編 | [Gatt/](Gatt/) |
 | UUIDの標準形と独自形 | 5章 | — |
+| キーボード・マウスとして振る舞う／入力を受け取る | 6章 HID編 | [Hid/](Hid/) |
+| BLE MIDI楽器 | 7章 BLE MIDI編 | [Midi/](Midi/) |
 
 各exampleのREADMEはそれ単体で読めるように書いてあるので、ガイドを読まずに個別のexampleから入っても構いません。
-
-以下はガイドに章がまだ無い2分野の概要です。
-
-### HID — キーボードやマウス
-
-HID over GATT（HOGP）は、USBキーボード・マウスと同じHIDの仕組みをBLEに載せた標準プロファイルです。EspBleは次の両方を提供します。
-
-- **HID Device**: keyboard、mouse、consumer/system control、gamepadを1つのHID Serviceへ複合できます。
-- **HID Host**: 1つの`hidHost()`で全対応Reportを受信し、keyboardはUnicode/ASCIIへの19レイアウト変換にも対応します。
-
-### MIDI — BLE MIDI楽器
-
-BLE MIDIは、メッセージごとに13-bitミリ秒timestampを付けて単一のGATT characteristicでMIDIを流します。EspBleは`EspBleMidi.h`のpacket codecの上に両側を提供します。
-
-- **MIDI Device**（`EspBleMidiDevice`）: BLE MIDI Peripheralをadvertiseし、Note On/Off、Control Change等を送信します。
-- **MIDI Host**（`EspBleMidiHost`）: BLE MIDI Peripheralへ接続・購読し、デコード済みメッセージ（running statusやSystem Real-Timeも処理）を受信します。
-
-APIは[EspUsbDevice](https://github.com/tanakamasayuki/EspUsbDevice) / [EspUsbHost](https://github.com/tanakamasayuki/EspUsbHost)のMIDIクラスに揃えており、USBとBLEでコードを移植できます。
 
 ## ビルド方法
 

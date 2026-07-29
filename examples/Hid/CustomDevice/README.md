@@ -1,6 +1,7 @@
 # CustomDevice
 
 > 日本語版: [README.ja.md](README.ja.md)
+> Concepts: [BLE communication beginner guide](../../../docs/GUIDE_BLE_BASICS.md) — chapter 6, "HID"
 
 A BLE HID device over GATT (HOGP) built with an **arbitrary Report Descriptor** via `ble.hidCustom()`. You supply the raw HID Report Map and declare each report yourself, so any device shape is possible; custom reports compose into the same HID service (`0x1812`) and can coexist with `hidKeyboard()`/`hidMouse()`. This example is a vendor-defined "control panel" (vendor usage page `0xFF00`, Report ID 1): a 2-byte input report (a signed dial delta + a button bitfield) and a 1-byte output report (an LED state written by the host).
 

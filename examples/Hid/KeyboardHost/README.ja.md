@@ -1,6 +1,7 @@
 # KeyboardHost
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../docs/GUIDE_BLE_BASICS.ja.md) 6章「HID編 — キーボードやマウスとして振る舞う」
 
 HID Host（Central）としてBLE keyboardへ接続します。HID Service `0x1812` をscanし、Pairing後にHID ReportをDiscoveryしてキーイベントを表示します。単一の `hidHost()` オブジェクトがmouse / consumer control / system control / gamepad Reportも配送するため、市販のBLE keyboardでも、2台目のボードで動かす[KeyboardDevice](../KeyboardDevice/)・[KeyboardNkro](../KeyboardNkro/)・[CompositeKeyboardMouse](../CompositeKeyboardMouse/) exampleでも使えます。
 

@@ -1,6 +1,7 @@
 # CustomClient
 
 > 日本語版: [README.ja.md](README.ja.md)
+> Concepts: [BLE communication beginner guide](../../../docs/GUIDE_BLE_BASICS.md) — chapter 6, "HID"
 
 Reads a Custom HID device's arbitrary Report Descriptor and drives its reports using the **generic GATT client** (central). Pairs with the [CustomDevice](../CustomDevice/) example. A HID device exposes several Report characteristics that all share UUID `0x2A4D`, so this example discovers the HID service (`0x1812`), resolves each report to its distinct **attribute handle**, subscribes to the input report by handle, and writes the output report by handle.
 

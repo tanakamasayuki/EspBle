@@ -32,7 +32,7 @@ BLEを理解する最初の鍵は、**GAPとGATTという2つの層がまった�
 | 扱うもの | アドバタイズ、スキャン、接続、アドレス | Service、Characteristic、値の読み書き |
 | いつ使うか | 接続が成立するまで | 接続が成立した後 |
 
-一言でいえば、**探して繋ぐまでがGAP、繋がった後の会話がGATT**です。この文書は2章でGAP、4章でGATTを扱い、その間の3章でリンクの保護（セキュリティ）を扱います。
+一言でいえば、**探して繋ぐまでがGAP、繋がった後の会話がGATT**です。この文書は2章でGAP、4章でGATTを扱い、その間の3章でリンクの保護（セキュリティ）を扱います。5章はUUID、6章と7章はGATTの上に建つ標準プロファイル（HIDとBLE MIDI）です。
 
 ### 1.2 4つの役割 — 2つの独立した軸
 
@@ -773,3 +773,151 @@ Base UUID:  0000____-0000-1000-8000-00805F9B34FB
 3. **アドバタイズに出ていない＝そのServiceが無い、ではない。** 31バイトの制限のため、Service UUIDを全部載せられるとは限りません。確実に知りたいときは接続後のDiscoveryで確認します。
 4. **Service UUIDを一切載せない機器もある。** iBeaconのようにManufacturer Dataだけの機器は、UUIDでは絞り込めません。アドレスやManufacturer Dataの中身で判定します。
 5. **短縮形が意味を持つのはSIG登録済みの値だけ。** 未登録の16ビット値に決まった意味はありません。
+
+---
+
+## 6. HID編 — キーボードやマウスとして振る舞う
+
+BLEでキーボードやマウスを作る、あるいは市販のキーボードから入力を受け取る場合の話です。4章のGATTの上に成り立っているので、先に4章を読んでください。
+
+### 6.1 HID over GATTとは
+
+**HID**（Human Interface Device）は、キーボード・マウス・ゲームパッドといった入力機器の仕組みで、もともとUSBのものです。それをBLEに載せたのが**HOGP**（HID over GATT Profile）で、単に「BLE HID」とも呼ばれます。
+
+利点は、**OS側に専用のアプリが要らない**ことです。HIDの規約に従って作れば、PCもスマートフォンも「キーボードが繋がった」と認識して、そのまま文字が入力できます。独自Serviceで同じことをしようとすると、受け手のアプリを自分で書く必要があります。
+
+構造としては、4章のGATTそのままです。HID Service（`0x1812`）の中に、入力を送るCharacteristic（Input Report、`0x2A4D`）が並び、Hostがそれを購読します。**キー入力はNotificationとして飛びます。**
+
+### 6.2 Report Descriptorという別の言語
+
+HIDが他の標準Serviceと違うのは、**「自分がどんな入力機器か」を機械可読な形で申告する**点です。それを書くのが**Report Descriptor**（BLEでは**Report Map**、`0x2A4B`）で、これはバイト列で表現された小さな記述言語です。
+
+```
+「これはキーボードです」
+「1バイト目の8ビットはmodifier（Ctrl・Shiftなど）です」
+「続く6バイトは同時に押されているキーの番号です」
+```
+
+といった内容を、専用の書式で並べます。Host側はこれを読んで初めて、届いたバイト列の意味を解釈できます。**バイト並びの決まりが値の側にあるのではなく、機器が自分で申告する**——ここがHIDの特徴です。
+
+だからEspBleはHIDに専用クラスを持っています（4.8節）。他の標準Serviceは「UUIDとバイト並びの決まり」に従うだけなので汎用APIで足りますが、HIDはReport Descriptorの組み立てという別種の作業が必要で、しかも間違えても**エラーにならず「認識されない」だけ**なので、自分で書くと原因が分かりません。
+
+### 6.3 Device側 — profileを合成する
+
+EspBleは6種類のprofileを持ち、**必要なものだけを `begin()` の前に構成**します。
+
+```cpp
+ble.hidKeyboard().configure();
+ble.hidMouse().configure();
+ble.begin(config);
+```
+
+これで**1つのHID Serviceの中にキーボードとマウスが同居**します。OSからは「キーボードとマウスを兼ねた1台の機器」として見えます。
+
+| 入口 | Report ID | 中身 |
+|---|---:|---|
+| `hidKeyboard()` | 1 | 6KRO 8バイト / NKRO 29バイト |
+| `hidMouse()` | 2 | ボタン・X・Y・ホイール |
+| `hidGamepad()` | 3 | 6軸・ハット・32ボタン |
+| `hidConsumerControl()` | 4 | メディアキー（16ビットusage） |
+| `hidSystemControl()` | 5 | 電源など（8ビットusage） |
+| `hidVendor()` | 6 | 独自の1〜64バイト |
+
+**Report IDが固定なのは意図的です。** 複数のprofileが1つのHID Serviceに同居する以上、届いたNotificationがどのprofileのものかを区別する番号が必要で、それを構成順で変えると、profileを1つ足しただけで他の番号が動いてしまいます。
+
+任意のReport Descriptorを自分で書く場合は `ble.hidCustom()` を使います。内蔵profileと同じHID Serviceへ合成できますが、**Report IDは予約分（1〜6）を避け**、1台あたり最大4つまでです。
+
+Battery ServiceとDevice Information Serviceは、HIDを構成すると自動的に登録されます。OSが電池残高と製品名を期待するためです。
+
+### 6.4 Host側 — 横断Discoveryと種別別イベント
+
+Host（Central）側は `ble.hidHost()` ひとつで扱います。
+
+```cpp
+ble.hidHost().onKeyboard([](const EspBleHidKeyboardEvent &event) { /* ... */ });
+ble.hidHost().discover(connectionId);
+```
+
+`discover()` が相手のHID ServiceのReport Mapを読み、**対応する全Input Reportを購読します**。相手が複合機器なら、キーボードもマウスも一度に購読されます。以降は種別ごとのコールバック（`onKeyboard` / `onMouse` / `onConsumerControl` / `onSystemControl` / `onGamepad` / `onVendorInput`）へ振り分けて届きます。
+
+**`discover()` は接続ごとに明示的に呼ぶ必要があります。** セキュリティを使う場合は `onSecurityChanged` の成功後です。暗号化前にHIDのCharacteristicへ触るとATTのエラーになるためです（6.6節）。再接続のたびに呼び直すのが面倒なら `setAutoRediscover(true)` で自動化できます（既定off）。
+
+各種別には主コールバック1つに加えて `add*Listener()` で最大4件を併設できます。**ライブラリの上に自分の層を作りつつ、アプリからも同じ入力を観測する**という構成が要るためです。
+
+### 6.5 キーボードの扱い
+
+キーボードだけは事情が多いので、別に挙げます。
+
+**6KROとNKRO** — 標準の8バイトReportは、同時に押せるキーが**6個まで**です（modifierは別枠）。それを超えると、どのキーが押されているか表現できません。**NKRO**（N-Key Rollover）は押下状態をビットマップで持つ形式で、全キー同時押しを表現できます。`configure()` の前に `enableNkro()` を呼ぶと切り替わります。
+
+NKROのReportは29バイトになるため、**MTUを32以上にする必要があります**。`preferredMtu` が足りないまま構成すると `begin()` が `InvalidArgument` で拒否します。黙って送信が失敗するより明示的なエラーのほうがよいからです。
+
+**レイアウトとUnicode** — HIDが運ぶのは文字ではなく**キーの物理的な位置番号**（usage）です。同じ番号がJIS配列とUS配列で違う文字になります。EspBleは19レイアウトの変換表を持ち、Device側は `write("あ")` のような文字からusageを逆引きし、Host側は届いたusageを文字へ変換します。**変換表を選び間違えると、記号だけが違う文字になります。**
+
+**LEDは逆方向** — Caps LockなどのLEDは、Host側からDeviceへ送られます（Output Report）。キー入力と逆向きです。Device側は `onOutputReport()` で受け取ります。
+
+**切断時のstuck key** — キーを押したまま接続が切れると、Host側には「押されたまま」の状態が残ります。EspBleのHost側は切断時に**全キーを離した状態を合成して配送**するので、この問題は起きません。
+
+### 6.6 制限
+
+- **暗号化が必須です。** セキュリティを有効にすると、HIDのattributeにはHOGP Security Mode 1 Level 2（暗号化必須）が適用され、未暗号化のリンクへ入力を送りません。仕様がそう定めているためで、キー入力が平文で飛ぶことを避けるためです
+- **Boot Protocolは既定offです。** BIOSのような限られたHostのための簡易モード（`0x2A4E` ほか）で、`EspBleHidKeyboardConfig::bootProtocol` でopt-inします。多くのHostはReport Protocol Modeで足り、Characteristicが増えると全Hostのdiscoveryが重くなるためです。現状キーボードのみで、Mouse Boot Report（`0x2A33`）は未対応です
+- **Gamepadのarray inputは意味解釈しません。** Report Mapのvariable inputは分解して届けますが、ベンダー固有のarray表現は解釈しません。raw bytesは常に参照できるので、必要なら自分で解釈してください
+- **Report Mapのparserには上限があります。** short item、最大8 report、解析fieldは最大64、Hostイベントへ配送するのは先頭40 fieldです
+- **長さが合わないNotificationは配送しません。** Report Mapから算出した長さと違うものは捨て、`invalidInputReportCount()` に加算します。壊れたデータを解釈するより数えるほうが安全だからです
+
+### 6.7 関連するexample
+
+| example | 内容 |
+|---|---|
+| [Hid/KeyboardDevice](../examples/Hid/KeyboardDevice/) | キーボードとして振る舞う最小の例 |
+| [Hid/KeyboardNkro](../examples/Hid/KeyboardNkro/) | NKROの有効化とMTUの引き上げ |
+| [Hid/Mouse](../examples/Hid/Mouse/) / [ConsumerControl](../examples/Hid/ConsumerControl/) | マウスとメディアキー |
+| [Hid/CompositeKeyboardMouse](../examples/Hid/CompositeKeyboardMouse/) | 1つのHID Serviceへの複合 |
+| [Hid/KeyboardHost](../examples/Hid/KeyboardHost/) | Host側。横断Discoveryと種別別イベント |
+| [Hid/CustomDevice](../examples/Hid/CustomDevice/) / [CustomClient](../examples/Hid/CustomClient/) | 任意のReport Descriptorを自分で書く |
+| [Hid/VendorDevice](../examples/Hid/VendorDevice/) / [VendorHost](../examples/Hid/VendorHost/) | 独自バイト列のInput / Output / Feature |
+
+---
+
+## 7. BLE MIDI編 — 楽器としてつながる
+
+### 7.1 BLE MIDIとは
+
+MIDIは電子楽器の標準的な通信規約で、「この音を鳴らす」「この音を止める」といった短いメッセージを送ります。**BLE MIDI**はそれをBLEに載せたもので、HIDと同じく**OS側に専用アプリが要りません**。iOSやmacOSは接続するだけでMIDI機器として認識します。
+
+構造は単純で、**1つのCharacteristicにすべてのMIDIメッセージを流します**。GATTとしては「Notifyで送り、Writeで受ける」だけです。複雑さは、その中に詰めるバイト列の側にあります。
+
+### 7.2 タイムスタンプとrunning status
+
+BLE MIDIが素のMIDIと違う点が2つあります。
+
+**タイムスタンプ** — BLEは一定間隔でしか通信できないため、複数のメッセージが1回の送信にまとめて載ります。そのままでは**同時に鳴ったのか、順に鳴ったのかが分かりません**。そこでBLE MIDIは各メッセージに**13ビットのミリ秒タイムスタンプ**を付けます。受け手はこれを見て、元の時間関係を復元します。和音とアルペジオを区別できるのはこの仕組みです。
+
+**running status** — 同じ種類のメッセージが続くとき、種類を表すバイトを省略できるMIDIの圧縮規則です。31バイトしか入らないBLEのパケットでは効果が大きい代わりに、**省略された種類を受け手が覚えていないと解釈できません**。
+
+どちらも「間違えても例外は出ず、音がずれるか鳴らないだけ」の種類の難しさです。だからEspBleはHIDと並んでBLE MIDIにも専用クラスを持っています（4.8節）。
+
+### 7.3 DeviceとHost
+
+両側が揃っています。
+
+- **`EspBleMidiDevice`** — 楽器側（Peripheral）。`noteOn()` / `noteOff()` / `controlChange()` などで送ります
+- **`EspBleMidiHost`** — 受け手側（Central）。接続・購読して、デコード済みのメッセージを `onMidiMessage()` で受け取ります
+
+APIは姉妹ライブラリのUSB版（[EspUsbDevice](https://github.com/tanakamasayuki/EspUsbDevice) / [EspUsbHost](https://github.com/tanakamasayuki/EspUsbHost)）に合わせてあります。**USB MIDIとBLE MIDIでコードを移植できる**ようにするためです。
+
+これらのhelperは、必要な汎用GATTイベントを `add*Listener()` の追加リスナとして取ります（4.8節）。**MIDI helperを使いながら、同じイベントに自分のコールバックを併設できます。**
+
+### 7.4 制限
+
+- **SysExは1メッセージ320バイトまでです。** 送受信ともに複数のBLEパケットへ分割・再構成しますが、その上限があります
+- **同時に進行できるSysEx送信は1件です。** 分割中の状態を1つしか持たないためです
+- **タイムスタンプは `millis()` 由来です。** BLE MIDIの13ビットミリ秒クロックに合わせて生成します
+
+### 7.5 関連するexample
+
+| example | 内容 |
+|---|---|
+| [Midi/MidiDevice](../examples/Midi/MidiDevice/) | 楽器として音を送る |
+| [Midi/MidiHost](../examples/Midi/MidiHost/) | BLE MIDI機器へ接続してメッセージを受ける |

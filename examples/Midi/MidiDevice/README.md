@@ -1,6 +1,7 @@
 # MidiDevice
 
 > 日本語版: [README.ja.md](README.ja.md)
+> Concepts: [BLE communication beginner guide](../../../docs/GUIDE_BLE_BASICS.md) — chapter 7, "BLE MIDI"
 
 Advertises a BLE MIDI peripheral using the standard BLE MIDI service. Send Note On/Off from Serial and print any MIDI a connected host sends back. Pairs with the [MidiHost](../MidiHost/) example or any BLE MIDI host (phone/tablet DAW).
 

@@ -1,6 +1,7 @@
 # KeyboardNkro
 
 > 日本語版: [README.ja.md](README.ja.md)
+> Concepts: [BLE communication beginner guide](../../../docs/GUIDE_BLE_BASICS.md) — chapter 6, "HID"
 
 A BLE HID keyboard over GATT (HOGP) that uses the 29-byte NKRO (N-key rollover) bitmap input report instead of the fixed 6-key report, allowing any number of keys to be reported simultaneously. Advertises the HID service `0x1812`; keystrokes are triggered by Serial commands.
 

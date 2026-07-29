@@ -1,6 +1,7 @@
 # MidiDevice
 
 > English: [README.md](README.md)
+> 概念の説明: [BLE通信の入門ガイド](../../../docs/GUIDE_BLE_BASICS.ja.md) 7章「BLE MIDI編 — 楽器としてつながる」
 
 標準のBLE MIDI Serviceを使ってBLE MIDI PeripheralをAdvertiseします。Serial入力でNote On/Offを送信し、接続したHostから届くMIDIを表示します。[MidiHost](../MidiHost/) exampleや一般的なBLE MIDI Host（スマホ/タブレットのDAW等）と接続できます。
 

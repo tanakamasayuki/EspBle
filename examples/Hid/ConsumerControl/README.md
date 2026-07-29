@@ -1,6 +1,7 @@
 # ConsumerControl
 
 > 日本語版: [README.ja.md](README.ja.md)
+> Concepts: [BLE communication beginner guide](../../../docs/GUIDE_BLE_BASICS.md) — chapter 6, "HID"
 
 A BLE HID Consumer Control device over GATT (HOGP) — media keys for volume and playback. Advertises the HID service `0x1812`; keys are triggered by Serial commands.
 
