@@ -1,7 +1,31 @@
 #include "EspBle.h"
 
-#include <BLEDevice.h>
+#include <esp_bt.h>
+
+// The Arduino core releases the BLE controller's memory (~36 KB) before setup()
+// runs unless a BLE library announces itself; the constructor in this header is
+// how a library does that. Without it esp_bt_controller_init() crashes inside
+// its own cleanup path, which is what happens the moment nothing links the
+// bundled BLE wrapper any more.
+#if __has_include("esp32-hal-alloc-ble-mem.h")
+#include "esp32-hal-alloc-ble-mem.h"
+#else
+// Older cores decide with this weak hook instead.
+extern "C" bool bleInUse(void)
+{
+  return true;
+}
+#endif
+
 #include <host/ble_gap.h>
+#include <host/ble_hs.h>
+#include <host/ble_hs_pvcy.h>
+#include <host/util/util.h>
+#include <nimble/nimble_port.h>
+#include <nimble/nimble_port_freertos.h>
+// The NVS-backed bond store. Its initialiser has no public header in the
+// ESP-IDF build, so it is declared the way the IDF's own examples do.
+extern "C" void ble_store_config_init(void);
 #include <host/ble_sm.h>
 #include <host/ble_uuid.h>
 #include <host/ble_hs_id.h>
@@ -39,6 +63,58 @@ constexpr size_t BondCapacity = CONFIG_BT_NIMBLE_MAX_BONDS;
 #else
 constexpr size_t BondCapacity = 16;
 #endif
+
+// NimBLE host bring-up. The host runs on its own FreeRTOS task and reports
+// when the controller is ready; nothing may touch GAP before that.
+volatile bool hostSynced = false;
+
+void onHostSync()
+{
+  // Make sure this device has an identity address (public if the chip has one,
+  // random static otherwise): every GAP procedure needs one.
+  ble_hs_util_ensure_addr(0);
+  hostSynced = true;
+}
+
+void onHostReset(int)
+{
+  // The controller restarted; sync_cb runs again once it is back.
+  hostSynced = false;
+}
+
+void hostTask(void *)
+{
+  nimble_port_run(); // returns only once nimble_port_stop() has been called
+  nimble_port_freertos_deinit();
+}
+
+// Returns false if the controller never reports in.
+bool startNimbleHost()
+{
+  if (hostSynced) return true;
+  if (nimble_port_init() != ESP_OK) return false;
+  ble_hs_cfg.reset_cb = onHostReset;
+  ble_hs_cfg.sync_cb = onHostSync;
+  // Bonds live in NVS, so they survive a reboot; this is the store that does it.
+  ble_hs_cfg.store_status_cb = ble_store_util_status_rr;
+  ble_store_config_init();
+  nimble_port_freertos_init(hostTask);
+
+  const uint32_t deadline = millis() + 5000;
+  while (!hostSynced)
+  {
+    if (static_cast<int32_t>(millis() - deadline) >= 0) return false;
+    delay(1);
+  }
+  return true;
+}
+
+void stopNimbleHost()
+{
+  nimble_port_stop();
+  nimble_port_deinit();
+  hostSynced = false;
+}
 
 // AD types (Core Specification Supplement, Part A). The builder writes the
 // "complete" list variants; the parser also accepts the "incomplete" ones,
@@ -8601,11 +8677,6 @@ bool EspBle::begin(const EspBleConfig &config)
     clearError();
     return true;
   }
-  if (BLEDevice::getInitialized())
-  {
-    setError(EspBleError::InvalidState, "Arduino BLE stack was initialized outside this EspBle instance");
-    return false;
-  }
   if (config.preferredMtu < 23 || config.preferredMtu > 517)
   {
     setError(EspBleError::InvalidArgument, "preferred MTU must be between 23 and 517");
@@ -8659,17 +8730,18 @@ bool EspBle::begin(const EspBleConfig &config)
   }
 
   const char *deviceName = config.deviceName == nullptr ? "" : config.deviceName;
-  if (!BLEDevice::init(deviceName))
+  if (!startNimbleHost())
   {
-    setError(EspBleError::BackendFailure, "BLEDevice::init failed");
+    setError(EspBleError::BackendFailure, "the BLE controller did not start");
     return false;
   }
+  ble_svc_gap_device_name_set(deviceName);
   // Recorded here because starting the GATT server restores the GAP device
   // name, and that can happen while begin() is still running (HID realize).
   activeDeviceName_ = deviceName;
-  if (BLEDevice::setMTU(config.preferredMtu) != ESP_OK)
+  if (ble_att_set_preferred_mtu(config.preferredMtu) != 0)
   {
-    BLEDevice::deinit(false);
+    stopNimbleHost();
     setError(EspBleError::BackendFailure, "failed to set preferred MTU");
     return false;
   }
@@ -8682,19 +8754,30 @@ bool EspBle::begin(const EspBleConfig &config)
   {
     ble_addr_t randomAddress{};
     if (ble_hs_id_gen_rnd(0, &randomAddress) != 0 ||
-        !BLEDevice::setOwnAddr(randomAddress.val))
+        ble_hs_id_set_rnd(randomAddress.val) != 0)
     {
-      BLEDevice::deinit(false);
+      stopNimbleHost();
       setError(EspBleError::BackendFailure, "failed to set a random device address");
       return false;
     }
-    const uint8_t ownType =
-      config.ownAddressType == EspBleOwnAddressType::RandomStatic
-        ? BLE_OWN_ADDR_RANDOM
-        : BLE_OWN_ADDR_RPA_RANDOM_DEFAULT;
-    if (!BLEDevice::setOwnAddrType(ownType))
+    const bool resolvable = config.ownAddressType == EspBleOwnAddressType::ResolvablePrivate;
+#if defined(CONFIG_IDF_TARGET_ESP32)
+    // The original ESP32 controller cannot generate an RPA itself, so the host
+    // does it and every GAP call still passes the random static type.
+    if (ble_hs_pvcy_rpa_config(resolvable ? 1 : 0) != 0)
     {
-      BLEDevice::deinit(false);
+      stopNimbleHost();
+      setError(EspBleError::BackendFailure, "failed to configure address privacy");
+      return false;
+    }
+    const uint8_t ownType = BLE_OWN_ADDR_RANDOM;
+#else
+    const uint8_t ownType =
+      resolvable ? BLE_OWN_ADDR_RPA_RANDOM_DEFAULT : BLE_OWN_ADDR_RANDOM;
+#endif
+    if (ble_hs_id_copy_addr(ownType & 1, nullptr, nullptr) != 0)
+    {
+      stopNimbleHost();
       setError(EspBleError::BackendFailure, "failed to set the own address type");
       return false;
     }
@@ -8705,7 +8788,7 @@ bool EspBle::begin(const EspBleConfig &config)
     impl_ = new EspBleImpl(this);
     if (impl_ == nullptr)
     {
-      BLEDevice::deinit(false);
+      stopNimbleHost();
       setError(EspBleError::ResourceExhausted, "failed to allocate connection state");
       return false;
     }
@@ -8731,7 +8814,7 @@ bool EspBle::begin(const EspBleConfig &config)
   if (!gattServer_.realize())
   {
     clearSecurityConfiguration();
-    BLEDevice::deinit(false);
+    stopNimbleHost();
     gattServer_.resetBackend();
     delete impl_;
     impl_ = nullptr;
@@ -8741,7 +8824,7 @@ bool EspBle::begin(const EspBleConfig &config)
   {
     clearSecurityConfiguration();
     hidKeyboardDevice_.resetBackend();
-    BLEDevice::deinit(false);
+    stopNimbleHost();
     gattServer_.resetBackend();
     delete impl_;
     impl_ = nullptr;
@@ -8886,7 +8969,7 @@ void EspBle::end()
     ble_gap_event_listener_unregister(&impl_->gapEventListener);
     impl_->gapEventListenerRegistered = false;
   }
-  BLEDevice::deinit(false);
+  stopNimbleHost();
   initialized_ = false;
   gattServer_.resetBackend();
   // deinit() drops the backend accept list, so drop the mirror with it.
@@ -9424,22 +9507,16 @@ bool EspBle::requestSecurity(EspBleConnectionId connectionId)
 
 bool EspBle::syncAcceptList()
 {
-  // The bundled wrapper's BLEDevice::whiteListAdd()/whiteListRemove() cannot be
-  // used: BLEDevice::m_whiteList is declared but never defined in the NimBLE
-  // build (a link error), and the wrapper reinterpret_casts BLEAddress to
-  // ble_addr_t even though their field order differs. The mirror kept here is
-  // authoritative instead, and ble_gap_wl_set() overwrites the controller's
-  // list with it in one call.
+  // The mirror kept here is authoritative; ble_gap_wl_set() overwrites the
+  // controller's list with it in one call.
   ble_addr_t entries[MaxAcceptListEntries];
   for (size_t index = 0; index < acceptListCount_; ++index)
   {
-    BLEAddress address(
-      acceptList_[index].peerAddress,
-      static_cast<uint8_t>(acceptList_[index].peerAddressType));
     entries[index].type = static_cast<uint8_t>(acceptList_[index].peerAddressType);
-    // In the NimBLE build BLEAddress stores the address in NimBLE's inverse
-    // byte order, which is what ble_addr_t::val expects.
-    memcpy(entries[index].val, address.getNative(), sizeof(entries[index].val));
+    if (!parseAddress(acceptList_[index].peerAddress.c_str(), entries[index].val))
+    {
+      return false;
+    }
   }
   return ble_gap_wl_set(entries, static_cast<uint8_t>(acceptListCount_)) == 0;
 }
@@ -9450,10 +9527,15 @@ String EspBle::localAddress() const
   {
     return String();
   }
-  // Only the address bytes are taken: the backend leaves the type field of the
-  // structure it fills uninitialised, so localAddressType() reports the type
-  // that was requested at begin() instead.
-  return BLEDevice::getAddress().toString();
+  // Only the address bytes are asked for; localAddressType() reports the type
+  // that was requested at begin().
+  uint8_t address[6] = {};
+  if (impl_ == nullptr ||
+      ble_hs_id_copy_addr(impl_->ownAddressType & 1, address, nullptr) != 0)
+  {
+    return String();
+  }
+  return formatAddress(address);
 }
 
 EspBleAddressType EspBle::localAddressType() const
@@ -9494,7 +9576,8 @@ bool EspBle::setTxPower(int8_t dBm)
       nearest = &candidate;
     }
   }
-  BLEDevice::setPower(nearest->level, ESP_BLE_PWR_TYPE_DEFAULT);
+  esp_ble_tx_power_set(
+    ESP_BLE_PWR_TYPE_DEFAULT, static_cast<esp_power_level_t>(nearest->level));
   clearError();
   return true;
 }
@@ -9505,9 +9588,12 @@ int8_t EspBle::txPower() const
   {
     return INT8_MIN;
   }
-  const int level = BLEDevice::getPower(ESP_BLE_PWR_TYPE_DEFAULT);
-  // The backend answers -128 when the level is not one it recognises.
-  return level == -128 ? INT8_MIN : static_cast<int8_t>(level);
+  const esp_power_level_t level = esp_ble_tx_power_get(ESP_BLE_PWR_TYPE_DEFAULT);
+  for (const TxPowerLevel &candidate : TxPowerLevels)
+  {
+    if (candidate.level == level) return candidate.dBm;
+  }
+  return INT8_MIN;
 }
 
 bool EspBle::addToAcceptList(const char *address, EspBleAddressType addressType)
@@ -9657,9 +9743,8 @@ bool EspBle::bond(size_t index, EspBleBond &bond) const
   {
     return false;
   }
-  const BLEAddress address(peers[index]);
-  bond.peerAddress = address.toString();
-  bond.peerAddressType = static_cast<EspBleAddressType>(address.getType());
+  bond.peerAddress = formatAddress(peers[index].val);
+  bond.peerAddressType = static_cast<EspBleAddressType>(peers[index].type);
   return true;
 }
 
@@ -9685,9 +9770,8 @@ bool EspBle::deleteBond(const EspBleBond &bond)
   }
   for (int index = 0; index < count; ++index)
   {
-    const BLEAddress address(peers[index]);
-    if (address.getType() == static_cast<uint8_t>(bond.peerAddressType) &&
-        address.toString().equalsIgnoreCase(bond.peerAddress))
+    if (peers[index].type == static_cast<uint8_t>(bond.peerAddressType) &&
+        formatAddress(peers[index].val).equalsIgnoreCase(bond.peerAddress))
     {
       if (ble_store_util_delete_peer(&peers[index]) != 0)
       {
