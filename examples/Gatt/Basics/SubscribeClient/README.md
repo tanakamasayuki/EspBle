@@ -22,6 +22,12 @@ Connects to the [Gatt/NotifyServer](../NotifyServer/) example, subscribes to its
 - `ble.onNotification(callback)` — `EspBleGattNotification` with `connectionId`, UUIDs, the copied payload, and an indication flag
 - `ble.unsubscribe(connectionId, serviceUuid, characteristicUuid)` — clears the CCCD
 
+## Notes
+
+- **Subscribing is a CCCD write.** `subscribe()` writes a bit to the CCCD attached to the peer's characteristic, and the completion arrives at `onSubscribed()`. It involves radio traffic, so a `true` return from `subscribe()` does not mean the subscription is active yet.
+- **`onNotification()` receives both notifications and indications.** Tell them apart with `notification.indication` (see [IndicateClient](../IndicateClient/)).
+- **Subscriptions are restored automatically after a reconnect.** `EspBleConfig::persistentSubscriptions` is on by default, so `onSubscribed()` fires without calling `subscribe()` again (see [AutoReconnectClient](../AutoReconnectClient/)). Turn it off to manage subscriptions yourself.
+
 ## Expected Serial output
 
 ```

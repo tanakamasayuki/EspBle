@@ -16,6 +16,16 @@ A GATT server that notifies a counter value once per second, but only while at l
 - Sends the incrementing counter as a string every second
 - Reports asynchronous send failures via `onSent()`
 
+## Nothing is sent without a subscriber
+
+Notifications are the server's way of pushing values when it likes, but **the client decides whether that is allowed**. A notifiable characteristic automatically gets a **CCCD** (Client Characteristic Configuration Descriptor), and a subscription begins when the client writes to it.
+
+The CCCD is therefore a **per-connection switch**. With three peers connected there are three independent states, and it is perfectly normal for only one of them to be subscribed. `notify()` goes to the subscribed connections only; the others receive nothing.
+
+That is why this example checks the subscriber count before sending. Producing a value every second and throwing it away is wasted work, so `onSubscriptionChanged()` tracks the state. **The send itself does not fail** — there is simply nowhere for it to go.
+
+Subscriptions are dropped on disconnect. Depending on the client's configuration they may be restored on reconnect ([AutoReconnectClient](../AutoReconnectClient/)); from the server's side that arrives as an ordinary subscription, a CCCD write after the new connection.
+
 ## Key APIs
 
 - `EspBleGattCharacteristicConfig::notifiable` — adds the Notify property and CCCD

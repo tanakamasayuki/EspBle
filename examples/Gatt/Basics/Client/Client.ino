@@ -15,6 +15,9 @@
 static constexpr const char *SERVICE_UUID = "10da4dd0-8eaa-4c69-9003-676174747277";
 static constexpr const char *CHARACTERISTIC_UUID = "10da4dd1-8eaa-4c69-9003-676174747277";
 static constexpr const char *DESCRIPTOR_UUID = "10da4dd2-8eaa-4c69-9003-676174747277";
+// en: The server produces this one's value when it is read (its onRead callback).
+// ja: Server側が読まれた瞬間に値を作るCharacteristic（onRead callback）。
+static constexpr const char *LIVE_UUID = "10da4dd3-8eaa-4c69-9003-676174747277";
 
 EspBle ble;
 bool connectionRequested = false;
@@ -54,13 +57,17 @@ void setup()
   });
   // en: Discovery done -> request a read.
   // ja: Discovery完了 → Readを要求。
+  // en: One callback serves every characteristic, so branch on which one it is.
+  // ja: callbackは全Characteristic共通なので、どれの結果かで分岐する。
   ble.onCharacteristicDiscovered([](const EspBleGattResult &result) {
     if (!result.success)
     {
       Serial.printf("Discovery failed: %s\n", result.detail.c_str());
       return;
     }
-    ble.readCharacteristic(result.connectionId, SERVICE_UUID, CHARACTERISTIC_UUID);
+    const bool live = result.characteristicUuid.equalsIgnoreCase(LIVE_UUID);
+    ble.readCharacteristic(
+      result.connectionId, SERVICE_UUID, live ? LIVE_UUID : CHARACTERISTIC_UUID);
   });
   // en: Read done -> print the value and request a write (5th arg true = write with response).
   // ja: Read完了 → 値を表示し、Writeを要求（第5引数true = Write with Response）。
@@ -68,6 +75,13 @@ void setup()
     if (!result.success)
     {
       Serial.printf("Read failed: %s\n", result.detail.c_str());
+      return;
+    }
+    if (result.characteristicUuid.equalsIgnoreCase(LIVE_UUID))
+    {
+      // en: Not a stored value: the server built it while answering this read.
+      // ja: 保持された値ではなく、この読み取りに答える際にServerが作った値。
+      Serial.printf("Live: %s\n", result.value.c_str());
       return;
     }
     Serial.printf("Read: %s\n", result.value.c_str());
@@ -111,6 +125,10 @@ void setup()
   });
   ble.onDescriptorWritten([](const EspBleGattResult &result) {
     Serial.println(result.success ? "Descriptor write complete" : "Descriptor write failed");
+    if (!result.success) return;
+    // en: Last step: read the characteristic whose value the server makes on demand.
+    // ja: 最後に、Serverが要求時に値を作るCharacteristicを読む。
+    ble.discoverCharacteristic(result.connectionId, SERVICE_UUID, LIVE_UUID);
   });
 
   // en: Connect once the target service UUID is found.

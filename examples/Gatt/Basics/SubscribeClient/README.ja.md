@@ -22,6 +22,12 @@
 - `ble.onNotification(callback)` — `connectionId`、UUID、copy済みpayload、indicationフラグを持つ`EspBleGattNotification`
 - `ble.unsubscribe(connectionId, serviceUuid, characteristicUuid)` — CCCDを解除します
 
+## 注意
+
+- **購読はCCCDへの書き込みです。** `subscribe()` は相手のCharacteristicに付いているCCCDへビットを書き、その完了が `onSubscribed()` に届きます。無線のやり取りを伴うので、`subscribe()` が `true` を返した時点ではまだ購読していません。
+- **`onNotification()` はNotificationとIndicationの両方を受け取ります。** `notification.indication` で区別してください（[IndicateClient](../IndicateClient/)）。
+- **切断後の再接続では、購読が自動で復元されます。** `EspBleConfig::persistentSubscriptions` が既定でonのため、`subscribe()` を呼び直さなくても `onSubscribed()` が発火します（[AutoReconnectClient](../AutoReconnectClient/)）。手動で管理したい場合はこれをoffにしてください。
+
 ## 期待されるSerial出力
 
 ```

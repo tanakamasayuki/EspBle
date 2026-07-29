@@ -518,7 +518,7 @@ Phase 1〜4bでGAP側のAPIが増えた。テスト・example・ガイドのど�
 | a | Directed Advertising（`setDirectedTarget`） | ✅ `directed_advertising` | ✅ `Gap/DirectedAdvertise` | ✅ 2.1 | なし |
 | b | Advertisingチャネルマップ（`setChannelMap`） | ✅ `directed_advertising`（ch39のみで接続） | ✅ `Gap/Advertise` に1行 | ✅ 2.1 | **完了。現状維持と判断した。** 設定値1つで、動作の観察にはスペクトラムアナライザか受信側の統計が要る。単独exampleを作っても「読んで分かる」以上のものにならない |
 | c | スキャン側Filter Accept List（`acceptListOnly`） | ✅ `accept_list` | ✅ `Gap/AcceptList` | ✅ 2.2 | **完了。** `Gap/AcceptList` に `f`（絞り込みscan）/ `a`（全件scan）を追加し、1つのリストの2つの使い道を1箇所で見せる形にした。README両言語も更新 |
-| d | GATT Serverの読み取りフック（`onRead`） | ⚠️ `gatt_read_write` の計測用sketchのみ | ❌ | ❌ | **公開APIなのに実演が無い**。`Gatt/Basics/Server` に「読まれた瞬間に値を作る」節を足す（Phase 5と同時でよい） |
+| d | GATT Serverの読み取りフック（`onRead`） | ✅ `gatt_read_write` | ✅ `Gatt/Basics/Server` | Phase 6 | **完了。** `Gatt/Basics/Server` に読み取り時に `millis()` を返すCharacteristicを追加し、READMEへ「読まれた瞬間に値を作る」節（スタックタスクで走るため短く保つ・`loop()`と同時に走る・`onRead`は1つだけ）を追加。対になる `Gatt/Basics/Client` もその値を読む形へ延長した |
 | e | MTUは接続後に決まる（`onConnected`時点は23） | ✅ `mtu` | ✅ `Gap/Mtu` README | ✅ 2.5 | **完了。** |
 | f | MTU超の値のRead（Read Long） | ✅ `hid_keyboard_host`（Report Map）ほか | — | ❌ | GATT章（Phase 6）で「長い値は分割して読まれる」として触れる |
 
@@ -571,6 +571,14 @@ Phase 1〜4bでGAP側のAPIが増えた。テスト・example・ガイドのど�
 ### Phase 5 — GATT examples のコード＋README充実
 
 Phase 4後のAPIで、`Gatt/Basics/*` を中心に「概念はガイド、使い方はここ」の粒度へ書き直す。
+
+| # | 項目 | 状況 |
+|---|---|---|
+| 5-1 | `Gatt/Basics/Server` — `onRead()`（読まれた瞬間に値を作る）の追加 | **完了。** `millis()` を返すCharacteristicを追加し、スタックタスクで走ること・短く保つこと・`loop()`と同時に走ること・`onRead()`は1つだけであることをREADMEに明記 |
+| 5-2 | `Gatt/Basics/Client` — 連鎖の説明と、要求時生成値のRead | **完了。** callbackの連鎖を図として示し、「イベントは操作の種類ごとに1つで対象ごとには分かれない」ことを説明。Read Long（長い値の自動分割読み取り）とWriteが分割されないことの非対称もREADMEへ |
+| 5-3 | `Gatt/Basics/NotifyServer` / `SubscribeClient` — CCCDの説明 | **完了。** 「購読者がいないと送れない」「CCCDは接続ごとのスイッチ」「送信は失敗しない、届く先が無いだけ」をServer側へ、購読がCCCD書き込みであること・`onNotification()`がIndicationも受けること・再接続で自動復元されることをClient側へ追加 |
+| 5-4 | `Gatt/Basics` の残り（`IndicateServer` / `IndicateClient` / `NusServer` / `NusClient` / `AutoReconnectClient`） | **確認済み・変更不要。** Notification/Indicationの使い分け、CCCDのビット、persistent subscriptionがそれぞれ既に説明されている |
+| 5-5 | profile別example（`Gatt/Health` / `Fitness` / `Alerts` / `Device` / `Time` / `Sensors`） | **未着手。** 今回のパスでは見ていない |
 
 ### Phase 6 — ガイドのGATT章を執筆
 
