@@ -1,14 +1,16 @@
 // hid_custom peer_device: a Custom HID device built with ble.hidCustom() using an
 // arbitrary (vendor-defined) Report Descriptor composed into the HID service. It
-// declares a 2-byte input report (dial delta + buttons) and a 1-byte output
-// report (LED), both under Report ID 1. Security is disabled so a generic GATT
-// client can read the Report Map and subscribe to the input report directly.
+// declares a 2-byte input report (dial delta + buttons), a 1-byte output report
+// (LED) and a 2-byte feature report (configuration), all under Report ID 1.
+// Security is disabled so a generic GATT client can read the Report Map and
+// subscribe to the input report directly.
 #include <EspBle.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
 // Vendor-defined usage page 0xFF00: Report ID 1 with a 2-byte input (signed dial
-// delta + button bitfield) and a 1-byte output (LED state).
+// delta + button bitfield), a 1-byte output (LED state) and a 2-byte feature
+// (configuration read/written by the host, never streamed).
 static const uint8_t customReportMap[] = {
   0x06, 0x00, 0xFF,   // Usage Page (Vendor-Defined 0xFF00)
   0x09, 0x01,         // Usage (0x01)
@@ -26,6 +28,12 @@ static const uint8_t customReportMap[] = {
   0x95, 0x01,         //   Report Count (1)
   0x09, 0x03,         //   Usage (0x03)
   0x91, 0x02,         //   Output (Data, Variable, Absolute)
+  0x15, 0x00,         //   Logical Minimum (0)
+  0x26, 0xFF, 0x00,   //   Logical Maximum (255)
+  0x75, 0x08,         //   Report Size (8)
+  0x95, 0x02,         //   Report Count (2)
+  0x09, 0x04,         //   Usage (0x04)
+  0xB1, 0x02,         //   Feature (Data, Variable, Absolute)
   0xC0,               // End Collection
 };
 
@@ -52,6 +60,7 @@ void setup()
   if (!custom.configure(config) ||
       !custom.addInputReport(1, 2) ||
       !custom.addOutputReport(1, 1) ||
+      !custom.addFeatureReport(1, 2) ||
       !custom.setReportMap(customReportMap, sizeof(customReportMap)))
   {
     Serial.printf("HID_CONFIG_FAILED %s %s\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
@@ -62,6 +71,14 @@ void setup()
       static_cast<unsigned>(report.reportId),
       static_cast<unsigned>(report.length),
       report.length > 0 ? report.data[0] : 0,
+      contextName());
+  });
+  custom.onFeatureReport([](const EspBleHidVendorReport &report) {
+    Serial.printf("FEATURE_REPORT id=%u len=%u byte0=%u byte1=%u context=%s\n",
+      static_cast<unsigned>(report.reportId),
+      static_cast<unsigned>(report.length),
+      report.length > 0 ? report.data[0] : 0,
+      report.length > 1 ? report.data[1] : 0,
       contextName());
   });
 

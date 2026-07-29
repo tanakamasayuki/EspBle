@@ -528,9 +528,9 @@ Phase 1〜4bでGAP側のAPIが増えた。テスト・example・ガイドのど�
 
 | # | 対象 | 状況 | 判断 |
 |---|---|---|---|
-| 2-a | **多重リスナAPI** — `EspBleCallbackList`、`EspBle::add*Listener()` 8種、`removeGattListener()`、`EspBleGattServer::addWrittenListener()` ほか、`EspBleHidHost::add*Listener()` 7種 | 発見時点では**Peer・unit・手動・examplesのいずれにも呼び出しが無かった** | **対応済み。** Peerテスト `multi_listener` を新設し、primary＋listener 2件への同時配送、`removeListener()` / `removeGattListener()` が1件だけを外すこと、未登録idの削除が失敗すること、上限4件で追加が拒否されること（既存を追い出さない）を、`EspBleGattServer` 側と `EspBle` 側の両方で実機検証した。HID Host側の `add*Listener()` はHID章の作業で同様に扱う |
+| 2-a | **多重リスナAPI** — `EspBleCallbackList`、`EspBle::add*Listener()` 8種、`removeGattListener()`、`EspBleGattServer::addWrittenListener()` ほか、`EspBleHidHost::add*Listener()` 7種 | 発見時点では**Peer・unit・手動・examplesのいずれにも呼び出しが無かった** | **対応済み。** Peerテスト `multi_listener` を新設し、primary＋listener 2件への同時配送、`removeListener()` / `removeGattListener()` が1件だけを外すこと、未登録idの削除が失敗すること、上限4件で追加が拒否されること（既存を追い出さない）を、`EspBleGattServer` 側と `EspBle` 側の両方で実機検証した。`EspBleHidHost` 側（別実装の `ListenerSlot`）はPhase 10の `hid_convenience` で同じ4点を検証した |
 | 2-b | `removeFromAcceptList()` / `acceptListEntry()` | 発見時点ではPeerテストに呼び出しが無かった（追加方向のみ検証） | **対応済み。** `accept_list` に列挙と削除方向のテストを追加し、削除後に絞り込みscanが再び一致しなくなることまで実機検証した |
-| 2-c | HIDデバイス入力の一部 — `pressKey()` / `tapKey()` / `tapUsage()` / `setLayout()` / `wheel()` / `sendUsage()` / `addFeatureReport()` / `sendRawReport()` / `sendVendorReport()` | Peerテストに呼び出しが無い | HID章（Phase 9以降）の作業に含める。`write()` と `click()` はexamplesで使われている |
+| 2-c | HIDデバイス入力の一部 — `pressKey()` / `tapKey()` / `tapUsage()` / `setLayout()` / `wheel()` / `sendUsage()` / `addFeatureReport()` / `sendRawReport()` / `sendVendorReport()` | 発見時点ではPeerテストに呼び出しが無かった（`write()` と `click()` はexamplesのみ） | **対応済み（Phase 10）。** Peerテスト `hid_convenience` を新設して便利入力APIをすべて実機検証し、`addFeatureReport()` は `hid_custom` の拡張で検証した。`sendRawReport()`（keyboard）と `sendVendorReport()`（HID Host）は**publicではなく内部API**で、公開経路は `EspBleHidVendor::sendInput()` / `EspBleHidCustom::sendInput()` / `sendVendorOutput()` / `sendVendorFeature()`。いずれも既存の `hid_keyboard_host` / `hid_custom` で検証済みのため、この行の対象から外した |
 | 2-d | `autoReconnect()` / `EspBleHidHost::autoRediscover()` / `keyboardLayout()` の各getter | setter側は検証済み、getterは未呼び出し | 影響が小さいため、2-aのテストへ相乗りで確認する |
 | 2-e | `droppedPersistentSubscriptionCount()` | 未検証 | 上限は16件（当初「8件」と記録したのは誤り。8はaccept listとCCCD storeの値）。1接続では超えられないが、**2台の常設構成のまま自動テストで作れる**見込み（Public address → `RandomStatic` で同一Peripheralを別peerとして数えさせる）。手順と根拠は[tests/TEST_PLAN.ja.md](../tests/TEST_PLAN.ja.md)の「未実装scenarioのメモ」に記載。**今回は実装せず、メモのみ** |
 | 2-f | `requestSecurity()` / `bond()` / `deleteBond()` | examplesのみ（`deleteAllBonds()` はPeer済み） | セキュリティ章の作業に合わせ、`security_bond` テストへ列挙と個別削除を足す |
@@ -668,10 +668,25 @@ Phase 7で「ガイドに章が無いためexamples/READMEに残す」とした2
 
 あわせて `Hid` / `Midi` 配下の全example README（24ファイル）へ該当章への導線を追加した。導線の対象外は `CompileSmoke` のみ（対応する章が無い）。
 
+---
+
+### Phase 10 — 監査項目2-cの穴埋め（HID入力APIのPeerカバレッジ）
+
+Phase 4c-2の監査で見つかった最後の穴。HIDの**便利入力API**（`pressKey()` / `tapKey()` / `write()` / `tapUsage()` / `setLayout()` / `wheel()` / `click()` / `sendUsage()` / `addFeatureReport()`）にPeerテストの呼び出しが無かった。
+
+**完了。** すべて2台の自動テストで賄えたため、[MEMORY: 2台なら自動テスト]の方針どおりマニュアルテストは作っていない。
+
+| # | 項目 | 内容 |
+|---|---|---|
+| 10-1 | Peerテスト `hid_convenience` の新設 | Deviceは便利入力APIだけを呼び、rawな`sendReport()`は一切呼ばない（そちらは51・52が押さえている）。Hostが受け取ったReportを報告し、**便利APIが実際に電波へ何を出したか**をテストが判定する。テスト2件・実機green |
+| 10-2 | `addFeatureReport()` の検証を `hid_custom` へ追加 | report mapへFeature項目を足し、`addFeatureReport(1, 2)` が独立した0x2A4D characteristicを得て、そこへの書き込みがdeviceの`onFeatureReport()`へ届くことを確認。**outputとfeatureはどちらもwritableなので、Write Without Responseの有無で見分ける**——outputはストリームなので持ち、featureは設定なので必ず応答付きになる。この見分け方自体がflagsの正しさの検証になっている |
+| 10-3 | `EspBleHidHost` のmulti listener検証 | 2-aで検証した4点（配送・選択解除・未登録id・上限）を、別実装（`EspBleCallbackList` ではなく専用の `ListenerSlot`）であるHID Host側にも適用。上限は`MaxListenersPerEvent`=4で`RESOURCE_EXHAUSTED`、既存を追い出さない |
+| 10-4 | 2-cの記述の訂正 | 監査表が挙げていた `sendRawReport()` と `sendVendorReport()` は**publicではなく内部API**だった。公開経路（`sendInput()` / `sendVendorOutput()` / `sendVendorFeature()`）はいずれも既存テストで検証済みのため対象から外した |
+
+作業中に見つけて記録した設計上の穴: **handle指定の `readDescriptor()` / `writeDescriptor()` が無い。** characteristic側にはhandle overloadがあるのに、descriptor側はUUID指定しかない。HIDのReport Reference（0x2908）は同一UUIDのReport characteristicが並ぶ**まさにhandle overloadを用意した状況**なので、アプリからは特定Reportのdescriptorを読めない。[DESIGN_DEBT.ja.md](DESIGN_DEBT.ja.md) に記載した。今回のテストはcharacteristicのflagsで見分けたため回避できている。
+
 ## 未決事項
 
-- **Phase 0は完了**（0-1〜0-5すべて決着）。次はPhase 1から着手する。
-- Cの各項目は現在 [DESIGN_DEBT.ja.md](DESIGN_DEBT.ja.md) に記載が無い。Phase 0の決定内容を同文書へ「クラスタD」として追記し、既存の運用（是正計画→実装→DECISIONS移送）に載せる。Directed Advertising は「対象外（backend由来）」節へ。
-- 2-3（Gap/Scan と Info/ScanDump の役割重複）は、最小例を残す方針かどうかで結論が変わる。Phase 2着手時に判断する。
-- 1-5（Advertisingの未公開オプション）は公開範囲が未選定。Tx Power は実用性が高いが、Flags / Short Name / Preferred Params は現実の必要性で取捨する（[MEMORY: scope-by-real-world-use] の方針に従う）。
-- 調査は Arduino-ESP32 **3.3.10** のソースで実施。examplesのpinは **3.3.11** のため、Phase 1着手時に該当APIを再確認する。
+**Phase 0〜10はすべて完了。** この計画に残っている作業は無い。着手時に未決だった項目の結末は各Phaseの表に記録してある（Phase 2の2-3、Phase 1の1-5、調査時のcore版差など）。
+
+計画外で残っている既知の穴は1件だけ: **persistent subscriptionの上限超過（`droppedPersistentSubscriptionCount()`）の実機検証**。2台で成立させる手順は[tests/TEST_PLAN.ja.md](../tests/TEST_PLAN.ja.md)の「未実装scenarioのメモ」にある。

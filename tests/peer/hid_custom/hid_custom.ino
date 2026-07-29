@@ -1,9 +1,10 @@
 // hid_custom DUT: EspBle generic GATT client that validates a Custom HID device
 // built with an arbitrary Report Descriptor, AND the handle-based client
-// operations. The device exposes two Report characteristics that share UUID
-// 0x2A4D (a notifiable input and a writable output). The client discovers the
-// service, resolves each report by its attribute handle, subscribes to the input
-// by handle, decodes a custom 2-byte report, and writes the output by handle.
+// operations. The device exposes three Report characteristics that share UUID
+// 0x2A4D (a notifiable input, a writable output and a writable feature). The
+// client discovers the service, resolves each report by its attribute handle,
+// subscribes to the input by handle, decodes a custom 2-byte report, and writes
+// the output and the feature by handle.
 #include <EspBle.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -18,6 +19,7 @@ EspBleConnectionId connectionId = 0;
 bool connectionRequested = false;
 uint16_t inputHandle = 0;
 uint16_t outputHandle = 0;
+uint16_t featureHandle = 0;
 
 static const char *contextName()
 {
@@ -55,6 +57,7 @@ void setup()
     connectionRequested = false;
     inputHandle = 0;
     outputHandle = 0;
+    featureHandle = 0;
     Serial.printf("DISCONNECTED id=%u context=%s\n",
       static_cast<unsigned>(connection.id), contextName());
   });
@@ -64,7 +67,10 @@ void setup()
       Serial.println("DISCOVER_FAILED");
       return;
     }
-    // Resolve the two 0x2A4D Report characteristics by role using their handles.
+    // Resolve the three 0x2A4D Report characteristics by role using their
+    // handles. Output and Feature are both writable, so the discriminator is
+    // Write Without Response: an Output report is a stream and carries it, a
+    // Feature report is configuration and is always written with a response.
     const size_t count = ble.discoveredCharacteristicCount(result.connectionId, HID_SERVICE_UUID);
     for (size_t index = 0; index < count; ++index)
     {
@@ -73,11 +79,14 @@ void setup()
         continue;
       if (!uuidIs(info.characteristicUuid, REPORT_UUID)) continue;
       if (info.notifiable) inputHandle = info.handle;
-      else if (info.writable) outputHandle = info.handle;
+      else if (info.writableWithoutResponse) outputHandle = info.handle;
+      else if (info.writable) featureHandle = info.handle;
     }
-    Serial.printf("REPORTS_RESOLVED input=%u output=%u distinct=%u\n",
-      inputHandle, outputHandle,
-      (inputHandle != 0 && outputHandle != 0 && inputHandle != outputHandle) ? 1 : 0);
+    Serial.printf("REPORTS_RESOLVED input=%u output=%u feature=%u distinct=%u\n",
+      inputHandle, outputHandle, featureHandle,
+      (inputHandle != 0 && outputHandle != 0 && featureHandle != 0 &&
+       inputHandle != outputHandle && outputHandle != featureHandle &&
+       inputHandle != featureHandle) ? 1 : 0);
   });
   ble.onCharacteristicRead([](const EspBleGattResult &result) {
     if (!result.characteristicUuid.equalsIgnoreCase(REPORT_MAP_UUID)) return;
@@ -85,7 +94,9 @@ void setup()
       result.success ? 1 : 0, result.value.length());
   });
   ble.onCharacteristicWritten([](const EspBleGattResult &result) {
-    Serial.printf("OUTPUT_WRITTEN success=%u handle=%u context=%s\n",
+    // The result handle says which of the two writable reports this was.
+    Serial.printf("%s success=%u handle=%u context=%s\n",
+      result.handle == featureHandle ? "FEATURE_WRITTEN" : "OUTPUT_WRITTEN",
       result.success ? 1 : 0, result.handle, contextName());
   });
   ble.onSubscribed([](const EspBleGattResult &result) {
@@ -135,6 +146,14 @@ void loop()
       const uint8_t leds = 0x02;
       Serial.println(ble.writeCharacteristic(connectionId, outputHandle, &leds, sizeof(leds), true)
         ? "OUTPUT_WRITE_REQUESTED" : "OUTPUT_WRITE_REQUEST_FAILED");
+    }
+    else if (command == 'f' && featureHandle != 0)
+    {
+      // Write the feature report by handle: two bytes of configuration.
+      const uint8_t configuration[2] = {0x5a, 0xa5};
+      Serial.println(ble.writeCharacteristic(
+        connectionId, featureHandle, configuration, sizeof(configuration), true)
+        ? "FEATURE_WRITE_REQUESTED" : "FEATURE_WRITE_REQUEST_FAILED");
     }
     else if (command == 'd' && connectionId != 0)
     {
