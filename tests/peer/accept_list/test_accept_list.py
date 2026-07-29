@@ -1,3 +1,6 @@
+import time
+
+
 def test_accept_list_blocks_and_admits_connections(dut, peers):
     peripheral = peers["device"]
 
@@ -29,3 +32,42 @@ def test_accept_list_blocks_and_admits_connections(dut, peers):
     dut.write("d")
     dut.expect_exact("DISCONNECT_REQUESTED", timeout=10)
     dut.expect("CENTRAL_DISCONNECTED id=", timeout=15)
+
+
+def test_scanner_accept_list_filters_advertisers(dut, peers):
+    """The scanner's own accept list: the controller drops reports from
+    advertisers that are not on it, so onResult never sees them."""
+    peripheral = peers["device"]
+
+    peripheral.write("o")
+    peripheral.expect_exact("POLICY open entries=1", timeout=15)
+    peripheral.write("?")
+    peripheral.expect_exact("ADVERTISING 1", timeout=10)
+
+    # Learn the peripheral's address with an unfiltered scan.
+    dut.write("x")
+    dut.expect_exact("CENTRAL_ACCEPT_LIST added=0 count=0", timeout=10)
+    dut.write("s")
+    dut.expect_exact("OBSERVE_STARTED", timeout=10)
+    time.sleep(3)
+    dut.write("n")
+    dut.expect(r"OBSERVED target=1 address=([0-9a-f:]{17})", timeout=10)
+
+    # With an empty accept list, the filtered scan reports nobody.
+    dut.write("f")
+    dut.expect_exact("OBSERVE_STARTED", timeout=10)
+    time.sleep(3)
+    dut.write("n")
+    dut.expect_exact("OBSERVED target=0", timeout=10)
+
+    # The same scan sees it again once its address is on the list.
+    dut.write("a")
+    dut.expect_exact("CENTRAL_ACCEPT_LIST added=1 count=1", timeout=10)
+    dut.write("f")
+    dut.expect_exact("OBSERVE_STARTED", timeout=10)
+    time.sleep(3)
+    dut.write("n")
+    dut.expect_exact("OBSERVED target=1", timeout=10)
+
+    dut.write("x")
+    dut.expect_exact("CENTRAL_ACCEPT_LIST added=0 count=0", timeout=10)

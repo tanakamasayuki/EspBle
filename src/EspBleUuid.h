@@ -88,6 +88,28 @@ inline bool espBleParseUuid(const char *text, EspBleUuidValue &out)
   return false;
 }
 
+// A UUID as it appears on air: 2, 4 or 16 bytes, least significant byte first.
+// Any other length is rejected.
+inline bool espBleUuidFromLittleEndian(const uint8_t *bytes, size_t length, EspBleUuidValue &out)
+{
+  out = EspBleUuidValue();
+  if (bytes == nullptr) return false;
+  if (length == 16)
+  {
+    memcpy(out.bytes, bytes, 16);
+    out.bitSize = 128;
+    return true;
+  }
+  if (length != 2 && length != 4) return false;
+  static const uint8_t base[16] = {
+    0xfb, 0x34, 0x9b, 0x5f, 0x80, 0x00, 0x00, 0x80,
+    0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+  memcpy(out.bytes, base, sizeof(base));
+  memcpy(out.bytes + 12, bytes, length);
+  out.bitSize = length == 2 ? 16 : 32;
+  return true;
+}
+
 // Always the 128-bit spelling, so one text form is comparable everywhere. The
 // buffer needs 37 bytes (36 characters plus the terminator).
 inline void espBleFormatUuid(const EspBleUuidValue &value, char *out, size_t size)

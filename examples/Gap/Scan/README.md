@@ -22,7 +22,8 @@ Those three fields are all it prints. To see **every field** — service UUIDs, 
 - `ble.scanner().onResult(callback)` — receives an `EspBleScanResult` per advertisement
   - `scanResult.address`, `scanResult.rssi`, `scanResult.hasName()`, `scanResult.name`
   - also available: `advertisesService(uuid)`, `connectable`, manufacturer data
-- `EspBleScanConfig` — `active`, `wantDuplicates`, `intervalMilliseconds`, `windowMilliseconds`, `durationSeconds`
+- `EspBleScanConfig` — `active`, `wantDuplicates`, `intervalMilliseconds`, `windowMilliseconds`, `durationSeconds`, `acceptListOnly`
+  - With `acceptListOnly = true` only advertisers registered through `ble.addToAcceptList()` are reported. The controller drops the rest, so they never reach `onResult` ([Gap/AcceptList](../AcceptList/) uses the same list to restrict connections). Matching is by address, so a peer that rotates an RPA must be bonded first
 - `ble.scanner().start(scanConfig)` / `ble.scanner().stop()`
 - `ble.scanner().droppedResultCount()` — results dropped when the queue overflows
 

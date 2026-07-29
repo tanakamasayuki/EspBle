@@ -8,7 +8,6 @@
 #include <BLERemoteCharacteristic.h>
 #include <BLERemoteDescriptor.h>
 #include <BLERemoteService.h>
-#include <BLEScan.h>
 #include <BLEServer.h>
 #include <BLEService.h>
 #include <BLESecurity.h>
@@ -51,6 +50,26 @@ constexpr size_t BondCapacity = CONFIG_BT_NIMBLE_MAX_BONDS;
 #else
 constexpr size_t BondCapacity = 16;
 #endif
+
+// AD types (Core Specification Supplement, Part A). The builder writes the
+// "complete" list variants; the parser also accepts the "incomplete" ones,
+// which carry the same values and differ only in whether the advertiser
+// promised to list everything.
+constexpr uint8_t AdTypeFlags = 0x01;
+constexpr uint8_t AdTypeServiceUuids16Partial = 0x02;
+constexpr uint8_t AdTypeServiceUuids16 = 0x03;
+constexpr uint8_t AdTypeServiceUuids32Partial = 0x04;
+constexpr uint8_t AdTypeServiceUuids32 = 0x05;
+constexpr uint8_t AdTypeServiceUuids128Partial = 0x06;
+constexpr uint8_t AdTypeServiceUuids128 = 0x07;
+constexpr uint8_t AdTypeShortenedLocalName = 0x08;
+constexpr uint8_t AdTypeCompleteLocalName = 0x09;
+constexpr uint8_t AdTypeTxPowerLevel = 0x0a;
+constexpr uint8_t AdTypeServiceData16 = 0x16;
+constexpr uint8_t AdTypeAppearance = 0x19;
+constexpr uint8_t AdTypeServiceData32 = 0x20;
+constexpr uint8_t AdTypeServiceData128 = 0x21;
+constexpr uint8_t AdTypeManufacturerData = 0xff;
 
 // UUID conversions between the library's text form and the stack's types. The
 // text codec itself lives in EspBleUuid.h so it can be unit tested on the host.
@@ -159,6 +178,126 @@ bool parseAddress(const char *text, uint8_t out[6])
     out[5 - index] = static_cast<uint8_t>((high << 4) | low);
   }
   return true;
+}
+
+// Raw bytes as a String. Arduino's String is length-based, so an embedded 0x00
+// survives -- only c_str() readers stop early, which is the caller's business.
+String stringFromBytes(const uint8_t *bytes, size_t length)
+{
+  String value;
+  value.reserve(length);
+  for (size_t index = 0; index < length; ++index)
+  {
+    value.concat(static_cast<char>(bytes[index]));
+  }
+  return value;
+}
+
+String uuidTextFromLittleEndian(const uint8_t *bytes, size_t length)
+{
+  EspBleUuidValue value;
+  if (!espBleUuidFromLittleEndian(bytes, length, value)) return String();
+  char text[37];
+  espBleFormatUuid(value, text, sizeof(text));
+  return String(text);
+}
+
+// One advertising report's AD structures, merged into result. An advertisement
+// and its scan response are two reports describing one device, so a field is
+// only written when this report carries it.
+void parseAdvertisingReport(const uint8_t *data, size_t length, EspBleScanResult &result)
+{
+  if (data == nullptr) return;
+  size_t offset = 0;
+  while (offset + 1 < length)
+  {
+    const size_t fieldLength = data[offset];
+    // A zero length is the padding that fills the rest of the report.
+    if (fieldLength == 0) break;
+    if (offset + 1 + fieldLength > length) break; // truncated report
+    const uint8_t type = data[offset + 1];
+    const uint8_t *value = data + offset + 2;
+    const size_t valueLength = fieldLength - 1;
+    offset += 1 + fieldLength;
+
+    switch (type)
+    {
+    case AdTypeShortenedLocalName:
+    case AdTypeCompleteLocalName:
+    {
+      char text[32];
+      const size_t copied = valueLength < sizeof(text) - 1 ? valueLength : sizeof(text) - 1;
+      memcpy(text, value, copied);
+      text[copied] = '\0';
+      result.name = text;
+      break;
+    }
+    case AdTypeServiceUuids16Partial:
+    case AdTypeServiceUuids16:
+    case AdTypeServiceUuids32Partial:
+    case AdTypeServiceUuids32:
+    case AdTypeServiceUuids128Partial:
+    case AdTypeServiceUuids128:
+    {
+      const size_t uuidSize =
+        (type == AdTypeServiceUuids16Partial || type == AdTypeServiceUuids16) ? 2
+        : (type == AdTypeServiceUuids32Partial || type == AdTypeServiceUuids32) ? 4
+                                                                                : 16;
+      for (size_t position = 0; position + uuidSize <= valueLength; position += uuidSize)
+      {
+        if (result.serviceUuidCount == EspBleScanResult::MaxServiceUuids) break;
+        const String uuid = uuidTextFromLittleEndian(value + position, uuidSize);
+        if (uuid.isEmpty()) continue;
+        bool known = false;
+        for (size_t index = 0; index < result.serviceUuidCount; ++index)
+        {
+          if (result.serviceUuids[index] == uuid)
+          {
+            known = true;
+            break;
+          }
+        }
+        // The advertisement and the scan response may list the same UUID.
+        if (!known) result.serviceUuids[result.serviceUuidCount++] = uuid;
+      }
+      break;
+    }
+    case AdTypeServiceData16:
+    case AdTypeServiceData32:
+    case AdTypeServiceData128:
+    {
+      const size_t uuidSize = type == AdTypeServiceData16 ? 2 : (type == AdTypeServiceData32 ? 4 : 16);
+      if (valueLength < uuidSize) break;
+      if (result.serviceDataCount == EspBleScanResult::MaxServiceData) break;
+      const String uuid = uuidTextFromLittleEndian(value, uuidSize);
+      if (uuid.isEmpty()) break;
+      EspBleServiceData &block = result.serviceData[result.serviceDataCount++];
+      block.uuid = uuid;
+      block.data = stringFromBytes(value + uuidSize, valueLength - uuidSize);
+      break;
+    }
+    case AdTypeManufacturerData:
+      result.manufacturerData = stringFromBytes(value, valueLength);
+      break;
+    case AdTypeAppearance:
+      if (valueLength >= 2)
+      {
+        result.appearance = static_cast<uint16_t>(value[0] | (value[1] << 8));
+      }
+      break;
+    case AdTypeTxPowerLevel:
+      if (valueLength >= 1)
+      {
+        // 0 dBm is a legal level, so presence needs its own flag.
+        result.txPowerLevel = static_cast<int8_t>(value[0]);
+        result.txPowerLevelPresent = true;
+      }
+      break;
+    default:
+      // Flags and anything else this library does not surface.
+      break;
+    }
+  }
 }
 
 bool isValidBleAddress(const char *address)
@@ -1176,7 +1315,7 @@ struct EspBleImpl
         passkey = staticPasskeyEnabled ? staticPasskey : (esp_random() % 1000000);
       }
       io.passkey = passkey;
-      queuePasskeyDisplayed(passkey);
+      queuePasskeyDisplayed(passkey, connectionHandle);
       break;
     }
     case BLE_SM_IOACT_INPUT:
@@ -1185,7 +1324,7 @@ struct EspBleImpl
       io.passkey = requestPasskey();
       break;
     case BLE_SM_IOACT_NUMCMP:
-      io.numcmp_accept = confirmNumericComparison(params.numcmp) ? 1 : 0;
+      io.numcmp_accept = confirmNumericComparison(params.numcmp, connectionHandle) ? 1 : 0;
       break;
     default:
       return;
@@ -1223,9 +1362,10 @@ struct EspBleImpl
   // Called on the backend host task for Numeric Comparison. Surfaces the value
   // both devices display, then blocks (yielding) until the loop task confirms
   // via confirmNumericComparison(), or a timeout rejects the pairing.
-  bool confirmNumericComparison(uint32_t pin)
+  bool confirmNumericComparison(
+    uint32_t pin, uint16_t connectionHandle = BLE_HS_CONN_HANDLE_NONE)
   {
-    queueNumericComparison(pin);
+    queueNumericComparison(pin, connectionHandle);
     for (int elapsed = 0; elapsed < 30000; ++elapsed)
     {
       {
@@ -1241,13 +1381,25 @@ struct EspBleImpl
     return false;
   }
 
-  void queueNumericComparison(uint32_t pin)
+  // connectionHandle is the pairing connection when it is known -- it is, for
+  // every connection whose GAP events we own. The wrapper's security callback
+  // does not report one, so that path still has to guess.
+  void queueNumericComparison(uint32_t pin, uint16_t connectionHandle = BLE_HS_CONN_HANDLE_NONE)
   {
     std::lock_guard<std::mutex> lock(mutex);
     const ConnectionSlot *selected = nullptr;
     for (const ConnectionSlot &slot : connections)
     {
       if (!slot.used)
+      {
+        continue;
+      }
+      if (slot.connection.handle == connectionHandle)
+      {
+        selected = &slot;
+        break;
+      }
+      if (connectionHandle != BLE_HS_CONN_HANDLE_NONE)
       {
         continue;
       }
@@ -1267,13 +1419,23 @@ struct EspBleImpl
     pushEvent(event);
   }
 
-  void queuePasskeyDisplayed(uint32_t passkey)
+  // See queueNumericComparison() for what connectionHandle does.
+  void queuePasskeyDisplayed(uint32_t passkey, uint16_t connectionHandle = BLE_HS_CONN_HANDLE_NONE)
   {
     std::lock_guard<std::mutex> lock(mutex);
     const ConnectionSlot *selected = nullptr;
     for (const ConnectionSlot &slot : connections)
     {
       if (!slot.used)
+      {
+        continue;
+      }
+      if (slot.connection.handle == connectionHandle)
+      {
+        selected = &slot;
+        break;
+      }
+      if (connectionHandle != BLE_HS_CONN_HANDLE_NONE)
       {
         continue;
       }
@@ -4388,76 +4550,145 @@ struct EspBleHidKeyboardHostImpl
 
 struct EspBleScannerImpl
 {
-  class BackendCallbacks : public BLEAdvertisedDeviceCallbacks
+  // An advertisement and its scan response arrive as two reports. A scannable
+  // advertiser is therefore held here until its response arrives, so the
+  // application sees one complete result instead of two partial ones.
+  struct Pending
   {
-  public:
-    explicit BackendCallbacks(EspBleScannerImpl *owner) : owner_(owner) {}
+    bool used = false;
+    uint8_t address[6] = {};
+    uint8_t addressType = 0;
+    EspBleScanResult result;
+  };
+  // Enough for the advertisers in radio range at one moment; when it overflows
+  // the oldest is reported as it stands rather than dropped.
+  static constexpr size_t PendingCapacity = 8;
 
-    void onResult(BLEAdvertisedDevice device) override
+  explicit EspBleScannerImpl(EspBleScanner *scanner) : scanner(scanner) {}
+
+  // Queue one finished result for dispatch from update(). Called on the host
+  // task, so the queue is the only thing shared with the application.
+  void publish(EspBleScanResult &&result)
+  {
+    std::lock_guard<std::mutex> lock(mutex);
+    if (count == ScanQueueCapacity)
     {
-      EspBleScanResult result;
-      result.address = device.getAddress().toString();
-      result.addressType = static_cast<EspBleAddressType>(device.getAddressType());
-      result.rssi = device.getRSSI();
-      result.connectable = device.isConnectable();
-      result.scannable = device.isScannable();
+      ++dropped;
+      return;
+    }
+    const size_t tail = (head + count) % ScanQueueCapacity;
+    queue[tail] = std::move(result);
+    ++count;
+  }
 
-      if (device.haveName())
+  Pending *findPending(const uint8_t address[6], uint8_t addressType)
+  {
+    for (Pending &entry : pending)
+    {
+      if (entry.used && entry.addressType == addressType &&
+          memcmp(entry.address, address, 6) == 0)
       {
-        result.name = device.getName();
+        return &entry;
       }
-      if (device.haveManufacturerData())
-      {
-        result.manufacturerData = device.getManufacturerData();
-      }
-      const int serviceDataCount = device.getServiceDataCount();
-      for (int index = 0;
-           index < serviceDataCount &&
-             result.serviceDataCount < EspBleScanResult::MaxServiceData;
-           ++index)
-      {
-        EspBleServiceData &block = result.serviceData[result.serviceDataCount++];
-        block.uuid = device.getServiceDataUUID(index).toString();
-        block.data = device.getServiceData(index);
-      }
-      if (device.haveAppearance())
-      {
-        result.appearance = device.getAppearance();
-      }
-      if (device.haveTXPower())
-      {
-        // 0 dBm is a legal level, so presence needs its own flag.
-        result.txPowerLevel = device.getTXPower();
-        result.txPowerLevelPresent = true;
-      }
+    }
+    return nullptr;
+  }
 
-      const int serviceCount = device.getServiceUUIDCount();
-      for (int index = 0;
-           index < serviceCount && result.serviceUuidCount < EspBleScanResult::MaxServiceUuids;
-           ++index)
-      {
-        result.serviceUuids[result.serviceUuidCount++] = device.getServiceUUID(index).toString();
-      }
+  void handleReport(const ble_gap_disc_desc &report)
+  {
+    const bool isScanResponse = report.event_type == BLE_HCI_ADV_RPT_EVTYPE_SCAN_RSP;
+    Pending *entry = findPending(report.addr.val, report.addr.type);
 
-      std::lock_guard<std::mutex> lock(owner_->mutex);
-      if (owner_->count == ScanQueueCapacity)
+    if (isScanResponse)
+    {
+      if (entry == nullptr)
       {
-        ++owner_->dropped;
+        // A scan response with no advertisement to attach it to: report what it
+        // carries rather than discard it.
+        EspBleScanResult result;
+        result.address = formatAddress(report.addr.val);
+        result.addressType = static_cast<EspBleAddressType>(report.addr.type);
+        result.rssi = report.rssi;
+        parseAdvertisingReport(report.data, report.length_data, result);
+        publish(std::move(result));
         return;
       }
-
-      const size_t tail = (owner_->head + owner_->count) % ScanQueueCapacity;
-      owner_->queue[tail] = std::move(result);
-      ++owner_->count;
+      entry->result.rssi = report.rssi;
+      parseAdvertisingReport(report.data, report.length_data, entry->result);
+      entry->used = false;
+      publish(std::move(entry->result));
+      entry->result = EspBleScanResult();
+      return;
     }
 
-  private:
-    EspBleScannerImpl *owner_;
-  };
+    EspBleScanResult result;
+    result.address = formatAddress(report.addr.val);
+    result.addressType = static_cast<EspBleAddressType>(report.addr.type);
+    result.rssi = report.rssi;
+    // The PDU type says what the advertiser accepts; the payload cannot.
+    result.connectable = report.event_type == BLE_HCI_ADV_RPT_EVTYPE_ADV_IND ||
+      report.event_type == BLE_HCI_ADV_RPT_EVTYPE_DIR_IND;
+    result.scannable = report.event_type == BLE_HCI_ADV_RPT_EVTYPE_ADV_IND ||
+      report.event_type == BLE_HCI_ADV_RPT_EVTYPE_SCAN_IND;
+    parseAdvertisingReport(report.data, report.length_data, result);
 
-  explicit EspBleScannerImpl(EspBleScanner *scanner)
-      : callbacks(this), scanner(scanner)
+    if (!activeScan || !result.scannable)
+    {
+      // Nothing more is coming: a passive scan never asks, and a
+      // non-scannable advertiser has nothing to answer with.
+      publish(std::move(result));
+      return;
+    }
+
+    if (entry == nullptr)
+    {
+      for (Pending &candidate : pending)
+      {
+        if (!candidate.used)
+        {
+          entry = &candidate;
+          break;
+        }
+      }
+    }
+    if (entry == nullptr)
+    {
+      // Table full: publish the oldest as it stands and take its slot.
+      entry = &pending[pendingNext];
+      pendingNext = (pendingNext + 1) % PendingCapacity;
+      publish(std::move(entry->result));
+    }
+    entry->used = true;
+    entry->addressType = report.addr.type;
+    memcpy(entry->address, report.addr.val, 6);
+    entry->result = std::move(result);
+  }
+
+  // Scannable advertisers that never answered the scan request are reported
+  // when the scan ends, so they are not lost entirely.
+  void flushPending()
   {
+    for (Pending &entry : pending)
+    {
+      if (!entry.used) continue;
+      entry.used = false;
+      publish(std::move(entry.result));
+      entry.result = EspBleScanResult();
+    }
+  }
+
+  static int gapEvent(ble_gap_event *event, void *argument)
+  {
+    EspBleScannerImpl *impl = static_cast<EspBleScannerImpl *>(argument);
+    if (event->type == BLE_GAP_EVENT_DISC)
+    {
+      impl->handleReport(event->disc);
+    }
+    else if (event->type == BLE_GAP_EVENT_DISC_COMPLETE)
+    {
+      impl->flushPending();
+    }
+    return 0;
   }
 
   mutable std::mutex mutex;
@@ -4465,7 +4696,10 @@ struct EspBleScannerImpl
   size_t head = 0;
   size_t count = 0;
   size_t dropped = 0;
-  BackendCallbacks callbacks;
+  // Touched only on the host task, inside the GAP callback.
+  Pending pending[PendingCapacity];
+  size_t pendingNext = 0;
+  bool activeScan = true;
   EspBleScanner *scanner;
 };
 
@@ -4744,22 +4978,6 @@ bool EspBleAdvertising::setInterval(uint16_t minMilliseconds, uint16_t maxMillis
   owner_->clearError();
   return true;
 }
-
-namespace
-{
-// AD types used by the payload builder (Core Specification Supplement, Part A).
-constexpr uint8_t AdTypeFlags = 0x01;
-constexpr uint8_t AdTypeServiceUuids16 = 0x03;
-constexpr uint8_t AdTypeServiceUuids32 = 0x05;
-constexpr uint8_t AdTypeServiceUuids128 = 0x07;
-constexpr uint8_t AdTypeCompleteLocalName = 0x09;
-constexpr uint8_t AdTypeTxPowerLevel = 0x0a;
-constexpr uint8_t AdTypeServiceData16 = 0x16;
-constexpr uint8_t AdTypeAppearance = 0x19;
-constexpr uint8_t AdTypeServiceData32 = 0x20;
-constexpr uint8_t AdTypeServiceData128 = 0x21;
-constexpr uint8_t AdTypeManufacturerData = 0xff;
-} // namespace
 
 bool EspBleAdvertising::buildPayload(
   const EspBleAdvertisingData &source,
@@ -5162,14 +5380,29 @@ bool EspBleScanner::start(const EspBleScanConfig &config)
     }
   }
 
-  BLEScan *backend = BLEDevice::getScan();
-  backend->setAdvertisedDeviceCallbacks(&impl_->callbacks, config.wantDuplicates, true);
-  backend->setActiveScan(config.active);
-  backend->setInterval(config.intervalMilliseconds);
-  backend->setWindow(config.windowMilliseconds);
-  backend->setDuplicateFilter(!config.wantDuplicates);
+  // A scan already running would keep its own parameters, so replace it.
+  if (ble_gap_disc_active()) ble_gap_disc_cancel();
+  impl_->flushPending();
+  impl_->activeScan = config.active;
 
-  if (!backend->start(config.durationSeconds, nullptr, false))
+  ble_gap_disc_params parameters{};
+  // The controller counts interval and window in 0.625 ms units.
+  parameters.itvl = static_cast<uint16_t>((config.intervalMilliseconds * 1000) / 625);
+  parameters.window = static_cast<uint16_t>((config.windowMilliseconds * 1000) / 625);
+  parameters.filter_policy = config.acceptListOnly ? BLE_HCI_SCAN_FILT_USE_WL
+                                                   : BLE_HCI_SCAN_FILT_NO_WL;
+  parameters.limited = 0;
+  parameters.passive = config.active ? 0 : 1;
+  // Controller-side duplicate filtering: the same advertiser is reported once
+  // per scan rather than every interval.
+  parameters.filter_duplicates = config.wantDuplicates ? 0 : 1;
+
+  const int32_t duration = config.durationSeconds == 0
+    ? BLE_HS_FOREVER
+    : static_cast<int32_t>(config.durationSeconds * 1000);
+  const int status = ble_gap_disc(
+    owner_->impl_->ownAddressType, duration, &parameters, &EspBleScannerImpl::gapEvent, impl_);
+  if (status != 0)
   {
     owner_->setError(EspBleError::BackendFailure, "failed to start scan");
     return false;
@@ -5186,18 +5419,22 @@ bool EspBleScanner::stop()
     owner_->setError(EspBleError::InvalidState, "BLE stack is not initialized");
     return false;
   }
-  if (!BLEDevice::getScan()->stop())
+  // Cancelling a scan that is not running reports BLE_HS_EALREADY, which is the
+  // requested state rather than a failure.
+  const int status = ble_gap_disc_cancel();
+  if (status != 0 && status != BLE_HS_EALREADY)
   {
     owner_->setError(EspBleError::BackendFailure, "failed to stop scan");
     return false;
   }
+  if (impl_ != nullptr) impl_->flushPending();
   owner_->clearError();
   return true;
 }
 
 bool EspBleScanner::isScanning() const
 {
-  return owner_->initialized() && BLEDevice::getScan()->isScanning();
+  return owner_->initialized() && ble_gap_disc_active() != 0;
 }
 
 size_t EspBleScanner::droppedResultCount() const
@@ -8441,7 +8678,7 @@ void EspBle::end()
 
   if (scanner_.isScanning())
   {
-    BLEDevice::getScan()->stop();
+    ble_gap_disc_cancel();
   }
   if (advertising_.isAdvertising())
   {

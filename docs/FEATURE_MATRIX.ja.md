@@ -97,14 +97,14 @@ EspUsbHost / EspUsbDeviceで扱っている機能のBLE版、およびBLEで一�
 | iBeacon（Apple beacon layout） | ✅ | backend非依存codec `EspBleIBeacon.h`（`espBleEncodeIBeacon`/`espBleDecodeIBeacon`）。company ID 0x004C＋UUID＋major/minor＋measured power。unit test＋`ibeacon` Peerでbroadcast/decodeを検証済み |
 | Advertising Service Data（AD 0x16） | ✅ | `EspBleAdvertising::addServiceData(uuid, data, length)`で最大4ブロック送信、`EspBleScanResult::serviceData[]`/`serviceDataCount`/`serviceDataFor(uuid, data)`で受信。複数ブロックとUUID検索を`service_data` Peerで検証済み |
 | Filter Accept List（Peripheral側の接続制限） | ✅ | `EspBle::addToAcceptList()` ＋ `EspBleAdvertising::setFilterPolicy()`（Any / ScanRequest / Connection / Both）。コントローラが弾くのでアプリまで届かない。同梱wrapperのwhite list APIはリンク不能なため`ble_gap_wl_set()`を直接使用（[UPSTREAM_REQUEST_ARDUINO_ESP32_NIMBLE_WHITELIST.ja.md](UPSTREAM_REQUEST_ARDUINO_ESP32_NIMBLE_WHITELIST.ja.md)）。`accept_list` Peerで検証済み |
-| Directed Advertising（送信） | ❌ | 同梱wrapperの`BLEAdvertising::start()`が`ble_gap_adv_start()`を`direct_addr = NULL`固定で呼ぶため到達不可。`ble_gap_adv_start()`直呼びはadvertising状態とGAPイベント配線の二重管理になるため見送り。接続先の限定はFilter Accept Listで代替可能（再接続の速さは得られない） |
+| Directed Advertising（送信） | ✅ | `EspBleAdvertising::setDirectedTarget(address, addressType, highDuty)` / `clearDirectedTarget()`。`ble_gap_adv_start()`を直接呼ぶ。仕様上ADデータを載せられないためpayloadは送出されず、指定した相手だけが接続できる。highDutyは3.75 ms間隔・最大1.28秒。相手がRPAを使う場合はボンド経由で解決するため先にボンディングが必要。`directed_advertising` Peerで検証済み |
 | Directed Advertising（受信） | ⚠️ | 自分宛のADV_DIRECT_INDはスキャン結果として届き、address / addressType / rssi / connectable=true / scannable=false を持つ（仕様上ADデータを載せないため他は空）。そのまま接続可。ただし**advertisement typeを公開していないため判別不能**で、「connectable かつ non-scannable かつ payload空」からの推測になる |
-| スキャン側のFilter Accept List | ❌ | 同梱wrapperの`BLEScan`がfilter policyを公開していない（`setDuplicateFilter`のみ）。絞り込みは受信後にアプリ側で判定する |
+| スキャン側のFilter Accept List | ✅ | `EspBleScanConfig::acceptListOnly`。`ble_gap_disc()` の filter policy に渡すため、許可リスト外のアドバタイズはコントローラが捨てアプリまで届かない。`accept_list` Peerで、リストが空なら1件も報告されず、アドレス追加後は報告されることを検証済み |
 | 送信電力の変更 | ✅ | `EspBle::setTxPower(dBm)` / `txPower()`。無線が対応する飛び飛びの値（-12..+9 dBm、3 dB刻み）へ丸める。`local_identity` Peerで、設定値がadvertisingのTx Power Levelとして電波に出ることを検証済み |
 | 自分のアドレスの取得 | ✅ | `EspBle::localAddress()` / `localAddressType()`。RPA使用時は回転のたびに変わる現在値。`local_identity` Peerで、相手がスキャンで観測したアドレスと一致することを検証済み |
 | 接続時のパラメータ / PHY指定 | 🔧 | `connect()`でConnection IntervalやPHYを指定できない。接続確立後に`updateConnectionParameters()`/`updatePhy()`で変更する |
 | 切断理由の指定（送信側） | ✅ | `disconnect(id, reason)`。`disconnectReason`はHCIコードへ正規化して公開する（backendは0x200オフセット付きで報告するため）ので、渡した値がそのまま相手に現れる。`local_identity` Peerで検証済み |
-| Advertisingチャネルマップの選択 | ❌ | 同梱wrapperの`setAdvertisementChannelMap()`はBluedroid専用で、NimBLE経路には存在しない。常に37/38/39の3チャネルを使用 |
+| Advertisingチャネルマップの選択 | ✅ | `EspBleAdvertising::setChannelMap(mask)`（`EspBleAdvertisingChannel37/38/39`のビットマスク、0で3チャネル全部）。Wi-Fiと重なるチャネルを避けられる代わりに、見つかるまでの時間は延びる。`directed_advertising` Peerでチャネル39のみでの接続を検証済み |
 | Extended Advertising / 複数Advertising Set | ❌ | 同梱NimBLEが`CONFIG_BT_NIMBLE_EXT_ADV`無効でビルドされており、Arduinoライブラリからは有効化不可 |
 | Periodic Advertising | ❌ | Extended Advertising（`CONFIG_BT_NIMBLE_EXT_ADV`）に依存するため同上で対応不可 |
 | 2M PHY / Coded PHY（Long Range） | ✅ | 接続後のPHY更新で対応（下記「PHY更新」）。2Mは実機Peer検証済み、Coded（Long Range）は無線対応依存 |

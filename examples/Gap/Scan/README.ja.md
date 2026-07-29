@@ -22,7 +22,8 @@
 - `ble.scanner().onResult(callback)` — advertisementごとに`EspBleScanResult`を受け取ります
   - `scanResult.address`、`scanResult.rssi`、`scanResult.hasName()`、`scanResult.name`
   - ほかに`advertisesService(uuid)`、`connectable`、Manufacturer Dataも参照できます
-- `EspBleScanConfig` — `active`、`wantDuplicates`、`intervalMilliseconds`、`windowMilliseconds`、`durationSeconds`
+- `EspBleScanConfig` — `active`、`wantDuplicates`、`intervalMilliseconds`、`windowMilliseconds`、`durationSeconds`、`acceptListOnly`
+  - `acceptListOnly = true` にすると、`ble.addToAcceptList()` で登録した相手のアドバタイズだけを受け取ります。それ以外はコントローラが捨てるので`onResult`まで届きません（[Gap/AcceptList](../AcceptList/)は同じリストを接続の制限に使う例です）。照合はアドレス単位なので、RPAを回転させる相手はbonding後でないと登録できません
 - `ble.scanner().start(scanConfig)` / `ble.scanner().stop()`
 - `ble.scanner().droppedResultCount()` — queue溢れで取りこぼしたresult数
 

@@ -124,7 +124,7 @@ Phase 3が2章まで、Phase 6が3章と4章を担当する。
 | # | 項目 | 状況 |
 |---|---|---|
 | 1-1 | Scan Responseに任意ペイロードを載せるAPI | **完了（Peer検証済み）** |
-| 1-2 | ~~Directed Advertising~~ → 0-1により見送り。FEATURE_MATRIXへ❌として記録済み | **完了** |
+| 1-2 | Directed Advertising → 0-1では「wrapper経由では不可」として見送ったが、Phase 4b S3のwrapper撤去で実装した（`setDirectedTarget()`） | **完了（Peer検証済み）** |
 | 1-3 | Filter Accept ListによるPeripheral側の接続制限 | **完了（Peer検証済み）** |
 | 1-4 | `preferredMtu` 既定値を247へ | **完了（Peer検証済み）** |
 | 1-5 | Advertisingの未公開オプション公開 | **一部完了（Tx Powerのみ）** |
@@ -394,7 +394,7 @@ EspBleのHID Deviceは、同梱wrapperを介さず `ble_gatt_svc_def` / `ble_gat
 | 2 | **S1** | #2 汎用GATT Client（discovery・read/write・descriptor・購読・notification受信） | **完了** |
 | 3 | **S2** | **GATT Server自前化**（#1）。ここでPeripheral側のGAPイベントを完全に引き取る。S3の前提 | **完了** |
 | 4 | **S3** | **Advertising自前化**（#3・#5） | **完了** |
-| 5 | **S4** | **Scan自前化**（#4） | 未着手 |
+| 5 | **S4** | **Scan自前化**（#4） | **完了** |
 | 6 | **S5** | **接続・Security・init/address/MTU自前化**（#7、SMブロッキング解消） | 未着手 |
 | 7 | **S6** | HID Hostを自前Client経路へ移行、wrapperの `#include` を全削除、`library.properties`・ドキュメント更新 | 未着手 |
 
@@ -468,7 +468,21 @@ EspBleのHID Deviceは、同梱wrapperを介さず `ble_gatt_svc_def` / `ble_gat
 
 判明した挙動: 非接続広告のPDU種別は **`disc_mode` で決まる**。`BLE_GAP_DISC_MODE_GEN` だとscannable（ADV_SCAN_IND）になり、scan responseを持たないビーコンでも走査要求を受けてしまう。scan responseの中身が無いときは `BLE_GAP_DISC_MODE_NON` を選ぶ。
 
+#### S4 の実施状況
+
+`ble_gap_disc()` / `ble_gap_disc_cancel()` / `ble_gap_disc_active()` を直接呼び、AD構造のパーサも自前で持つ。`BLEScan` / `BLEAdvertisedDevice` は使わない（`#include <BLEScan.h>` を削除）。新しく `EspBleScanConfig::acceptListOnly`（#4）を追加した。
+
+パーサは `parseAdvertisingReport()` の1関数で、AD type 0x02〜0x09・0x0a・0x16・0x19・0x20・0x21・0xff を読む。builderが書く「complete list」だけでなく「incomplete list」も受ける（値は同じで、全部を列挙したと宣言したかどうかしか違わない）。UUIDのon-air形式（2/4/16バイトのリトルエンディアン）から `EspBleUuidValue` を作る `espBleUuidFromLittleEndian()` を `EspBleUuid.h` へ追加し、host unit testも足した。
+
+**アドバタイズとスキャン応答は2つのレポートで届く**ので、scannableな相手はスキャン応答が来るまで保留して1件のScanResultにまとめる。保留表は8件で、溢れたら最も古いものをその時点の内容で報告する（黙って捨てない）。スキャンが終わるとき（`BLE_GAP_EVENT_DISC_COMPLETE` と `stop()`）に、応答が来なかった保留分を吐き出す。passive scanと非scannableな広告は、続きが来ないのでその場で報告する。
+
+実機確認（2ボード）: スキャンに依存する `advertise_scan` / `advertise_payload` / `service_data` / `beacon` / `ibeacon` / `scan_response` / `accept_list` / `address_privacy` / `local_identity` / `connect_disconnect` が通ることを確認した。`accept_list` には**スキャン側**のaccept list（#4）のテストを追加し、accept listが空なら1件も報告されず、相手のアドレスを入れると報告されるところまで検証した。
+
 判明した挙動その2: **`ble_gap_event_listener_register()` のグローバルリスナは `BLE_GAP_EVENT_PASSKEY_ACTION` を受け取らない**。`ENC_CHANGE` や `MTU` は届くのでリスナ側だけで足りると考えていたが、passkeyの表示・入力・数値比較はその接続のコールバック（＝自前広告に渡した `advertisingGapEvent`）にしか来ない。実機のダンプで、リスナ側に一度も届かないこと、接続コールバック側には `action=3`（DISP）が届くことを確認して切り分けた。
+
+実機確認（2ボード）: 新設した `peer/directed_advertising` で、(1) 無向広告で互いのアドレスを学習 →(2) そのCentral宛の有向広告へ切り替えてアドレス指定で接続 →(3) チャネル39のみに絞った無向広告で再び発見・接続、まで通した。有向広告はペイロードを載せられないため、Centralはスキャンではなくアドレス指定で接続する。
+
+副産物: passkey表示 / Numeric Comparisonの**接続attributionが推定でなくなった**（Peripheral接続のみ）。`BLE_GAP_EVENT_PASSKEY_ACTION` が `conn_handle` を持つため、該当スロットを直接引ける。DESIGN_DEBTの「対象外（backend由来）」から1件消えた。
 
 判明した挙動その3: **Centralの `ENC_CHANGE` をグローバルリスナで拾うと、セキュリティ確立イベントが二重に上がる**。wrapperのセキュリティコールバックが同じことを報告するためで、アプリがそこでdiscoveryを走らせていると2回走り、HID Hostがキャッシュしていた `BLERemoteCharacteristic` が入れ替わってLED（Output Report）書き込みが失敗した。リスナ側の `ENC_CHANGE` はPeripheral接続に限定し、Central接続はwrapperの経路に任せる。Peripheral側を自前化したときは「引き取り漏れ」だけでなく「二重計上」も出る、という形の失敗。
 

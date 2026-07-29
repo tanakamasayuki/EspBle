@@ -87,6 +87,26 @@ int main()
   check("128-bit with bad digit rejected", !parse("5266f727-49d7-4eaf-a6f1-64757073657g").valid());
   check("an invalid value equals nothing", !espBleUuidEquals(parse("nope"), parse("nope")));
 
+  // On-air UUIDs: little-endian bytes of 2, 4 or 16 length.
+  const uint8_t air16[2] = {0x0f, 0x18};
+  EspBleUuidValue fromAir;
+  check("2-byte on-air parses", espBleUuidFromLittleEndian(air16, sizeof(air16), fromAir));
+  check("2-byte on-air equals 180f", espBleUuidEquals(fromAir, battery));
+  check("2-byte on-air keeps its width", fromAir.bitSize == 16);
+
+  const uint8_t air32[4] = {0x0f, 0x18, 0x00, 0x00};
+  check("4-byte on-air parses", espBleUuidFromLittleEndian(air32, sizeof(air32), fromAir));
+  check("4-byte on-air equals 180f", espBleUuidEquals(fromAir, battery));
+
+  uint8_t air128[16];
+  std::memcpy(air128, vendor.bytes, sizeof(air128));
+  check("16-byte on-air parses", espBleUuidFromLittleEndian(air128, sizeof(air128), fromAir));
+  check("16-byte on-air round-trips", std::strcmp(format(fromAir, text), custom) == 0);
+
+  check("3-byte on-air rejected", !espBleUuidFromLittleEndian(air128, 3, fromAir));
+  check("zero-length on-air rejected", !espBleUuidFromLittleEndian(air128, 0, fromAir));
+  check("null on-air rejected", !espBleUuidFromLittleEndian(nullptr, 2, fromAir));
+
   if (failures == 0)
   {
     std::printf("PASS uuid codec\n");

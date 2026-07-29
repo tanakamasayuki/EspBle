@@ -30,6 +30,13 @@ void setup()
   auto &advertising = ble.advertising();
   advertising.setName("EspBle Advertiser");     // en: put the local name in the payload / ja: local nameを載せる
   advertising.addServiceUuid("1812");           // en: HID Service UUID (16-bit) / ja: HID Service UUID（16-bit表記）
+  // en: All three advertising channels (37/38/39) are used by default.
+  //     setChannelMap() can drop the ones that overlap a busy Wi-Fi band, at the
+  //     cost of taking longer to be found. Passing 0 restores all three.
+  // ja: 既定では3つのadvertisingチャネル（37/38/39）すべてを使う。setChannelMap() で
+  //     Wi-Fiと重なるチャネルを外せるが、見つけてもらうまでの時間は延びる。
+  //     0を渡すと3チャネルすべてに戻る。
+  advertising.setChannelMap(EspBleAdvertisingChannelAll);
   if (!advertising.start())
   {
     // en: Fails with InvalidArgument if the payload would exceed 31 bytes.

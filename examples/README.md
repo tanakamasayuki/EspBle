@@ -89,6 +89,7 @@ Examples are grouped by area. Each standard-service directory holds a matching
 | [Gap/ServiceData](Gap/ServiceData/) | Broadcaster | Broadcast a temperature as Service Data (AD 0x16); publish values without a connection |
 | [Gap/ScanResponse](Gap/ScanResponse/) | Peripheral | Split the payload across advertising data and scan response to get past the 31-byte limit |
 | [Gap/AcceptList](Gap/AcceptList/) | Peripheral | Restrict who may connect with the Filter Accept List |
+| [Gap/DirectedAdvertise](Gap/DirectedAdvertise/) | Peripheral | Directed advertising aimed at a single peer; carries no payload |
 | [Gap/PrivateAddress](Gap/PrivateAddress/) | Peripheral | Advertise with a random static / resolvable private address |
 
 ### GATT — Basics (generic mechanics + serial)

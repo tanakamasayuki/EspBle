@@ -88,6 +88,7 @@ arduino-cli compile --profile esp32s3 examples/<path>
 | [Gap/ServiceData](Gap/ServiceData/) | Broadcaster | Service Data（AD 0x16）で温度を放送。接続させずに値を配る |
 | [Gap/ScanResponse](Gap/ScanResponse/) | Peripheral | advertising payloadとscan responseの2面に分けて31byte制限を回避 |
 | [Gap/AcceptList](Gap/AcceptList/) | Peripheral | Filter Accept Listで接続できる相手を制限 |
+| [Gap/DirectedAdvertise](Gap/DirectedAdvertise/) | Peripheral | 相手を1台に指定したDirected Advertising。payloadは載らない |
 | [Gap/PrivateAddress](Gap/PrivateAddress/) | Peripheral | random static / resolvable private addressでadvertise |
 
 ### GATT — 基本（汎用の仕組み＋シリアル）

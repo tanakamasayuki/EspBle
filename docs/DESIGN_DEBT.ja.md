@@ -105,10 +105,11 @@ HID Host の `discover()` が汎用queueエンジンに乗らず、別経路に�
 ## 対象外（backend由来・修正不能）
 
 - SMコールバック（passkey要求 / Numeric Comparison確認）が同期でhost taskを最大30秒block（NimBLEの `onPassKeyRequest()`/`onConfirmPIN()` がinline戻り必須）。
-- passkey表示 / Numeric Comparisonの接続attributionが「最初の未暗号化接続」の推定（backend callbackにconn handle無し、DECISIONS Security#8）。
 - GATT client discoveryのheap leak（約2.6 KB/discovery）。ただし**汎用GATT Clientはこの経路を通らなくなった**: discoveryもread/write/購読もNimBLEホストAPIへ直接発行し、wrapperの `BLEClient` のremoteオブジェクトを作らない（[PLAN_GUIDE_REVAMP.ja.md](PLAN_GUIDE_REVAMP.ja.md) Phase 4b #2）。残る利用箇所はHID Host / MIDI Hostの自前discovery経路で、そこは未変更。
 - client側MTU変更callback無し（接続時snapshotのみ）。
 - Extended/Periodic Advertising、動的service追加、`connect()` のtimeout引数無視、最大3接続（同梱NimBLEビルド構成）。
+
+> **解決済み（自前広告化）**: passkey表示 / Numeric Comparisonの接続attributionが「最初の未暗号化接続」の推定だった件は、Peripheral接続では解消した。`BLE_GAP_EVENT_PASSKEY_ACTION` を自前の広告コールバックで受けるため `conn_handle` が判る（Central接続はwrapperのsecurity callback経由のままで、そこは引き続き推定）。なお `ble_gap_event_listener_register()` のグローバルリスナには **PASSKEY_ACTION が届かない**（`ENC_CHANGE` や `MTU` は届く）ため、接続コールバックで受ける必要がある（[PLAN_GUIDE_REVAMP.ja.md](PLAN_GUIDE_REVAMP.ja.md) Phase 4b S3）。
 
 > **解決済み（自前GATT Server化）**: Descriptor Write eventの接続ID欠落は、属性テーブルを`ble_gatts_add_svcs()`で自前に組むようにして解消した。ホストのaccess callbackは`conn_handle`を受け取るため、`EspBleGattDescriptorWrite::connectionId`を埋められる（[PLAN_GUIDE_REVAMP.ja.md](PLAN_GUIDE_REVAMP.ja.md) Phase 4b S2）。
 

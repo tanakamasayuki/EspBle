@@ -20,6 +20,7 @@
 - `ble.begin(config)` — スタック初期化。`config.deviceName`がGAPデバイス名になります
 - `ble.advertising().setName(name)` — advertising payloadへlocal nameを載せます
 - `ble.advertising().addServiceUuid(uuid)` — Service UUIDを掲載（サイズごとに単一のComplete Listへまとめます）
+- `ble.advertising().setChannelMap(mask)` — 使うadvertisingチャネルを絞ります（`EspBleAdvertisingChannel37/38/39` のビットマスク、0で3チャネルすべて）。Wi-Fiと重なるチャネルを避けられる代わりに、見つけてもらうまでの時間は延びます
 - `ble.advertising().start()` — connectableなLegacy Advertisingを開始。payloadが31 bytesを超える場合は`InvalidArgument`で失敗します
 - `ble.lastErrorName()` / `ble.lastErrorDetail()` — 要求が拒否された理由
 

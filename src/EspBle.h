@@ -99,6 +99,12 @@ struct EspBleScanConfig
   uint16_t intervalMilliseconds = 100;
   uint16_t windowMilliseconds = 50;
   uint32_t durationSeconds = 0;
+  // Report only advertisers on the Filter Accept List (EspBle::addToAcceptList()).
+  // The controller drops the rest, so they never reach the application at all --
+  // cheaper and more reliable than filtering in onResult(). Matching is by
+  // address, so a peer that rotates a Resolvable Private Address must be bonded
+  // for its entry to keep working.
+  bool acceptListOnly = false;
 };
 
 enum class EspBleAddressType : uint8_t

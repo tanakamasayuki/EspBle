@@ -20,6 +20,7 @@ Starts connectable legacy advertising carrying a device name and a 16-bit servic
 - `ble.begin(config)` — initialize the stack; `config.deviceName` sets the GAP device name
 - `ble.advertising().setName(name)` — put the local name into the advertising payload
 - `ble.advertising().addServiceUuid(uuid)` — advertise a service UUID (grouped by size into a single Complete List)
+- `ble.advertising().setChannelMap(mask)` — restrict which advertising channels are used (a bit mask of `EspBleAdvertisingChannel37/38/39`; 0 means all three). Avoiding a channel that overlaps a busy Wi-Fi band costs longer discovery times
 - `ble.advertising().start()` — start connectable legacy advertising; fails with `InvalidArgument` if the payload would exceed 31 bytes
 - `ble.lastErrorName()` / `ble.lastErrorDetail()` — reason for a rejected request
 

@@ -10,6 +10,18 @@ static constexpr uint32_t CONNECT_TIMEOUT_MS = 4000;
 EspBle ble;
 bool connectRequested = false;
 
+// What the current scan is for: connecting, or checking which advertisers the
+// controller lets through while the scanner filters against the accept list.
+enum class ScanMode
+{
+  Connect,
+  Observe,
+};
+ScanMode scanMode = ScanMode::Connect;
+bool targetSeen = false;
+String targetAddress;
+EspBleAddressType targetAddressType = EspBleAddressType::Public;
+
 void setup()
 {
   Serial.begin(115200);
@@ -24,7 +36,15 @@ void setup()
   }
 
   ble.scanner().onResult([](const EspBleScanResult &scanResult) {
-    if (connectRequested || !scanResult.advertisesService(SERVICE_UUID)) return;
+    if (!scanResult.advertisesService(SERVICE_UUID)) return;
+    if (scanMode == ScanMode::Observe)
+    {
+      targetSeen = true;
+      targetAddress = scanResult.address;
+      targetAddressType = scanResult.addressType;
+      return;
+    }
+    if (connectRequested) return;
     connectRequested = true;
     ble.scanner().stop();
     Serial.printf("TARGET_FOUND %s\n", scanResult.address.c_str());
@@ -50,8 +70,37 @@ void loop()
   if (Serial.available() > 0)
   {
     const char command = Serial.read();
-    if (command == 'c')
+    if (command == 's' || command == 'f')
     {
+      // 's' observes every advertiser; 'f' only those on the accept list.
+      scanMode = ScanMode::Observe;
+      targetSeen = false;
+      EspBleScanConfig scanConfig;
+      scanConfig.active = true;
+      scanConfig.acceptListOnly = command == 'f';
+      Serial.println(ble.scanner().start(scanConfig) ? "OBSERVE_STARTED" : "OBSERVE_START_FAILED");
+    }
+    else if (command == 'n')
+    {
+      ble.scanner().stop();
+      Serial.printf("OBSERVED target=%u address=%s\n", targetSeen ? 1 : 0, targetAddress.c_str());
+    }
+    else if (command == 'a')
+    {
+      const bool added = targetAddress.length() > 0 &&
+        ble.addToAcceptList(targetAddress.c_str(), targetAddressType);
+      Serial.printf("CENTRAL_ACCEPT_LIST added=%u count=%u\n",
+        added ? 1 : 0, static_cast<unsigned>(ble.acceptListCount()));
+    }
+    else if (command == 'x')
+    {
+      ble.clearAcceptList();
+      Serial.printf("CENTRAL_ACCEPT_LIST added=0 count=%u\n",
+        static_cast<unsigned>(ble.acceptListCount()));
+    }
+    else if (command == 'c')
+    {
+      scanMode = ScanMode::Connect;
       connectRequested = false;
       EspBleScanConfig scanConfig;
       scanConfig.active = true;
