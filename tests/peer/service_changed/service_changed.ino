@@ -38,7 +38,7 @@ void setup()
     Serial.println(accepted ? "SC_SUBSCRIBE_REQUESTED" : "SC_SUBSCRIBE_REQUEST_FAILED");
   });
   ble.onSubscribed([](const EspBleGattResult &result) {
-    Serial.printf("SC_SUBSCRIBED success=%u context=%s\n", result.success ? 1 : 0, contextName());
+    Serial.printf("SC_SUBSCRIBED success=%u error=%u detail=%s context=%s\n", result.success ? 1 : 0, static_cast<unsigned>(result.error), result.detail.c_str(), contextName());
   });
   ble.onUnsubscribed([](const EspBleGattResult &result) {
     Serial.printf("SC_UNSUBSCRIBED success=%u context=%s\n", result.success ? 1 : 0, contextName());

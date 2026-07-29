@@ -1773,6 +1773,8 @@ private:
   void pumpSendQueue();
   bool startGattServer();
   void releaseDeferredNotifications();
+  void applySecurityConfiguration(const EspBleSecurityConfig &security);
+  void clearSecurityConfiguration();
   void cancelExpiredConnectAttempt();
   void drainPendingDisconnects();
   // True when a HID discovery for connectionId is already queued or in flight.

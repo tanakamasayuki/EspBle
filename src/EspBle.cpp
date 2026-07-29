@@ -1,7 +1,6 @@
 #include "EspBle.h"
 
 #include <BLEDevice.h>
-#include <BLESecurity.h>
 #include <host/ble_gap.h>
 #include <host/ble_sm.h>
 #include <host/ble_uuid.h>
@@ -763,6 +762,17 @@ struct EspBleImpl
       // arrives as BLE_GAP_EVENT_MTU a moment later, which is where the
       // connection's mtu is updated and onMtuChanged() fires.
       ble_gattc_exchange_mtu(event->connect.conn_handle, nullptr, nullptr);
+      if (impl->securityEnabled && impl->pairOnConnect && !description.sec_state.encrypted)
+      {
+        ble_gap_security_initiate(event->connect.conn_handle);
+      }
+      return 0;
+    }
+    if (event->type == BLE_GAP_EVENT_PASSKEY_ACTION)
+    {
+      // Pairing input is answered from the connection's own callback: the
+      // global listener never sees this event.
+      impl->handlePasskeyAction(event->passkey.conn_handle, event->passkey.params);
       return 0;
     }
     if (event->type == BLE_GAP_EVENT_DISCONNECT)
@@ -800,47 +810,14 @@ struct EspBleImpl
       timedOut ? EspBleError::Timeout : EspBleError::BackendFailure);
   }
 
-  class SecurityCallbacks : public BLESecurityCallbacks
-  {
-  public:
-    explicit SecurityCallbacks(EspBleImpl *owner) : owner_(owner) {}
-
-    void onAuthenticationComplete(ble_gap_conn_desc *description) override
-    {
-      if (description != nullptr)
-      {
-        owner_->updateSecurity(description->conn_handle, description->sec_state);
-      }
-    }
-
-    void onPassKeyNotify(uint32_t passkey) override
-    {
-      owner_->queuePasskeyDisplayed(passkey);
-    }
-
-    uint32_t onPassKeyRequest() override
-    {
-      return owner_->requestPasskey();
-    }
-
-    bool onConfirmPIN(uint32_t pin) override
-    {
-      return owner_->confirmNumericComparison(pin);
-    }
-
-  private:
-    EspBleImpl *owner_;
-  };
-
   explicit EspBleImpl(EspBle *owner)
-      : owner(owner), securityCallbacks(this)
+      : owner(owner)
   {
   }
 
   ~EspBleImpl()
   {
     for (GattDatabaseSnapshot *database : gattDatabases) delete database;
-    delete securityBackend;
   }
 
   // EspBleImpl is a friend of EspBle and EspBleGattServer, so it can hand the
@@ -1053,13 +1030,8 @@ struct EspBleImpl
     }
     else if (event->type == BLE_GAP_EVENT_ENC_CHANGE)
     {
-      // Peripheral connections only: a central one is reported a second time by
-      // the wrapper's security callback, and two events would run the
-      // application's post-pairing work (discovery, and so its cached
-      // characteristics) twice.
       ble_gap_conn_desc description{};
-      if (impl->isPeripheralConnection(event->enc_change.conn_handle) &&
-          ble_gap_conn_find(event->enc_change.conn_handle, &description) == 0)
+      if (ble_gap_conn_find(event->enc_change.conn_handle, &description) == 0)
       {
         impl->updateSecurity(event->enc_change.conn_handle, description.sec_state);
       }
@@ -1305,27 +1277,9 @@ struct EspBleImpl
   // entered. With a static passkey it returns immediately; otherwise it blocks
   // (yielding) until the loop task supplies one via providePasskey(), or a
   // timeout elapses and pairing is rejected with 0.
-  bool isPeripheralConnection(uint16_t connectionHandle)
-  {
-    std::lock_guard<std::mutex> lock(mutex);
-    for (const ConnectionSlot &slot : connections)
-    {
-      if (slot.used && slot.connection.handle == connectionHandle &&
-          slot.connection.localRole == EspBleRole::Peripheral)
-      {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  // Pairing input for a connection whose GAP events we own. Advertising is
-  // started here rather than through the bundled wrapper, so the wrapper's
-  // security callbacks never fire for an incoming connection and the answer has
-  // to be produced here. Central connections still belong to the wrapper.
+  // Pairing input, for either role: every connection's GAP events are ours.
   void handlePasskeyAction(uint16_t connectionHandle, const ble_gap_passkey_params &params)
   {
-    if (!isPeripheralConnection(connectionHandle)) return;
     ble_sm_io io{};
     io.action = params.action;
     switch (params.action)
@@ -2429,6 +2383,8 @@ struct EspBleImpl
   uint8_t ownAddressType = BLE_OWN_ADDR_PUBLIC;
   // Set once ble_gatts_start() has run; the attribute table cannot change after.
   bool gattServerStarted = false;
+  // Set once the mandatory GAP/GATT services have been registered.
+  bool peripheralPrepared = false;
   ConnectionSlot connections[ConnectionCapacity];
   Event events[ConnectionEventQueueCapacity];
   size_t eventHead = 0;
@@ -2444,8 +2400,6 @@ struct EspBleImpl
   uint32_t connectDeadlineMilliseconds = 0;
   bool connectCancelRequested = false;
 
-  SecurityCallbacks securityCallbacks;
-  BLESecurity *securityBackend = nullptr;
   bool securityEnabled = false;
   // Start pairing as soon as a peer connects (EspBleSecurityConfig::pairOnConnect).
   bool pairOnConnect = false;
@@ -8772,56 +8726,11 @@ bool EspBle::begin(const EspBleConfig &config)
     impl_->staticPasskey = config.security.staticPasskey;
     impl_->passkeyProvided = false;
   }
-  if (config.security.enabled)
-  {
-    impl_->securityBackend = new BLESecurity();
-    if (impl_->securityBackend == nullptr)
-    {
-      BLESecurity::setAuthenticationMode(false, false, false);
-      BLESecurity::setForceAuthentication(false);
-      BLEDevice::deinit(false);
-      delete impl_;
-      impl_ = nullptr;
-      setError(EspBleError::ResourceExhausted, "failed to allocate security state");
-      return false;
-    }
-    uint8_t ioCapability = ESP_IO_CAP_NONE;
-    if (config.security.ioCapability == EspBleSecurityIoCapability::DisplayOnly)
-    {
-      ioCapability = ESP_IO_CAP_OUT;
-    }
-    else if (config.security.ioCapability == EspBleSecurityIoCapability::KeyboardOnly)
-    {
-      ioCapability = ESP_IO_CAP_IN;
-    }
-    else if (config.security.ioCapability == EspBleSecurityIoCapability::DisplayYesNo)
-    {
-      ioCapability = ESP_IO_CAP_IO;
-    }
-    BLESecurity::setCapability(ioCapability);
-    if (config.security.staticPasskeyEnabled)
-    {
-      BLESecurity::setPassKey(true, config.security.staticPasskey);
-    }
-    BLESecurity::setAuthenticationMode(
-      config.security.bonding,
-      config.security.mitm,
-      true);
-    BLESecurity::setForceAuthentication(config.security.pairOnConnect);
-    BLEDevice::setSecurityCallbacks(&impl_->securityCallbacks);
-  }
-  else
-  {
-    BLESecurity::setAuthenticationMode(false, false, false);
-    BLESecurity::setForceAuthentication(false);
-    BLEDevice::setSecurityCallbacks(nullptr);
-  }
+  applySecurityConfiguration(config.security);
 
   if (!gattServer_.realize())
   {
-    BLEDevice::setSecurityCallbacks(nullptr);
-    BLESecurity::setAuthenticationMode(false, false, false);
-    BLESecurity::setForceAuthentication(false);
+    clearSecurityConfiguration();
     BLEDevice::deinit(false);
     gattServer_.resetBackend();
     delete impl_;
@@ -8830,9 +8739,7 @@ bool EspBle::begin(const EspBleConfig &config)
   }
   if (!hidKeyboardDevice_.realize())
   {
-    BLEDevice::setSecurityCallbacks(nullptr);
-    BLESecurity::setAuthenticationMode(false, false, false);
-    BLESecurity::setForceAuthentication(false);
+    clearSecurityConfiguration();
     hidKeyboardDevice_.resetBackend();
     BLEDevice::deinit(false);
     gattServer_.resetBackend();
@@ -8857,6 +8764,50 @@ bool EspBle::begin(const EspBleConfig &config)
   initialized_ = true;
   clearError();
   return true;
+}
+
+// The Security Manager is configured through ble_hs_cfg: what this device can
+// display or type, whether it demands MITM protection, and which keys are
+// exchanged. Bonding keys are distributed both ways so a bond can be restored
+// from either side.
+void EspBle::applySecurityConfiguration(const EspBleSecurityConfig &security)
+{
+  if (!security.enabled)
+  {
+    clearSecurityConfiguration();
+    return;
+  }
+  uint8_t ioCapability = BLE_HS_IO_NO_INPUT_OUTPUT;
+  if (security.ioCapability == EspBleSecurityIoCapability::DisplayOnly)
+  {
+    ioCapability = BLE_HS_IO_DISPLAY_ONLY;
+  }
+  else if (security.ioCapability == EspBleSecurityIoCapability::KeyboardOnly)
+  {
+    ioCapability = BLE_HS_IO_KEYBOARD_ONLY;
+  }
+  else if (security.ioCapability == EspBleSecurityIoCapability::DisplayYesNo)
+  {
+    ioCapability = BLE_HS_IO_DISPLAY_YESNO;
+  }
+  ble_hs_cfg.sm_io_cap = ioCapability;
+  ble_hs_cfg.sm_bonding = security.bonding ? 1 : 0;
+  ble_hs_cfg.sm_mitm = security.mitm ? 1 : 0;
+  // LE Secure Connections: the modern pairing algorithm. Legacy pairing is only
+  // needed for peers older than BLE 4.2 and is materially weaker.
+  ble_hs_cfg.sm_sc = 1;
+  ble_hs_cfg.sm_our_key_dist = BLE_SM_PAIR_KEY_DIST_ENC | BLE_SM_PAIR_KEY_DIST_ID;
+  ble_hs_cfg.sm_their_key_dist = BLE_SM_PAIR_KEY_DIST_ENC | BLE_SM_PAIR_KEY_DIST_ID;
+}
+
+void EspBle::clearSecurityConfiguration()
+{
+  ble_hs_cfg.sm_io_cap = BLE_HS_IO_NO_INPUT_OUTPUT;
+  ble_hs_cfg.sm_bonding = 0;
+  ble_hs_cfg.sm_mitm = 0;
+  ble_hs_cfg.sm_sc = 1;
+  ble_hs_cfg.sm_our_key_dist = 0;
+  ble_hs_cfg.sm_their_key_dist = 0;
 }
 
 void EspBle::end()
@@ -8918,9 +8869,7 @@ void EspBle::end()
       delay(1);
     }
   }
-  BLEDevice::setSecurityCallbacks(nullptr);
-  BLESecurity::setAuthenticationMode(false, false, false);
-  BLESecurity::setForceAuthentication(false);
+  clearSecurityConfiguration();
   hidKeyboardDevice_.resetBackend();
   hidKeyboardHost_.resetBackend();
   scanner_.flushPendingResults();
@@ -9459,12 +9408,14 @@ bool EspBle::requestSecurity(EspBleConnectionId connectionId)
     return false;
   }
 
-  int backendCode = 0;
-  if (!BLESecurity::startSecurity(connectionHandle, &backendCode))
+  // BLE_HS_EALREADY means the link is already encrypted, which is the state the
+  // caller asked for.
+  const int status = ble_gap_security_initiate(connectionHandle);
+  if (status != 0 && status != BLE_HS_EALREADY)
   {
     setError(
       EspBleError::BackendFailure,
-      (String("failed to request BLE security, backend code ") + backendCode).c_str());
+      (String("failed to request BLE security, backend code ") + status).c_str());
     return false;
   }
   clearError();
@@ -10564,9 +10515,12 @@ bool EspBle::startGattServer()
   return true;
 }
 
-// Kept as the single place the peripheral role is claimed, even though the
-// attribute table and the GAP events are now ours: profile helpers call it
-// before they register services.
+// The first claim on the peripheral role starts the attribute table. Every
+// GATT server exposes two services before its own: Generic Access (0x1800),
+// which carries the device name and appearance, and Generic Attribute (0x1801),
+// whose Service Changed characteristic tells a bonded peer that its cached copy
+// of the table is stale. Both are mandatory, and a peer that discovers neither
+// cannot subscribe to Service Changed at all.
 bool EspBle::preparePeripheral()
 {
   if (impl_ == nullptr)
@@ -10574,6 +10528,12 @@ bool EspBle::preparePeripheral()
     setError(EspBleError::InvalidState, "connection state is unavailable");
     return false;
   }
+  if (impl_->peripheralPrepared) return true;
+  // Discards anything a previous session registered, so this table starts clean.
+  ble_gatts_reset();
+  ble_svc_gap_init();
+  ble_svc_gatt_init();
+  impl_->peripheralPrepared = true;
   return true;
 }
 
