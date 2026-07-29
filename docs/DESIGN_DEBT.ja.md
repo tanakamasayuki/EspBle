@@ -83,7 +83,7 @@ HID Host の `discover()` が汎用queueエンジンに乗らず、別経路に�
 2. **切断時のqueue未purge＋GATT op中の `disconnect()` reject**: `removeConnection` が `gattQueue` を触らず、切断済み接続のqueue済みopが残って生存接続を遅延させる。`disconnect()` はGATT op中false。→ **完了**: `removeConnection` が `purgeQueuedGattOpsLocked(connectionId)` で当該接続のqueue済みopをdrop（generic opは失敗GattResultを配送して完了contractを維持、queued HidDiscoverはHID Host切断処理に委ねて静かにdrop、実行中opは無干渉）。`disconnect()` はGATT op中に**rejectせず deferred**（`ConnectionSlot::pendingDisconnect`＋`update()` の `drainPendingDisconnects()` でop完了後に実行）。**状況: 完了（要実機再確認）**
 3. **NKROのMTU下限未引き上げ**: `enableNkro()` はフラグとreport長29のみ設定し `preferredMtu`（既定23）を触らないため、29-byte notifyが送信時に無言失敗。→ **完了**: ライブラリの明示エラー方針に合わせ、`begin()` で「NKRO keyboard configured かつ `preferredMtu < 32`」を `InvalidArgument` で拒否（無言失敗より明示エラー。silentにMTUを上書きしない）。**状況: 完了（要実機再確認）**
 
-4. **`connect()` timeoutが効かない（cancel前提の設計が誤り）**: `cancelExpiredConnectAttempt()` は要求timeout経過時に `ble_gap_conn_cancel()` で backend の待ちを打ち切る設計だったが、**打ち切れない**。同梱wrapperのNimBLE `BLEClient::connect()` は `ble_gap_connect()` ではなくBluedroid互換層の `esp_ble_gattc_open()` を使うため、接続試行がホストの追跡するGAP手続きとして存在せず、`ble_gap_conn_cancel()` は `BLE_HS_EALREADY`(rc=2) を返して空振りする。`accept_list` Peerで、timeout 4000 ms 指定に対し `BLEClient::connect()` の戻りが実測 **31000 ms**（成功時は219 ms）であることを確認した。→ **完了**: cancel前提をやめ、**timeout経過時に試行を「放棄」する**方式へ変更。失敗イベント（`EspBleError::Timeout`）を即座に配送し、`connecting` を解放してアプリが直ちに再接続できるようにする。放棄されたworkerは戻ってきた時点で結果を破棄して自分のclientをretireし、遅れて成立した接続は `ClientCallbacks::onConnect` で slot に載せずに切断する。`end()` は放棄済みworkerの終了も待ってからdeinitする。`accept_list` Peerで、失敗が4秒で返りその直後の接続が（旧workerがbackend内でブロックされたまま）成立することを実機確認。**状況: 完了**
+4. **`connect()` timeoutが効かない（cancel前提の設計が誤り）**: `cancelExpiredConnectAttempt()` は要求timeout経過時に `ble_gap_conn_cancel()` で backend の待ちを打ち切る設計だったが、**打ち切れない**。同梱wrapperのNimBLE `BLEClient::connect()` は `ble_gap_connect()` ではなくBluedroid互換層の `esp_ble_gattc_open()` を使うため、接続試行がホストの追跡するGAP手続きとして存在せず、`ble_gap_conn_cancel()` は `BLE_HS_EALREADY`(rc=2) を返して空振りする。`accept_list` Peerで、timeout 4000 ms 指定に対し `BLEClient::connect()` の戻りが実測 **31000 ms**（成功時は219 ms）であることを確認した。→ **完了**: cancel前提をやめ、**timeout経過時に試行を「放棄」する**方式へ変更。失敗イベント（`EspBleError::Timeout`）を即座に配送し、`connecting` を解放してアプリが直ちに再接続できるようにする。放棄されたworkerは戻ってきた時点で結果を破棄して自分のclientをretireし、遅れて成立した接続は `ClientCallbacks::onConnect` で slot に載せずに切断する。`end()` は放棄済みworkerの終了も待ってからdeinitする。`accept_list` Peerで、失敗が4秒で返りその直後の接続が（旧workerがbackend内でブロックされたまま）成立することを実機確認。→ **その後、接続自体を `ble_gap_connect()` へ移してcancelが本当に効くようになった**（[PLAN_GUIDE_REVAMP.ja.md](PLAN_GUIDE_REVAMP.ja.md) Phase 4b S5）。放棄機構は削除し、期限が来たら `ble_gap_conn_cancel()` で打ち切る。なお同梱NimBLEは接続失敗を自前で数回リトライするため（`BLE_GAP_EVENT_REATTEMPT_COUNT`）、`ble_gap_connect()` のdurationだけでは指定時間を守れず、期限の管理は引き続き `update()` 側で行う。**状況: 完了**
 
 ### より大きめ（任意・クラスタA完了が前提）
 
@@ -104,8 +104,8 @@ HID Host の `discover()` が汎用queueエンジンに乗らず、別経路に�
 
 ## 対象外（backend由来・修正不能）
 
-- SMコールバック（passkey要求 / Numeric Comparison確認）が同期でhost taskを最大30秒block（NimBLEの `onPassKeyRequest()`/`onConfirmPIN()` がinline戻り必須）。
-- GATT client discoveryのheap leak（約2.6 KB/discovery）。ただし**汎用GATT Clientはこの経路を通らなくなった**: discoveryもread/write/購読もNimBLEホストAPIへ直接発行し、wrapperの `BLEClient` のremoteオブジェクトを作らない（[PLAN_GUIDE_REVAMP.ja.md](PLAN_GUIDE_REVAMP.ja.md) Phase 4b #2）。残る利用箇所はHID Host / MIDI Hostの自前discovery経路で、そこは未変更。
+- SMコールバック（passkey要求 / Numeric Comparison確認）が同期でhost taskを最大30秒block。`ble_sm_inject_io()` は `BLE_GAP_EVENT_PASSKEY_ACTION` を受けた文脈で答える必要があり、アプリの応答を待つ間はそこで止まる。
+- ~~GATT client discoveryのheap leak（約2.6 KB/discovery）~~ → **該当しなくなった**。discoveryもread/write/購読もNimBLEホストAPIへ直接発行し、wrapperの `BLEClient` は一切使わない。HID Hostも同じ経路へ移行済み（[PLAN_GUIDE_REVAMP.ja.md](PLAN_GUIDE_REVAMP.ja.md) Phase 4b S1・S6）。`gatt_read_write` の `test_discovery_cycles_do_not_leak_heap` が8サイクルで実測する。
 - client側MTU変更callback無し（接続時snapshotのみ）。
 - Extended/Periodic Advertising、動的service追加、`connect()` のtimeout引数無視、最大3接続（同梱NimBLEビルド構成）。
 

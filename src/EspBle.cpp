@@ -19,7 +19,6 @@ extern "C" bool bleInUse(void)
 
 #include <host/ble_gap.h>
 #include <host/ble_hs.h>
-#include <host/ble_hs_pvcy.h>
 #include <host/util/util.h>
 #include <nimble/nimble_port.h>
 #include <nimble/nimble_port_freertos.h>
@@ -8760,21 +8759,13 @@ bool EspBle::begin(const EspBleConfig &config)
       setError(EspBleError::BackendFailure, "failed to set a random device address");
       return false;
     }
-    const bool resolvable = config.ownAddressType == EspBleOwnAddressType::ResolvablePrivate;
-#if defined(CONFIG_IDF_TARGET_ESP32)
-    // The original ESP32 controller cannot generate an RPA itself, so the host
-    // does it and every GAP call still passes the random static type.
-    if (ble_hs_pvcy_rpa_config(resolvable ? 1 : 0) != 0)
-    {
-      stopNimbleHost();
-      setError(EspBleError::BackendFailure, "failed to configure address privacy");
-      return false;
-    }
-    const uint8_t ownType = BLE_OWN_ADDR_RANDOM;
-#else
+    // Every supported SoC generates the Resolvable Private Address in the
+    // controller (the original ESP32, whose controller cannot, has no NimBLE
+    // build and is rejected at compile time).
     const uint8_t ownType =
-      resolvable ? BLE_OWN_ADDR_RPA_RANDOM_DEFAULT : BLE_OWN_ADDR_RANDOM;
-#endif
+      config.ownAddressType == EspBleOwnAddressType::ResolvablePrivate
+        ? BLE_OWN_ADDR_RPA_RANDOM_DEFAULT
+        : BLE_OWN_ADDR_RANDOM;
     if (ble_hs_id_copy_addr(ownType & 1, nullptr, nullptr) != 0)
     {
       stopNimbleHost();

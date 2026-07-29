@@ -395,8 +395,8 @@ EspBleのHID Deviceは、同梱wrapperを介さず `ble_gatt_svc_def` / `ble_gat
 | 3 | **S2** | **GATT Server自前化**（#1）。ここでPeripheral側のGAPイベントを完全に引き取る。S3の前提 | **完了** |
 | 4 | **S3** | **Advertising自前化**（#3・#5） | **完了** |
 | 5 | **S4** | **Scan自前化**（#4） | **完了** |
-| 6 | **S5** | **接続・Security・init/address/MTU自前化**（#7、SMブロッキング解消） | 未着手 |
-| 7 | **S6** | HID Hostを自前Client経路へ移行、wrapperの `#include` を全削除、`library.properties`・ドキュメント更新 | 未着手 |
+| 6 | **S6** | HID Hostを自前Client経路へ移行（S5より先に実施。理由は下記） | **完了** |
+| 7 | **S5** | **接続・Security・init/address/MTU自前化**（#7）。wrapperの `#include` を全削除 | **完了** |
 
 各段階の完了条件は**peerテスト全件PASS**。段階の途中でビルドが通らない期間は許容する（合意済み）。
 
@@ -477,6 +477,27 @@ EspBleのHID Deviceは、同梱wrapperを介さず `ble_gatt_svc_def` / `ble_gat
 **アドバタイズとスキャン応答は2つのレポートで届く**ので、scannableな相手はスキャン応答が来るまで保留して1件のScanResultにまとめる。保留表は8件で、溢れたら最も古いものをその時点の内容で報告する（黙って捨てない）。スキャンが終わるとき（`BLE_GAP_EVENT_DISC_COMPLETE` と `stop()`）に、応答が来なかった保留分を吐き出す。passive scanと非scannableな広告は、続きが来ないのでその場で報告する。
 
 実機確認（2ボード）: スキャンに依存する `advertise_scan` / `advertise_payload` / `service_data` / `beacon` / `ibeacon` / `scan_response` / `accept_list` / `address_privacy` / `local_identity` / `connect_disconnect` が通ることを確認した。`accept_list` には**スキャン側**のaccept list（#4）のテストを追加し、accept listが空なら1件も報告されず、相手のアドレスを入れると報告されるところまで検証した。
+
+#### S6・S5 の実施状況（順序を入れ替えた）
+
+**S6をS5より先に実施した**。HID Hostは接続スロットが持つ `BLEClient*` からリモートオブジェクトを取っており、先に接続を `ble_gap_connect()` へ移すとHID Hostが動かなくなるため。MIDI HostはS1の時点で公開API経由に移行済みで、追加作業は無かった。
+
+**S6**: HID Hostの `Connection` を `BLERemoteCharacteristic*` から属性ハンドルへ移し、discoveryは汎用GATT Clientと同じスナップショットを共有する（同じ相手をHID Hostとアプリの両方が見ても探索は1回）。入力レポートの通知は購読テーブルに追加したconsumerフック経由で、アプリの汎用notificationイベントを通らずHID Hostへ直接渡す。
+
+ここで**Read Longの取りこぼしが見つかった**。`ble_gattc_read()` は1 MTUで切れるが、wrapperの `readValue()` はRead Longを行っていた。数百バイトあるHID Report Mapが途中で切れ、末尾のベンダーコレクションが丸ごと落ちて `kindForReportId()` がUnknownを返していた。**これはS1で汎用GATT Clientにも入っていた欠陥**で（MTU-1超の値が黙って切り詰められる）、`ble_gattc_read_long()` に統一して解消した。短い値は最初の応答で完結するので往復は増えない。
+
+**S5**: `ble_gap_connect()` は非同期なので、接続用のワーカータスク（6 KB）と `abandonedClients` / `retiredClients` / `reapRetiredClients()` の後始末機構がまるごと不要になった。disconnect・接続パラメータ更新は `ble_gap_terminate()` / `ble_gap_update_params()` で両ロール共通になった。SecurityもBLESecurityを介さず `ble_hs_cfg` に直接書く。
+
+**#7が解決した**。ただし同梱NimBLEは接続失敗を自前で数回リトライし（`BLE_GAP_EVENT_REATTEMPT_COUNT`）、最後は「接続失敗」ではなく**切断イベント**で終わるため、`ble_gap_connect()` の duration では呼び出し側の指定時間を守れない。期限は `update()` で見て `ble_gap_conn_cancel()` する。以前と違い今度は本物のキャンセルで、「諦めて放置」ではない。
+
+**仕様変更**: `onConnected` の `connection.mtu` が両ロールとも23になった。wrapperのCentralは接続完了前にMTU交換を済ませていたが、自前化後は接続成立→MTU交換の順で、結果は `onMtuChanged` に届く。CentralとPeripheralで挙動が揃った。
+
+wrapper撤去で踏んだ2つの罠:
+
+- `BLEDevice::createServer()` は中で `ble_gatts_reset(); ble_svc_gap_init(); ble_svc_gatt_init();` を呼んでいた。**GATTサーバに必須の Generic Access (0x1800) と Generic Attribute (0x1801) を登録していたのはここ**で、サーバオブジェクトを使わなくなった時点で属性表から消えていた（`service_changed` テストが検出）。`preparePeripheral()` で自分で登録する。
+- **Arduinoコアは `setup()` の前にBLEコントローラのメモリ（約36 KB）を解放する** — BLEライブラリがリンクされていると宣言されない限り。宣言は `esp32-hal-alloc-ble-mem.h` のコンストラクタが行い、`BLEDevice.cpp` がそれをincludeしていた。wrapperを外した瞬間にメモリが解放され、`esp_bt_controller_init()` が自身のクリーンアップ経路でクラッシュする。自前でincludeして解決。
+
+サイズ: `connect_disconnect` のスケッチで 688 KB → **634 KB**（54 KB減）。使っていないwrapperのコードがリンクされ続けていた分。
 
 判明した挙動その2: **`ble_gap_event_listener_register()` のグローバルリスナは `BLE_GAP_EVENT_PASSKEY_ACTION` を受け取らない**。`ENC_CHANGE` や `MTU` は届くのでリスナ側だけで足りると考えていたが、passkeyの表示・入力・数値比較はその接続のコールバック（＝自前広告に渡した `advertisingGapEvent`）にしか来ない。実機のダンプで、リスナ側に一度も届かないこと、接続コールバック側には `action=3`（DISP）が届くことを確認して切り分けた。
 
