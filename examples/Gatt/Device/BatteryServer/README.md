@@ -1,7 +1,7 @@
 # BatteryServer
 
 > 日本語版: [README.ja.md](README.ja.md)
-> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 4, "GATT" (Japanese)
+> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.md) — chapter 4, "GATT"
 
 Peripheral publishing the standard Battery Service (`0x180F`) with a readable and notifiable Battery Level characteristic (`0x2A19`).
 

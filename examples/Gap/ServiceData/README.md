@@ -1,7 +1,7 @@
 # ServiceData
 
 > 日本語版: [README.ja.md](README.ja.md)
-> Concepts: [BLE communication beginner guide](../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 2, "GAP" (Japanese)
+> Concepts: [BLE communication beginner guide](../../../docs/GUIDE_BLE_BASICS.md) — chapter 2, "GAP"
 
 Advertises a Service Data block (AD type 0x16): a payload tagged with the service UUID it belongs to. This is the standard way for **a sensor to publish a reading without anyone connecting to it**.
 

@@ -1,7 +1,7 @@
 # GlucoseServer
 
 > 日本語版: [README.ja.md](README.ja.md)
-> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 4, "GATT" (Japanese)
+> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.md) — chapter 4, "GATT"
 
 Standard Glucose Service (0x1808) peripheral with the **Record Access Control Point (RACP)** procedure. When a client writes "Report Stored Records (all)", the server notifies one Glucose Measurement and then indicates the RACP response.
 

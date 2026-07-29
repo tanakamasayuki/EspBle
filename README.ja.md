@@ -67,8 +67,11 @@ void loop() {
 
 ## 文書
 
-**はじめての方は[ドキュメント案内](docs/README.ja.md)から** — 読む順序と各文書の役割をまとめています。「今どこまで進んでいるか」を最短で把握するには [docs/STATUS.ja.md](docs/STATUS.ja.md) → [docs/DECISIONS.ja.md](docs/DECISIONS.ja.md) の順です。
+**BLEがはじめての方は[BLE通信の入門ガイド](docs/GUIDE_BLE_BASICS.ja.md)から** — 相手を探すところからデータのやり取りまで、何が起きているのかを説明し、話題ごとに対応するexampleへ案内します。
 
+**特定の文書を探すときは[ドキュメント案内](docs/README.ja.md)へ** — 読む順序と各文書の役割をまとめています。「今どこまで進んでいるか」を最短で把握するには [docs/STATUS.ja.md](docs/STATUS.ja.md) → [docs/DECISIONS.ja.md](docs/DECISIONS.ja.md) の順です。
+
+- [BLE通信の入門ガイド](docs/GUIDE_BLE_BASICS.ja.md)
 - [開発状況とTODO](docs/STATUS.ja.md)
 - [要件](docs/REQUIREMENTS.ja.md)
 - [コア設計](docs/CORE_DESIGN.ja.md)
@@ -78,7 +81,6 @@ void loop() {
 - [用語と命名規則](docs/TERMINOLOGY.ja.md)
 - [設計決定](docs/DECISIONS.ja.md)
 - [機能対応マトリクス](docs/FEATURE_MATRIX.ja.md)
-- [開発状況](docs/STATUS.ja.md)
 - [テスト計画](tests/TEST_PLAN.ja.md)
 - [リリースチェックリスト](docs/RELEASE_CHECKLIST.ja.md)
 

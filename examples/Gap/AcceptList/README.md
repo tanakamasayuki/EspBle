@@ -1,7 +1,7 @@
 # AcceptList
 
 > 日本語版: [README.ja.md](README.ja.md)
-> Concepts: [BLE communication beginner guide](../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 2, "GAP" (Japanese)
+> Concepts: [BLE communication beginner guide](../../../docs/GUIDE_BLE_BASICS.md) — chapter 2, "GAP"
 
 One **Filter Accept List** (formerly "white list") put to **two uses**: restricting who may connect (the advertising side) and filtering which advertisers a scan reports (the scanning side), both from the same list.
 

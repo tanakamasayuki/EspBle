@@ -1,7 +1,7 @@
 # HeartRateServer
 
 > 日本語版: [README.ja.md](README.ja.md)
-> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 4, "GATT" (Japanese)
+> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.md) — chapter 4, "GATT"
 
 Standard Heart Rate Service (0x180D) peripheral. Heart Rate Measurement (0x2A37) is **notify-only** and carries an 8-bit heart rate plus one RR interval; Body Sensor Location (0x2A38) is readable (value 1 = Chest).
 

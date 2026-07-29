@@ -1,7 +1,7 @@
 # ImmediateAlertClient
 
 > 日本語版: [README.ja.md](README.ja.md)
-> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 4, "GATT" (Japanese)
+> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.md) — chapter 4, "GATT"
 
 The Find Me profile **locator** role. Connects to an Immediate Alert Service (0x1802) and writes Alert Level (0x2A06) with **Write Without Response** to make the target alert.
 

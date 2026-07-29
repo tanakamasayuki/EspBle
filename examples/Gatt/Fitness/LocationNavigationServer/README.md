@@ -1,7 +1,7 @@
 # LocationNavigationServer
 
 > 日本語版: [README.ja.md](README.ja.md)
-> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 4, "GATT" (Japanese)
+> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.md) — chapter 4, "GATT"
 
 Standard Location and Navigation Service (0x1819) peripheral. Location and Speed (0x2A67) is notified with a uint16 flags field plus the flags-selected data fields; LN Feature (0x2A6A) is a readable uint32.
 

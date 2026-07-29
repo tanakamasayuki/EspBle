@@ -1,7 +1,7 @@
 # ProximityServer
 
 > 日本語版: [README.ja.md](README.ja.md)
-> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 4, "GATT" (Japanese)
+> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.md) — chapter 4, "GATT"
 
 The Proximity profile **Reporter** role. Hosts two standard services at once: the Link Loss Service (0x1803) with a read/write Alert Level (0x2A06), and the Tx Power Service (0x1804) with a read-only signed-int8 Tx Power Level (0x2A07).
 

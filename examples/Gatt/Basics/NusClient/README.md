@@ -1,7 +1,7 @@
 # NusClient
 
 > 日本語版: [README.ja.md](README.ja.md)
-> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 4, "GATT" (Japanese)
+> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.md) — chapter 4, "GATT"
 
 Central that talks to a Nordic UART Service (NUS) server by composing the generic GATT client API: it subscribes to TX notifications (`6e400003-…`) and sends each Serial line to RX (`6e400002-…`) using Write Without Response, under service `6e400001-…`.
 

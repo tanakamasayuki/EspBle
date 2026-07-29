@@ -1,0 +1,61 @@
+# Development status
+
+> 日本語版: [STATUS.ja.md](STATUS.ja.md)
+
+This document tracks only the current implementation status, the known limits, and what is left before 1.0.0. For the list of supported features see [FEATURE_MATRIX.md](FEATURE_MATRIX.md); for settled specifications, [REQUIREMENTS.ja.md](REQUIREMENTS.ja.md), [DECISIONS.ja.md](DECISIONS.ja.md) and the individual specification documents are authoritative.
+
+## Where things stand
+
+Using the NimBLE host API bundled with Arduino-ESP32 3.3.11 directly, central / peripheral, GATT client / server, security, and composite HID device / host all work. **There is no dependency on the bundled `BLE` wrapper classes** (`BLEDevice`, `BLEClient`, `BLEServer`, `BLEScan`, `BLEAdvertising` and the rest); the history and reasoning are in [PLAN_GUIDE_REVAMP.ja.md](PLAN_GUIDE_REVAMP.ja.md), Phase 4b. There is a peer test environment using two ESP32-S3 boards plus host unit tests, and every published example is compile-verified for the ESP32-S3.
+
+HID can compose keyboard (6KRO / NKRO), mouse, consumer control, system control, gamepad, and vendor input / output / feature into a single service. The host discovers every supported input report and dispatches it to a per-kind event.
+
+BLE MIDI provides a backend-independent packet codec (timestamps, running status, multi-packet SysEx) plus the `EspBleMidiDevice` / `EspBleMidiHost` profile helpers, whose API matches the sibling USB libraries.
+
+## Verification status
+
+- Peer tests: 62 suites, 77 tests. Verified on hardware: connections, GATT, per-connection discovery cache, persistent subscriptions (automatic re-subscribe on reconnect), address privacy (random static address), iBeacon broadcast/decode, service data in both directions, Fitness Machine (Indoor Bike Data), security, standard services, composite HID, NKRO, custom HID with an arbitrary report descriptor, non-connectable beacons, BLE MIDI, Health Thermometer, Blood Pressure, Weight Scale, Body Composition, Cycling / Running Speed and Cadence, Cycling Power, Pulse Oximeter, Glucose (the RACP procedure), Location and Navigation, User Data (write → onWritten → notify), Alert Notification (control point → notify), Immediate Alert (write without response), Phone Alert Status (control point → state-change notify), Proximity (Link Loss + Tx Power, two services coexisting), Reference Time Update (control point → state transition), Bond Management (feature read + control point), Continuous Glucose Monitoring (E2E-CRC), disconnect reason codes, connection parameter updates, PHY updates (2M), Service Changed, runtime passkey entry, Numeric Comparison, directed advertising (including channel narrowing), multi-listener dispatch / removal / capacity, HID Boot Protocol switching, custom HID report descriptors, non-connectable beacons (interval control), error paths, and reconnection
+- Manual tests (require a third board; skipped automatically when it is absent): `multi_connection` verifies several simultaneous connections, per-connection notify routing, auto-reconnect (`setAutoReconnect`), and persistent subscription restore on reconnect, on hardware
+- Unit tests: keymap conversion, HID report map parser, BLE MIDI codec, IEEE-11073 medical float codec, CGM E2E-CRC codec, iBeacon codec
+- Example compilation: 91 examples for the ESP32-S3
+- ESP32KeyBridge prototype adapter: raw usage, remap, modifiers, release on disconnect, LED reporting, and bonded reconnection verified with peer tests
+
+For how to run them see [tests/TEST_PLAN.ja.md](../tests/TEST_PLAN.ja.md); for the release-time checks, [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md).
+
+## Known limits
+
+- Before the 1.0.0 release, the public API carries no compatibility guarantee.
+- BLE MIDI SysEx transmission is limited to 320 bytes per message (split across and reassembled from several BLE packets in both directions). Only one SysEx transmission can be in progress at a time.
+- The gamepad host parses variable input fields but does not interpret the meaning of vendor-specific array inputs.
+- The HID host requires an explicit `discover(connectionId)` per connection. With security enabled, call it after security completes.
+- Custom HID with an arbitrary report descriptor is configured through `ble.hidCustom()` (`setReportMap()` plus `addInputReport()` / `addOutputReport()` / `addFeatureReport()`). Custom reports are composed into the same HID service as the built-in profiles and coexist with them. Report IDs are unique; when built-in profiles are also used, avoid their reserved IDs (1–6). A device may carry at most four custom reports.
+- The HID keyboard supports the Boot Protocol (Protocol Mode characteristic 0x2A4E, Boot Keyboard Input/Output Report 0x2A22/0x2A32), but it is opt-in through `EspBleHidKeyboardConfig::bootProtocol` (off by default). Most HOGP hosts are satisfied by Report Protocol Mode, and the extra characteristics enlarge discovery for every host — which amplifies the upstream discovery leak described below — hence the default. When enabled, input switches automatically to the 8-byte Boot Keyboard Input Report in Boot Protocol Mode, and the mode is observable through `onProtocolMode()` / `protocolMode()`. The Boot Protocol currently covers the keyboard only; the mouse boot report (0x2A33) is not supported.
+- Central-side GATT operations put only one ATT exchange on the air at a time, but calls such as `readCharacteristic()` are **queued automatically and executed in order** (they do not fail with "operation already in progress"). There is no forced cancel for an individual operation.
+- GATT client read / write / subscribe / unsubscribe have **attribute-handle overloads** in addition to the UUID forms. For characteristics with duplicate UUIDs (several 0x2A4D reports in a HID service, for instance), obtain the handle with `discoveredCharacteristic()` after `discoverServices()` and address them by handle. `EspBleGattResult` and `EspBleGattNotification` carry the target `handle`. Discovery enumerates by handle, so same-UUID characteristics are enumerated individually. **A peer that exposes several services with the same UUID is reachable too** (discovery calls `ble_gattc_disc_all_svcs()` directly, and reads, writes and CCCD writes are issued against attribute handles). Automatic subscription restore on reconnect keys on the peer address and the UUID, however, so it is limited to characteristics with a unique UUID.
+- Repeating generic GATT client discovery does not lose heap (`test_discovery_cycles_do_not_leak_heap` in `gatt_read_write` measures eight cycles). The roughly 1.2 KB per cycle observed previously was our own defect: the FreeRTOS task used for GATT operations exited through `vTaskDelete(nullptr)`, so destructors for local variables never ran and `String` heap buffers were left behind. Moving the task body into a separate function fixed it.
+- The bundled NimBLE backend has a heap leak when GATT client discovery is repeated (proportional to the number of characteristics discovered, roughly 2.6 KB per discovery). See the [upstream report draft](UPSTREAM_REQUEST_ARDUINO_ESP32_GATTC_DISCOVERY_LEAK.ja.md) for details. **The generic GATT client no longer creates the wrapper's `BLEClient` remote objects** (discovery, reads, writes and subscriptions all go straight to the NimBLE host API), so this path no longer allocates. The HID host and MIDI host have their own discovery paths and are unchanged. Keeping the Boot Protocol off by default avoids amplifying this leak needlessly.
+- GATT client discovery snapshots are held per connection (up to the connection limit, released on disconnect). Subscriptions are restored automatically on reconnection to the same peer through `EspBleConfig::persistentSubscriptions` (on by default). Service Changed indications are sent from the server with `notifyServicesChanged()`, and a client can subscribe to 0x1801/0x2A05 to receive and decode them, but no automatic rediscovery happens on receipt (the application decides whether to rediscover).
+- The disconnect reason is `EspBleConnection::disconnectReason`; connection parameters are the interval / latency / timeout fields of `EspBleConnection` plus `updateConnectionParameters()` / `onConnectionParametersUpdated()`; the LE PHY is the tx/rxPhy fields plus `updatePhy()` / `onPhyUpdated()`; runtime passkey entry is `providePasskey()` (dynamic passkey display is DisplayOnly with no static passkey); and Numeric Comparison works with DisplayYesNo plus MITM on both sides through `onNumericComparison()` / `confirmNumericComparison()`.
+- Descriptor write events carry no connection ID, because the backend does not expose the connection context. See the [upstream request draft](UPSTREAM_REQUEST_ARDUINO_ESP32_DESCRIPTOR_CONTEXT.ja.md) for details.
+- The MTU exchange is tracked for both roles through the global GAP event (`BLE_GAP_EVENT_MTU`) and delivered to `onMtuChanged`. That includes an exchange that completes after the connection is established on the central side.
+- Advertising can be connectable (the default) or non-connectable (`setConnectable(false)`, for beacons and broadcasters); `setScanResponseEnabled(false)` makes it non-scannable, and `setInterval(minMs, maxMs)` controls the interval (20–10240 ms; 100 ms or more when non-connectable). Address privacy is selected with `EspBleConfig::ownAddressType` (`Public`, the default, `RandomStatic`, or `ResolvablePrivate`). `RandomStatic` is a fixed random static address that hides the public one; `ResolvablePrivate` is an RPA rotated periodically by the controller (`CONFIG_BT_NIMBLE_RPA_TIMEOUT` = 900 s), and since a peer resolves an RPA with the IRK exchanged at bonding, it is only useful together with security/bonding. Extended and periodic advertising cannot be supported in this configuration, because the bundled NimBLE is built with `CONFIG_BT_NIMBLE_EXT_ADV` disabled.
+- Several simultaneous connections are supported (separated by per-connection cache, subscriptions and GATT routing). The maximum is set by the bundled NimBLE controller (`CONFIG_BT_NIMBLE_MAX_CONNECTIONS`, 3 on the ESP32-S3). Verified together with auto-reconnect (`setAutoReconnect`, off by default) in the three-board manual test `multi_connection`.
+- Automated hardware verification centres on the ESP32-S3. Interoperability with off-the-shelf devices and with Android / Linux / Windows / macOS is not yet complete.
+- The Bluedroid backend, Bluetooth Classic, and the external NimBLE-Arduino library are out of scope.
+
+## Remaining work before 1.0.0
+
+1. Implement, as far as is reasonable, the HID extensions in [FEATURE_MATRIX.md](FEATURE_MATRIX.md) that are to be included in 1.0.0.
+2. Run all peer and unit tests with `--clean`, back to back, several times over.
+3. Regenerate the board and Arduino-ESP32 core matrices in CI and settle the supported environments.
+4. Check manual interoperability with an off-the-shelf BLE keyboard and several external hosts.
+5. Reconcile metadata, the CHANGELOG, the examples and the specifications against the final API.
+6. Update the release metadata including `library.properties` to 1.0.0 and run the release workflow.
+
+The scope of the first release is not fixed: anything that can be implemented and verified safely goes into 1.0.0. Unimplemented candidates are not promises; when one is adopted, its specification, example, and unit/build/peer tests are added at the same time. For future feature candidates, the "priority candidates" section of [DECISIONS.ja.md](DECISIONS.ja.md) is authoritative.
+
+## Rules for updating this document
+
+- Detailed enumeration of completed features belongs in the feature matrix and the specifications, not duplicated here.
+- An implementation alone is not "done": the state of the matching example and of the unit/build/peer/manual tests is updated with it.
+- Past plans and completed checklists are not kept; only the design reasoning is preserved, in `DECISIONS.ja.md`.

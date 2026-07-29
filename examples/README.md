@@ -4,7 +4,7 @@
 
 ## The concepts are covered in the guide
 
-How BLE works — the difference from Bluetooth Classic, GAP (finding and connecting), security (pairing and bonding), GATT (exchanging data), and UUIDs — is explained in the [BLE communication beginner guide](../docs/GUIDE_BLE_BASICS.ja.md) (Japanese; an English edition is planned). Every term is defined there.
+How BLE works — the difference from Bluetooth Classic, GAP (finding and connecting), security (pairing and bonding), GATT (exchanging data), and UUIDs — is explained in the [BLE communication beginner guide](../docs/GUIDE_BLE_BASICS.md). Every term is defined there.
 
 | What you want to know | Guide chapter | Matching examples |
 |---|---|---|

@@ -1,7 +1,7 @@
 # Advertise
 
 > 日本語版: [README.ja.md](README.ja.md)
-> Concepts: [BLE communication beginner guide](../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 2, "GAP" (Japanese)
+> Concepts: [BLE communication beginner guide](../../../docs/GUIDE_BLE_BASICS.md) — chapter 2, "GAP"
 
 Starts connectable legacy advertising carrying a device name and a 16-bit service UUID (HID, `1812`). A minimal peripheral example; observe it with a generic BLE scanner app or with the paired [Scan](../Scan/) example on a second board.
 

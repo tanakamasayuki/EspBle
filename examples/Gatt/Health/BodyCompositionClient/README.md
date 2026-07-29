@@ -1,7 +1,7 @@
 # BodyCompositionClient
 
 > 日本語版: [README.ja.md](README.ja.md)
-> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 4, "GATT" (Japanese)
+> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.md) — chapter 4, "GATT"
 
 Connects to a Body Composition Service (0x181B), reads Body Composition Feature, subscribes to Body Composition Measurement indications, and decodes Body Fat Percentage (0.1 %/LSB) plus the optional Weight field.
 

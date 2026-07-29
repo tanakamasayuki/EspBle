@@ -1,7 +1,7 @@
 # Connect
 
 > 日本語版: [README.ja.md](README.ja.md)
-> Concepts: [BLE communication beginner guide](../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 2, "GAP" (Japanese)
+> Concepts: [BLE communication beginner guide](../../../docs/GUIDE_BLE_BASICS.md) — chapter 2, "GAP"
 
 Scans for a peripheral advertising a specific service UUID and connects to it as a central. Demonstrates the asynchronous connection model: `connect()` only accepts the request, and completion (or failure) arrives later as an event delivered from `ble.update()`.
 

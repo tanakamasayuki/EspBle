@@ -1,7 +1,7 @@
 # NumericComparisonClient
 
 > 日本語版: [README.ja.md](README.ja.md)
-> Concepts: [BLE communication beginner guide](../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 3, "Security" (Japanese)
+> Concepts: [BLE communication beginner guide](../../../docs/GUIDE_BLE_BASICS.md) — chapter 3, "Security"
 
 The central side of **Numeric Comparison** pairing. Its counterpart is [NumericComparisonServer](../NumericComparisonServer/), and the configuration is **exactly the same as the server's** (`DisplayYesNo` plus MITM required) — both sides declaring the same thing is what makes this method get chosen.
 

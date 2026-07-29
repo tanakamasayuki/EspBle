@@ -1,7 +1,7 @@
 # Scan
 
 > 日本語版: [README.ja.md](README.ja.md)
-> Concepts: [BLE communication beginner guide](../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 2, "GAP" (Japanese)
+> Concepts: [BLE communication beginner guide](../../../docs/GUIDE_BLE_BASICS.md) — chapter 2, "GAP"
 
 Runs a continuous active scan and prints every advertisement it receives: address, RSSI, and the device name when present. A **minimal** central example; pair it with the [Advertise](../Advertise/) example on a second board, or just observe nearby BLE devices.
 

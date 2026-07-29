@@ -1,7 +1,7 @@
 # CyclingSpeedCadenceServer
 
 > 日本語版: [README.ja.md](README.ja.md)
-> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 4, "GATT" (Japanese)
+> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.md) — chapter 4, "GATT"
 
 Standard Cycling Speed and Cadence Service (0x1816) peripheral. CSC Measurement (0x2A5B) is notified with cumulative wheel/crank revolutions and their last-event times; CSC Feature (0x2A5C) and Sensor Location (0x2A5D) are readable.
 

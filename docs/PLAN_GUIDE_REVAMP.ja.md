@@ -629,13 +629,15 @@ Service / Characteristic / Descriptor、UUIDとハンドルの使い分け、Ser
 
 ### Phase 8 — 英語版と周辺文書
 
+**方針（確定）**: **利用者が読む文書は日本語と英語を同期させる。** 設計・計画文書（`API_DESIGN` / `CORE_DESIGN` / `DECISIONS` / `DESIGN_DEBT` / `REQUIREMENTS` / `PLAN_*` / `HID_*_SPEC` / `TERMINOLOGY` / `UPSTREAM_*` / `TEST_PLAN`）は日本語のみとし、`README.md` にその旨を明記する。
+
 | # | 項目 | 状況 |
 |---|---|---|
-| 8-1 | 全 `README.md`（en）と英語版ガイドの同期 | 未着手 |
-| 8-2 | [FEATURE_MATRIX.ja.md](FEATURE_MATRIX.ja.md) 更新（Phase 1・4の結果を反映） | 未着手 |
-| 8-3 | [DESIGN_DEBT.ja.md](DESIGN_DEBT.ja.md) 更新 | 未着手 |
-| 8-4 | [DECISIONS.ja.md](DECISIONS.ja.md) へ確定判断を移送 | 未着手 |
-| 8-5 | [RELEASE_CHECKLIST.ja.md](RELEASE_CHECKLIST.ja.md) との整合確認 | 未着手 |
+| 8-1 | 全 `README.md`（en）と英語版ガイドの同期 | **完了。** [GUIDE_BLE_BASICS.md](GUIDE_BLE_BASICS.md) を新規作成（775行、日本語版773行。章・節番号・mermaid 3本・表20個が完全に一致）。あわせて [STATUS.md](STATUS.md) と [FEATURE_MATRIX.md](FEATURE_MATRIX.md) を作成し、利用者向け文書の英語版を揃えた。英語側の導線（root `README.md`、`docs/README.md`、`examples/README.md`、各example READMEの概念リンク78件）はすべて英語版を指すよう差し替え、日本語版には `> English:` 行を追加した |
+| 8-2 | [FEATURE_MATRIX.ja.md](FEATURE_MATRIX.ja.md) 更新（Phase 1・4の結果を反映） | **完了。** Directed Advertising・チャネルマップ・スキャン側accept list・MTU交換の順序・Read Long・`onRead()` の行を追加し、同一UUID重複の根拠を現在の実装（`ble_gatts_add_svcs()`）へ訂正。英語版も同内容で作成 |
+| 8-3 | [DESIGN_DEBT.ja.md](DESIGN_DEBT.ja.md) 更新 | **完了。** クラスタC（多listener）を「要実機再確認」から「実機検証済み（`multi_listener`）」へ更新し、未検証だった経緯（`notify_indicate` は第2observerの発火だけを見ており解除・上限は未検証）も残した。小粒1（persistent-subscription overflowカウンタ）は**カウンタ自体が未検証**であることと成立手順の参照先を明記。他の「要実機再確認」項目は指し示せる根拠が無いため据え置き |
+| 8-4 | [DECISIONS.ja.md](DECISIONS.ja.md) へ確定判断を移送 | **完了。** 「ガイドと文書構成で確定」節を新設し6件を移送（ガイドの5章構成と役割分担、「後述」で飛ばさない、標準Serviceに専用クラスを置かない理由と例外、概念説明のガイドへの一本化、利用者向け文書の日英同期方針、fqbnの統一） |
+| 8-5 | [RELEASE_CHECKLIST.ja.md](RELEASE_CHECKLIST.ja.md) との整合確認 | **完了。** 英語版が増えた文書を確認項目へ反映し、「利用者向け文書の日英が同期している」という項目を日英双方のチェックリストへ追加 |
 
 ---
 

@@ -1,7 +1,7 @@
 # CurrentTimeClient
 
 > 日本語版: [README.ja.md](README.ja.md)
-> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 4, "GATT" (Japanese)
+> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.md) — chapter 4, "GATT"
 
 Connects to a Current Time Service (0x1805), reads and decodes the 10-byte Current Time (0x2A2B), then subscribes to notifications and decodes each update.
 

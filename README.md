@@ -67,11 +67,14 @@ void loop() {
 
 ## Documents
 
-**New here? Start with the [documentation guide](docs/README.md)** — it shows the reading order and each document's role. The quickest path to "where does this project stand" is [docs/STATUS.ja.md](docs/STATUS.ja.md) then [docs/DECISIONS.ja.md](docs/DECISIONS.ja.md).
+**New to BLE? Start with the [beginner's guide to BLE](docs/GUIDE_BLE_BASICS.md)** — it explains what is actually happening, from finding a peer through to exchanging data, and links to the matching example for each topic.
 
-The design documents are currently written in Japanese.
+**Looking for a specific document? See the [documentation guide](docs/README.md)** — it shows the reading order and each document's role. The quickest path to "where does this project stand" is [docs/STATUS.md](docs/STATUS.md) then [docs/DECISIONS.ja.md](docs/DECISIONS.ja.md).
 
-- [Development status and TODO](docs/STATUS.ja.md)
+The user-facing documents below are available in English; the remaining design documents are currently Japanese-only.
+
+- [A beginner's guide to BLE](docs/GUIDE_BLE_BASICS.md)
+- [Development status and TODO](docs/STATUS.md)
 - [Requirements](docs/REQUIREMENTS.ja.md)
 - [Core design](docs/CORE_DESIGN.ja.md)
 - [API design](docs/API_DESIGN.ja.md)
@@ -79,8 +82,7 @@ The design documents are currently written in Japanese.
 - [HID Host specification](docs/HID_HOST_SPEC.ja.md)
 - [Terminology and naming rules](docs/TERMINOLOGY.ja.md)
 - [Design decision ledger](docs/DECISIONS.ja.md)
-- [Feature support matrix](docs/FEATURE_MATRIX.ja.md)
-- [Development status](docs/STATUS.ja.md)
+- [Feature support matrix](docs/FEATURE_MATRIX.md)
 - [Test plan](tests/TEST_PLAN.ja.md)
 - [Release checklist](docs/RELEASE_CHECKLIST.md)
 

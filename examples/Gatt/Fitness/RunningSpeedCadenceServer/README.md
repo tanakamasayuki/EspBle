@@ -1,7 +1,7 @@
 # RunningSpeedCadenceServer
 
 > 日本語版: [README.ja.md](README.ja.md)
-> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 4, "GATT" (Japanese)
+> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.md) — chapter 4, "GATT"
 
 Standard Running Speed and Cadence Service (0x1814) peripheral. RSC Measurement (0x2A53) is notified with instantaneous speed and cadence plus optional stride length and total distance; RSC Feature (0x2A54) and Sensor Location (0x2A5D) are readable.
 

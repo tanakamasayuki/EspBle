@@ -1,7 +1,7 @@
 # ReferenceTimeUpdateClient
 
 > 日本語版: [README.ja.md](README.ja.md)
-> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 4, "GATT" (Japanese)
+> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.md) — chapter 4, "GATT"
 
 Connects to a Reference Time Update Service (0x1806), reads the Time Update State, writes the Time Update Control Point (**Write Without Response**) to request then cancel a reference update, and re-reads the state each time.
 

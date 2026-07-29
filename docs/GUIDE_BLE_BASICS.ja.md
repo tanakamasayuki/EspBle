@@ -1,5 +1,7 @@
 # BLE通信の入門ガイド
 
+> English: [GUIDE_BLE_BASICS.md](GUIDE_BLE_BASICS.md)
+
 BLEを初めて使う人が、**何が起きているのか**を理解するための資料です。用語はすべてこの文書内で説明します。
 
 実際のコードは各exampleにあります。この文書は概念に集中し、対応するexampleへのリンクを示します。

@@ -1,7 +1,7 @@
 # SubscribeClient
 
 > 日本語版: [README.ja.md](README.ja.md)
-> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 4, "GATT" (Japanese)
+> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.md) — chapter 4, "GATT"
 
 Connects to the [Gatt/NotifyServer](../NotifyServer/) example, subscribes to its notification characteristic, and prints every received value.
 

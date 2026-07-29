@@ -1,7 +1,7 @@
 # Mtu
 
 > 日本語版: [README.ja.md](README.ja.md)
-> Concepts: [BLE communication beginner guide](../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 2, "GAP" (Japanese)
+> Concepts: [BLE communication beginner guide](../../../docs/GUIDE_BLE_BASICS.md) — chapter 2, "GAP"
 
 Requests a larger ATT MTU before connecting and observes the negotiated value. The preferred MTU is set in the config passed to `begin()`; the bundled NimBLE backend exchanges it during connection establishment.
 

@@ -1,7 +1,7 @@
 # RuntimePasskeyClient
 
 > 日本語版: [README.ja.md](README.ja.md)
-> Concepts: [BLE communication beginner guide](../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 3, "Security" (Japanese)
+> Concepts: [BLE communication beginner guide](../../../docs/GUIDE_BLE_BASICS.md) — chapter 3, "Security"
 
 The **input side** of Passkey Entry (`KeyboardOnly`). It takes the 6 digits the peer displays **at runtime** and hands them over with `providePasskey()`. Its counterpart is [RuntimePasskeyServer](../RuntimePasskeyServer/).
 

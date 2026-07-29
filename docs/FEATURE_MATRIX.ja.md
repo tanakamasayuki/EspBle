@@ -1,5 +1,7 @@
 # 機能対応マトリクス
 
+> English: [FEATURE_MATRIX.md](FEATURE_MATRIX.md)
+
 EspUsbHost / EspUsbDeviceで扱っている機能のBLE版、およびBLEで一般的に使う機能について、EspBleの対応状況を整理した一覧です。優先順位の確定版は[REQUIREMENTS.ja.md](REQUIREMENTS.ja.md)と[DECISIONS.ja.md](DECISIONS.ja.md)を正とし、この表は俯瞰用のたたき台です。
 
 ## 凡例

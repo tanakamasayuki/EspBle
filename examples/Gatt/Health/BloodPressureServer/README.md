@@ -1,7 +1,7 @@
 # BloodPressureServer
 
 > 日本語版: [README.ja.md](README.ja.md)
-> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 4, "GATT" (Japanese)
+> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.md) — chapter 4, "GATT"
 
 Standard Blood Pressure Service (0x1810) peripheral. Blood Pressure Measurement (0x2A35) is **indicated** with systolic/diastolic/mean as IEEE-11073 16-bit SFLOATs; Blood Pressure Feature (0x2A49) is readable.
 

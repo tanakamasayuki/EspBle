@@ -1,7 +1,7 @@
 # AlertNotificationServer
 
 > 日本語版: [README.ja.md](README.ja.md)
-> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 4, "GATT" (Japanese)
+> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.md) — chapter 4, "GATT"
 
 Standard Alert Notification Service (0x1811) peripheral. Supported New Alert Category (0x2A47) is a readable uint16 bitmask, New Alert (0x2A46) is a **notification** carrying Category ID + count + text, and the Alert Notification Control Point (0x2A44) is writable.
 

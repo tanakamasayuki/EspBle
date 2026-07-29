@@ -1,7 +1,7 @@
 # CyclingPowerClient
 
 > 日本語版: [README.ja.md](README.ja.md)
-> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 4, "GATT" (Japanese)
+> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.md) — chapter 4, "GATT"
 
 Central / GATT client for the Cycling Power Service (0x1818). It reads Sensor Location (0x2A5D), subscribes to Cycling Power Measurement (0x2A63) notifications, and decodes the signed 16-bit instantaneous power.
 

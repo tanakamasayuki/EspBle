@@ -1,7 +1,7 @@
 # StaticPasskeyClient
 
 > 日本語版: [README.ja.md](README.ja.md)
-> Concepts: [BLE communication beginner guide](../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 3, "Security" (Japanese)
+> Concepts: [BLE communication beginner guide](../../../docs/GUIDE_BLE_BASICS.md) — chapter 3, "Security"
 
 Central-side counterpart of [StaticPasskeyServer](../StaticPasskeyServer/): the passkey-input side (`KeyboardOnly`) of MITM-authenticated pairing. After pairing succeeds it discovers and reads the characteristic that requires an authenticated link.
 

@@ -1,7 +1,7 @@
 # NumericComparisonServer
 
 > 日本語版: [README.ja.md](README.ja.md)
-> Concepts: [BLE communication beginner guide](../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 3, "Security" (Japanese)
+> Concepts: [BLE communication beginner guide](../../../docs/GUIDE_BLE_BASICS.md) — chapter 3, "Security"
 
 The peripheral side of **Numeric Comparison** pairing. Its counterpart is [NumericComparisonClient](../NumericComparisonClient/), and **both sides must be configured the same way** (`DisplayYesNo` plus MITM required).
 

@@ -75,11 +75,16 @@ HID Host の `discover()` が汎用queueエンジンに乗らず、別経路に�
 
 **破壊的変更なし（追加API）**: `on*` は「primaryスロット」として従来どおり動作（単一observerのsketchは無改修）。`add*Listener`/`removeGattListener`/`removeListener` を追加しただけ。
 **テスト影響**: `notify_indicate`（client `addNotificationListener` と server `addSentListener` の第2observerがprimaryと同時発火することを検証）。`midi_device`/`midi_host` はhelperがlistener経由になっても挙動不変（コンパイル確認済み）。
-**状況: 完了（要実機再確認）**
+
+**追加検証（実施済み）**: 公開APIとテストの突き合わせで、`EspBleCallbackList` と `add*Listener` / `removeGattListener` / `removeListener` に**Peer・unit・手動・examplesのいずれからも呼び出しが無い**ことが判明した（`notify_indicate` は第2observerの発火だけを見ており、解除と上限は未検証だった）。Peerテスト `multi_listener` を新設し、primary＋listener 2件への同時配送、**1件だけの解除**（残りとprimaryに影響しない）、未登録idの削除が`false`を返すこと、上限4件で追加が拒否され既存を追い出さないことを、`EspBleGattServer` 側と `EspBle` 側の両方で実機検証した。
+
+**状況: 完了（実機検証済み。`multi_listener` / `notify_indicate`）**
 
 ### 小粒（自己完結）
 
-1. **persistent-subscription registryの無言overflow**: `free==nullptr` で黙って記録しない（容量16）。既定onのため、再接続時に復元されないことにアプリが気づけない。→ **完了**: `droppedPersistentSubscriptions` カウンタを追加、overflow時に加算し、公開 `EspBle::droppedPersistentSubscriptionCount()` で露出（`droppedEventCount()` に倣う）。**状況: 完了（要実機再確認）**
+1. **persistent-subscription registryの無言overflow**: `free==nullptr` で黙って記録しない（容量16）。既定onのため、再接続時に復元されないことにアプリが気づけない。→ **完了**: `droppedPersistentSubscriptions` カウンタを追加、overflow時に加算し、公開 `EspBle::droppedPersistentSubscriptionCount()` で露出（`droppedEventCount()` に倣う）。
+
+**カウンタ自体は未検証**（overflowを起こすには17件の異なる（peer, service, characteristic）が必要で、centralのアクティブ購読表も16件のため1接続では到達できない）。成立させる手順とその根拠は[tests/TEST_PLAN.ja.md](../tests/TEST_PLAN.ja.md)の「未実装scenarioのメモ」に記載した。**状況: 実装は完了、overflow経路のテストは未実施**
 2. **切断時のqueue未purge＋GATT op中の `disconnect()` reject**: `removeConnection` が `gattQueue` を触らず、切断済み接続のqueue済みopが残って生存接続を遅延させる。`disconnect()` はGATT op中false。→ **完了**: `removeConnection` が `purgeQueuedGattOpsLocked(connectionId)` で当該接続のqueue済みopをdrop（generic opは失敗GattResultを配送して完了contractを維持、queued HidDiscoverはHID Host切断処理に委ねて静かにdrop、実行中opは無干渉）。`disconnect()` はGATT op中に**rejectせず deferred**（`ConnectionSlot::pendingDisconnect`＋`update()` の `drainPendingDisconnects()` でop完了後に実行）。**状況: 完了（要実機再確認）**
 3. **NKROのMTU下限未引き上げ**: `enableNkro()` はフラグとreport長29のみ設定し `preferredMtu`（既定23）を触らないため、29-byte notifyが送信時に無言失敗。→ **完了**: ライブラリの明示エラー方針に合わせ、`begin()` で「NKRO keyboard configured かつ `preferredMtu < 32`」を `InvalidArgument` で拒否（無言失敗より明示エラー。silentにMTUを上書きしない）。**状況: 完了（要実機再確認）**
 

@@ -1,7 +1,7 @@
 # UserDataClient
 
 > 日本語版: [README.ja.md](README.ja.md)
-> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 4, "GATT" (Japanese)
+> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.md) — chapter 4, "GATT"
 
 Connects to a User Data Service (0x181C), subscribes to Database Change Increment notifications, reads Age, and writes a new First Name and Age. Each write bumps the increment, which arrives as a notification.
 

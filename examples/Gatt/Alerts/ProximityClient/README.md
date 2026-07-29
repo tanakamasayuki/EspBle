@@ -1,7 +1,7 @@
 # ProximityClient
 
 > 日本語版: [README.ja.md](README.ja.md)
-> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 4, "GATT" (Japanese)
+> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.md) — chapter 4, "GATT"
 
 The Proximity profile **Monitor** role. Connects to a Proximity Reporter, reads its Tx Power Level (0x2A07, signed int8), reads the Link Loss Alert Level (0x2A06), and writes a Link Loss Alert Level so the Reporter alerts if the link is later lost.
 

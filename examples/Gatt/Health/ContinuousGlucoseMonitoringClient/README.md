@@ -1,7 +1,7 @@
 # ContinuousGlucoseMonitoringClient
 
 > 日本語版: [README.ja.md](README.ja.md)
-> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 4, "GATT" (Japanese)
+> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.md) — chapter 4, "GATT"
 
 Connects to a Continuous Glucose Monitoring Service (0x181F), reads and E2E-CRC-verifies CGM Feature, subscribes to CGM Measurement, verifies each measurement's E2E-CRC, and decodes the SFLOAT glucose concentration and time offset.
 

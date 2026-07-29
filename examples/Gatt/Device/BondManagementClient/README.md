@@ -1,7 +1,7 @@
 # BondManagementClient
 
 > 日本語版: [README.ja.md](README.ja.md)
-> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.ja.md) — chapter 4, "GATT" (Japanese)
+> Concepts: [BLE communication beginner guide](../../../../docs/GUIDE_BLE_BASICS.md) — chapter 4, "GATT"
 
 Connects to a Bond Management Service (0x181E), reads the Bond Management Feature bit field, and writes the Bond Management Control Point op code "Delete bond of requesting device (LE)" (0x03) with response.
 
