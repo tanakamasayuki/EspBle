@@ -19,7 +19,7 @@
 ## 主なAPI
 
 - `EspBleConfig::preferredMtu` — 希望ATT MTU（23〜517）。範囲外は`begin()`が`InvalidArgument`で拒否します
-- `connection.mtu` — 接続完了時に取得したMTUのsnapshot
+- `connection.mtu` — そのイベント時点のMTU。**接続直後は23**です。MTUの交換は接続が成立した直後に行われるので、`onConnected`の時点ではまだ既定値で、交換結果は`onMtuChanged`で届きます（CentralとPeripheralのどちらも同じ順序です）
 - `connection.maximumNotificationPayload()` — `mtu - 3`（ATT notification header分を除いた値）
 - `ble.onMtuChanged(callback)` — `event.previousMtu`と`event.connection.mtu`
 

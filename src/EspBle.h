@@ -309,6 +309,9 @@ struct EspBleConnection
   String peerAddress;
   EspBleAddressType peerAddressType = EspBleAddressType::Public;
   EspBleRole localRole = EspBleRole::Central;
+  // ATT MTU as of this event. The exchange runs just after the connection
+  // comes up, so onConnected() still reports the 23-byte default on both roles
+  // and the negotiated value arrives through onMtuChanged().
   uint16_t mtu = 23;
   bool encrypted = false;
   bool authenticated = false;
@@ -503,6 +506,15 @@ struct EspBleGattWrite
   String serviceUuid;
   String characteristicUuid;
   String value;
+};
+
+// A peer is reading a local characteristic, reported before the value goes out.
+struct EspBleGattReadRequest
+{
+  EspBleConnectionId connectionId = 0;
+  EspBleGattCharacteristic characteristic;
+  String serviceUuid;
+  String characteristicUuid;
 };
 
 struct EspBleGattDescriptorWrite
@@ -965,6 +977,7 @@ public:
   static constexpr size_t MaxCharacteristics = 32;
   static constexpr size_t MaxDescriptors = 16;
   using WriteCallback = std::function<void(const EspBleGattWrite &write)>;
+  using ReadCallback = std::function<void(const EspBleGattReadRequest &request)>;
   using DescriptorWriteCallback =
     std::function<void(const EspBleGattDescriptorWrite &write)>;
   using SubscriptionCallback = std::function<void(const EspBleGattSubscription &subscription)>;
@@ -1025,6 +1038,16 @@ public:
     const String &value);
   // Primary observer (one per event; a second call replaces it).
   void onWritten(WriteCallback callback);
+  // Called the moment a peer reads a characteristic, before the stored value is
+  // sent, so a value can be produced on demand -- a live sensor reading, say --
+  // instead of being pushed with setValue() in advance. Call setValue() from
+  // the callback and that value is what the peer receives.
+  //
+  // Unlike every other callback here it runs on the BLE stack task, not from
+  // update(): the answer has to be ready before this ATT transaction completes,
+  // so there is nowhere to defer it to. Keep it short. Anything slow stalls the
+  // whole stack, and the peer sees the read time out.
+  void onRead(ReadCallback callback);
   void onDescriptorWritten(DescriptorWriteCallback callback);
   void onSubscriptionChanged(SubscriptionCallback callback);
   void onSent(SendCallback callback);
@@ -1048,6 +1071,7 @@ private:
   bool realize();
   void resetBackend();
   void dispatchWrite(const EspBleGattWrite &write);
+  void dispatchRead(const EspBleGattReadRequest &request);
   void dispatchDescriptorWrite(const EspBleGattDescriptorWrite &write);
   void dispatchSubscription(const EspBleGattSubscription &subscription);
   void dispatchSendResult(const EspBleGattSendResult &result);
@@ -1065,6 +1089,9 @@ private:
   mutable std::mutex listenerMutex_;
   EspBleListenerId nextListenerId_ = 1;
   EspBleCallbackList<WriteCallback> writtenListeners_;
+  // Single observer, not a list: it runs on the stack task and its whole point
+  // is to fill in the value about to be sent, which only one owner can do.
+  ReadCallback readCallback_;
   EspBleCallbackList<DescriptorWriteCallback> descriptorWrittenListeners_;
   EspBleCallbackList<SubscriptionCallback> subscriptionListeners_;
   EspBleCallbackList<SendCallback> sentListeners_;
@@ -1727,8 +1754,6 @@ private:
   bool syncAcceptList();
   bool preparePeripheral();
   void dispatchConnectionEvents();
-  void reapRetiredClients();
-  void cancelExpiredConnectAttempt();
   void driveAutoReconnect();
   void expireGattOperation();
   bool startGattOperation(
@@ -1748,6 +1773,7 @@ private:
   void pumpSendQueue();
   bool startGattServer();
   void releaseDeferredNotifications();
+  void cancelExpiredConnectAttempt();
   void drainPendingDisconnects();
   // True when a HID discovery for connectionId is already queued or in flight.
   // Lets HID auto-rediscover avoid a second discovery when the app also asked.

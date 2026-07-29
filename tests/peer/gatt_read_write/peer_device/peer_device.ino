@@ -1,6 +1,4 @@
 #include <EspBle.h>
-#include <BLEDevice.h>
-#include <BLEServer.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
@@ -14,15 +12,9 @@ EspBle ble;
 EspBleGattService testServiceService;
 EspBleGattCharacteristic testCharacteristicCharacteristic;
 EspBleGattDescriptor testDescriptorDescriptor;
+EspBleGattService slowServiceService;
+EspBleGattCharacteristic slowCharacteristicCharacteristic;
 TaskHandle_t loopTask = nullptr;
-
-class SlowReadCallbacks : public BLECharacteristicCallbacks
-{
-  void onRead(BLECharacteristic *) override
-  {
-    delay(1000);
-  }
-};
 
 void setup()
 {
@@ -43,6 +35,16 @@ void setup()
       !(testDescriptorDescriptor = gattServer.addDescriptor(testCharacteristicCharacteristic, TEST_DESCRIPTOR_UUID, descriptorConfig)).valid() ||
       !gattServer.setValue(testCharacteristicCharacteristic, String("peer-ready")) ||
       !gattServer.setDescriptorValue(testDescriptorDescriptor, String("peer-description")))
+  {
+    Serial.printf("GATT_CONFIG_FAILED %s %s\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
+    return;
+  }
+  EspBleGattCharacteristicConfig slowConfig;
+  slowConfig.readable = true;
+  if (!(slowServiceService = gattServer.addService(SLOW_SERVICE_UUID)).valid() ||
+      !(slowCharacteristicCharacteristic = gattServer.addCharacteristic(
+          slowServiceService, SLOW_CHARACTERISTIC_UUID, slowConfig)).valid() ||
+      !gattServer.setValue(slowCharacteristicCharacteristic, String("slow-ready")))
   {
     Serial.printf("GATT_CONFIG_FAILED %s %s\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
     return;
@@ -77,15 +79,14 @@ void setup()
     return;
   }
 
-  // A deliberately slow backend characteristic verifies client operation
-  // timeout and late-completion suppression without changing the public
-  // EspBle GATT Server API solely for test instrumentation.
-  BLEService *slowService = BLEDevice::getServer()->createService(SLOW_SERVICE_UUID);
-  BLECharacteristic *slowCharacteristic = slowService->createCharacteristic(
-    SLOW_CHARACTERISTIC_UUID, BLECharacteristic::PROPERTY_READ);
-  slowCharacteristic->setValue("slow-ready");
-  slowCharacteristic->setCallbacks(new SlowReadCallbacks());
-  slowService->start();
+  // A deliberately slow read verifies the client's operation timeout and its
+  // suppression of a late completion. onRead() runs on the stack task, so the
+  // delay here is exactly the "anything slow stalls the stack" case its
+  // documentation warns about -- which is the point: the reader must see the
+  // read take a second.
+  gattServer.onRead([](const EspBleGattReadRequest &request) {
+    if (request.characteristic == slowCharacteristicCharacteristic) delay(1000);
+  });
 
   // Advertising does not restart by itself after a disconnect, so the
   // reconnect-cycle test would find nothing on its second pass.

@@ -19,7 +19,7 @@ Requests a larger ATT MTU before connecting and observes the negotiated value. T
 ## Key APIs
 
 - `EspBleConfig::preferredMtu` — desired ATT MTU (23–517); out-of-range values are rejected by `begin()` with `InvalidArgument`
-- `connection.mtu` — MTU snapshot taken when the connection completes
+- `connection.mtu` — the MTU as of that event. **It is still 23 right after connecting**: the exchange happens just after the connection comes up, so `onConnected` sees the default and the negotiated value arrives through `onMtuChanged` (same order on both roles)
 - `connection.maximumNotificationPayload()` — `mtu - 3` (ATT notification header)
 - `ble.onMtuChanged(callback)` — `event.previousMtu` and `event.connection.mtu`
 

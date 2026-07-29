@@ -1,17 +1,7 @@
 #include "EspBle.h"
 
-#include <BLEAdvertising.h>
-#include <BLECharacteristic.h>
-#include <BLEClient.h>
 #include <BLEDevice.h>
-#include <BLEDescriptor.h>
-#include <BLERemoteCharacteristic.h>
-#include <BLERemoteDescriptor.h>
-#include <BLERemoteService.h>
-#include <BLEServer.h>
-#include <BLEService.h>
 #include <BLESecurity.h>
-#include <BLEUtils.h>
 #include <host/ble_gap.h>
 #include <host/ble_sm.h>
 #include <host/ble_uuid.h>
@@ -523,6 +513,47 @@ inline int readCallback(
   return 0;
 }
 
+// Read Long: the value arrives in fragments, one callback each, ending with
+// BLE_HS_EDONE. A plain read stops at one MTU, which silently truncates
+// anything longer -- a HID Report Map, for instance.
+inline int readLongCallback(
+  uint16_t connectionHandle, const struct ble_gatt_error *error,
+  struct ble_gatt_attr *attribute, void *argument)
+{
+  Operation *operation = static_cast<Operation *>(argument);
+  const int status = error == nullptr ? 0 : error->status;
+  if (status == BLE_HS_EDONE)
+  {
+    operation->status = 0;
+    reportCompletion(operation);
+    return 0;
+  }
+  if (status != 0)
+  {
+    operation->status = status;
+    reportCompletion(operation);
+    return 0;
+  }
+  if (attribute != nullptr && attribute->om != nullptr)
+  {
+    const uint16_t length = OS_MBUF_PKTLEN(attribute->om);
+    if (length > 0)
+    {
+      char *buffer = new (std::nothrow) char[length];
+      if (buffer != nullptr)
+      {
+        uint16_t copied = 0;
+        if (ble_hs_mbuf_to_flat(attribute->om, buffer, length, &copied) == 0)
+        {
+          operation->value.concat(buffer, copied);
+        }
+        delete[] buffer;
+      }
+    }
+  }
+  return 0;
+}
+
 inline int writeCallback(
   uint16_t connectionHandle, const struct ble_gatt_error *error,
   struct ble_gatt_attr *attribute, void *argument)
@@ -548,6 +579,49 @@ inline bool wait(Operation &operation, uint32_t timeoutMilliseconds)
     ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(remaining > 20 ? 20 : remaining));
   }
   return true;
+}
+
+// One read, blocking the calling task until the peer answers. For callers that
+// hold a handle already and want the value, not an event. Reads the whole
+// value, however long: the host only asks for more once a fragment comes back
+// full, so a short value costs the same single request as a plain read.
+inline bool readHandle(
+  uint16_t connectionHandle,
+  uint16_t attributeHandle,
+  String &value,
+  uint32_t timeoutMilliseconds = 10000)
+{
+  Operation operation;
+  operation.waiter = xTaskGetCurrentTaskHandle();
+  if (ble_gattc_read_long(
+        connectionHandle, attributeHandle, 0, readLongCallback, &operation) != 0 ||
+      !wait(operation, timeoutMilliseconds) || operation.status != 0)
+  {
+    return false;
+  }
+  value = operation.value;
+  return true;
+}
+
+// One write. Without a response there is nothing to wait for and no status to
+// report, so success only means the request was accepted for transmission.
+inline bool writeHandle(
+  uint16_t connectionHandle,
+  uint16_t attributeHandle,
+  const uint8_t *data,
+  size_t length,
+  bool response,
+  uint32_t timeoutMilliseconds = 10000)
+{
+  if (!response)
+  {
+    return ble_gattc_write_no_rsp_flat(connectionHandle, attributeHandle, data, length) == 0;
+  }
+  Operation operation;
+  operation.waiter = xTaskGetCurrentTaskHandle();
+  return ble_gattc_write_flat(
+           connectionHandle, attributeHandle, data, length, writeCallback, &operation) == 0 &&
+    wait(operation, timeoutMilliseconds) && operation.status == 0;
 }
 } // namespace espble_raw
 
@@ -593,24 +667,12 @@ struct EspBleImpl
   {
     bool used = false;
     EspBleConnection connection;
-    BLEClient *client = nullptr;
     // Set when disconnect() is called while a GATT op is in flight on this
     // connection; EspBle::drainPendingDisconnects() performs the disconnect once
     // the op completes, instead of rejecting the disconnect() call.
     bool pendingDisconnect = false;
     uint8_t pendingDisconnectReason = 0x13;
   };
-
-  // Central clients waiting to be freed on the loop task. The backend has no
-  // deleteClient() API and BLEDevice::deinit() frees only the most recently
-  // created client, so EspBle owns the lifetime of every other client.
-  struct RetiredClient
-  {
-    BLEClient *client = nullptr;
-    EspBleConnectionId connectionId = 0;
-  };
-
-  static constexpr size_t RetiredClientCapacity = ConnectionCapacity * 2;
 
   struct GattDatabaseSnapshot
   {
@@ -651,91 +713,92 @@ struct EspBleImpl
     EspBlePasskeyDisplayed passkeyDisplayed;
   };
 
-  class ClientCallbacks : public BLEClientCallbacks
+  // GAP callback for connections this device initiates. It owns the central
+  // side of a connection's life cycle, the way advertisingGapEvent() owns the
+  // peripheral side; the global listener sees these events too and handles
+  // everything that is the same for both roles.
+  static int centralGapEvent(ble_gap_event *event, void *argument)
   {
-  public:
-    explicit ClientCallbacks(EspBleImpl *owner) : owner_(owner) {}
-
-    void onConnect(BLEClient *client) override
+    EspBleImpl *impl = static_cast<EspBleImpl *>(argument);
+    if (event->type == BLE_GAP_EVENT_CONNECT)
     {
-      if (owner_->isAbandoned(client))
+      EspBleScanResult target;
       {
-        // update() already reported this attempt as failed after its timeout
-        // elapsed. Tear the late connection down instead of surfacing it.
-        client->disconnect();
-        owner_->retireClient(client, 0);
-        return;
+        std::lock_guard<std::mutex> lock(impl->mutex);
+        target = impl->connectTarget;
       }
-      BLEAddress peerAddress = client->getPeerAddress();
+      if (event->connect.status != 0)
+      {
+        impl->reportConnectFailure(target, event->connect.status == BLE_HS_ETIMEOUT);
+        return 0;
+      }
       ble_gap_conn_desc description{};
-      ble_gap_conn_find(client->getConnId(), &description);
-      if (!owner_->addConnection(
-            client->getConnId(),
-            peerAddress.toString(),
-            static_cast<EspBleAddressType>(peerAddress.getType()),
+      if (ble_gap_conn_find(event->connect.conn_handle, &description) != 0)
+      {
+        impl->reportConnectFailure(target, false);
+        return 0;
+      }
+      {
+        std::lock_guard<std::mutex> lock(impl->mutex);
+        impl->connecting = false;
+        impl->connectCancelRequested = false;
+      }
+      if (!impl->addConnection(
+            event->connect.conn_handle,
+            formatAddress(description.peer_ota_addr.val),
+            static_cast<EspBleAddressType>(description.peer_ota_addr.type),
             EspBleRole::Central,
-            client->getMTU(),
+            ble_att_mtu(event->connect.conn_handle),
             description.sec_state.encrypted,
             description.sec_state.authenticated,
             description.sec_state.bonded,
-            description.sec_state.key_size,
-            client))
+            description.sec_state.key_size))
       {
-        client->disconnect();
-        // Never added to a slot, so onDisconnect will not retire it.
-        owner_->retireClient(client, 0);
+        // No slot left: drop the connection rather than hold one the
+        // application can never see.
+        ble_gap_terminate(event->connect.conn_handle, BLE_ERR_REM_USER_CONN_TERM);
+        return 0;
+      }
+      // The central is the side that asks for a larger ATT MTU. The answer
+      // arrives as BLE_GAP_EVENT_MTU a moment later, which is where the
+      // connection's mtu is updated and onMtuChanged() fires.
+      ble_gattc_exchange_mtu(event->connect.conn_handle, nullptr, nullptr);
+      return 0;
+    }
+    if (event->type == BLE_GAP_EVENT_DISCONNECT)
+    {
+      // An attempt that never succeeded ends here too: the bundled NimBLE
+      // re-attempts a failed connection a few times of its own accord
+      // (BLE_GAP_EVENT_REATTEMPT_COUNT) and then reports a disconnect rather
+      // than a failed connect.
+      if (!impl->removeConnectionByHandle(event->disconnect.conn.conn_handle))
+      {
+        EspBleScanResult target;
+        {
+          std::lock_guard<std::mutex> lock(impl->mutex);
+          target = impl->connectTarget;
+        }
+        impl->reportConnectFailure(target, false);
       }
     }
+    return 0;
+  }
 
-    void onDisconnect(BLEClient *client) override
-    {
-      owner_->removeClientConnection(client);
-    }
-
-  private:
-    EspBleImpl *owner_;
-  };
-
-  class ServerCallbacks : public BLEServerCallbacks
+  // Close out the in-flight attempt. Called from whichever event ended it;
+  // only the first one reports, since a cancel may be followed by a disconnect.
+  void reportConnectFailure(const EspBleScanResult &target, bool timedOut)
   {
-  public:
-    explicit ServerCallbacks(EspBleImpl *owner) : owner_(owner) {}
-
-    void onConnect(BLEServer *server, ble_gap_conn_desc *description) override
     {
-      const BLEAddress peerAddress(description->peer_ota_addr);
-      if (!owner_->addConnection(
-            description->conn_handle,
-            peerAddress.toString(),
-            static_cast<EspBleAddressType>(peerAddress.getType()),
-            EspBleRole::Peripheral,
-            server->getPeerMTU(description->conn_handle),
-            description->sec_state.encrypted,
-            description->sec_state.authenticated,
-            description->sec_state.bonded,
-            description->sec_state.key_size,
-            nullptr))
-      {
-        server->disconnect(description->conn_handle);
-      }
+      std::lock_guard<std::mutex> lock(mutex);
+      if (!connecting) return;
+      connecting = false;
+      timedOut = timedOut || connectCancelRequested;
+      connectCancelRequested = false;
     }
-
-    void onDisconnect(BLEServer *, ble_gap_conn_desc *description) override
-    {
-      owner_->removeServerConnection(description->conn_handle);
-    }
-
-    void onMtuChanged(
-      BLEServer *,
-      ble_gap_conn_desc *description,
-      uint16_t mtu) override
-    {
-      owner_->updateMtu(description->conn_handle, mtu);
-    }
-
-  private:
-    EspBleImpl *owner_;
-  };
+    pushFailure(
+      target, timedOut ? "BLE connection timed out" : "BLE connection failed",
+      timedOut ? EspBleError::Timeout : EspBleError::BackendFailure);
+  }
 
   class SecurityCallbacks : public BLESecurityCallbacks
   {
@@ -770,7 +833,7 @@ struct EspBleImpl
   };
 
   explicit EspBleImpl(EspBle *owner)
-      : owner(owner), clientCallbacks(this), serverCallbacks(this), securityCallbacks(this)
+      : owner(owner), securityCallbacks(this)
   {
   }
 
@@ -838,8 +901,7 @@ struct EspBleImpl
     bool encrypted,
     bool authenticated,
     bool bonded,
-    uint8_t encryptionKeySize,
-    BLEClient *client)
+    uint8_t encryptionKeySize)
   {
     std::lock_guard<std::mutex> lock(mutex);
     for (ConnectionSlot &slot : connections)
@@ -850,7 +912,6 @@ struct EspBleImpl
       }
 
       slot.used = true;
-      slot.client = client;
       slot.connection.id = nextConnectionId++;
       if (nextConnectionId == 0)
       {
@@ -917,59 +978,22 @@ struct EspBleImpl
     return false;
   }
 
-  void retireClientLocked(BLEClient *client, EspBleConnectionId connectionId)
-  {
-    if (client == nullptr)
-    {
-      return;
-    }
-    for (size_t index = 0; index < retiredClientCount; ++index)
-    {
-      if (retiredClients[index].client == client)
-      {
-        return;
-      }
-    }
-    if (retiredClientCount < RetiredClientCapacity)
-    {
-      retiredClients[retiredClientCount].client = client;
-      retiredClients[retiredClientCount].connectionId = connectionId;
-      ++retiredClientCount;
-    }
-  }
-
-  void retireClient(BLEClient *client, EspBleConnectionId connectionId)
-  {
-    std::lock_guard<std::mutex> lock(mutex);
-    retireClientLocked(client, connectionId);
-  }
-
-  void removeClientConnection(BLEClient *client)
+  // Either role: the connection is gone, whoever started it. False when no
+  // slot held that handle.
+  bool removeConnectionByHandle(uint16_t handle)
   {
     std::lock_guard<std::mutex> lock(mutex);
     for (ConnectionSlot &slot : connections)
     {
-      if (slot.used && slot.client == client)
+      if (slot.used && slot.connection.handle == handle)
       {
-        retireClientLocked(slot.client, slot.connection.id);
         removeConnection(slot);
-        return;
+        return true;
       }
     }
+    return false;
   }
 
-  void removeServerConnection(uint16_t handle)
-  {
-    std::lock_guard<std::mutex> lock(mutex);
-    for (ConnectionSlot &slot : connections)
-    {
-      if (slot.used && slot.client == nullptr && slot.connection.handle == handle)
-      {
-        removeConnection(slot);
-        return;
-      }
-    }
-  }
 
   // GAP callback for advertising we started ourselves. It owns the peripheral
   // side of a connection's life cycle; everything else about the connection
@@ -992,8 +1016,7 @@ struct EspBleImpl
             description.sec_state.encrypted,
             description.sec_state.authenticated,
             description.sec_state.bonded,
-            description.sec_state.key_size,
-            nullptr))
+            description.sec_state.key_size))
       {
         // No slot left: refuse the connection rather than hold one the
         // application can never see.
@@ -1008,7 +1031,7 @@ struct EspBleImpl
     }
     if (event->type == BLE_GAP_EVENT_DISCONNECT)
     {
-      impl->removeServerConnection(event->disconnect.conn.conn_handle);
+      impl->removeConnectionByHandle(event->disconnect.conn.conn_handle);
     }
     else if (event->type == BLE_GAP_EVENT_PASSKEY_ACTION)
     {
@@ -1580,15 +1603,25 @@ struct EspBleImpl
   // when a peer repeats a UUID.
   struct ClientSubscription
   {
+    // Notifications for a subscription with a consumer go straight to it
+    // instead of the application's notification callback: the HID Host turns
+    // input reports into its own events and never surfaces them as generic
+    // GATT notifications. Called on the host task, with no lock held.
+    using Consumer = void (*)(
+      void *owner, EspBleConnectionId connectionId, uint16_t valueHandle,
+      const uint8_t *data, size_t length);
+
     bool used = false;
     EspBleConnectionId connectionId = 0;
     uint16_t connectionHandle = 0xffff;
     uint16_t valueHandle = 0;
     String serviceUuid;
     String characteristicUuid;
+    Consumer consumer = nullptr;
+    void *consumerOwner = nullptr;
   };
 
-  static constexpr size_t ClientSubscriptionCapacity = 8;
+  static constexpr size_t ClientSubscriptionCapacity = 16;
   ClientSubscription clientSubscriptions[ClientSubscriptionCapacity];
 
   // Raised on the host task when a GATT operation completes, cleared once its
@@ -1597,6 +1630,38 @@ struct EspBleImpl
   static constexpr size_t DeferredNotificationCapacity = 4;
   Event deferredNotifications[DeferredNotificationCapacity];
   size_t deferredNotificationCount = 0;
+
+  // Route this attribute's notifications to an internal consumer. Used by the
+  // HID Host, whose reports are its own events rather than the application's
+  // generic notification callback.
+  bool rememberConsumerSubscription(
+    EspBleConnectionId connectionId,
+    uint16_t connectionHandle,
+    uint16_t valueHandle,
+    ClientSubscription::Consumer consumer,
+    void *consumerOwner)
+  {
+    std::lock_guard<std::mutex> lock(mutex);
+    ClientSubscription *free = nullptr;
+    for (ClientSubscription &entry : clientSubscriptions)
+    {
+      if (entry.used && entry.connectionHandle == connectionHandle &&
+          entry.valueHandle == valueHandle)
+      {
+        free = &entry;
+        break;
+      }
+      if (!entry.used && free == nullptr) free = &entry;
+    }
+    if (free == nullptr) return false;
+    free->used = true;
+    free->connectionId = connectionId;
+    free->connectionHandle = connectionHandle;
+    free->valueHandle = valueHandle;
+    free->consumer = consumer;
+    free->consumerOwner = consumerOwner;
+    return true;
+  }
 
   bool rememberSubscribedHandle(
     EspBleConnectionId connectionId,
@@ -1657,13 +1722,24 @@ struct EspBleImpl
     size_t length,
     bool indication)
   {
-    std::lock_guard<std::mutex> lock(mutex);
+    std::unique_lock<std::mutex> lock(mutex);
     for (const ClientSubscription &entry : clientSubscriptions)
     {
       if (!entry.used || entry.connectionHandle != connectionHandle ||
           entry.valueHandle != valueHandle)
       {
         continue;
+      }
+      if (entry.consumer != nullptr)
+      {
+        // Released first: the consumer takes its own lock, and holding both
+        // would fix an order this class cannot guarantee elsewhere.
+        ClientSubscription::Consumer consumer = entry.consumer;
+        void *consumerOwner = entry.consumerOwner;
+        const EspBleConnectionId connectionId = entry.connectionId;
+        lock.unlock();
+        consumer(consumerOwner, connectionId, valueHandle, data, length);
+        return true;
       }
       Event event;
       event.type = EventType::Notification;
@@ -1734,79 +1810,6 @@ struct EspBleImpl
     event.serverSendResult = result;
     pushEvent(event);
   }
-
-  static void runConnect(void *argument)
-  {
-    EspBleImpl *impl = static_cast<EspBleImpl *>(argument);
-    EspBleScanResult target;
-    uint32_t timeoutMilliseconds;
-    {
-      std::lock_guard<std::mutex> lock(impl->mutex);
-      target = impl->connectTarget;
-      timeoutMilliseconds = impl->connectTimeoutMilliseconds;
-    }
-
-    BLEClient *client = BLEDevice::createClient();
-    bool connected = false;
-    if (client != nullptr)
-    {
-      {
-        // BLEDevice::deinit() frees the most recently created client, so it
-        // must never also be freed by EspBle.
-        std::lock_guard<std::mutex> lock(impl->mutex);
-        impl->newestClient = client;
-        impl->connectClient = client;
-      }
-      client->setClientCallbacks(&impl->clientCallbacks);
-      connected = client->connect(
-        BLEAddress(target.address, static_cast<uint8_t>(target.addressType)),
-        static_cast<uint8_t>(target.addressType),
-        timeoutMilliseconds);
-    }
-
-    bool abandoned = false;
-    {
-      std::lock_guard<std::mutex> lock(impl->mutex);
-      abandoned = impl->isAbandonedLocked(client);
-      if (abandoned)
-      {
-        impl->forgetAbandonedLocked(client);
-      }
-    }
-
-    if (abandoned)
-    {
-      // The failure was already reported when the timeout elapsed, and a late
-      // connection was torn down in ClientCallbacks::onConnect. Only the client
-      // still needs retiring; the connect slot was freed at abandonment, so
-      // connecting / connectTask belong to a newer attempt and must be left be.
-      impl->retireClient(client, 0);
-      return;
-    }
-
-    if (!connected)
-    {
-      impl->pushFailure(target, client == nullptr ? "failed to create BLE client" : "BLE connection failed");
-      impl->retireClient(client, 0);
-    }
-
-    {
-      std::lock_guard<std::mutex> lock(impl->mutex);
-      impl->connecting = false;
-      impl->connectTask = nullptr;
-      impl->connectClient = nullptr;
-    }
-  }
-
-  // vTaskDelete() never returns, so the body runs in its own function: the destructors
-  // of its locals (Strings hold heap buffers) must run before the task ends, or every
-  // operation leaks them.
-  static void connectTaskEntry(void *argument)
-  {
-    runConnect(argument);
-    vTaskDelete(nullptr);
-  }
-
 
   // Enumerate the peer's whole attribute table into our own snapshot. This runs
   // straight through the NimBLE host API: the bundled wrapper's remote service
@@ -1985,7 +1988,6 @@ struct EspBleImpl
   {
     EspBleImpl *impl = static_cast<EspBleImpl *>(argument);
     EspBleGattResult result;
-    BLEClient *client = nullptr;
     String writeValue;
     bool response = true;
     // Set when the subscribed characteristic shares its UUID with another on the
@@ -2002,17 +2004,24 @@ struct EspBleImpl
       writeValue = impl->gattWriteValue;
       response = impl->gattWriteResponse;
       result.response = response;
+    }
+
+    ble_gap_conn_desc description{};
+    uint16_t operationHandle = 0xffff;
+    {
+      std::lock_guard<std::mutex> lock(impl->mutex);
       for (const ConnectionSlot &slot : impl->connections)
       {
-        if (slot.used && slot.connection.id == result.connectionId)
+        if (slot.used && slot.connection.id == result.connectionId &&
+            slot.connection.localRole == EspBleRole::Central)
         {
-          client = slot.client;
+          operationHandle = slot.connection.handle;
           break;
         }
       }
     }
 
-    if (client == nullptr || !client->isConnected())
+    if (operationHandle == 0xffff || ble_gap_conn_find(operationHandle, &description) != 0)
     {
       result.error = EspBleError::InvalidState;
       result.detail = "connection is not an active Central connection";
@@ -2156,8 +2165,11 @@ struct EspBleImpl
               result.error = EspBleError::InvalidState;
               result.detail = "GATT characteristic is not readable";
             }
-            else if (ble_gattc_read(
-                       connectionHandle, valueHandle, espble_raw::readCallback, &operation) != 0 ||
+            // Read Long: a value longer than one MTU would otherwise come back
+            // silently truncated.
+            else if (ble_gattc_read_long(
+                       connectionHandle, valueHandle, 0, espble_raw::readLongCallback,
+                       &operation) != 0 ||
                      !espble_raw::wait(operation, 10000))
             {
               result.error = EspBleError::Timeout;
@@ -2221,8 +2233,8 @@ struct EspBleImpl
             }
             else if (result.operation == EspBleGattOperation::ReadDescriptor)
             {
-              if (ble_gattc_read(
-                    connectionHandle, descriptorHandle, espble_raw::readCallback,
+              if (ble_gattc_read_long(
+                    connectionHandle, descriptorHandle, 0, espble_raw::readLongCallback,
                     &operation) != 0 ||
                   !espble_raw::wait(operation, 10000))
               {
@@ -2418,64 +2430,20 @@ struct EspBleImpl
   // Set once ble_gatts_start() has run; the attribute table cannot change after.
   bool gattServerStarted = false;
   ConnectionSlot connections[ConnectionCapacity];
-  RetiredClient retiredClients[RetiredClientCapacity];
-  size_t retiredClientCount = 0;
-  BLEClient *newestClient = nullptr;
   Event events[ConnectionEventQueueCapacity];
   size_t eventHead = 0;
   size_t eventCount = 0;
   size_t droppedEvents = 0;
   EspBleConnectionId nextConnectionId = 1;
-  BLEServer *server = nullptr;
   bool connecting = false;
-  TaskHandle_t connectTask = nullptr;
   EspBleScanResult connectTarget;
   uint32_t connectTimeoutMilliseconds = 10000;
-  uint32_t connectStartMilliseconds = 0;
+  // When the attempt must be given up on. The host's own duration would do the
+  // job, but the bundled NimBLE re-attempts underneath it and stretches the
+  // wait well past what the caller asked for, so the deadline is enforced here.
+  uint32_t connectDeadlineMilliseconds = 0;
   bool connectCancelRequested = false;
-  // Client of the in-flight attempt, published by the worker as soon as it is
-  // created so update() can identify the attempt it gives up on.
-  BLEClient *connectClient = nullptr;
-  // Clients of attempts that update() abandoned once their requested timeout
-  // elapsed. Their workers are still blocked inside the backend (which does not
-  // honour the timeout and cannot be interrupted; see
-  // cancelExpiredConnectAttempt), so their eventual result is discarded and a
-  // late-arriving connection is torn down instead of being reported.
-  BLEClient *abandonedClients[RetiredClientCapacity] = {};
-  size_t abandonedClientCount = 0;
 
-  bool isAbandonedLocked(BLEClient *client) const
-  {
-    if (client == nullptr) return false;
-    for (size_t index = 0; index < abandonedClientCount; ++index)
-    {
-      if (abandonedClients[index] == client) return true;
-    }
-    return false;
-  }
-
-  bool isAbandoned(BLEClient *client)
-  {
-    std::lock_guard<std::mutex> lock(mutex);
-    return isAbandonedLocked(client);
-  }
-
-  void forgetAbandonedLocked(BLEClient *client)
-  {
-    for (size_t index = 0; index < abandonedClientCount; ++index)
-    {
-      if (abandonedClients[index] != client) continue;
-      for (size_t next = index + 1; next < abandonedClientCount; ++next)
-      {
-        abandonedClients[next - 1] = abandonedClients[next];
-      }
-      abandonedClients[--abandonedClientCount] = nullptr;
-      return;
-    }
-  }
-
-  ClientCallbacks clientCallbacks;
-  ServerCallbacks serverCallbacks;
   SecurityCallbacks securityCallbacks;
   BLESecurity *securityBackend = nullptr;
   bool securityEnabled = false;
@@ -2809,6 +2777,12 @@ struct EspBleGattServerImpl
     if (context->op == BLE_GATT_ACCESS_OP_READ_CHR ||
         context->op == BLE_GATT_ACCESS_OP_READ_DSC)
     {
+      if (context->op == BLE_GATT_ACCESS_OP_READ_CHR)
+      {
+        // Before the lock: the callback is expected to answer with setValue(),
+        // which takes the same mutex.
+        notifyReadRequest(connectionHandle, context);
+      }
       // Values are written from the loop task; hold the mutex so a read on the
       // host task cannot observe a half-updated String.
       std::lock_guard<std::mutex> lock(mutex);
@@ -2902,7 +2876,34 @@ struct EspBleGattServerImpl
     return 0;
   }
 
+  // Hand a read request to the application so it can publish the value now.
+  // Runs on the host task with no lock held.
+  void notifyReadRequest(uint16_t connectionHandle, const ble_gatt_access_ctxt *context)
+  {
+    EspBleGattReadRequest request;
+    {
+      std::lock_guard<std::mutex> lock(mutex);
+      for (size_t index = 0; index < characteristicCount; ++index)
+      {
+        const CharacteristicDefinition &definition = characteristics[index];
+        if (definition.def == nullptr || definition.def != context->chr) continue;
+        request.characteristic.id = static_cast<uint16_t>(index + 1);
+        request.serviceUuid = definition.serviceUuid;
+        request.characteristicUuid = definition.uuid;
+        break;
+      }
+      if (!request.characteristic.valid()) return;
+    }
+    EspBleImpl *ownerImpl = server->owner_->impl_;
+    if (ownerImpl != nullptr)
+    {
+      request.connectionId = ownerImpl->findPeripheralConnectionId(connectionHandle);
+    }
+    server->dispatchRead(request);
+  }
+
   // Held value behind the attribute the host is reading. Call with the mutex.
+
   const String *findValueLocked(const ble_gatt_access_ctxt *context) const
   {
     if (context->op == BLE_GATT_ACCESS_OP_READ_CHR)
@@ -3934,12 +3935,18 @@ struct EspBleHidKeyboardHostImpl
   {
     bool used = false;
     EspBleConnectionId connectionId = 0;
+    // Attribute handles, not wrapper objects: a peer may expose several Report
+    // characteristics with the same UUID, which only a handle can tell apart.
+    // Zero means the peer does not have that report.
+    uint16_t connectionHandle = 0xffff;
     uint8_t reportId = 0;
-    BLERemoteCharacteristic *inputReport = nullptr;
-    BLERemoteCharacteristic *outputReport = nullptr;
-    BLERemoteCharacteristic *vendorOutputReport = nullptr;
-    BLERemoteCharacteristic *vendorFeatureReport = nullptr;
-    BLERemoteCharacteristic *inputReports[MaxInputReports] = {};
+    uint16_t inputReport = 0;
+    uint16_t outputReport = 0;
+    bool outputReportNoResponse = false;
+    uint16_t vendorOutputReport = 0;
+    bool vendorOutputReportNoResponse = false;
+    uint16_t vendorFeatureReport = 0;
+    uint16_t inputReports[MaxInputReports] = {};
     EspBleHidReportKind inputKinds[MaxInputReports] = {};
     uint8_t inputReportIds[MaxInputReports] = {};
     ReportFormat inputFormats[MaxInputReports];
@@ -4262,254 +4269,411 @@ struct EspBleHidKeyboardHostImpl
     if (event.changed) pushEventLocked(event, false);
   }
 
+  // One Report characteristic as the attribute table describes it, before its
+  // Report Reference descriptor says what it is for.
+  struct ReportCandidate
+  {
+    uint16_t valueHandle = 0;
+    uint16_t referenceHandle = 0;
+    uint16_t configurationHandle = 0;
+    bool notifiable = false;
+    bool writable = false;
+    bool writableWithoutResponse = false;
+  };
+
+  // Notifications for a subscribed input report, straight from the host task.
+  static void inputReportConsumer(
+    void *owner,
+    EspBleConnectionId connectionId,
+    uint16_t valueHandle,
+    const uint8_t *data,
+    size_t length)
+  {
+    EspBleHidKeyboardHostImpl *impl = static_cast<EspBleHidKeyboardHostImpl *>(owner);
+    uint8_t reportId = 0;
+    EspBleHidReportKind kind = EspBleHidReportKind::Unknown;
+    {
+      std::lock_guard<std::mutex> lock(impl->mutex);
+      Connection *connection = impl->findConnection(connectionId);
+      if (connection == nullptr) return;
+      bool found = false;
+      for (size_t index = 0; index < connection->inputReportCount; ++index)
+      {
+        if (connection->inputReports[index] != valueHandle) continue;
+        reportId = connection->inputReportIds[index];
+        kind = connection->inputKinds[index];
+        found = true;
+        break;
+      }
+      if (!found) return;
+    }
+    if (kind == EspBleHidReportKind::Keyboard)
+    {
+      impl->queueInputReport(connectionId, reportId, data, length);
+    }
+    else
+    {
+      impl->queueRawReport(connectionId, reportId, kind, data, length);
+    }
+  }
+
   static void runDiscovery(void *argument)
   {
     EspBleHidKeyboardHostImpl *impl = static_cast<EspBleHidKeyboardHostImpl *>(argument);
+    EspBleImpl *owner = impl->host->owner_->impl_;
     EspBleHidKeyboardHostDiscovery result;
-    BLEClient *client = nullptr;
+    uint16_t connectionHandle = 0xffff;
     {
       std::lock_guard<std::mutex> lock(impl->mutex);
       result.connectionId = impl->discoveryConnectionId;
     }
     {
-      std::lock_guard<std::mutex> lock(impl->host->owner_->impl_->mutex);
-      for (const EspBleImpl::ConnectionSlot &slot : impl->host->owner_->impl_->connections)
+      std::lock_guard<std::mutex> lock(owner->mutex);
+      for (const EspBleImpl::ConnectionSlot &slot : owner->connections)
       {
-        if (slot.used && slot.connection.id == result.connectionId && slot.client != nullptr)
+        if (slot.used && slot.connection.id == result.connectionId &&
+            slot.connection.localRole == EspBleRole::Central)
         {
-          client = slot.client;
+          connectionHandle = slot.connection.handle;
           break;
         }
       }
     }
 
-    BLERemoteCharacteristic *inputReports[8] = {};
-    EspBleHidReportKind inputKinds[8] = {};
-    uint8_t inputReportIds[8] = {};
-    size_t inputReportCount = 0;
-    BLERemoteCharacteristic *outputReports[8] = {};
-    uint8_t outputReportIds[8] = {};
-    size_t outputReportCount = 0;
-    BLERemoteCharacteristic *featureReports[8] = {};
-    uint8_t featureReportIds[8] = {};
-    size_t featureReportCount = 0;
-    if (client == nullptr || !client->isConnected())
+    if (connectionHandle == 0xffff)
     {
       result.error = EspBleError::InvalidState;
       result.detail = "connection is not an active Central connection";
+      publishDiscovery(impl, result);
+      return;
     }
-    else
+
+    // The attribute table is discovered once per connection and shared with the
+    // generic GATT client, so a HID Host and an application both looking at the
+    // same peer walk it once.
+    bool discovered = false;
     {
-      BLERemoteService *hidService = client->getService(BLEUUID((uint16_t)0x1812));
-      if (hidService == nullptr)
+      std::lock_guard<std::mutex> lock(owner->mutex);
+      const EspBleImpl::GattDatabaseSnapshot *database =
+        owner->findDatabaseLocked(result.connectionId);
+      discovered = database != nullptr && database->valid;
+    }
+    if (!discovered)
+    {
+      EspBleGattResult discovery;
+      discovery.connectionId = result.connectionId;
+      if (!EspBleImpl::discoverDatabase(owner, discovery))
       {
-        result.error = EspBleError::NotFound;
-        result.detail = "HID Service was not found";
+        result.error = discovery.error;
+        result.detail = discovery.detail;
+        publishDiscovery(impl, result);
+        return;
+      }
+    }
+
+    // Copy what is needed out of the snapshot, so the ATT reads below run
+    // without holding the owner's lock.
+    uint16_t reportMapHandle = 0;
+    uint16_t hidInformationHandle = 0;
+    uint16_t batteryHandle = 0;
+    ReportCandidate candidates[MaxInputReports * 3];
+    size_t candidateCount = 0;
+    {
+      std::lock_guard<std::mutex> lock(owner->mutex);
+      const EspBleImpl::GattDatabaseSnapshot *database =
+        owner->findDatabaseLocked(result.connectionId);
+      if (database == nullptr)
+      {
+        result.error = EspBleError::InvalidState;
+        result.detail = "the GATT database snapshot went away";
+        publishDiscovery(impl, result);
+        return;
+      }
+      for (size_t index = 0; index < database->characteristicCount; ++index)
+      {
+        const EspBleGattCharacteristicInfo &info = database->characteristics[index];
+        if (uuidEquals(info.serviceUuid, "180f") &&
+            uuidEquals(info.characteristicUuid, "2a19") && info.readable)
+        {
+          batteryHandle = info.handle;
+          continue;
+        }
+        if (!uuidEquals(info.serviceUuid, "1812")) continue;
+        if (uuidEquals(info.characteristicUuid, "2a4b"))
+        {
+          reportMapHandle = info.handle;
+        }
+        else if (uuidEquals(info.characteristicUuid, "2a4a"))
+        {
+          hidInformationHandle = info.handle;
+        }
+        else if (uuidEquals(info.characteristicUuid, "2a4d") &&
+                 candidateCount < (sizeof(candidates) / sizeof(candidates[0])))
+        {
+          ReportCandidate &candidate = candidates[candidateCount++];
+          candidate.valueHandle = info.handle;
+          candidate.notifiable = info.notifiable;
+          candidate.writable = info.writable;
+          candidate.writableWithoutResponse = info.writableWithoutResponse;
+          for (size_t d = 0; d < database->descriptorCount; ++d)
+          {
+            const EspBleGattDescriptorInfo &descriptor = database->descriptors[d];
+            // Matched by the characteristic's value handle: a UUID cannot tell
+            // two Report characteristics apart.
+            if (descriptor.characteristicHandle != info.handle) continue;
+            if (uuidEquals(descriptor.descriptorUuid, "2908"))
+            {
+              candidate.referenceHandle = descriptor.handle;
+            }
+            else if (uuidEquals(
+                       descriptor.descriptorUuid, EspBle::ClientCharacteristicConfigurationUuid))
+            {
+              candidate.configurationHandle = descriptor.handle;
+            }
+          }
+        }
+      }
+    }
+
+    if (reportMapHandle == 0)
+    {
+      result.error = EspBleError::NotFound;
+      result.detail = "HID Service was not found";
+      publishDiscovery(impl, result);
+      return;
+    }
+
+    String reportMapValue;
+    espble_raw::readHandle(connectionHandle, reportMapHandle, reportMapValue);
+    const EspBleHidReportMapInfo mapInfo = espBleParseHidReportMap(
+      reinterpret_cast<const uint8_t *>(reportMapValue.c_str()), reportMapValue.length());
+    if (mapInfo.count == 0)
+    {
+      result.error = EspBleError::InvalidState;
+      result.detail = "HID Report Map has no supported input report";
+      publishDiscovery(impl, result);
+      return;
+    }
+
+    if (hidInformationHandle != 0)
+    {
+      String hidInformationValue;
+      if (espble_raw::readHandle(connectionHandle, hidInformationHandle, hidInformationValue) &&
+          hidInformationValue.length() >= 3)
+      {
+        result.hasCountryCode = true;
+        result.countryCode = static_cast<uint8_t>(hidInformationValue[2]);
+      }
+    }
+
+    uint16_t inputReports[MaxInputReports] = {};
+    EspBleHidReportKind inputKinds[MaxInputReports] = {};
+    uint8_t inputReportIds[MaxInputReports] = {};
+    uint16_t inputConfigurations[MaxInputReports] = {};
+    size_t inputReportCount = 0;
+    uint16_t outputReports[MaxInputReports] = {};
+    bool outputNoResponse[MaxInputReports] = {};
+    uint8_t outputReportIds[MaxInputReports] = {};
+    size_t outputReportCount = 0;
+    uint16_t featureReports[MaxInputReports] = {};
+    uint8_t featureReportIds[MaxInputReports] = {};
+    size_t featureReportCount = 0;
+    bool keyboardInputFound = false;
+
+    for (size_t index = 0; index < candidateCount; ++index)
+    {
+      const ReportCandidate &candidate = candidates[index];
+      String reference;
+      if (candidate.referenceHandle != 0 &&
+          espble_raw::readHandle(connectionHandle, candidate.referenceHandle, reference) &&
+          reference.length() == 2)
+      {
+        const uint8_t reportId = static_cast<uint8_t>(reference[0]);
+        const uint8_t reportType = static_cast<uint8_t>(reference[1]);
+        const EspBleHidReportKind kind = mapInfo.kindForReportId(reportId);
+        if (reportType == 1 && candidate.notifiable &&
+            kind != EspBleHidReportKind::Unknown && inputReportCount < MaxInputReports)
+        {
+          inputReports[inputReportCount] = candidate.valueHandle;
+          inputConfigurations[inputReportCount] = candidate.configurationHandle;
+          inputKinds[inputReportCount] = kind;
+          inputReportIds[inputReportCount++] = reportId;
+          if (kind == EspBleHidReportKind::Keyboard)
+          {
+            result.reportId = reportId;
+            keyboardInputFound = true;
+          }
+        }
+        else if (reportType == 2 && outputReportCount < MaxInputReports)
+        {
+          outputReports[outputReportCount] = candidate.valueHandle;
+          outputNoResponse[outputReportCount] = candidate.writableWithoutResponse;
+          outputReportIds[outputReportCount++] = reportId;
+        }
+        else if (reportType == 3 && featureReportCount < MaxInputReports)
+        {
+          featureReports[featureReportCount] = candidate.valueHandle;
+          featureReportIds[featureReportCount++] = reportId;
+        }
+      }
+      else if (mapInfo.count == 1 && !mapInfo.entries[0].hasReportId)
+      {
+        // No Report Reference descriptor: acceptable when the Report Map
+        // declares no report IDs (single-report keyboards).
+        if (candidate.notifiable && inputReportCount == 0)
+        {
+          inputReports[0] = candidate.valueHandle;
+          inputConfigurations[0] = candidate.configurationHandle;
+          inputKinds[0] = mapInfo.entries[0].kind;
+          inputReportIds[0] = 0;
+          inputReportCount = 1;
+          result.reportId = 0;
+          keyboardInputFound = mapInfo.entries[0].kind == EspBleHidReportKind::Keyboard;
+        }
+        else if ((candidate.writable || candidate.writableWithoutResponse) &&
+                 outputReportCount < MaxInputReports)
+        {
+          outputReports[outputReportCount] = candidate.valueHandle;
+          outputNoResponse[outputReportCount] = candidate.writableWithoutResponse;
+          outputReportIds[outputReportCount++] = 0;
+        }
+      }
+    }
+
+    if (inputReportCount == 0)
+    {
+      result.error = EspBleError::NotFound;
+      result.detail = "supported HID Input Report was not found";
+      publishDiscovery(impl, result);
+      return;
+    }
+
+    uint16_t outputReport = 0;
+    bool outputReportNoResponse = false;
+    uint16_t vendorOutputReport = 0;
+    bool vendorOutputReportNoResponse = false;
+    uint16_t vendorFeatureReport = 0;
+    for (size_t index = 0; index < outputReportCount; ++index)
+    {
+      if (keyboardInputFound && outputReportIds[index] == result.reportId)
+      {
+        outputReport = outputReports[index];
+        outputReportNoResponse = outputNoResponse[index];
+      }
+      if (outputReportIds[index] == ESP_BLE_HID_REPORT_ID_VENDOR)
+      {
+        vendorOutputReport = outputReports[index];
+        vendorOutputReportNoResponse = outputNoResponse[index];
+      }
+    }
+    for (size_t index = 0; index < featureReportCount; ++index)
+    {
+      if (featureReportIds[index] == ESP_BLE_HID_REPORT_ID_VENDOR)
+        vendorFeatureReport = featureReports[index];
+    }
+    result.hasOutputReport = outputReport != 0;
+
+    if (batteryHandle != 0)
+    {
+      String batteryValue;
+      if (espble_raw::readHandle(connectionHandle, batteryHandle, batteryValue) &&
+          batteryValue.length() >= 1)
+      {
+        result.batteryLevel = static_cast<uint8_t>(batteryValue[0]);
+        result.hasBatteryLevel = true;
+      }
+    }
+
+    {
+      std::lock_guard<std::mutex> lock(impl->mutex);
+      Connection *connection = impl->allocateConnection(result.connectionId);
+      if (connection == nullptr)
+      {
+        result.error = EspBleError::ResourceExhausted;
+        result.detail = "too many HID Host connections";
       }
       else
       {
-        BLERemoteCharacteristic *reportMap =
-          hidService->getCharacteristic(BLEUUID((uint16_t)0x2a4b));
-        const String reportMapValue = reportMap == nullptr ? String() : reportMap->readValue();
-        const EspBleHidReportMapInfo mapInfo = espBleParseHidReportMap(
-          reinterpret_cast<const uint8_t *>(reportMapValue.c_str()), reportMapValue.length());
-        if (reportMap == nullptr || mapInfo.count == 0)
+        connection->connectionHandle = connectionHandle;
+        connection->reportId = result.reportId;
+        connection->inputReport = 0;
+        connection->outputReport = outputReport;
+        connection->outputReportNoResponse = outputReportNoResponse;
+        connection->vendorOutputReport = vendorOutputReport;
+        connection->vendorOutputReportNoResponse = vendorOutputReportNoResponse;
+        connection->vendorFeatureReport = vendorFeatureReport;
+        connection->inputReportCount = inputReportCount;
+        for (size_t index = 0; index < inputReportCount; ++index)
         {
-          result.error = EspBleError::InvalidState;
-          result.detail = "HID Report Map has no supported input report";
-        }
-        else
-        {
-          BLERemoteCharacteristic *hidInformation =
-            hidService->getCharacteristic(BLEUUID((uint16_t)0x2a4a));
-          const String hidInformationValue =
-            hidInformation == nullptr ? String() : hidInformation->readValue();
-          if (hidInformationValue.length() >= 3)
+          connection->inputReports[index] = inputReports[index];
+          connection->inputKinds[index] = inputKinds[index];
+          connection->inputReportIds[index] = inputReportIds[index];
+          ReportFormat &format = connection->inputFormats[index];
+          for (size_t entryIndex = 0; entryIndex < mapInfo.count; ++entryIndex)
           {
-            result.hasCountryCode = true;
-            result.countryCode = static_cast<uint8_t>(hidInformationValue[2]);
-          }
-          std::map<uint16_t, BLERemoteCharacteristic *> *characteristics =
-            hidService->getCharacteristicsByHandle();
-          bool keyboardInputFound = false;
-          for (const auto &entry : *characteristics)
-          {
-            BLERemoteCharacteristic *characteristic = entry.second;
-            if (!characteristic->getUUID().equals(BLEUUID((uint16_t)0x2a4d)))
+            if (mapInfo.entries[entryIndex].kind == inputKinds[index] &&
+                mapInfo.entries[entryIndex].reportId == inputReportIds[index])
             {
-              continue;
-            }
-            BLERemoteDescriptor *reference =
-              characteristic->getDescriptor(BLEUUID((uint16_t)0x2908));
-            const String value = reference == nullptr ? String() : reference->readValue();
-            if (value.length() == 2)
-            {
-              const uint8_t reportId = static_cast<uint8_t>(value[0]);
-              const uint8_t reportType = static_cast<uint8_t>(value[1]);
-              const EspBleHidReportKind kind = mapInfo.kindForReportId(reportId);
-              if (reportType == 1 && characteristic->canNotify() &&
-                  kind != EspBleHidReportKind::Unknown && inputReportCount < 8)
-              {
-                inputReports[inputReportCount] = characteristic;
-                inputKinds[inputReportCount] = kind;
-                inputReportIds[inputReportCount++] = reportId;
-                if (kind == EspBleHidReportKind::Keyboard)
-                {
-                  result.reportId = reportId;
-                  keyboardInputFound = true;
-                }
-              }
-              else if (reportType == 2 && outputReportCount < 8)
-              {
-                outputReports[outputReportCount] = characteristic;
-                outputReportIds[outputReportCount++] = reportId;
-              }
-              else if (reportType == 3 && featureReportCount < 8)
-              {
-                featureReports[featureReportCount] = characteristic;
-                featureReportIds[featureReportCount++] = reportId;
-              }
-            }
-            else if (mapInfo.count == 1 && !mapInfo.entries[0].hasReportId)
-            {
-              // No Report Reference descriptor: acceptable when the Report
-              // Map declares no report IDs (single-report keyboards).
-              if (characteristic->canNotify() && inputReportCount == 0)
-              {
-                inputReports[0] = characteristic;
-                inputKinds[0] = mapInfo.entries[0].kind;
-                inputReportIds[0] = 0;
-                inputReportCount = 1;
-                result.reportId = 0;
-                keyboardInputFound = mapInfo.entries[0].kind == EspBleHidReportKind::Keyboard;
-              }
-              else if ((characteristic->canWrite() || characteristic->canWriteNoResponse()) &&
-                       outputReportCount < 8)
-              {
-                outputReports[outputReportCount] = characteristic;
-                outputReportIds[outputReportCount++] = 0;
-              }
+              const EspBleHidReportMapEntry &entry = mapInfo.entries[entryIndex];
+              format.inputBitLength = entry.inputBitLength;
+              format.keyboardBitmap = entry.keyboardBitmap;
+              format.keyboardHasModifiers = entry.keyboardHasModifiers;
+              format.keyboardModifierBitOffset = entry.keyboardModifierBitOffset;
+              format.keyboardBitmapBitOffset = entry.keyboardBitmapBitOffset;
+              format.keyboardBitmapBitCount = entry.keyboardBitmapBitCount;
+              format.keyboardBitmapUsageMinimum = entry.keyboardBitmapUsageMinimum;
             }
           }
-          if (inputReportCount == 0)
+          for (size_t fieldIndex = 0; fieldIndex < mapInfo.fieldCount &&
+               format.fieldCount < MaxFieldsPerReport; ++fieldIndex)
           {
-            result.error = EspBleError::NotFound;
-            result.detail = "supported HID Input Report was not found";
+            if (mapInfo.fields[fieldIndex].kind == inputKinds[index] &&
+                mapInfo.fields[fieldIndex].reportId == inputReportIds[index])
+              format.fields[format.fieldCount++] = mapInfo.fields[fieldIndex];
           }
-          else
-          {
-            BLERemoteCharacteristic *outputReport = nullptr;
-            BLERemoteCharacteristic *vendorOutputReport = nullptr;
-            BLERemoteCharacteristic *vendorFeatureReport = nullptr;
-            for (size_t index = 0; index < outputReportCount; ++index)
-            {
-              if (keyboardInputFound && outputReportIds[index] == result.reportId)
-              {
-                outputReport = outputReports[index];
-              }
-              if (outputReportIds[index] == ESP_BLE_HID_REPORT_ID_VENDOR)
-                vendorOutputReport = outputReports[index];
-            }
-            for (size_t index = 0; index < featureReportCount; ++index)
-              if (featureReportIds[index] == ESP_BLE_HID_REPORT_ID_VENDOR)
-                vendorFeatureReport = featureReports[index];
-            result.hasOutputReport = outputReport != nullptr;
-
-            BLERemoteService *batteryService =
-              client->getService(BLEUUID((uint16_t)0x180f));
-            BLERemoteCharacteristic *battery = batteryService == nullptr
-              ? nullptr
-              : batteryService->getCharacteristic(BLEUUID((uint16_t)0x2a19));
-            if (battery != nullptr && battery->canRead())
-            {
-              result.batteryLevel = battery->readUInt8();
-              result.hasBatteryLevel = true;
-            }
-
-            {
-              std::lock_guard<std::mutex> lock(impl->mutex);
-              Connection *connection = impl->allocateConnection(result.connectionId);
-              if (connection == nullptr)
-              {
-                result.error = EspBleError::ResourceExhausted;
-                result.detail = "too many HID Host connections";
-              }
-              else
-              {
-                connection->reportId = result.reportId;
-                connection->inputReport = nullptr;
-                connection->outputReport = outputReport;
-                connection->vendorOutputReport = vendorOutputReport;
-                connection->vendorFeatureReport = vendorFeatureReport;
-                connection->inputReportCount = inputReportCount;
-                for (size_t index = 0; index < inputReportCount; ++index)
-                {
-                  connection->inputReports[index] = inputReports[index];
-                  connection->inputKinds[index] = inputKinds[index];
-                  connection->inputReportIds[index] = inputReportIds[index];
-                  ReportFormat &format = connection->inputFormats[index];
-                  for (size_t entryIndex = 0; entryIndex < mapInfo.count; ++entryIndex)
-                  {
-                    if (mapInfo.entries[entryIndex].kind == inputKinds[index] &&
-                        mapInfo.entries[entryIndex].reportId == inputReportIds[index])
-                    {
-                      const EspBleHidReportMapEntry &entry = mapInfo.entries[entryIndex];
-                      format.inputBitLength = entry.inputBitLength;
-                      format.keyboardBitmap = entry.keyboardBitmap;
-                      format.keyboardHasModifiers = entry.keyboardHasModifiers;
-                      format.keyboardModifierBitOffset = entry.keyboardModifierBitOffset;
-                      format.keyboardBitmapBitOffset = entry.keyboardBitmapBitOffset;
-                      format.keyboardBitmapBitCount = entry.keyboardBitmapBitCount;
-                      format.keyboardBitmapUsageMinimum = entry.keyboardBitmapUsageMinimum;
-                    }
-                  }
-                  for (size_t fieldIndex = 0; fieldIndex < mapInfo.fieldCount &&
-                       format.fieldCount < MaxFieldsPerReport; ++fieldIndex)
-                  {
-                    if (mapInfo.fields[fieldIndex].kind == inputKinds[index] &&
-                        mapInfo.fields[fieldIndex].reportId == inputReportIds[index])
-                      format.fields[format.fieldCount++] = mapInfo.fields[fieldIndex];
-                  }
-                  if (inputKinds[index] == EspBleHidReportKind::Keyboard)
-                    connection->inputReport = inputReports[index];
-                }
-              }
-            }
-            if (result.error == EspBleError::None)
-            {
-              result.success = true;
-              for (size_t index = 0; index < inputReportCount && result.success; ++index)
-              {
-                const EspBleConnectionId connectionId = result.connectionId;
-                const uint8_t reportId = inputReportIds[index];
-                const EspBleHidReportKind kind = inputKinds[index];
-                result.success = inputReports[index]->subscribe(
-                  true,
-                  [impl, connectionId, reportId, kind](
-                    BLERemoteCharacteristic *, uint8_t *data, size_t length, bool) {
-                    if (kind == EspBleHidReportKind::Keyboard)
-                      impl->queueInputReport(connectionId, reportId, data, length);
-                    else
-                      impl->queueRawReport(connectionId, reportId, kind, data, length);
-                  }, true);
-              }
-              if (!result.success)
-              {
-                result.error = EspBleError::BackendFailure;
-                result.detail = "failed to subscribe to HID Input Report";
-                std::lock_guard<std::mutex> lock(impl->mutex);
-                Connection *connection = impl->findConnection(result.connectionId);
-                if (connection != nullptr)
-                {
-                  resetConnection(*connection);
-                }
-              }
-            }
-          }
+          if (inputKinds[index] == EspBleHidReportKind::Keyboard)
+            connection->inputReport = inputReports[index];
         }
       }
     }
 
+    if (result.error == EspBleError::None)
+    {
+      result.success = true;
+      for (size_t index = 0; index < inputReportCount && result.success; ++index)
+      {
+        // Subscribing is a CCCD write; the host then routes the peer's
+        // notifications here by attribute handle.
+        static const uint8_t enableNotifications[2] = {0x01, 0x00};
+        result.success = inputConfigurations[index] != 0 &&
+          espble_raw::writeHandle(
+            connectionHandle, inputConfigurations[index], enableNotifications,
+            sizeof(enableNotifications), true) &&
+          owner->rememberConsumerSubscription(
+            result.connectionId, connectionHandle, inputReports[index],
+            &EspBleHidKeyboardHostImpl::inputReportConsumer, impl);
+      }
+      if (!result.success)
+      {
+        result.error = EspBleError::BackendFailure;
+        result.detail = "failed to subscribe to HID Input Report";
+        std::lock_guard<std::mutex> lock(impl->mutex);
+        Connection *connection = impl->findConnection(result.connectionId);
+        if (connection != nullptr)
+        {
+          resetConnection(*connection);
+        }
+      }
+    }
+
+    publishDiscovery(impl, result);
+  }
+
+  // Report the outcome and release both the HID Host's discovery slot and the
+  // owner's GATT gate, whichever way discovery ended.
+  static void publishDiscovery(
+    EspBleHidKeyboardHostImpl *impl, const EspBleHidKeyboardHostDiscovery &result)
+  {
     Event event;
     event.type = EventType::Discovery;
     event.discovery = result;
@@ -6044,6 +6208,12 @@ void EspBleGattServer::onWritten(WriteCallback callback)
   writtenListeners_.setPrimary(std::move(callback));
 }
 
+void EspBleGattServer::onRead(ReadCallback callback)
+{
+  std::lock_guard<std::mutex> lock(listenerMutex_);
+  readCallback_ = std::move(callback);
+}
+
 void EspBleGattServer::onDescriptorWritten(DescriptorWriteCallback callback)
 {
   std::lock_guard<std::mutex> lock(listenerMutex_);
@@ -6315,6 +6485,16 @@ void EspBleGattServer::dispatchWrite(const EspBleGattWrite &write)
     count = writtenListeners_.snapshot(callbacks);
   }
   for (size_t i = 0; i < count; ++i) (*callbacks[i])(write);
+}
+
+void EspBleGattServer::dispatchRead(const EspBleGattReadRequest &request)
+{
+  ReadCallback callback;
+  {
+    std::lock_guard<std::mutex> lock(listenerMutex_);
+    callback = readCallback_;
+  }
+  if (callback) callback(request);
 }
 
 void EspBleGattServer::dispatchDescriptorWrite(const EspBleGattDescriptorWrite &write)
@@ -7766,16 +7946,20 @@ bool EspBleHidHost::setKeyboardLeds(
     owner_->impl_->gattConnectionId = connectionId;
   }
 
-  BLERemoteCharacteristic *outputReport = nullptr;
+  uint16_t outputReport = 0;
+  bool writeWithoutResponse = false;
+  uint16_t connectionHandle = 0xffff;
   {
     std::lock_guard<std::mutex> lock(impl_->mutex);
     EspBleHidKeyboardHostImpl::Connection *connection = impl_->findConnection(connectionId);
     if (connection != nullptr)
     {
       outputReport = connection->outputReport;
+      writeWithoutResponse = connection->outputReportNoResponse;
+      connectionHandle = connection->connectionHandle;
     }
   }
-  if (outputReport == nullptr)
+  if (outputReport == 0)
   {
     std::lock_guard<std::mutex> ownerLock(owner_->impl_->mutex);
     owner_->impl_->gattOperating = false;
@@ -7789,9 +7973,8 @@ bool EspBleHidHost::setKeyboardLeds(
     (scrollLock ? 0x04 : 0) |
     (compose ? 0x08 : 0) |
     (kana ? 0x10 : 0);
-  const bool response = !outputReport->canWriteNoResponse();
-  const bool success = outputReport->writeValue(
-    &leds, 1, response);
+  const bool success = espble_raw::writeHandle(
+    connectionHandle, outputReport, &leds, 1, !writeWithoutResponse);
   {
     std::lock_guard<std::mutex> ownerLock(owner_->impl_->mutex);
     owner_->impl_->gattOperating = false;
@@ -7859,14 +8042,20 @@ bool EspBleHidHost::sendVendorReport(
     owner_->impl_->gattConnectionId = connectionId;
   }
 
-  BLERemoteCharacteristic *report = nullptr;
+  uint16_t report = 0;
+  bool writeWithoutResponse = false;
+  uint16_t connectionHandle = 0xffff;
   {
     std::lock_guard<std::mutex> lock(impl_->mutex);
     EspBleHidKeyboardHostImpl::Connection *connection = impl_->findConnection(connectionId);
     if (connection != nullptr)
+    {
       report = feature ? connection->vendorFeatureReport : connection->vendorOutputReport;
+      writeWithoutResponse = !feature && connection->vendorOutputReportNoResponse;
+      connectionHandle = connection->connectionHandle;
+    }
   }
-  if (report == nullptr)
+  if (report == 0)
   {
     std::lock_guard<std::mutex> ownerLock(owner_->impl_->mutex);
     owner_->impl_->gattOperating = false;
@@ -7876,9 +8065,10 @@ bool EspBleHidHost::sendVendorReport(
     return false;
   }
 
-  const bool response = feature || !report->canWriteNoResponse();
-  const bool success = report->writeValue(
-    const_cast<uint8_t *>(data), length, response);
+  // A Feature Report is always written with a response; it is configuration,
+  // not a stream of input.
+  const bool success = espble_raw::writeHandle(
+    connectionHandle, report, data, length, !writeWithoutResponse);
   {
     std::lock_guard<std::mutex> ownerLock(owner_->impl_->mutex);
     owner_->impl_->gattOperating = false;
@@ -8693,9 +8883,7 @@ void EspBle::end()
       bool cancelConnect = false;
       {
         std::lock_guard<std::mutex> lock(impl_->mutex);
-        // Abandoned attempts are waited out too: their worker is still inside
-        // the backend, so deinit() must not run underneath it.
-        if (!impl_->connecting && !impl_->gattOperating && impl_->abandonedClientCount == 0)
+        if (!impl_->connecting && !impl_->gattOperating)
         {
           break;
         }
@@ -8703,8 +8891,8 @@ void EspBle::end()
       }
       if (cancelConnect)
       {
-        // Abort an in-flight connect attempt instead of blocking here until
-        // its timeout (up to tens of seconds). Repeated calls are harmless.
+        // Abort an in-flight connect attempt instead of blocking here until it
+        // times out. Repeated calls are harmless.
         ble_gap_conn_cancel();
       }
       delay(1);
@@ -8738,33 +8926,10 @@ void EspBle::end()
   scanner_.flushPendingResults();
   if (impl_ != nullptr)
   {
-    // Free every Central client except the most recently created one, which
-    // BLEDevice::deinit() frees itself. Slots are cleared first so the
-    // onDisconnect callbacks triggered by ~BLEClient find nothing to retire.
-    BLEClient *clients[ConnectionCapacity + EspBleImpl::RetiredClientCapacity];
-    size_t clientCount = 0;
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    for (EspBleImpl::ConnectionSlot &slot : impl_->connections)
     {
-      std::lock_guard<std::mutex> lock(impl_->mutex);
-      for (EspBleImpl::ConnectionSlot &slot : impl_->connections)
-      {
-        if (slot.used && slot.client != nullptr && slot.client != impl_->newestClient)
-        {
-          clients[clientCount++] = slot.client;
-        }
-        slot = EspBleImpl::ConnectionSlot();
-      }
-      for (size_t index = 0; index < impl_->retiredClientCount; ++index)
-      {
-        if (impl_->retiredClients[index].client != impl_->newestClient)
-        {
-          clients[clientCount++] = impl_->retiredClients[index].client;
-        }
-      }
-      impl_->retiredClientCount = 0;
-    }
-    for (size_t index = 0; index < clientCount; ++index)
-    {
-      delete clients[index];
+      slot = EspBleImpl::ConnectionSlot();
     }
   }
   if (impl_ != nullptr && impl_->gapEventListenerRegistered)
@@ -8786,13 +8951,30 @@ void EspBle::end()
   impl_ = nullptr;
 }
 
+// The caller asked for a timeout; hold the stack to it. ble_gap_conn_cancel()
+// is a real cancel now that the attempt is a GAP procedure of ours, so the
+// failure is reported from the event it produces rather than guessed at here.
+void EspBle::cancelExpiredConnectAttempt()
+{
+  if (impl_ == nullptr) return;
+  bool cancel = false;
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    if (impl_->connecting && !impl_->connectCancelRequested &&
+        static_cast<int32_t>(millis() - impl_->connectDeadlineMilliseconds) >= 0)
+    {
+      impl_->connectCancelRequested = true;
+      cancel = true;
+    }
+  }
+  if (cancel) ble_gap_conn_cancel();
+}
+
 void EspBle::drainPendingDisconnects()
 {
   if (impl_ == nullptr) return;
   struct Target
   {
-    BLEClient *client = nullptr;
-    BLEServer *server = nullptr;
     uint16_t handle = 0xffff;
     uint8_t reason = 0x13;
   };
@@ -8806,8 +8988,6 @@ void EspBle::drainPendingDisconnects()
       // Still wait while a GATT op is in flight on this connection.
       if (impl_->gattOperating && impl_->gattConnectionId == slot.connection.id) continue;
       slot.pendingDisconnect = false;
-      targets[count].client = slot.client;
-      targets[count].server = impl_->server;
       targets[count].handle = slot.connection.handle;
       targets[count].reason = slot.pendingDisconnectReason;
       ++count;
@@ -8815,9 +8995,7 @@ void EspBle::drainPendingDisconnects()
   }
   for (size_t i = 0; i < count; ++i)
   {
-    if (targets[i].client != nullptr) targets[i].client->disconnect(targets[i].reason);
-    else if (targets[i].server != nullptr)
-      targets[i].server->disconnect(targets[i].handle, targets[i].reason);
+    ble_gap_terminate(targets[i].handle, targets[i].reason);
   }
 }
 
@@ -8831,7 +9009,6 @@ void EspBle::update()
   drainPendingDisconnects();
   scanner_.dispatchPendingResults();
   dispatchConnectionEvents();
-  reapRetiredClients();
   driveAutoReconnect();
   hidKeyboardDevice_.dispatchPendingOutputReports();
   hidKeyboardDevice_.dispatchPendingProtocolMode();
@@ -8917,95 +9094,6 @@ void EspBle::expireGattOperation()
   impl_->pushEvent(event);
 }
 
-void EspBle::cancelExpiredConnectAttempt()
-{
-  if (impl_ == nullptr)
-  {
-    return;
-  }
-
-  bool cancel = false;
-  EspBleScanResult target;
-  {
-    std::lock_guard<std::mutex> lock(impl_->mutex);
-    // The requested timeout is enforced here because the backend does not
-    // enforce it. Its NimBLE BLEClient::connect() goes through the Bluedroid
-    // compatibility layer (esp_ble_gattc_open), so the attempt is not a GAP
-    // procedure the host tracks: ble_gap_conn_cancel() answers BLE_HS_EALREADY
-    // and the worker stays blocked for the backend's own ~30 s regardless of
-    // the timeout passed to it (measured with the accept_list peer test).
-    // The attempt is therefore abandoned rather than cancelled: the failure is
-    // reported now and the connect slot is freed, so the application can retry
-    // immediately. The worker discards its result when it finally returns, and
-    // a connection that lands late is torn down in ClientCallbacks::onConnect.
-    if (impl_->connecting && !impl_->connectCancelRequested &&
-      (millis() - impl_->connectStartMilliseconds) >= impl_->connectTimeoutMilliseconds)
-    {
-      impl_->connectCancelRequested = true;
-      cancel = true;
-      target = impl_->connectTarget;
-      if (impl_->connectClient != nullptr &&
-          impl_->abandonedClientCount < EspBleImpl::RetiredClientCapacity)
-      {
-        impl_->abandonedClients[impl_->abandonedClientCount++] = impl_->connectClient;
-      }
-      impl_->connectClient = nullptr;
-      impl_->connectTask = nullptr;
-      impl_->connecting = false;
-    }
-  }
-  if (cancel)
-  {
-    // Harmless when it answers BLE_HS_EALREADY, and it does abort the attempt
-    // on the paths where the host is genuinely mid-connect.
-    ble_gap_conn_cancel();
-    impl_->pushFailure(target, "BLE connection timed out", EspBleError::Timeout);
-  }
-}
-
-void EspBle::reapRetiredClients()
-{
-  if (impl_ == nullptr)
-  {
-    return;
-  }
-
-  EspBleImpl::RetiredClient retired[EspBleImpl::RetiredClientCapacity];
-  size_t count = 0;
-  {
-    std::lock_guard<std::mutex> lock(impl_->mutex);
-    if (impl_->gattOperating)
-    {
-      // A GATT worker task may still be traversing a retired client's remote
-      // service objects; try again on the next update().
-      return;
-    }
-    size_t kept = 0;
-    for (size_t index = 0; index < impl_->retiredClientCount; ++index)
-    {
-      if (impl_->retiredClients[index].client == impl_->newestClient)
-      {
-        // BLEDevice::deinit() frees the most recently created client; keep it
-        // retired until a newer client supersedes it or end() runs.
-        impl_->retiredClients[kept++] = impl_->retiredClients[index];
-      }
-      else
-      {
-        retired[count++] = impl_->retiredClients[index];
-      }
-    }
-    impl_->retiredClientCount = kept;
-  }
-
-  for (size_t index = 0; index < count; ++index)
-  {
-    // Clear any HID Host slot still pointing into the client's service tree
-    // before ~BLEClient frees it.
-    hidKeyboardHost_.handleDisconnected(retired[index].connectionId);
-    delete retired[index].client;
-  }
-}
-
 bool EspBle::connect(const EspBleScanResult &scanResult, uint32_t timeoutMilliseconds)
 {
   if (!initialized_)
@@ -9034,33 +9122,32 @@ bool EspBle::connect(const EspBleScanResult &scanResult, uint32_t timeoutMillise
     }
     impl_->connectTarget = scanResult;
     impl_->connectTimeoutMilliseconds = timeoutMilliseconds;
-    impl_->connectStartMilliseconds = millis();
+    impl_->connectDeadlineMilliseconds = millis() + timeoutMilliseconds;
     impl_->connectCancelRequested = false;
-    impl_->connectClient = nullptr;
     impl_->connecting = true;
   }
 
-  TaskHandle_t task = nullptr;
-  const BaseType_t result = xTaskCreate(
-    EspBleImpl::connectTaskEntry,
-    "espble-connect",
-    6144,
-    impl_,
-    1,
-    &task);
-  if (result != pdPASS)
+  ble_addr_t peer{};
+  peer.type = static_cast<uint8_t>(scanResult.addressType);
+  parseAddress(scanResult.address.c_str(), peer.val);
+
+  // A scan and a connection cannot run at once: the controller has one
+  // initiator. Stop scanning rather than let ble_gap_connect() fail with
+  // BLE_HS_EBUSY, which is what the application would have had to do anyway.
+  if (ble_gap_disc_active()) ble_gap_disc_cancel();
+
+  // Asynchronous: the host reports the outcome through centralGapEvent(), and
+  // enforces the timeout itself -- no worker task, and a cancel actually
+  // cancels.
+  const int status = ble_gap_connect(
+    impl_->ownAddressType, &peer, static_cast<int32_t>(timeoutMilliseconds), nullptr,
+    &EspBleImpl::centralGapEvent, impl_);
+  if (status != 0)
   {
     std::lock_guard<std::mutex> lock(impl_->mutex);
     impl_->connecting = false;
-    setError(EspBleError::ResourceExhausted, "failed to create connection task");
+    setError(EspBleError::BackendFailure, "failed to start the connection attempt");
     return false;
-  }
-  {
-    std::lock_guard<std::mutex> lock(impl_->mutex);
-    if (impl_->connecting)
-    {
-      impl_->connectTask = task;
-    }
   }
 
   clearError();
@@ -9086,8 +9173,6 @@ bool EspBle::disconnect(EspBleConnectionId connectionId, uint8_t reason)
     return false;
   }
 
-  BLEClient *client = nullptr;
-  BLEServer *server = nullptr;
   uint16_t handle = 0xffff;
   {
     std::lock_guard<std::mutex> lock(impl_->mutex);
@@ -9120,8 +9205,6 @@ bool EspBle::disconnect(EspBleConnectionId connectionId, uint8_t reason)
       clearError();
       return true;
     }
-    client = found->client;
-    server = impl_->server;
     handle = found->connection.handle;
   }
 
@@ -9131,9 +9214,8 @@ bool EspBle::disconnect(EspBleConnectionId connectionId, uint8_t reason)
     return false;
   }
 
-  const int result =
-    client != nullptr ? client->disconnect(reason) : server->disconnect(handle, reason);
-  if (result != 0)
+  // Same call for both roles: a connection is a connection once it exists.
+  if (ble_gap_terminate(handle, reason) != 0)
   {
     setError(EspBleError::BackendFailure, "failed to request disconnection");
     return false;
@@ -9188,8 +9270,6 @@ bool EspBle::updateConnectionParameters(
     return false;
   }
 
-  BLEClient *client = nullptr;
-  BLEServer *server = nullptr;
   uint16_t handle = 0xffff;
   {
     std::lock_guard<std::mutex> lock(impl_->mutex);
@@ -9197,8 +9277,6 @@ bool EspBle::updateConnectionParameters(
     {
       if (slot.used && slot.connection.id == connectionId)
       {
-        client = slot.client;
-        server = impl_->server;
         handle = slot.connection.handle;
         break;
       }
@@ -9211,17 +9289,20 @@ bool EspBle::updateConnectionParameters(
     return false;
   }
 
-  if (client != nullptr)
+  ble_gap_upd_params parameters{};
+  parameters.itvl_min = minInterval;
+  parameters.itvl_max = maxInterval;
+  parameters.latency = latency;
+  parameters.supervision_timeout = supervisionTimeout;
+  // The event-length window the controller may use for this connection. Zero
+  // and 0x0300 are the host's own defaults; a peripheral's request carries them
+  // just as a central's does.
+  parameters.min_ce_len = 0;
+  parameters.max_ce_len = 0x0300;
+  if (ble_gap_update_params(handle, &parameters) != 0)
   {
-    if (!client->updateConnParams(minInterval, maxInterval, latency, supervisionTimeout))
-    {
-      setError(EspBleError::BackendFailure, "failed to request connection parameter update");
-      return false;
-    }
-  }
-  else
-  {
-    server->updateConnParams(handle, minInterval, maxInterval, latency, supervisionTimeout);
+    setError(EspBleError::BackendFailure, "failed to request connection parameter update");
+    return false;
   }
 
   clearError();
@@ -10313,7 +10394,8 @@ bool EspBle::startGattOperation(
     bool centralConnectionFound = false;
     for (const EspBleImpl::ConnectionSlot &slot : impl_->connections)
     {
-      if (slot.used && slot.connection.id == connectionId && slot.client != nullptr)
+      if (slot.used && slot.connection.id == connectionId &&
+          slot.connection.localRole == EspBleRole::Central)
       {
         centralConnectionFound = true;
         break;
@@ -10482,6 +10564,9 @@ bool EspBle::startGattServer()
   return true;
 }
 
+// Kept as the single place the peripheral role is claimed, even though the
+// attribute table and the GAP events are now ours: profile helpers call it
+// before they register services.
 bool EspBle::preparePeripheral()
 {
   if (impl_ == nullptr)
@@ -10489,19 +10574,6 @@ bool EspBle::preparePeripheral()
     setError(EspBleError::InvalidState, "connection state is unavailable");
     return false;
   }
-  if (impl_->server != nullptr)
-  {
-    return true;
-  }
-
-  impl_->server = BLEDevice::createServer();
-  if (impl_->server == nullptr)
-  {
-    setError(EspBleError::BackendFailure, "failed to create BLE server");
-    return false;
-  }
-  impl_->server->setCallbacks(&impl_->serverCallbacks);
-  impl_->server->advertiseOnDisconnect(false);
   return true;
 }
 
