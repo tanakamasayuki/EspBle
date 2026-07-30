@@ -154,7 +154,7 @@ Examples are grouped by area. Each standard-service directory holds a matching
 | [Hid/VendorDevice](Hid/VendorDevice/) | HID Device | Report ID 6 Vendor Input / Output / Feature |
 | [Hid/VendorHost](Hid/VendorHost/) | HID Host | Vendor Input reception and Output / Feature writes |
 | [Hid/CustomDevice](Hid/CustomDevice/) | HID Device | Arbitrary Report Descriptor via `ble.hidCustom()` (input + output reports) |
-| [Hid/CustomClient](Hid/CustomClient/) | GATT Client | Read a Custom HID's Report Map and decode its input report |
+| [Hid/CustomClient](Hid/CustomClient/) | GATT Client | Read a Custom HID's Report Map, take each report's role from its Report Reference by handle, and decode the input report |
 
 ### MIDI
 

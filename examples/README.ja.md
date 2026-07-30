@@ -153,7 +153,7 @@ arduino-cli compile --profile esp32s3 examples/<path>
 | [Hid/VendorDevice](Hid/VendorDevice/) | HID Device | Report ID 6のVendor Input / Output / Feature |
 | [Hid/VendorHost](Hid/VendorHost/) | HID Host | Vendor Input受信とOutput / Feature書込み |
 | [Hid/CustomDevice](Hid/CustomDevice/) | HID Device | `ble.hidCustom()`で任意Report Descriptor（入力＋出力Report） |
-| [Hid/CustomClient](Hid/CustomClient/) | GATT Client | Custom HIDのReport Mapを読み、入力Reportをデコード |
+| [Hid/CustomClient](Hid/CustomClient/) | GATT Client | Custom HIDのReport Mapを読み、Report Referenceをhandle指定で読んで役割を判定し、入力Reportをデコード |
 
 ### MIDI
 

@@ -18,15 +18,19 @@
 
 ## A. 実装が必要（設計上の穴）
 
-### A-1. handle指定の `readDescriptor()` / `writeDescriptor()` を追加する
+### A-1. handle指定の `readDescriptor()` / `writeDescriptor()` を追加する — ✅ 完了
 
-**現状**: characteristic側には同一UUIDの重複に届くようhandle overload（`readCharacteristic(id, handle)` / `writeCharacteristic` / `subscribe` / `unsubscribe`）があるのに、descriptor側は`readDescriptor(id, serviceUuid, characteristicUuid, descriptorUuid)`のUUID指定しかない。
+**当時の状況**: characteristic側には同一UUIDの重複に届くようhandle overload（`readCharacteristic(id, handle)` / `writeCharacteristic` / `subscribe` / `unsubscribe`）があるのに、descriptor側は`readDescriptor(id, serviceUuid, characteristicUuid, descriptorUuid)`のUUID指定しかない。
 
 **なぜ穴か**: 同一UUIDのcharacteristicが並ぶとき、そのどれのdescriptorなのかをUUIDの組では指定できない。**HIDのReport Reference（0x2908）はまさにその状況**——Report characteristicは全部0x2A4Dなので、アプリからは「このReportのReport Referenceを読む」ができない。handle overloadを用意した動機そのものがdescriptor側で満たされていない。ライブラリ内部（HID HostのDiscovery）は`espble_raw`でhandle直指定して読んでおり、公開APIだけが届いていない。
 
-**難度は低い**: `EspBleGattDescriptorInfo`は既に`characteristicHandle`を持ち、Discoveryの結果からhandleは取れる。必要なのはoverloadの追加と、GATT queueのop種別が既存のものを流用できるかの確認。
+**完了内容**: `readDescriptor(connectionId, descriptorHandle)` と `writeDescriptor(connectionId, descriptorHandle, ...)`（pointer+length版・String版）を追加。`EspBleGattResult` に `descriptorHandle` を追加した（`handle` はそれを持つcharacteristic）。
 
-**完了条件**: overload追加 → Peerテスト（`hid_custom`を拡張し、3つの0x2A4D characteristicそれぞれのReport Referenceを読んでreport IDとtype（1=Input / 2=Output / 3=Feature）を照合する。現在はcharacteristicのflagsで代用しているので、そこが本来の判別方法に置き換わる） → FEATURE_MATRIX・STATUS（日英）・DESIGN_DEBT小粒5の更新。
+実装の要点は**解決の順序**。ハンドル指定のdescriptor操作は、discovery snapshotから**descriptorを先に**引き、その `characteristicHandle` で持ち主のcharacteristicを解決する。逆順（UUIDでcharacteristicを引いてからdescriptorを探す）では、重複したcharacteristicのどれかを選べないので成立しない。UUID指定側も結果に解決済みの `descriptorHandle` を載せる。失敗時は要求ハンドルをそのまま返す——どの呼び出しの結果か分からなければ、非同期完了の意味がない。
+
+`hid_custom` Peerを**HIDが本来宣言している方法**へ置き換えた: 各Report Reference（0x2908）をハンドル指定で読み、type byte（1=Input / 2=Output / 3=Feature）で役割を決める。従来のflagsによる代用は捨てず、「宣言されたtypeとflagsが一致すること」の照合として残した（Featureが応答付き書き込みのみであることの確認になる）。ゼロハンドルの拒否と存在しないハンドルの`NotFound`も検証済み。
+
+文書は FEATURE_MATRIX・STATUS・GUIDE_BLE_BASICS（いずれも日英）、DESIGN_DEBT小粒5、TEST_PLAN項目51を更新。`keywords.txt`は`readDescriptor`/`writeDescriptor`が既に登録済みでoverloadは同名のため変更不要（struct fieldは元から列挙していない）。
 
 出典: [DESIGN_DEBT.ja.md](DESIGN_DEBT.ja.md) 小粒5（Phase 10の作業中に発見）
 

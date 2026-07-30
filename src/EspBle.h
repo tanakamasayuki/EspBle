@@ -420,8 +420,14 @@ struct EspBleGattResult
   String descriptorUuid;
   // Attribute handle of the target characteristic. Populated for every
   // characteristic operation; the way to tell apart characteristics that share
-  // a UUID (e.g. several HID Report characteristics).
+  // a UUID (e.g. several HID Report characteristics). For a descriptor
+  // operation this is the handle of the characteristic that owns it.
   uint16_t handle = 0;
+  // Attribute handle of the target descriptor. Populated for descriptor
+  // operations only (0 otherwise), and it is what tells apart descriptors of
+  // characteristics that share a UUID — several HID Report Reference
+  // descriptors, for instance.
+  uint16_t descriptorHandle = 0;
   bool success = false;
   EspBleError error = EspBleError::None;
   String detail;
@@ -1689,6 +1695,32 @@ public:
     uint16_t characteristicHandle,
     uint32_t timeoutMilliseconds = 10000);
 
+  // Handle-based descriptor operations, for the same reason as the
+  // characteristic ones above: the UUID form takes a service/characteristic/
+  // descriptor UUID triple, which cannot name a descriptor when two
+  // characteristics repeat a UUID. HID is the everyday case — every Report
+  // characteristic is 0x2A4D, so "the Report Reference of this Report" is only
+  // expressible by handle. Obtain it from discoveredDescriptor() after
+  // discoverServices(); EspBleGattResult::descriptorHandle echoes it back, and
+  // `handle` reports the characteristic that owns it.
+  bool readDescriptor(
+    EspBleConnectionId connectionId,
+    uint16_t descriptorHandle,
+    uint32_t timeoutMilliseconds = 10000);
+  bool writeDescriptor(
+    EspBleConnectionId connectionId,
+    uint16_t descriptorHandle,
+    const uint8_t *data,
+    size_t length,
+    bool response = true,
+    uint32_t timeoutMilliseconds = 10000);
+  bool writeDescriptor(
+    EspBleConnectionId connectionId,
+    uint16_t descriptorHandle,
+    const String &value,
+    bool response = true,
+    uint32_t timeoutMilliseconds = 10000);
+
   // Primary observer (one per event; a second call replaces it).
   void onCharacteristicDiscovered(GattResultCallback callback);
   void onCharacteristicRead(GattResultCallback callback);
@@ -1767,7 +1799,8 @@ private:
     bool response = true,
     const char *descriptorUuid = nullptr,
     uint32_t timeoutMilliseconds = 10000,
-    uint16_t characteristicHandle = 0);
+    uint16_t characteristicHandle = 0,
+    uint16_t descriptorHandle = 0);
   // Start the next queued GATT operation if the ATT channel is free. Pumped from
   // update() so operations serialize behind whatever is currently running.
   void pumpGattQueue();

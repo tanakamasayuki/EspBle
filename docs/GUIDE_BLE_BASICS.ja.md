@@ -562,7 +562,7 @@ GATTでは、データが3階層で表現されます。
 
 そのためEspBleでは、**登録時に返るハンドルで対象を指定します**。`addService()` がServiceのハンドルを返し、それを `addCharacteristic()` へ渡すとCharacteristicのハンドルが返り、以降の値設定やNotifyはそのハンドルで行います。イベント（書き込み通知や購読状態の変化）にも対象のハンドルが入るので、UUIDが同じでもどれのことか分かります。
 
-Client側は、相手のCharacteristicを**属性ハンドル**で指定できます。同じUUIDのCharacteristicが並ぶHIDのReportを撃ち分けるのはこの方法です。
+Client側は、相手のCharacteristicを**属性ハンドル**で指定できます。同じUUIDのCharacteristicが並ぶHIDのReportを撃ち分けるのはこの方法です。Descriptorにも同じ指定方法があります——HIDのReport Reference（0x2908）は「0x2A4DのCharacteristicの下にある0x2908」なので、UUIDの組では言い表せません。
 
 #### 同一UUIDの重複はどこまで扱えるか
 
@@ -575,7 +575,7 @@ Client側は、相手のCharacteristicを**属性ハンドル**で指定でき�
 
 Peripheral側は、`addService()` / `addCharacteristic()` が返すハンドルが対象を表します。EspBleはBLEスタックのAPI（`ble_gatts_add_svcs()`）で属性テーブルを直接組み立て、読み書きの通知もスタックが渡す「どの定義か」の情報で判別するので、UUIDが同じでも取り違えません。
 
-Central側は、相手がどう重複させていても属性ハンドルで撃ち分けられます。discoveryを`ble_gattc_disc_all_svcs()`などのAPIで自前に行い、read / write / 購読（CCCDへの書き込み）もすべて属性ハンドルに対して直接発行するためです。Notificationも、どのハンドルから来たかで対応付けます。
+Central側は、相手がどう重複させていても属性ハンドルで撃ち分けられます。discoveryを`ble_gattc_disc_all_svcs()`などのAPIで自前に行い、read / write / 購読（CCCDへの書き込み）もすべて属性ハンドルに対して直接発行するためです。Notificationも、どのハンドルから来たかで対応付けます。**Descriptorも同様にハンドルで指定できます**（`readDescriptor(id, descriptorHandle)` / `writeDescriptor(...)`）。DescriptorはCharacteristicに属するので、Characteristicが重複しているとUUIDの組では特定できません。結果の`descriptorHandle`が対象のDescriptor、`handle`がそれを持つCharacteristicを指します。
 
 ひとつだけ制限があります。**再接続時の購読自動復元は、UUIDが一意なCharacteristicに限られます。** 復元は相手のアドレスとUUIDを手掛かりに行うため、同じUUIDが複数あると「どれを購読していたか」を言えないからです。該当する場合は、再接続後に自分でハンドルを指定して購読し直してください。
 

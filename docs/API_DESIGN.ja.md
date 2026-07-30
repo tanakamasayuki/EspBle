@@ -153,11 +153,11 @@ ble.onCharacteristicRead([](const EspBleGattResult &result) {
 ble.discoverCharacteristic(connectionId, serviceUuid, characteristicUuid);
 ```
 
-Central側のWrite完了は`onCharacteristicWritten()`へ配送します。`response=false`でWrite Without Responseを選び、結果の`response`にも方式を保持します。Descriptorは`readDescriptor()` / `writeDescriptor()`と`onDescriptorRead()` / `onDescriptorWritten()`を使います。各完了は`EspBleGattResult`（success、error、detail、connectionId、Service/Characteristic/Descriptor UUID、値）を持つ値イベントです。
+Central側のWrite完了は`onCharacteristicWritten()`へ配送します。`response=false`でWrite Without Responseを選び、結果の`response`にも方式を保持します。Descriptorは`readDescriptor()` / `writeDescriptor()`と`onDescriptorRead()` / `onDescriptorWritten()`を使います。Characteristic操作と同様に**属性ハンドル指定のoverload**も提供します（`readDescriptor(connectionId, descriptorHandle)` ほか）。UUIDが重複するCharacteristicに属するDescriptor——HIDのReport Reference（0x2908）が典型——はUUIDの組では特定できないためです。結果の`descriptorHandle`が対象Descriptor、`handle`がそれを持つCharacteristicを指します。各完了は`EspBleGattResult`（success、error、detail、connectionId、Service/Characteristic/Descriptor UUID、値）を持つ値イベントです。
 
-`discoverCharacteristic()`は既知のService/Characteristic UUIDを指定して存在とpropertyを取得する軽量経路として維持します。Central GATT操作は同時に1件だけ受理します。operation idはこの制限が続く間は導入しません（DECISIONS 確定 #19）。timeout時は`EspBleError::Timeout`を持つ完了eventを1回だけ配送し、遅れて戻ったbackend結果を破棄します。remote service treeを別taskから強制破棄しないため、backend処理が戻るまでは次操作を`InvalidState`で拒否します。operation queueと明示cancelは今後の対象です。
+`discoverCharacteristic()`は既知のService/Characteristic UUIDを指定して存在とpropertyを取得する軽量経路として維持します。ATTに出るのは同時に1件だけですが、**呼び出しは自動でFIFO queueへ積まれ順に実行されます**（「already in progress」で失敗しません）。queueは実行中1件のほかに8件までで、それを超える呼び出しは`ResourceExhausted`で拒否します。operation idと個別の強制cancelは導入しません（DECISIONS 確定 #19）。timeout時は`EspBleError::Timeout`を持つ完了eventを1回だけ配送し、遅れて戻ったbackend結果を破棄します。切断時は、その接続のqueue済みopを失敗`GattResult`として配送してから捨てます（完了contractを保つため黙って消さない）。
 
-GATT値はpointer+lengthを基本とし、NULを含めてcopyできる`String`を便宜overloadとして提供します（同梱backendの`String`構築は長さ明示でbinary-safe。DECISIONS 確定 #20）。Server側は`addDescriptor()`、`setDescriptorValue()`、`descriptorValue()`、`onDescriptorWritten()`も提供します。構成上限はService 4、Characteristic 16、Descriptor 16です。Descriptor Writeは専用の`EspBleGattDescriptorWrite`値イベントへ配送します。同梱backendがDescriptor callbackへconnection handleを渡さないため、推測値は公開せずConnection IDを型に含めません。Descriptorの動的Read callbackはまだ提供しません。
+GATT値はpointer+lengthを基本とし、NULを含めてcopyできる`String`を便宜overloadとして提供します（同梱backendの`String`構築は長さ明示でbinary-safe。DECISIONS 確定 #20）。Server側は`addDescriptor()`、`setDescriptorValue()`、`descriptorValue()`、`onDescriptorWritten()`も提供します。構成上限はService 8、Characteristic 32、Descriptor 16です。Descriptor Writeは専用の`EspBleGattDescriptorWrite`値イベントへ配送します。同梱backendがDescriptor callbackへconnection handleを渡さないため、推測値は公開せずConnection IDを型に含めません。Descriptorの動的Read callbackはまだ提供しません。
 
 ## Subscription / Notify / Indicate API
 

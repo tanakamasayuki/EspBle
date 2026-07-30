@@ -1277,6 +1277,7 @@ struct EspBleImpl
           failure.gattResult.characteristicUuid = op.characteristicUuid;
           failure.gattResult.descriptorUuid = op.descriptorUuid;
           failure.gattResult.handle = op.characteristicHandle;
+          failure.gattResult.descriptorHandle = op.descriptorHandle;
           failure.gattResult.error = EspBleError::InvalidState;
           failure.gattResult.detail = "connection closed before the queued GATT operation started";
           pushEvent(failure);
@@ -2030,6 +2031,7 @@ struct EspBleImpl
       result.characteristicUuid = impl->gattCharacteristicUuid;
       result.descriptorUuid = impl->gattDescriptorUuid;
       result.handle = impl->gattCharacteristicHandle;
+      result.descriptorHandle = impl->gattDescriptorHandle;
       writeValue = impl->gattWriteValue;
       response = impl->gattWriteResponse;
       result.response = response;
@@ -2089,11 +2091,16 @@ struct EspBleImpl
       }
       else
       {
-        const bool byHandle = result.handle != 0;
+        // A descriptor named by handle carries no UUIDs of its own, so the
+        // owning characteristic is resolved from the snapshot below and this
+        // flag is decided there rather than here.
+        const bool byDescriptorHandle = result.descriptorHandle != 0;
+        bool byHandle = result.handle != 0;
         uint16_t valueHandle = 0;
         uint16_t cccdHandle = 0;
         uint16_t descriptorHandle = 0;
         bool found = false;
+        bool descriptorHandleFound = false;
         // True when the peer has more than one characteristic with the target's
         // UUID pair, i.e. when a UUID alone cannot name this attribute again.
         bool ambiguousUuid = false;
@@ -2102,6 +2109,21 @@ struct EspBleImpl
           const GattDatabaseSnapshot *database = impl->findDatabaseLocked(result.connectionId);
           if (database != nullptr)
           {
+            // Resolve a handle-addressed descriptor first: it yields the owning
+            // characteristic's handle, which is the only way to reach the right
+            // characteristic when several repeat a UUID — the case this
+            // addressing mode exists for.
+            for (size_t index = 0; byDescriptorHandle && index < database->descriptorCount; ++index)
+            {
+              const EspBleGattDescriptorInfo &descriptor = database->descriptors[index];
+              if (descriptor.handle != result.descriptorHandle) continue;
+              descriptorHandleFound = true;
+              descriptorHandle = descriptor.handle;
+              result.descriptorUuid = descriptor.descriptorUuid;
+              result.handle = descriptor.characteristicHandle;
+              byHandle = true;
+              break;
+            }
             String serviceUuid;
             String characteristicUuid;
             for (size_t index = 0; index < database->characteristicCount; ++index)
@@ -2162,7 +2184,7 @@ struct EspBleImpl
               {
                 cccdHandle = descriptor.handle;
               }
-              if (result.descriptorUuid.length() != 0 &&
+              if (!byDescriptorHandle && result.descriptorUuid.length() != 0 &&
                   uuidEquals(descriptor.descriptorUuid, result.descriptorUuid.c_str()))
               {
                 descriptorHandle = descriptor.handle;
@@ -2171,7 +2193,18 @@ struct EspBleImpl
           }
         }
 
-        if (!found)
+        // Fill in the resolved descriptor handle for a UUID-addressed operation so
+        // the application learns which attribute answered. A handle-addressed one
+        // keeps the requested value even when it resolves to nothing, so a
+        // failure still says which call it belongs to.
+        if (descriptorHandle != 0) result.descriptorHandle = descriptorHandle;
+
+        if (byDescriptorHandle && !descriptorHandleFound)
+        {
+          result.error = EspBleError::NotFound;
+          result.detail = "GATT descriptor handle was not found";
+        }
+        else if (!found)
         {
           result.error = EspBleError::NotFound;
           result.detail = byHandle
@@ -2498,6 +2531,10 @@ struct EspBleImpl
   String gattCharacteristicUuid;
   String gattDescriptorUuid;
   uint16_t gattCharacteristicHandle = 0; // when non-zero, target by handle
+  // When non-zero, the descriptor operation names the descriptor by handle. The
+  // owning characteristic is then resolved from the discovery snapshot rather
+  // than from the caller's UUIDs.
+  uint16_t gattDescriptorHandle = 0;
   String gattWriteValue;
   bool gattWriteResponse = true;
   uint32_t gattStartMilliseconds = 0;
@@ -2729,6 +2766,7 @@ struct EspBleImpl
     String characteristicUuid;
     String descriptorUuid;
     uint16_t characteristicHandle = 0;
+    uint16_t descriptorHandle = 0;
     String writeValue;
     bool response = true;
     uint32_t timeoutMilliseconds = 10000;
@@ -9111,6 +9149,7 @@ void EspBle::expireGattOperation()
   event.gattResult.characteristicUuid = impl_->gattCharacteristicUuid;
   event.gattResult.descriptorUuid = impl_->gattDescriptorUuid;
   event.gattResult.handle = impl_->gattCharacteristicHandle;
+  event.gattResult.descriptorHandle = impl_->gattDescriptorHandle;
   event.gattResult.response = impl_->gattWriteResponse;
   event.gattResult.error = EspBleError::Timeout;
   event.gattResult.detail = "GATT operation timed out";
@@ -10250,6 +10289,55 @@ bool EspBle::unsubscribe(
     nullptr, 0, true, nullptr, timeoutMilliseconds, characteristicHandle);
 }
 
+bool EspBle::readDescriptor(
+  EspBleConnectionId connectionId,
+  uint16_t descriptorHandle,
+  uint32_t timeoutMilliseconds)
+{
+  if (descriptorHandle == 0)
+  {
+    setError(EspBleError::InvalidArgument, "descriptor handle must be non-zero");
+    return false;
+  }
+  return startGattOperation(
+    EspBleGattOperation::ReadDescriptor, connectionId, nullptr, nullptr,
+    nullptr, 0, true, nullptr, timeoutMilliseconds, 0, descriptorHandle);
+}
+
+bool EspBle::writeDescriptor(
+  EspBleConnectionId connectionId,
+  uint16_t descriptorHandle,
+  const uint8_t *data,
+  size_t length,
+  bool response,
+  uint32_t timeoutMilliseconds)
+{
+  if (descriptorHandle == 0)
+  {
+    setError(EspBleError::InvalidArgument, "descriptor handle must be non-zero");
+    return false;
+  }
+  return startGattOperation(
+    EspBleGattOperation::WriteDescriptor, connectionId, nullptr, nullptr,
+    data, length, response, nullptr, timeoutMilliseconds, 0, descriptorHandle);
+}
+
+bool EspBle::writeDescriptor(
+  EspBleConnectionId connectionId,
+  uint16_t descriptorHandle,
+  const String &value,
+  bool response,
+  uint32_t timeoutMilliseconds)
+{
+  return writeDescriptor(
+    connectionId,
+    descriptorHandle,
+    reinterpret_cast<const uint8_t *>(value.c_str()),
+    value.length(),
+    response,
+    timeoutMilliseconds);
+}
+
 void EspBle::onCharacteristicDiscovered(GattResultCallback callback)
 {
   std::lock_guard<std::mutex> lock(gattListenerMutex_);
@@ -10389,7 +10477,8 @@ bool EspBle::startGattOperation(
   bool response,
   const char *descriptorUuid,
   uint32_t timeoutMilliseconds,
-  uint16_t characteristicHandle)
+  uint16_t characteristicHandle,
+  uint16_t descriptorHandle)
 {
   if (!initialized_)
   {
@@ -10402,13 +10491,17 @@ bool EspBle::startGattOperation(
     operation == EspBleGattOperation::HidDiscover;
   const bool descriptorOperation = operation == EspBleGattOperation::ReadDescriptor ||
     operation == EspBleGattOperation::WriteDescriptor;
-  // A handle-based operation identifies the characteristic by handle, so the
-  // service/characteristic UUID arguments are not required.
-  const bool handleBased = characteristicHandle != 0;
+  // A handle-based operation identifies the target by handle, so the
+  // service/characteristic UUID arguments are not required. A descriptor handle
+  // also supplies the descriptor UUID and the owning characteristic, so it
+  // stands in for the whole UUID triple.
+  const bool handleBased = characteristicHandle != 0 || descriptorHandle != 0;
   if ((!noTargetOperation && !handleBased &&
        (serviceUuid == nullptr || serviceUuid[0] == '\0' ||
         characteristicUuid == nullptr || characteristicUuid[0] == '\0')) ||
-      (descriptorOperation && (descriptorUuid == nullptr || descriptorUuid[0] == '\0')) ||
+      (descriptorOperation && descriptorHandle == 0 &&
+       (descriptorUuid == nullptr || descriptorUuid[0] == '\0')) ||
+      (descriptorHandle != 0 && !descriptorOperation) ||
       (data == nullptr && length != 0) || timeoutMilliseconds == 0)
   {
     setError(EspBleError::InvalidArgument, "invalid GATT operation arguments");
@@ -10448,6 +10541,7 @@ bool EspBle::startGattOperation(
     op.characteristicUuid = characteristicUuid == nullptr ? "" : characteristicUuid;
     op.descriptorUuid = descriptorUuid == nullptr ? "" : descriptorUuid;
     op.characteristicHandle = characteristicHandle;
+    op.descriptorHandle = descriptorHandle;
     op.writeValue = length == 0
       ? String()
       : String(reinterpret_cast<const char *>(data), length);
@@ -10502,6 +10596,7 @@ void EspBle::pumpGattQueue()
     impl_->gattCharacteristicUuid = op.characteristicUuid;
     impl_->gattDescriptorUuid = op.descriptorUuid;
     impl_->gattCharacteristicHandle = op.characteristicHandle;
+    impl_->gattDescriptorHandle = op.descriptorHandle;
     impl_->gattWriteValue = op.writeValue;
     impl_->gattWriteResponse = op.response;
     impl_->gattStartMilliseconds = millis();

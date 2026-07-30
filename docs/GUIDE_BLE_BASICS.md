@@ -562,7 +562,7 @@ But **a UUID is a type, not an identity.** The specification lets one device exp
 
 So in EspBle, **you name the target with the handle returned at registration**. `addService()` returns the service handle, passing it to `addCharacteristic()` returns the characteristic handle, and later value changes and notifications use that handle. Events (a write, a subscription change) also carry the target handle, so a shared UUID is not ambiguous.
 
-On the client side, a peer's characteristic can be named by **attribute handle**. That is how the same-UUID Report characteristics of a HID device are addressed individually.
+On the client side, a peer's characteristic can be named by **attribute handle**. That is how the same-UUID Report characteristics of a HID device are addressed individually. Descriptors have the same addressing — a HID Report Reference (0x2908) is "the 0x2908 under this 0x2A4D characteristic", which no combination of UUIDs can express.
 
 #### How far duplicate UUIDs are supported
 
@@ -575,7 +575,7 @@ Every duplication the specification allows **works in both roles**.
 
 On the peripheral side, the handles returned by `addService()` and `addCharacteristic()` identify the target. EspBle builds the attribute table directly through the BLE stack's API (`ble_gatts_add_svcs()`), and read/write notifications are matched using the "which definition" information the stack passes back, so a shared UUID is never confused.
 
-On the central side, whatever the peer duplicates can be addressed by attribute handle. Discovery is performed with APIs such as `ble_gattc_disc_all_svcs()`, and reads, writes and subscriptions (CCCD writes) are all issued against attribute handles directly. Notifications are matched by the handle they arrived from.
+On the central side, whatever the peer duplicates can be addressed by attribute handle. Discovery is performed with APIs such as `ble_gattc_disc_all_svcs()`, and reads, writes and subscriptions (CCCD writes) are all issued against attribute handles directly. Notifications are matched by the handle they arrived from. **Descriptors are addressable by handle too** (`readDescriptor(id, descriptorHandle)` / `writeDescriptor(...)`). A descriptor belongs to a characteristic, so when characteristics repeat a UUID no combination of UUIDs can pick one out. In the result, `descriptorHandle` is the descriptor addressed and `handle` is the characteristic that owns it.
 
 There is one restriction. **Automatic subscription restore after a reconnect is limited to characteristics with a unique UUID.** The restore keys on the peer's address and the UUID, so with duplicates it cannot say which one was subscribed. Where that applies, re-subscribe by handle yourself after reconnecting.
 
