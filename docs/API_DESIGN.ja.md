@@ -1,345 +1,65 @@
 # API Design
 
-この文書は公開APIの設計規則と現在のAPI構成を記録します。具体的なclass名とsignatureは`src/EspBle.h`を正とします。
+公開APIの**設計規則**を記録する。具体的なclass名とsignatureは`src/EspBle.h`を正とし、使い方は[../examples/](../examples/)と[GUIDE_BLE_BASICS.ja.md](GUIDE_BLE_BASICS.ja.md)が示す。**この文書に使用例を書かない**——ヘッダとexampleと三重に持つと必ず食い違う（実際にここのサンプルが古い署名のまま残っていた）。
 
-用語とexampleの変数命名は[TERMINOLOGY.ja.md](TERMINOLOGY.ja.md)に従います。
+判断の理由は[DECISIONS.ja.md](DECISIONS.ja.md)、用語は[TERMINOLOGY.ja.md](TERMINOLOGY.ja.md)に従う。
 
 ## 命名
 
-- library root: `EspBle`
-- standard terms: Central、Peripheral、GATT Client、GATT Server、Connection
-- `Host` / `Device`だけの曖昧な表現を避ける。
+- library root: `EspBle`。標準用語（Central、Peripheral、GATT Client、GATT Server、Connection）を使い、`Host` / `Device`だけの曖昧な表現を避ける。
 - 公開定数と型は`EspBle`または`ESP_BLE_` prefixで衝突を避ける。
 - Profile型では`HidHost` / `HidDevice`のようにroleを省略しない。
-- examplesでは複数roleが登場する場合、`hidKeyboardHost` / `hidKeyboardDevice`のように変数名でもroleを明示する。
-- 単一roleで文脈が自明なexampleでは`keyboard`などの簡潔な変数名を許容し、個別に判断する。
 
 ## 所有モデル
 
 - スケッチが`EspBle`を所有する。
-- Scanner、Advertiser、Serverは`EspBle`から取得する非所有handleとする。
-- Service/Characteristic/Profileは登録後`EspBle`が寿命を管理する案を優先する。
+- Scanner、Advertiser、GATT Server、各Profileは`EspBle`から取得する**非所有handle**とする。
+- 登録したService/Characteristic/Descriptorは`EspBle`が寿命を管理する。
 - Connectionは切断後に無効化を判定できるlibrary handleで表す。
-- backend native objectはadvanced APIからのみ参照可能にする。
+- backend native objectはborrowed referenceとして扱い、保存を保証しない。
 
-## GAP / Connection API
+## 操作と結果の分離
 
-GAP/Connectionの最初の実装では、次の利用形をPeer実機で検証しています。汎用GATTまで通してから公開APIとして確定します。
+- **受理時の同期エラー**は`bool`戻り値＋`lastError()` / `lastErrorName()` / `lastErrorDetail()` / `clearError()`。`EspBleError`は`None` / `InvalidState` / `InvalidArgument` / `BackendFailure` / `ResourceExhausted` / `NotFound` / `Timeout`。
+- **非同期の完了・失敗**は各イベント（`EspBleGattResult`等）のsuccess / error / detailフィールドと、Connection / Characteristic contextで通知する。
+- `lastError*`は単一状態のため、操作呼び出しは単一のloop task contextから行うことを前提とする。
+- operation idと個別の強制cancelは導入しない。
+- 待機を伴うbackend操作は内部taskで実行し、要求APIがloopをblockしない。
 
-```cpp
-EspBle ble;
+## イベント
 
-ble.begin();
-
-ble.advertising().setName("EspBle Peer");
-ble.advertising().addServiceUuid(serviceUuid);
-ble.advertising().start();
-
-ble.scanner().onResult([](const EspBleScanResult &scanResult) {
-  if (scanResult.advertisesService(serviceUuid)) {
-    // Scan Resultはcallback中だけのbackend参照ではなく、EspBleが所有する値。
-    ble.scanner().stop();
-    ble.connect(scanResult); // 要求の受理だけを返し、完了はcallbackで通知する。
-  }
-});
-ble.scanner().start();
-
-ble.onConnected([](const EspBleConnection &connection) {
-  // idはbackend handleとは別の、接続ごとに生成される安定した識別子。
-});
-ble.onDisconnected([](const EspBleConnection &connection) {
-  // 切断イベントにも接続時と同じidとlocal roleが含まれる。
-});
-ble.onConnectionFailed([](const EspBleConnectionFailure &failure) {
-  // 非同期接続失敗。
-});
-
-// 保存済みaddressからScanなしで再接続する場合。
-ble.connect("aa:bb:cc:dd:ee:ff", EspBleAddressType::Random, 10000);
-```
-
-`ble.update()`はstack callbackからqueueへcopyしたScan ResultとConnection eventをユーザーcallbackへ配送します。Arduino-ESP32 backendの待機型接続処理はEspBle内部taskで実行するため、`connect()`はloopやScan Result callbackを接続完了までblockしません。利用者が`update()`を定期的に呼ぶ明示駆動は確定仕様です（DECISIONS 確定 #17）。`update()`を呼ばない限り、接続・切断・Discovery等の完了通知は配送されません。
-
-Scanは`EspBleScanConfig`（active scan、duplicate配送、interval/window、duration）を`start()`へ渡して構成できます。Scan Result queueが満杯のときの取りこぼし数は`ble.scanner().droppedResultCount()`で観測できます（overflowは専用イベントではなくカウンタで観測する方針。DECISIONS 確定 #21）。
-
-root objectには接続操作・状態のAPIとして`connect(address, EspBleAddressType, timeout)`、`disconnect(connectionId)`、`connectionCount()`、`connection(index, result)`、`initialized()`があり、エラーは`lastError()`（`EspBleError`値）、`lastErrorName()`、`lastErrorDetail()`、`clearError()`で確認・消去します。`EspBleError`は`None` / `InvalidState` / `InvalidArgument` / `BackendFailure` / `ResourceExhausted` / `NotFound` / `Timeout`です。address typeはScan Result、Connection、Bond、直接接続のすべてで`EspBleAddressType`を使用します。
-
-`EspBleConnection`はlibrary connection id、backend handle、peer address/address type、local role、MTU、暗号化・認証・Bond状態、暗号鍵長の値snapshotです。初期実装は最大4接続を内部管理しますが、この上限と設定方法はまだ公開仕様として確定していません。
-
-## MTU API
-
-希望MTUはstack初期化前の設定として指定します。値域はATTで定められた23〜517で、範囲外は`begin()`が`EspBleError::InvalidArgument`で拒否します。同梱NimBLE backendが接続時にMTU交換を行い、合意した値をConnection snapshotと`onMtuChanged()`へ反映します。
-
-```cpp
-EspBleConfig config;
-config.preferredMtu = 185;
-ble.begin(config);
-
-ble.onMtuChanged([](const EspBleMtuChanged &event) {
-  Serial.printf("MTU: %u -> %u\n", event.previousMtu, event.connection.mtu);
-  Serial.printf("notification payload: %u\n",
-    static_cast<unsigned>(event.connection.maximumNotificationPayload()));
-});
-```
-
-`maximumNotificationPayload()`は現在のMTUからATT notification/indicationの3-byte headerを除いた`mtu - 3`を返します。Server送信はbackendによる黙示的な切詰めを避けるため、上限を超えるpayloadを`EspBleError::InvalidArgument`で拒否します。判定scopeは送信種別で異なります: `notify(connectionId, …)`（接続指定）は**対象接続のMTUのみ**、broadcastの`notify()`/`indicate()`は**全active Peripheral Connectionの最小**（誰にも切り詰められないための保守的判定）です。
-
-Server送信は内部FIFO（`update()`からpump）にqueueされ、送信中でもrejectされません。`notify()`/`indicate()`が`false`を返すのは未初期化・未接続・未登録characteristic・非notifiable/indicatable・queue満杯といった真のエラーのみで、送信結果は`onSent()`（`EspBleGattSendResult`）へ非同期に届きます。`connectionId`は接続指定送信で対象接続、broadcastで0です。接続指定`notify()`はbackend低レベルAPIで単一接続へ送ります。接続指定`indicate()`はAPI対称性のため用意しますが、同梱backendのindication確認がcharacteristic単位のため確認付きbroadcastパスで送ります（単一購読者ならその接続、結果の`connectionId`は要求値）。
-
-接続後にアプリケーションからMTU交換を再要求するAPIはまだ提供しません。Central側のMTUは接続時のsnapshotのみで、同梱backendにclient側のMTU変更callbackがないため接続後の変化は追跡できません（DECISIONS Connection/GATT #23）。希望MTUの動的変更、複数接続ごとの送信可否判定、MTU callbackの厳密な順序は、backendの制約と複数接続テストを踏まえて確定します。
-
-Legacy Advertising payloadが31 bytesへ収まらない場合、Arduino-ESP32 backendの黙示的なfield欠落をそのまま通さず、EspBleは`EspBleError::InvalidArgument`を返します。
-
-Advertisingの構成は`setName()` / `addServiceUuid()`（16/32/128-bit、サイズごとに単一のComplete List AD構造へ統合）に加えて、`setManufacturerData()`、`setAppearance()`、`setScanResponseEnabled()`、`clear()`で行い、`start(durationSeconds)` / `stop()` / `isAdvertising()`で制御します。Service UUIDは最大`EspBleAdvertising::MaxServiceUuids`（4）件です。
-
-## Generic GATT API
-
-GATT ServerのService/Characteristic定義は`begin()`前に登録します。この順序により、後からSecurity permissionをCharacteristic定義へ追加できます。
-
-```cpp
-auto &gattServer = ble.gattServer();
-
-EspBleGattCharacteristicConfig valueConfig;
-valueConfig.readable = true;
-valueConfig.writable = true;
-
-gattServer.addService(serviceUuid);
-gattServer.addCharacteristic(serviceUuid, characteristicUuid, valueConfig);
-gattServer.setValue(serviceUuid, characteristicUuid, String("ready"));
-gattServer.onWritten([](const EspBleGattWrite &write) {
-  // connectionId、Service/Characteristic UUID、書込み値を保持する値イベント。
-});
-gattServer.onDescriptorWritten([](const EspBleGattDescriptorWrite &write) {
-  // Service/Characteristic/Descriptor UUIDと書込み値を保持する値イベント。
-});
-
-ble.begin();
-```
-
-Central側のDiscovery、Read、Writeは要求の受理と完了を分離します。同梱backendの待機型操作は内部taskで実行し、結果は`update()` contextのcallbackへ配送します。各要求の末尾ではtimeoutをミリ秒単位（既定10000、0は無効）で指定できます。
-
-コアGATT client/server callbackは多observerモデルです。`on*()`（`onNotification`/`onCharacteristicDiscovered`/… server `onWritten`/`onSent`等）は単一のprimary observerを設定し、`add*Listener()`（`addNotificationListener`等）は追加のlistenerを登録して`EspBleListenerId`を返します（`removeGattListener(id)` / GATT Serverは`removeListener(id)`で解除）。配送はprimary→登録順で、profile helper（MIDI等）とアプリが同じイベントを競合せず観測できます。`on*()`は従来の単一observer用途をそのまま満たします（primaryを差し替えるだけ）。
-
-一覧Discoveryは1件ずつevent queueへ流さず、完了後に接続単位の固定容量snapshotを照会します。これにより大きなGATT databaseでも完了eventがqueue容量に依存しません。
-
-```cpp
-ble.onServicesDiscovered([](const EspBleGattResult &result) {
-  if (!result.success) return;
-  for (size_t i = 0; i < ble.discoveredServiceCount(result.connectionId); ++i) {
-    EspBleGattServiceInfo service;
-    if (ble.discoveredService(result.connectionId, i, service)) {
-      Serial.println(service.serviceUuid);
-    }
-  }
-});
-ble.discoverServices(connectionId);
-```
-
-snapshotは最新の一覧Discovery 1件を保持し、同じConnection IDの切断時に無効化します。上限はService 16、Characteristic 48、Descriptor 48です。Service/Characteristic UUIDで絞り込むcount/index APIも提供します。
-
-```cpp
-ble.onCharacteristicDiscovered([](const EspBleGattResult &result) {
-  if (result.success && result.readable) {
-    ble.readCharacteristic(result.connectionId, serviceUuid, characteristicUuid);
-  }
-});
-ble.onCharacteristicRead([](const EspBleGattResult &result) {
-  if (result.success) {
-    ble.writeCharacteristic(
-      result.connectionId, serviceUuid, characteristicUuid, String("new value"), true);
-  }
-});
-
-ble.discoverCharacteristic(connectionId, serviceUuid, characteristicUuid);
-```
-
-Central側のWrite完了は`onCharacteristicWritten()`へ配送します。`response=false`でWrite Without Responseを選び、結果の`response`にも方式を保持します。Descriptorは`readDescriptor()` / `writeDescriptor()`と`onDescriptorRead()` / `onDescriptorWritten()`を使います。Characteristic操作と同様に**属性ハンドル指定のoverload**も提供します（`readDescriptor(connectionId, descriptorHandle)` ほか）。UUIDが重複するCharacteristicに属するDescriptor——HIDのReport Reference（0x2908）が典型——はUUIDの組では特定できないためです。結果の`descriptorHandle`が対象Descriptor、`handle`がそれを持つCharacteristicを指します。各完了は`EspBleGattResult`（success、error、detail、connectionId、Service/Characteristic/Descriptor UUID、値）を持つ値イベントです。
-
-`discoverCharacteristic()`は既知のService/Characteristic UUIDを指定して存在とpropertyを取得する軽量経路として維持します。ATTに出るのは同時に1件だけですが、**呼び出しは自動でFIFO queueへ積まれ順に実行されます**（「already in progress」で失敗しません）。queueは実行中1件のほかに8件までで、それを超える呼び出しは`ResourceExhausted`で拒否します。operation idと個別の強制cancelは導入しません（DECISIONS 確定 #19）。timeout時は`EspBleError::Timeout`を持つ完了eventを1回だけ配送し、遅れて戻ったbackend結果を破棄します。切断時は、その接続のqueue済みopを失敗`GattResult`として配送してから捨てます（完了contractを保つため黙って消さない）。
-
-GATT値はpointer+lengthを基本とし、NULを含めてcopyできる`String`を便宜overloadとして提供します（同梱backendの`String`構築は長さ明示でbinary-safe。DECISIONS 確定 #20）。Server側は`addDescriptor()`、`setDescriptorValue()`、`descriptorValue()`、`onDescriptorWritten()`も提供します。構成上限はService 8、Characteristic 32、Descriptor 16です。Descriptor Writeは専用の`EspBleGattDescriptorWrite`値イベントへ配送します。同梱backendがDescriptor callbackへconnection handleを渡さないため、推測値は公開せずConnection IDを型に含めません。Descriptorの動的Read callbackはまだ提供しません。
-
-## Subscription / Notify / Indicate API
-
-Central側は既知UUIDのCharacteristicへNotificationまたはIndicationを購読します。`notifications=true`がNotification、`false`がIndicationです。CCCD書込み完了は`onSubscribed()`、解除完了は`onUnsubscribed()`、受信payloadは`onNotification()`へ配送します。
-
-```cpp
-ble.onConnected([](const EspBleConnection &connection) {
-  ble.subscribe(connection.id, serviceUuid, characteristicUuid, true);
-});
-ble.onSubscribed([](const EspBleGattResult &result) {
-  // result.subscribedToNotifications / subscribedToIndications
-});
-ble.onNotification([](const EspBleGattNotification &notification) {
-  // connectionId、UUID、copy済みpayload、indicationフラグを持つ。
-});
-
-ble.unsubscribe(connectionId, serviceUuid, characteristicUuid);
-```
-
-GATT Server側はCCCD変更をConnection ID付きで受け取り、`notify()` / `indicate()`で送信します。どちらも要求受理時にはblockせず、Notification送信結果またはIndication確認結果を`onSent()`へ配送します。
-
-```cpp
-gattServer.onSubscriptionChanged([](const EspBleGattSubscription &subscription) {
-  // notifications / indicationsで現在のCCCD状態を確認する。
-});
-gattServer.onSent([](const EspBleGattSendResult &result) {
-  // result.successとdetailで非同期送信結果を確認する。
-});
-
-gattServer.notify(serviceUuid, characteristicUuid, String("value"));
-gattServer.indicate(serviceUuid, characteristicUuid, String("confirmed value"));
-```
-
-現在のServer送信は、そのCharacteristicで該当方式を購読している全Connectionが対象です。Connectionを指定する送信、複数購読者ごとの送信結果、送信queueとbackpressureは複数接続Peerテストと合わせて設計します。
-
-## Security / Bonding API
-
-初期SecurityはLE Secure Connectionsを使用し、No Input / No OutputのJust Worksと静的passkeyによるMITM Pairingを扱います。Securityは`begin()`前の設定で有効にし、接続時の自動PairingとBond保存を個別に指定できます。無効が既定値です。
-
-```cpp
-EspBleConfig config;
-config.security.enabled = true;
-config.security.bonding = true;
-config.security.pairOnConnect = true;
-ble.begin(config);
-
-ble.onSecurityChanged([](const EspBleSecurityChanged &event) {
-  if (event.success) {
-    // encrypted、authenticated、bonded、encryptionKeySizeを参照できる。
-  }
-});
-```
-
-`pairOnConnect=false`の場合や、アプリケーションが明示的にSecurityを開始したい場合は`requestSecurity(connectionId)`を使用します。要求の受理だけを同期的に返し、完了時のConnection snapshotは`onSecurityChanged()`へ配送します。
-
-Just Worksではlinkは暗号化されますがMITM認証されないため、`encrypted=true`、`authenticated=false`になることをPeerで確認しています。`authenticated`をPairing成功の意味には使用しません。
-
-静的passkeyでは、表示側を`DisplayOnly`、入力側を`KeyboardOnly`として同じ6桁値を設定します。現在の`KeyboardOnly`は事前設定値をbackendへ渡す方式で、実行中にユーザー入力を待つAPIではありません。
-
-```cpp
-config.security.mitm = true;
-config.security.ioCapability = EspBleSecurityIoCapability::DisplayOnly;
-config.security.staticPasskeyEnabled = true;
-config.security.staticPasskey = 438209;
-
-ble.onPasskeyDisplayed([](const EspBlePasskeyDisplayed &event) {
-  Serial.printf("Passkey: %06u\n", static_cast<unsigned>(event.passkey));
-});
-```
-
-passkey表示イベントはstack callbackからcopyし、`ble.update()` contextへ配送します。同梱backendの表示callbackにConnection handleがないため、現在はSecurity確立前のConnectionを対応付けます。複数Connectionで同時にPairingする場合の識別方法は未確定です。passkeyは`000000`〜`999999`を受理しますが、製品では共通のhard-coded値ではなくデバイスごとの安全なprovisioningを使用します。
-
-GATT ServerはCharacteristic単位で暗号化を要求できます。暗号化指定には対応するread/write propertyも必要です。
-
-```cpp
-EspBleGattCharacteristicConfig valueConfig;
-valueConfig.readable = true;
-valueConfig.writable = true;
-valueConfig.encryptedRead = true;
-valueConfig.encryptedWrite = true;
-```
-
-MITM認証済みlinkを要求する場合は`authenticatedRead` / `authenticatedWrite`を使用します。静的passkey Peerテストで`authenticated=true`のConnectionだけがread/writeできることを確認しています。
-
-Bond storeには`bondCount()`、`bond(index, result)`、`deleteBond(const EspBleBond &)`、`deleteAllBonds()`でアクセスします。`bond(index)`はmutableなbond store上のsnapshot indexアクセスで、削除・追加により呼び出し間で並びが変わりうるため、特定削除には列挙直後に取得した`EspBleBond`値（addressで対象を特定）を渡します。削除中の接続状態との不整合を避けるため、すべての接続を切断してから削除します。保存上限はArduino-ESP32の`CONFIG_BT_NIMBLE_MAX_BONDS`に従います。
-
-実行時のpasskey入力、Numeric Comparison、Pairing確認・拒否UI、Privacyは未実装です。これらはstack contextで即時回答が必要なbackend callbackと、現在の`ble.update()`配送をどう両立するかを先に設計します。Pairing失敗理由のbackend code表現と、Bond操作を同期Resultのままにするかも今後確定します。
-
-## 複合HID Device API
-
-HID Keyboard Deviceは`EspBle`が所有するprofile handleとして取得し、`begin()`より前に構成します。単一roleで自明なexampleでは変数名を`keyboard`とします。
-
-```cpp
-auto &keyboard = ble.hidKeyboard();
-EspBleHidKeyboardConfig keyboardConfig;
-keyboardConfig.manufacturer = "EspBle";
-keyboardConfig.initialBatteryLevel = 100;
-// PnP ID（vendorId / productId / productVersion）、countryCodeも設定できる。
-keyboard.configure(keyboardConfig);
-
-EspBleConfig config;
-config.deviceName = "EspBle Keyboard";
-config.security.enabled = true;
-config.security.bonding = true;
-ble.begin(config);
-ble.advertising().start();
-```
-
-既定の入力はmodifier 1 byteと同時押し最大6 keyの値型で指定します。`configure()`前にEspUsbDeviceと同じ`enableNkro()`を呼ぶと29-byte bitmap Reportへ切り替わり、`pressUsage()`でキーを蓄積し`releaseUsage()`で個別解除できます。Report IDを利用者に組み立てさせず、`releaseAll()`は全フィールドが0のreportを送ります。
-
-```cpp
-EspBleHidKeyboardInputReport report;
-report.modifiers = EspBleHidKeyboardInputReport::LeftShift;
-report.keys[0] = 0x04; // Keyboard a and A
-keyboard.sendReport(report);
-keyboard.releaseAll();
-```
-
-LED Output Reportはstack callbackからcopyされ、`ble.update()` contextで配送されます。値には送信元Connection IDとNum Lock、Caps Lock、Scroll Lock、Compose、Kanaのbitが含まれます。Battery Levelは`setBatteryLevel(0..100)`で更新します。`configured()`で構成済みかを確認できます。
-
-`hidMouse()`、`hidConsumerControl()`、`hidSystemControl()`、`hidGamepad()`、`hidVendor()`も同じく`begin()`前に`configure()`します。構成したprofileだけが固定Report ID（keyboard=1、mouse=2、gamepad=3、consumer=4、system=5、vendor=6）で1つのHID Serviceへ合成されます。Vendorは`sendInput()`とOutput / Feature callbackを持ちます。詳細は[HID Device仕様](HID_DEVICE_SPEC.ja.md)に記載します。
-
-## HID Host API
-
-BLE固有のScanとConnectはroot objectで行い、接続後のHID Discoveryとreport処理をprofileへ渡します。これにより接続先の選択を隠さず、接続後はEspUsbHostに近いusage stateとLED APIを利用できます。
-
-```cpp
-auto &keyboard = ble.hidHost();
-
-// security有効構成ではonSecurityChanged成功後にdiscover()を呼ぶ
-// （HOST_SPEC「接続フロー」参照）。security無効構成の最小形:
-ble.onConnected([](const EspBleConnection &connection) {
-  keyboard.discover(connection.id);
-});
-keyboard.onDiscovered([](const EspBleHidKeyboardHostDiscovery &result) {
-  // reportId、Output Report有無、Battery Levelを確認する。
-});
-keyboard.onKeyboardState([](const EspBleHidKeyboardState &state) {
-  if (state.wasPressed(0x04)) {
-    // HID Keyboard/Keypad usage 0x04 (A) が押された。
-  }
-});
-keyboard.setKeyboardLayout(EspBleKeyboardLayout::JaJp);
-keyboard.onKeyboard([](const EspBleHidKeyboardEvent &event) {
-  // usage単位のpressed/released。変換可能な場合だけasciiが非0になる。
-});
-```
-
-通常のsketchは単一slotの`onDiscovered()` / `onKeyboardState()` / `onKeyboard()`を使います。adapterなど複数consumerとの共存には、対応する`addDiscoveredListener()` / `addKeyboardStateListener()` / `addKeyboardListener()`を使い、返された`EspBleListenerId`を`removeListener()`へ渡します。追加listenerはevent種別ごとに最大4件で、callback配送中の登録変更は次のeventから反映します。
-
-`EspBleHidKeyboardState`は接続ID、Report ID、modifier、lock状態、現在の256-bit usage bitmap、直前から変化したbitmapを持ちます。modifier usages `0xE0..0xE7`もbitmapへ含めます。`onKeyboard()`はこのsnapshotからusageごとのpress/releaseと任意のASCIIを派生します。ESP32KeyBridgeなどはlayout変換を通さずraw stateを使用できます。切断時にheld keyがあれば全release snapshot/eventを配送します。
-
-LEDは接続単位で返送します。
-
-```cpp
-keyboard.setKeyboardLeds(connectionId,
-  /*numLock=*/false, /*capsLock=*/true, /*scrollLock=*/false);
-```
-
-`discover()`は内部taskでReport Map read、Report Reference列挙、対応する全Input Reportの購読、Battery readを行います。`onMouse()`、`onConsumerControl()`、`onSystemControl()`、`onGamepad()`、`onVendorInput()`はkeyboard callbackと同じHost objectへ集約します。Vendor Output / Featureは`sendVendorOutput()` / `sendVendorFeature()`、keyboard LEDは`setKeyboardLeds()`で送ります。Discoveryは明示`discover()`、再接続時は新しいConnection IDでの再Discoveryが仕様です。詳細は[HID Host仕様](HID_HOST_SPEC.ja.md)に記載します。
-
-## 結果型
-
-操作APIの役割分担は次で確定しています（DECISIONS 確定 #19）。
-
-- 受理時の同期エラー: `bool`戻り値+`lastError()` / `lastErrorName()` / `lastErrorDetail()`。
-- 非同期完了・失敗: 各イベント（`EspBleGattResult`等）のsuccess / error / detailフィールドとConnection/Characteristic context。
-- operation idはCentral GATT同時1件制限が続く間は導入しません。
-- `lastError*`は単一状態のため、操作呼び出しは単一のloop task contextから行うことを前提とします。
-
-## Event API
-
-- 通常callbackは`update()` contextで配送する。
-- ✅ HID Keyboard Hostでは単一`on*()`と共存する固定容量listener登録・解除を提供する。他の領域へ共通化するかは利用例を追加して判断する。
-- Connection id、対象UUID、結果、payloadを必要に応じて含める。
-- payloadの寿命を型ごとに明記する。
+- 通常callbackは`update()` contextで配送する。stack contextで呼ぶraw callbackを追加する場合は、API名と文書でそれを明示する。
+- コアGATT callbackは**primary 1（`on*`）＋listener 複数（`add*Listener` / `removeGattListener`・`removeListener`）**の多observerモデル。`on*`はprimaryを差し替えるだけなので単一observer用途はそのまま満たす。listener上限はowner種別ごとに4件。
+- イベントはConnection ID、対象UUIDまたは属性ハンドル、結果、payloadを必要に応じて持つ。payloadの寿命を型ごとに明記する。
 - callbackを使わない利用者向けに状態getterを提供する。
+- queue overflowは専用イベントではなくdropカウンタ（`droppedEventCount()` / `droppedResultCount()` / `droppedPersistentSubscriptionCount()` / `invalidInputReportCount()`）で観測する。
 
-## GATT値とcodec
+## 対象の指定
 
-GATTコアはbyte sequenceを扱います。string、integer、Bluetooth SIG形式、HID report、Battery Levelなどは明示的なcodec/profile helperで変換します。CPUのendiannessやC++ struct layoutを暗黙にwire formatへ使用しません。
+- UUIDは「型」であって「どれか」ではない。**同一UUIDが重複しうる対象は属性ハンドルで指定できる**ようにする。
+- Server側は`addService()` / `addCharacteristic()` / `addDescriptor()`が返すハンドルを以降の操作で使う。
+- Client側はUUID指定に加えてハンドル指定のoverloadを持つ（characteristicのread / write / subscribe / unsubscribe、descriptorのread / write）。結果は`handle`（characteristic）と`descriptorHandle`（descriptor）を返す。
+- UUID指定は、そのUUIDが一意なときの簡便な経路として維持する。
 
-## 将来拡張の扱い
+## 値とcodec
 
-未実装機能と優先順位は[FEATURE_MATRIX.ja.md](FEATURE_MATRIX.ja.md)と[STATUS.ja.md](STATUS.ja.md)で管理します。新しいAPIは既存のConnection ID、非同期event、`update()`配送、byte sequence境界を維持し、採用した設計判断を`DECISIONS.ja.md`へ記録します。
+- GATTコアはbyte sequenceを扱う。公開の値containerはpointer+lengthを基本とし、NULを含めてcopyできる`String`を便宜overloadとして提供する。
+- string、integer、Bluetooth SIG形式、HID report、Battery Levelなどは明示的なcodec / profile helperで変換する。
+- **CPUのendiannessやC++ struct layoutを暗黙にwire formatへ使わない。**
+
+## 構成の順序
+
+- GATT ServerのService/Characteristic定義とProfileの`configure()`は`begin()`前に行う。security permissionも登録時に決まる。
+- `begin()`後の構成変更は禁止し、再構成は`end()`後に行う。
+- 構成上限はcompile-time定数（Server: Service 8 / Characteristic 32 / Descriptor 16、Discovery snapshot: Service 16 / Characteristic 48 / Descriptor 48、Advertising Service UUID 4、Service Data 4）。上限超過は明示的なresource errorとして返す。
+
+## Profile API
+
+- Profileは`EspBle`から取得したhandleを`begin()`前に`configure()`する。`configured()`で状態を確認できる。
+- 送信系は同期`bool`（受理）＋非同期イベント（結果）の分離に従う。ただしHIDの`setKeyboardLeds()`のようにWrite Without Responseで撃つものは、受理だけを返して配達確認をしないことを文書で明示する。
+- Profileは汎用GATT callbackを**listenerとして**使い、primaryを独占しない。
+- 詳細は[HID_DEVICE_SPEC.ja.md](HID_DEVICE_SPEC.ja.md) / [HID_HOST_SPEC.ja.md](HID_HOST_SPEC.ja.md)。
+
+## 拡張するとき
+
+新しいAPIは既存の境界——Connection ID、非同期event、`update()`配送、byte sequence、ハンドルによる対象指定——を維持する。採用した判断は[DECISIONS.ja.md](DECISIONS.ja.md)へ記録する。未実装機能と優先順位は[FEATURE_MATRIX.ja.md](FEATURE_MATRIX.ja.md)と[STATUS.ja.md](STATUS.ja.md)で管理する。

@@ -24,13 +24,11 @@ EspBleの開発ドキュメント一覧と、初見の人が状況を把握す�
 | 公開APIの設計方針 | [API_DESIGN.ja.md](API_DESIGN.ja.md) |
 | 用語・命名規則 | [TERMINOLOGY.ja.md](TERMINOLOGY.ja.md) |
 | 確定した設計決定とその理由 | [DECISIONS.ja.md](DECISIONS.ja.md) |
-| pre-1.0.0の設計負債監査と是正計画 | [DESIGN_DEBT.ja.md](DESIGN_DEBT.ja.md) |
 | HIDの仕様（Device / Host） | [HID_DEVICE_SPEC.ja.md](HID_DEVICE_SPEC.ja.md) / [HID_HOST_SPEC.ja.md](HID_HOST_SPEC.ja.md) |
 | BLE通信の入門ガイド（GAP / セキュリティ / GATT / UUID / HID / BLE MIDI） | [GUIDE_BLE_BASICS.ja.md](GUIDE_BLE_BASICS.ja.md) |
 | テスト方針・カバレッジ | [../tests/TEST_PLAN.ja.md](../tests/TEST_PLAN.ja.md) |
 | 1.0.0までに残っている作業 | [PLAN_RELEASE_1_0_0.ja.md](PLAN_RELEASE_1_0_0.ja.md) |
 | リリース前の確認手順 | [RELEASE_CHECKLIST.ja.md](RELEASE_CHECKLIST.ja.md) |
-| Arduino-ESP32への修正依頼案 | [UPSTREAM_REQUEST_ARDUINO_ESP32_DESCRIPTOR_CONTEXT.ja.md](UPSTREAM_REQUEST_ARDUINO_ESP32_DESCRIPTOR_CONTEXT.ja.md) |
 | ボード / coreビルド対応表（CI生成） | `BOARDS.<version>.md` / `COMPATIBILITY.<version>.md` |
 | 使い方のサンプル | [../examples/README.ja.md](../examples/README.ja.md) |
 

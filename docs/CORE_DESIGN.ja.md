@@ -1,22 +1,22 @@
 # Core Design
 
+ライブラリの層構成と境界。個別の設計判断とその理由は[DECISIONS.ja.md](DECISIONS.ja.md)、公開APIの形は[API_DESIGN.ja.md](API_DESIGN.ja.md)が正本。
+
 ## レイヤ構成
 
 ```text
 Application / ESP32KeyBridge adapter
-  Profile: HID / Battery / future profiles
+  Profile: HID / BLE MIDI / 標準Service（examples）
   Generic GATT Client / Server
   Connection / Security
   GAP: Scanner / Advertiser
   EspBle stack owner
-  Arduino-ESP32 bundled BLE API with NimBLE backend
+  Arduino-ESP32同梱NimBLE（ホストAPIを直接使用）
 ```
 
-`EspBle`はスタックの唯一の所有者です。Scanner、Advertiser、GATT Server、各Profileは`EspBle`から取得または登録し、個別にスタックを初期化しません。
+`EspBle`はスタックの唯一の所有者。Scanner、Advertiser、GATT Server、各Profileは`EspBle`から取得または登録し、個別にスタックを初期化しない。
 
-## 初期化と構成確定
-
-基本ライフサイクルは次の順序とします。
+## ライフサイクル
 
 1. `EspBle`と必要なService/Profileを構築する。
 2. Advertising、Security、GATT Server構成を登録する。
@@ -24,81 +24,53 @@ Application / ESP32KeyBridge adapter
 4. Advertising/Scanning/Connection操作を開始する。
 5. `end()`で操作を止め、接続を閉じ、スタック資源を解放する。
 
-`begin()`後のGATT Server構成変更は禁止し、再構成は`end()`後に行います。これは同梱backendの確認済み制約に基づく不変条件です: `createServer()`は`ble_gatts_reset()`を呼ぶためそれ以前の登録は消え、serviceの実登録は`BLEServer::start()`（Advertising開始が自動で呼ぶ）時の1回だけで、start後に追加したserviceは二度と登録されません（`CONFIG_BT_NIMBLE_DYNAMIC_SERVICE`無効ビルド）。将来動的Service追加を検討する場合もこの制約が前提になります。
+`begin()`後のGATT Server構成変更は禁止し、再構成は`end()`後に行う。`end()`は登録済みのService/Characteristic定義を保持しハンドルだけを捨てるため、次の`begin()`が同じ構成を再登録する。
 
 ## 状態モデル
 
-状態を単一enumへ押し込みません。
+状態を単一enumへ押し込まない。Advertising、Scanning、複数Connectionは同時に成立するため、集約状態は個別状態から算出する。
 
 - Stack lifecycle: uninitialized / initializing / ready / stopping / error
 - Scanner state: idle / scanning / stopping
-- Advertising state: advertising set単位のidle / advertising / stopping
+- Advertising state: idle / advertising / stopping
 - Connection state: connecting / connected / disconnecting / disconnected
-
-Advertising、Scanning、複数Connectionは同時に成立できます。集約状態は個別状態から算出します。
 
 ## Connection identity
 
-Connectionは次を持ちます。
+Connectionはlibrary生成の安定したid、backend handle、peer addressとaddress type、local role、MTUと接続パラメータ、encryption/authentication/bond状態、GATT discoveryとsubscription状態を持つ。
 
-- library生成の安定したconnection id
-- backend connection handle
-- peer addressとaddress type
-- local role（central/peripheral）
-- lifecycle、MTU、接続パラメータ
-- encryption/authentication/bond状態
-- GATT discoveryとsubscription状態
-
-切断でbackend handleが再利用されても古いConnection参照を別接続として扱いません。公開APIでは世代を識別できるhandleまたはライブラリ管理参照を使用し、無効化を検出します。
+切断でbackend handleが再利用されても、古いConnection参照を別接続として扱わない。
 
 ## データ所有権
 
-- UUIDと小さなイベント情報は値として保持する。
-- Characteristic valueの基本表現はbyte sequenceとする。
-- callbackへ渡す一時bufferの寿命をcallback終了までと明示する。
-- callback後も必要なScan Result/Discovery Resultは利用者所有の値へcopyできるようにする。
+- UUIDと小さなイベント情報は値として保持する。Characteristic valueの基本表現はbyte sequence。
+- callbackへ渡す一時bufferの寿命はcallback終了まで。callback後も必要なScan Result / Discovery Resultは利用者所有の値へcopyできる。
 - Service/Characteristic定義は`EspBle`より長生きしてはならず、原則として`EspBle`が所有する。
-- backend native objectへのアクセスはborrowed referenceであり、保存を保証しない。
-
-固定容量か動的確保かは対象データごとに決定し、上限超過を明示的なresource errorとして返します。
+- 固定容量か動的確保かは対象データごとに決め、上限超過は明示的なresource errorとして返す。
 
 ## 非同期処理と実行文脈
 
-BLE処理は非同期を基本とします。スタックcallback内では状態更新とイベントqueue投入だけを行い、利用者callbackは`update()`を呼んだコンテキストから配送します（確定仕様。内部task配送・選択式は採用しません）。`update()`を呼ばない限り、connect/discover等の完了通知も配送されません。
+スタックcallback内では状態更新とイベントqueue投入だけを行い、利用者callbackは`update()`を呼んだコンテキストから配送する。
 
-- `update()`は単一コンテキストから呼ぶ。
-- stack taskと`update()`間はライブラリが同期する。
+- `update()`は単一コンテキストから呼ぶ。stack taskと`update()`間はライブラリが同期する。
 - callback内から同期wait APIを呼ぶことは禁止する。
-- queue overflowは破棄数カウンタ（`droppedEventCount()`等）で観測可能にし、lifecycle・完了イベントを優先保持する。専用のoverflowイベントは設けない。queue容量はcompile-time定数で、実行時設定APIは設けない。
+- タイムアウト付き同期helperは非同期操作の上に構築し、無期限にblockしない。
 - latencyが重要なraw callbackを追加する場合は、stack contextであることをAPI名と文書で明示する。
-
-タイムアウト付き同期helperは非同期操作の上に構築し、無期限にblockしません。
 
 ## Backend境界
 
-公開APIはArduino-ESP32同梱BLEライブラリの型を通常利用に要求しません。backend固有のinclude、callback変換、error変換、機能差は内部層へ閉じ込めます。
+公開APIはArduino-ESP32同梱BLEライブラリの型を通常利用に要求しない。backend固有のinclude、callback変換、error変換、機能差は内部層へ閉じ込める。
 
-Arduino-ESP32 3.3.11の同梱BLE API自体はBluedroid/NimBLEの両backendを扱えますが、EspBleはそのうちNimBLE backendだけを対象とします。`CONFIG_NIMBLE_ENABLED`またはHosted BLEを示す`CONFIG_ESP_HOSTED_ENABLE_BT_NIMBLE`など、Arduino-ESP32が提供するcompile-time設定を確認し、Bluedroid構成では明示的にunsupportedとします。外部NimBLE-Arduinoとの互換性は保証しません。
+同梱BLE API自体はBluedroid/NimBLEの両backendを扱えるが、EspBleはNimBLEだけを対象とする。`CONFIG_NIMBLE_ENABLED`やHosted BLEを示す`CONFIG_ESP_HOSTED_ENABLE_BT_NIMBLE`などのcompile-time設定を確認し、Bluedroid構成では明示的にunsupportedとする。
 
-Backend境界はnative controllerとHosted controllerの両方を許容します。ESP32-P4へ規定GPIOでESP32-C6などを接続するHosted BLEでも、Arduino-ESP32の共通BLE APIより下のtransport差をアプリケーションへ露出させません。ただし利用可能機能とresource上限はbackend capabilityとして個別に判定します。
-
-Peer testの`s3_peer_host` / `s3_peer_device`はpytest-embedded-cliが2台を識別するprofile名であり、BLE Central / Peripheral、GATT Client / Serverなどのroleを表しません。両方のsketchは転送・実行され、両方のSerialを同じpytestから観測・操作できます。初期構成では親側sketchをCentral、`peer_device/`側sketchをPeripheralに固定し、役割交換は行いません。
+境界はnative controllerとHosted controllerの両方を許容する。ESP32-P4 + ESP32-C6のようなHosted BLEでもtransport差をアプリケーションへ露出させないが、利用可能機能とresource上限はbackend capabilityとして個別に判定する。
 
 ## Profile境界
 
-Profileは次を行います。
+Profileは、必要なService/Characteristic/Descriptor定義をGATT層へ登録し、標準wire formatをencode/decodeし、Profile固有イベントと操作を提供する。
 
-- 必要なService/Characteristic/Descriptor定義をGATT層へ登録する。
-- 標準wire formatをencode/decodeする。
-- Profile固有イベントと操作を提供する。
-
-Profileは次を行いません。
-
-- BLE stackを初期化する。
-- GATT Server全体またはAdvertising全体を所有する。
-- Connectionをグローバル変数として隠す。
-- 独自拡張を標準UUIDの値へ混入する。
+Profileは、BLE stackを初期化しない。GATT Server全体やAdvertising全体を所有しない。Connectionをグローバル変数として隠さない。独自拡張を標準UUIDの値へ混入しない。
 
 ## ESP32KeyBridgeとの境界
 
-ESP32KeyBridgeのadapterはスケッチ所有の`EspBle`参照を受け取ります。adapterは`begin()`を呼ばず、HID Profileイベントと操作をBridgeのinput/output interfaceへ変換します。Pairing開始、Bond削除、Advertising開始などの運用操作はBridge coreではなくEspBleまたはadapterの明示操作として提供します。
+adapterはスケッチ所有の`EspBle`参照を受け取り、`begin()`は呼ばない。HID Profileイベントと操作をBridgeのinput/output interfaceへ変換する。Pairing開始、Bond削除、Advertising開始などの運用操作はBridge coreではなく、EspBleまたはadapterの明示操作として提供する。

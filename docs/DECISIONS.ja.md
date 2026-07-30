@@ -1,179 +1,17 @@
 # 設計決定の台帳
 
-## 確定
+確定した設計判断と、その理由を話題別に記録する。**現在成立しているものだけを載せる**——上書きされた判断や、撤去した同梱`BLE`ラッパの挙動に関する記録は残さない。実装状況は[STATUS.ja.md](STATUS.ja.md)、対応機能は[FEATURE_MATRIX.ja.md](FEATURE_MATRIX.ja.md)、テストの中身は[../tests/TEST_PLAN.ja.md](../tests/TEST_PLAN.ja.md)が正本。
 
-1. Arduino向け単一ライブラリ`EspBle`として提供する。
-2. Arduino-ESP32に同梱されたBLEライブラリのNimBLE backendを使用し、外部NimBLE-Arduinoを必須依存にしない。Bluedroid backendは対象外とする。
-3. Bluetooth Classicは扱わない。
-4. Central / PeripheralとGATT Client / Serverを同じスタック所有者で扱う。
-5. APIを単一接続前提に固定しない。
-6. 標準Profileと独自Serviceを同じGATT Serverへ合成可能にする。
-7. 初期実機ターゲットと自動Peer環境はESP32-S3 2台とする。
-8. pytest-embedded-cli上の親DUTと2台目Peerは、既存環境と同じ`s3_peer_host` / `s3_peer_device` profileで識別する。この名前にBLE roleの意味を持たせない。
-9. Peerでは両方のsketchを転送・実行でき、両方のSerialを観測・操作できる。初期構成は親側sketchをCentral、`peer_device/`側sketchをPeripheralに固定し、役割を交換しない。EspBle PeripheralはPeer側の結果を主にassertして検証する。
-10. Peerの一方は可能な範囲でArduino-ESP32同梱BLE低レベルAPIを直接使い、EspBle同士だけの自己整合テストにしない。
-11. 初期プロファイルはHID KeyboardとBattery Serviceに絞る。
-12. 旧`memo.ja.md`（scratch）は内容を正式文書へ移行のうえ削除済み。Beacon/Connectionlessは優先順位候補へ、Semantic Versioningポリシーと非機能要件はREQUIREMENTSへ、初期リリース範囲は確定#11へ移した。
-13. 初期自動Peer環境は常設ESP32-S3 2台とする。3台必要な複数接続またはBLE-to-BLE bridge testは、manual用ESP32-S3を追加Peerとして利用し、Peerディレクトリを増やして拡張する。
-14. 対象可否はBLE内蔵SoCかどうかではなく、Arduino-ESP32がNimBLEを提供する構成かで判断する。ESP32-P4 + ESP32-C6などのHosted BLEも対象候補に含め、専用build/実機試験後に対応済みとする。
-15. 公開APIと文書はBluetooth LEの標準用語を基本とし、Central/Peripheral、GATT Client/Server、HID Host/Deviceを同一視しない。stack ownerは役割中立の`EspBle`とする。
-16. examplesの変数名は役割の明確さを優先する。複数roleが登場する場合は`hidKeyboardHost` / `hidKeyboardDevice`のように明示し、単一roleで自明なexampleでは`keyboard`などの短い名前を個別判断で許容する。
-17. イベント配送は明示`ble.update()`（呼び出したloop task context）を最終仕様とする。内部task配送や選択式は採用しない。`update()`を呼ばない限りconnect/discover等の完了通知も配送されない。queue満杯はdropカウンタとlifecycleイベント優先保持で観測・保護する。
-18. GATT Server構成は`begin()`前に全登録し、開始後の動的Service追加は禁止する。同梱backendは`createServer()`が`ble_gatts_reset()`を呼び、`BLEServer::start()`（Advertising開始が自動で呼ぶ）後に追加したserviceは二度と登録されない（`CONFIG_BT_NIMBLE_DYNAMIC_SERVICE`無効ビルド）ため、この順序は偶然ではなく維持すべき不変条件である。
-19. 操作APIの役割分担: 受理時の同期エラーは`bool`戻り値+`lastErrorName()`/`lastErrorDetail()`、完了・失敗は各イベントのerror/detailフィールドで通知する。operation IDはCentral GATT同時1件制限が続く間は導入しない。`lastError*`は単一状態のため、操作呼び出しは単一のloop task contextから行うことを前提とする。
-20. 公開の値containerはpointer+lengthを基本とし、`String`を便宜overloadとして提供する。同梱backendの`String`構築は長さ明示でbinary-safe（NUL切り詰めなし）であることを確認済み。将来の値型container（`EspBleBytes`等）への移行余地は未確定事項として残す。
-21. event queueの容量はcompile-time定数とする。Arduinoのlibrary buildでは利用者が`-D`で上書きする実用的な手段がないため、容量設定APIは設けない。overflowは専用イベントではなく、dropカウンタ（`droppedEventCount()`等）とlifecycleイベントの優先保持で扱う。
-22. 公開APIはSemantic Versioningに従う。1.0.0より前の0.x系は試行段階で互換性を保証しない。
-23. Bluedroidが既定のSoC（無印ESP32など、Arduino-ESP32がNimBLEを同梱しない構成）は本ライブラリの対象外とする。EspBleのAPI仕様が安定した後、別ライブラリ（`EspBleBluedroid`等）としてBluedroid backendで対応する可能性を残す。その場合もソース互換は努力目標にとどめ完全互換は保証しない（Bluedroid/NimBLEの内部差でbonding・MTU・securityの細部挙動は必ずずれるため）。公開APIはなるべく似た使い方に揃える方針とする。backend非依存の高レベルロジック（keymap変換`EspBleKeymap.h`、Report Map parser`EspBleHidReportMap.h`、イベント値型、KeyBridge境界など）は両ライブラリで共有する候補とする。なお`EspBleBluedroid`は未着手のため、利用者向けドキュメント（README）では紹介せず、無印ESP32でBLEが必要な場合の代替として実在のNimBLE-Arduinoを案内する（EspBleがNimBLE-Arduinoへ依存する意味ではない。確定#2と整合）。
+## スコープ
 
-## 仮置き
+1. Arduino向け単一ライブラリ`EspBle`として提供する。Arduino-ESP32に同梱されたNimBLEを使い、外部NimBLE-Arduinoを必須依存にしない。
+2. Bluetooth Classicは扱わない。LE Audio、Mesh、Matter provisioning、OTA/DFU方式の統一、ESP-IDF native APIも対象外。
+3. 対象可否はBLE内蔵SoCかどうかではなく、**Arduino-ESP32がNimBLEを提供する構成か**で判断する。ESP32-P4 + ESP32-C6などのHosted BLEも候補に含め、専用build/実機試験後に対応済みとする。
+4. Bluedroidが既定のSoC（無印ESP32など）は対象外。API仕様が安定した後に別ライブラリ（`EspBleBluedroid`等）で対応する可能性を残すが、ソース互換は努力目標にとどめる——Bluedroid/NimBLEの内部差でbonding・MTU・securityの細部挙動は必ずずれる。backend非依存の高レベルロジック（`EspBleKeymap.h`、`EspBleHidReportMap.h`、イベント値型、KeyBridge境界）は共有候補。未着手のため利用者向け文書では紹介せず、無印ESP32でBLEが必要な場合は実在のNimBLE-Arduinoを案内する。
+5. 公開APIはSemantic Versioningに従う。1.0.0より前の0.x系は試行段階で互換性を保証しない。
+6. Central / PeripheralとGATT Client / Serverを同じスタック所有者で扱い、APIを単一接続前提に固定しない。標準Profileと独自Serviceは同じGATT Serverへ合成できる。
 
-1. Characteristic valueはbyte sequenceを基本とし、型変換をcodecへ分離する。
-2. Connectionはbackend handleの再利用を検出できるlibrary identityを持つ。
-3. 初期の同時接続数は制限してよいが、接続単位APIを維持する。
-4. Pairing、Bonding、認証方式の実装は基本接続/GATTの後から追加する。ただしCharacteristicのsecurity permissionはGATT Server開始前に必要になり得るため、構成拡張点とConnectionのsecurity状態は初期API設計で塞がない。
-
-## GAPスパイクで確認済み（公開API確定前）
-
-1. root objectは`EspBle ble`とし、`begin()`でArduino-ESP32同梱NimBLEを初期化できる。
-2. `ble.advertising()`と`ble.scanner()`から役割を固定せずGAP操作へアクセスできる。
-3. Scan Resultはbackend callback引数を外へ露出せず、name、address、RSSI、Service UUID、Manufacturer Dataなどを持つ値へcopyする。
-4. stack callback内でユーザーcallbackを実行せずqueueへ積み、現在は`ble.update()`から配送する。Peer testでloop task contextから呼ばれることを確認済み。
-5. USB系と同様に操作は`bool`を返し、`lastErrorName()` / `lastErrorDetail()`で失敗理由を確認できる試行APIとする。
-6. Arduino-ESP32 BLE stackが外部で初期化済みの場合は所有権競合として拒否する。
-7. Legacy Advertisingの31-byte上限で要求fieldが欠落する場合は明示的なargument errorとする。
-8. Advertisingのservice UUIDはサイズ（16/32/128-bit）ごとに1つの「Complete List」AD構造へまとめ、同一AD typeをpayload内に複数出現させない（CSS Part A 1.1）。`advertise_payload` Peerテストでraw payloadを検証する。
-
-## Connection/GATTスパイクで確認済み（公開API確定前）
-
-1. Arduino-ESP32 backendの待機型Connect、Discovery、Read、Writeは内部taskで実行し、公開操作の受理時にはloopをblockしない。
-2. Connectionはbackend handleとは別のlibrary生成ID、peer address、local role、MTUを持つ値snapshotとし、接続と切断イベントで同じIDを通知できる。
-3. GATT ServerのService/Characteristicは`begin()`前に登録し、Security permissionを後から定義へ追加できる順序にする。
-4. GATT Server書込みイベントとCentral側のDiscovery/Read/Write結果は、現在は`ble.update()`からloop task contextで配送する。
-5. 最小Discoveryは既知Service/Characteristic UUIDを指定して存在とpropertyを確認する。全Service/Characteristic列挙は別途設計する。
-6. Central側GATT operationは実際のATT送受信を同時1件に保つ（HID Host discoveryとも`gattOperating`で共有排他）が、呼び出しは**自動でFIFOキューへ積み**loop taskがpumpして順に実行する。「operation already in progress」で拒否せず、利用側は直列化を意識しない。callbackから次のoperationを連鎖する使い方も引き続き可能。operation id / 強制cancelは未導入。（当初の「同時1件へ制限しqueueは未確定」を上書き）
-7. GATT値はpointer+lengthを基本に扱える一方、公開値containerは`String`で試行する。HID実装後に最終型を決める。
-8. Notification/Indicationの購読、解除、受信payloadとServer側CCCD変更は値イベントへcopyし、`ble.update()`から配送できる。
-9. Server側Notification/Indication送信は内部taskで実行し、Indication確認待ちでloopをblockしない。送信結果は別イベントで通知する。
-10. Arduino-ESP32 3.3.10のNimBLE Indicationではcontroller確認成功後に同期wrapper由来のtimeout statusが重複するため、先に観測した`SUCCESS_INDICATE`を保持するbackend workaroundを内部に置く。
-11. 現在のServer送信は該当方式を購読する全Connection向けとする。Connection指定送信と購読者ごとの結果は複数接続実装時に決める。→ #25で確定（接続指定`notify()`・`connectionId`付き結果・内部送信FIFOを追加）。
-12. 希望MTUは`begin()`前に23〜517で設定し、同梱NimBLE backendが接続時に交換したMTUをConnection snapshotへ反映する。接続後の再交換APIは現時点で設けない。
-13. MTU変更はConnection snapshotと変更前MTUを持つ値イベントとしてqueueへcopyし、`ble.update()` contextで配送できる。
-14. Notification/Indication payloadの上限は`mtu - 3`とし、backendによる黙示的な切詰めを避けるため超過を送信前に拒否する。複数接続ではactiveな全Peripheral Connectionの最小値を使う保守的な判定から開始する。
-15. connection eventのqueueが満杯のとき、lifecycle・完了イベント（Connected/Disconnected/Failed/GattResult/SecurityChanged等）は最古のNotificationを追い出して保持し、drop対象はNotificationに限定する。drop数（追い出し含む）は`EspBle::droppedEventCount()`で観測できる。
-16. Central `BLEClient`は切断時・接続失敗時にretireし、次の`update()`でloop task上のreapが解放する。同梱backendには`deleteClient()`がなく`BLEDevice::deinit(false)`が最後に生成した1個だけを解放するため、最新のclientはEspBle側では解放せず、後続のclient生成または`end()`まで保持する。`end()`は残りの全clientを解放してから`deinit(false)`を呼ぶ。
-17. 内部worker task（GATT operation、Server送信）は完了イベントをpushしてからbusy flagをクリアする。`end()`はbusy flagのクリアを待ってから共有状態を破棄するため、この順序でuse-after-freeを防ぐ。
-18. retired clientのreapは、client解放前に該当Connection IDのHID Host slot（remote characteristicポインタ）を無効化し、GATT operation実行中はreapを次の`update()`へ遅延する。
-19. 初期化済みインスタンスへの2回目の`begin()`は、同一configなら成功を返し、異なるconfigなら`InvalidState`で失敗する。黙って旧設定のまま成功を返さない。
-20. `end()`は実行中のconnect試行を`ble_gap_conn_cancel()`で中断し（connect timeoutまでblockしない）、Scannerの未配送resultをflushして次のsessionへ持ち越さない。
-21. Peripheral向けイベント（Server書込み・購読変更・HID Output Report）でConnection IDを解決できない場合（ID 0）は、無効IDのまま配送せずdropしてカウントする。
-22. GATT worker task（operation/discovery）は開始時に`isConnected()`を1回確認する以外の接続状態同期を行わない。操作途中の切断はbackendエラーとして完了イベントへ伝播する。同梱backendではremote service treeは切断で解放されず（解放は`~BLEClient`のみ）、client解放はGATT operation実行中はreapを遅延し`end()`はbusy flag解除を待つため、worker taskが解放済みobjectへ触れる経路はない。
-23. Central側MTUは接続時のsnapshotのみ保持する。同梱backendのclient側にはMTU変更callbackがなく、接続後の変化は追跡できない。MTU交換がconnect timeout+1秒までに完了しない場合、snapshotが既定値23になる可能性がある。制限としてSTATUSへ記載する。
-24. 同梱backendのNimBLE `BLEClient::connect()`はtimeout引数を無視して内部既定の30秒を待つため、`connect(scanResult, timeoutMilliseconds)`のtimeoutは`update()`が経過時間を監視し`ble_gap_conn_cancel()`で強制する。失敗は要求timeout付近でConnectionFailedイベントとして配送される（`lifecycle_stress`で検証）。`update()`を呼ばない場合はbackendの30秒が上限になる。
-25. Server送信はCentral GATT clientと同じく内部FIFO（`update()`からpump）へ積み、送信中でもrejectしない（#9・#11を上書き）。`EspBleGattSendResult`に`connectionId`（0=broadcast）を持ち、`notify(connectionId, …)`は同梱backend低レベルの`ble_gatts_notify_custom(connHandle, char->getHandle(), om)`で単一接続へ送る（HID Device送信と同型）。MTU判定は接続指定なら対象接続のみ、broadcastは全Peripheral接続の最小（#14の保守判定はbroadcastに限定）。`indicate(connectionId, …)`は対称性のため用意するが、同梱backendのindication確認が`m_semaphoreConfEvt`（characteristic単位・private）で待つ設計のため接続単位の確認応答を安全に取り出せず、確認付きbroadcastパスへ委譲する（単一購読者ならその接続、結果の`connectionId`は要求値を反映）。接続単位のindicate確認はbackend側APIが確認応答を接続単位で公開するまで見送る。
-26. コアGATT client/server callbackは「primary 1（`on*`）＋listener 複数（`add*Listener`／`removeGattListener`・`removeListener`）」の多observerモデルとする（HID Hostのlistener registryを`EspBleCallbackList<Callback>`として一般化。配送はlock外でsnapshotをprimary→登録順に実行）。`on*`は従来どおり単一primaryを差し替えるだけなので後方互換で、追加APIのみの非破壊変更。これによりprofile helper（MIDI等）が単一スロットを独占せず、helperはlistener経由で登録し（`begin()`はremove-before-addで重複防止）、appは同一イベントへ`on*`または`add*Listener`で合成観測できる。listener idはowner単位で単調発番。対象はclient 9種（characteristic discovered/read/written、services discovered、descriptor read/written、subscribed/unsubscribed、notification）とserver 4種（written/descriptorWritten/subscriptionChanged/sent）。connection系イベント（onConnected等）はprofileが独占しないため単一slotのまま据え置く。
-
-## Securityスパイクで確認済み（公開API確定前）
-
-1. Securityは`begin()`前の設定で有効化し、No Input / No OutputのJust Works + LE Secure Connectionsから開始する。
-2. 接続時の自動Security要求と、Connection IDを指定する明示要求の両方を試行する。完了は同期戻り値ではなく値イベントとして`ble.update()` contextへ配送する。
-3. Connection snapshotはencrypted、authenticated、bonded、encryption key sizeを保持する。Just Worksの成功時はencryptedかつbondedだがauthenticatedではない。
-4. GATT Characteristic定義にencrypted read/writeを追加し、同梱NimBLEのATT permissionで強制する。
-5. Bond列挙・特定削除・全削除は同梱NimBLE storeを使用する。現在はactive Connectionがない場合だけ削除を許可する。
-6. `security_bond` Peerテストで初回Pairing、暗号化Read/Write、両側Bond保存、切断後のBond再接続、両側Bond削除を確認済み。
-7. 最初のMITM方式はDisplayOnlyとKeyboardOnlyの静的6桁passkeyとする。実行時入力とNumeric Comparisonは、stack callbackへの即時回答方法を設計してから追加する。
-8. 表示passkeyは値イベントへcopyして`ble.update()` contextで配送する。同梱backend callbackにConnection handleがないため、イベントのConnectionは「最初の未暗号化Connection」の推定とする。初期リリースはこの推定を仕様とし、複数同時Pairingでは誤ったConnectionを報告しうることをSTATUSの制限へ記載する。
-9. GATT Characteristicへauthenticated read/writeを追加し、`security_passkey` Peerテストで両側`authenticated=true`、認証必須Read/Write、Bond保存・削除を確認済み。
-10. Bond列挙の`bond(index)`はmutableなbond store上のsnapshot indexアクセスで、削除・追加により呼び出し間で並びが変わりうる。特定削除は`deleteBond(const EspBleBond &)`がaddressで対象を特定するため、列挙直後に取得した値を使う。
-
-## HID Keyboard Deviceスパイクで確認済み（公開API確定前）
-
-1. 最初のHID DeviceはReport Protocolの固定6KRO Keyboardとし、Boot Protocol、NKRO、Consumer Control、Mouse、複合HIDを含めない。
-2. `ble.hidKeyboard()`からprofile handleを取得し、`begin()`前に構成する。Input APIはmodifierと最大6 keyを持つ値型とし、Report IDとreserved byteのwire処理をprofileへ隠す。
-3. HID Service、Device Information Service、Battery Serviceを同じGATT Serverへ登録し、HID UUIDとKeyboard appearanceをAdvertisingへ自動追加する。
-4. Report MapとReport ReferenceにはconfigurableなReport IDを持たせるが、GATT characteristic payload自体はReport IDを除いた8-byte Input / 1-byte Outputとする。
-5. Output ReportはConnection ID付きの値へcopyし、現在は`ble.update()` contextで配送する。
-6. Arduino-ESP32 3.3.10同梱`BLEService` wrapperは同一Service内のCharacteristicをUUIDで一意に扱うため、HOGPに必要なInput/Output 2個の`0x2A4D`を登録できない。内部だけ同梱NimBLEのGATT定義APIを使い、別attributeとして登録する。
-7. `hid_keyboard_device` Peerテストでは親側を同梱BLE API直接実装のHID Host、`peer_device/`側をEspBle HID Keyboard Deviceとし、Report Map、Report Reference、Battery Read、Input Notification、LED Output Write、Pairing/Bondingを確認済み。
-8. securityを有効にした場合、HOGPのSecurity Mode 1 Level 2に従いHID Serviceの全attribute（Report Map、Report、Report Reference、HID Information、Control Point）へ暗号化必須のpermissionを付与する。加えてInput Reportは暗号化されていないlinkへは送信しない。Device Information / Battery Serviceは識別用途のため暗号化必須にしない（`hid_security` Peerテストで検証）。
-9. Input Report / Battery Levelの通知は、GAP subscribeイベントから追跡したCCCD購読状態を持つ接続にのみ送信する。購読者が1つもない場合、`sendReport()`は失敗を返し、`setBatteryLevel()`は値更新のみ行う（`hid_robustness` Peerテストで検証）。
-
-## HID Keyboard Hostスパイクで確認済み（公開API確定前）
-
-1. Scan/ConnectはBLE共通APIに残し、接続後に`hidHost().discover(connectionId)`でHID固有のDiscoveryと購読を開始する。
-2. Host入力境界は文字イベントではなく、Connection ID、Report ID、modifier、256-bit usage現在値/変化値を持つsnapshotとする。modifier usagesもbitmapへ含め、EspUsbHostとESP32KeyBridgeの入力境界へ揃える。
-3. 切断時はheld usageの全release snapshotをloop contextへ配送し、bridgeでstuck keyを残さない。
-4. 初期Report Map parserはmodifier + 6-key arrayの8-byte reportだけを受理する。NKROや未知の複合reportを長さだけで推測しない。
-5. 同一UUIDのReport characteristicをhandleで全列挙し、Report Reference descriptorでInput/OutputとReport IDを識別する。
-6. Keyboard LED Output（`setKeyboardLeds()`）は同期`bool`を返すprofile helperとして確定する。書込みはWrite Without Responseを優先してATT応答を待たず、呼び出しtaskをblockしない（WWR非対応characteristicのみwith response）。戻り値は受理を表し、配達確認は行わない。HID Discovery等のGATT操作実行中は排他により失敗する。汎用GATT側の非同期Resultへは統一しない。
-7. `hid_keyboard_host` PeerテストでDiscovery、Battery Read、Input subscription、usage snapshot、LED Output、Pairing/Bondingを確認済み。Device wire形式は別テストで同梱BLE API直接実装により独立検証する。
-8. `EspBleHidKeyboardState`の256-bit usage snapshotはESP32KeyBridgeの`InputAdapter::keys()`へ変換なしで写像できる。試作adapterでは`bridge.update()`からEspBleの`update()`も駆動でき、remap、modifier、切断releaseを確認した。
-9. KeyBridgeのLockStateは`setKeyboardLeds(connectionId, ...)`でBLE keyboardへ返送でき、再接続・再Discovery後にも現在値を再送できる。
-10. 正式adapterとsketch callbackの競合を避けるため、HID Keyboard Hostは既存の単一`on*()`に加えて、event種別ごとに最大4件の`add*Listener()`とIDによる`removeListener()`を提供する。配送開始時にcallbackをsnapshotし、callback内の登録変更は次eventから反映する。共通Event APIへの一般化は他profileで必要になった時点で判断する。
-11. Report Mapの6KRO keyboard判定はバイト列一致ではなく、HID report descriptorの最小parser（`EspBleHidReportMap.h`、host unit test付き）で行う。keyboard Application collection内の「8×1-bit modifier(0xE0-0xE7) variable入力+6個以上の8-bit array入力」を持つreportを探し、そのReport IDでInput/Output Report characteristicを選択する。Report IDなしのkeyboard（Report Reference不在）も受理する。
-12. ErrorRollOver等のphantom report（key slotにusage 0x01-0x03）は一般的なHost同様に無視し、直前のkey状態を維持する。
-13. HID Hostのeventキューが満杯のとき、Discovery結果と切断時の全releaseイベントは最古のkey stateイベントを追い出して保持する。drop数（追い出し含む）は`droppedEventCount()`で観測できる。
-14. HID Discovery実行中と`setKeyboardLeds()`実行中は対象Connection IDを共通GATT操作状態へ記録し、`disconnect()`が同一接続への要求を拒否できるようにする。
-15. 長さが8以外のInput Reportは解釈せず、`invalidInputReportCount()`で観測できるようカウントする（「Discovery成功なのにキーが来ない」の診断手段）。
-16. keymap変換はEspUsbHostのUnicode 4-plane表現に揃える。tableは`uint16_t KEYCODE_TO_UNICODE_XX[N][4]`（無shift/Shift/AltGr/AltGr+Shift、Unicodeコードポイント）でEspUsbHostの`src/keymap/*.h`と同一内容を共有し、主関数`espBleUsageToUnicode()`がAltGr層選択と文字ペア判定CapsLockを行う。`espBleUsageToAscii()`はLatin-1 wrapper（非Latin-1は0）として維持し、`EspBleHidKeyboardEvent`は`unicode`と`ascii`の両方を持つ。en-US系（EnUs/KoKr/ZhCn/ZhTw）のみ内蔵変換パス（table等価）を使う。
-17. 再接続時は新しいConnection IDに対してSecurity完了後に再度`discover()`が必要で、Discovery完了後にinputをconnectedとして扱う。security有効構成では`onSecurityChanged`成功後に呼ぶことを規範とし、HOST_SPECとexampleを揃える。（当初は「HID Discovery自動化は初期リリースに含めず明示`discover()`を維持」としたが、再接続#5で**opt-inの`setAutoRediscover(bool)`**を追加し上書き。既定offなので明示`discover()`の規範は据え置き。）
-18. `onKeyboard()`は同一report内の変化をpress（usage昇順）→release（usage昇順）の順で配送する仕様とする。一般的なOS Hostのchord処理（release先行）とは順序が異なるが、bridge用途の主境界はusage snapshot（`EspBleHidKeyboardState`）であり影響しない。順序に依存する用途はraw usage境界を使う。
-19. HID Host listener registryは、EspUsbHostが先行実装した方式（実機peer test 56件PASS）に倣う。(1) 配送時に`std::function`をコピーせずshared ownershipをsnapshotし、解除との競合を防ぎつつmutable callback状態を保持する。(2) IDはHostインスタンス内でイベント種別をまたいで一意。(3) registryはmutexで保護するがcallback実行中はロックしない。(4) 単一`on*`→listener登録順で配送。(5) callback内の追加・解除は次イベントから反映する。
-
-## 複合HID再設計で確定
-
-1. Device入口は`hidKeyboard()` / `hidMouse()` / `hidConsumerControl()` / `hidSystemControl()` / `hidGamepad()` / `hidVendor()`とし、構成したprofileを1つのHID Serviceへ合成する。
-2. Report IDはEspUsbDevice/EspUsbHostと同じ固定値（keyboard=1、mouse=2、gamepad=3、consumer=4、system=5、vendor=6）とし、利用者configから除く。
-3. Host入口は`hidHost()`へ集約し、Report Mapで識別した全対応Input Reportを購読して種別別callbackへ配送する。
-4. Host eventは`connectionId`、`reportId`、raw bytesを持つ`EspBleHidReport`を共通baseとする。gamepadは`EspBleHidFieldValue`も配送する。
-5. Device共通マネージャがHID/DIS/Battery登録、Report Map合成、Report characteristic、Report ID別CCCD、暗号化permission、notify routingを一元管理する。
-6. Host listenerはshared ownershipをmutex下でsnapshotし、mutexを解放してから単一callback→listener登録順に実行する。旧keyboard専用型・入口は残さない。
-7. Vendor HIDは1〜64-byteの同一サイズをInput / Output / Featureで共有し、Deviceは`sendInput()`とOutput / Feature callback、Hostは`onVendorInput()`とOutput / Feature送信を提供する。
-8. NKROはEspUsbDeviceと同じmodifier 1 byte + 224-bit usage bitmapを採用し、`enableNkro()`は`configure()`前に選択する。Hostは6KRO / NKROを同じ256-bit usage snapshotへ正規化する。29-byte notificationのためMTU 32以上を利用者configで指定する。
-
-## BLE MIDIで確定
-
-1. BLE MIDIの wire codec（timestamp header/lowバイト、13-bit ミリ秒timestamp、MIDI running status、System Real-Time割り込み、複数BLEパケットにまたがるSystem Exclusive）はbackend非依存のheader `EspBleMidi.h`に置き、host unit test（`tests/unit/midi`）で検証する。keymap変換やReport Map parserと同じ「backend非依存ロジックはheader＋unit test」方針に揃える。
-2. profile helperはHID/DIS/Battery等の標準Serviceと同じく、既存の公開GATT API（`gattServer()`とClient側`discover`/`subscribe`/`onNotification`/`writeCharacteristic`）の上に薄く実装する。raw NimBLE登録（HID Device managerの方式）は使わない。MIDI Serviceは単一characteristic（read＋writeWithoutResponse＋notify）で複雑なGATT tableを持たないため、公開API上で完結できる。
-3. APIはUSB姉妹ライブラリに合わせる。`EspBleMidiDevice`は`EspUsbDeviceMidi(device)`同様に`EspBle &`参照で構築し`noteOn`/`noteOff`/`controlChange`/`programChange`/`polyPressure`/`channelPressure`/`pitchBend`を持つ。`EspBleMidiHost`は`EspUsbHost`のMIDI境界に倣い`onMidiMessage`と`sendNoteOn`等を持つ。イベント型`EspBleMidiMessage`は`EspUsbHostMidiMessage`と同じ`status`/`data1`/`data2`/`raw`/`length`を持つ。
-4. profile helperは必要な単一の汎用GATT callback（Deviceは`gattServer().onWritten`/`onSubscriptionChanged`、Hostは`onNotification`/`onCharacteristicDiscovered`/`onSubscribed`）を占有する。MIDI helperを使うsketchはこれらのcallbackを自前で併用しない前提とし、専用用途向けとしてheaderへ明記する。
-5. timestampは`millis() & 0x1FFF`（BLE MIDIの13-bit ミリ秒clock）から生成し、送信は running status圧縮を行わず全メッセージに完全なstatusバイトを付ける（あらゆる準拠receiverが受理できる保守的なencode）。
-6. 単発メッセージ送信は単一BLEパケット単位の`EspBleMidiPacketBuilder`とし、header の高位6bit windowを跨ぐtimestampのメッセージはappendを拒否して呼び出し側にflushを促す。大きなSysExは`EspBleMidiSysExEncoder`でBLEパケット（最大244 byte）へ分割し、`sendSysEx()`が送信完了イベント（Device=`onSent` / Host=`onCharacteristicWritten`、いずれも`update()` context）駆動で1パケットずつ送る非同期queueとする。BLE MIDIの送信は同時1件（`sending`/GATT操作排他）なので、この完了イベント駆動が排他制約と整合する。SysEx進行中は単発メッセージ送信をfalseで拒否してwire上のstreamを乱さない。1メッセージ上限は320 byteとする。
-7. `midi_device` Peerテストは親側を同梱BLE API直接実装のCentralにしてEspBleMidiDeviceのwire形式を独立検証し、`midi_host` Peerテストは`peer_device/`側を同梱BLE API直接実装のPeripheralにして running statusパケットのHost decodeを独立検証する。確定#10（一方を同梱BLE API直接実装にする）に沿う。
-
-## 標準Sensor Serviceで確定
-
-1. IEEE-11073 medical FLOAT（32-bit）/ SFLOAT（16-bit）はbackend非依存のheader `EspBleMedicalFloat.h`（host unit test付き、`tests/unit/medical_float`）で共有する。keymap/Report Map/MIDIと同じ「backend非依存の数値・wire変換はheader＋unit test」方針に揃える。Health Thermometer / Blood Pressure / Glucose / Pulse Oximeterで再利用できる。
-2. 標準Sensor Serviceは、Heart Rate / Environmental Sensing / Current Timeと同じく公開GATT API上のexample＋Peerテストで対応する（ライブラリ本体へprofile helperは追加しない）。wire形式の妥当性はcodec unit testで固定し、Peerテストはindicate購読・配送・decodeのend-to-endを検証する。
-3. Health ThermometerのTemperature Measurement（0x2A1C）はIndication、Temperature Type（0x2A1D）はReadとする。`health_thermometer` PeerテストでType Read、Indication購読、37.5℃のFLOAT decodeを検証済み。
-4. Blood PressureのBlood Pressure Measurement（0x2A35）はIndication、Blood Pressure Feature（0x2A49）はReadとする。systolic/diastolic/meanは16-bit SFLOATで、`blood_pressure` PeerテストでFeature Read、Indication購読、120/80/93 mmHgのSFLOAT decodeを検証済み。SFLOATは`EspBleMedicalFloat.h`をFLOATと共有する。
-5. Weight ScaleのWeight Measurement（0x2A9D）はIndication、Weight Scale Feature（0x2A9E）はReadとする。weightはIEEE floatではなく固定分解能uint16（SI 0.005 kg/LSB、Imperial 0.01 lb/LSB）で、medical float codecは使わず素のuint16として扱う。`weight_scale` PeerテストでFeature Read、Indication購読、70.000 kg decodeを検証済み。
-6. Cycling Speed and CadenceのCSC Measurement（0x2A5B）はNotification、CSC Feature（0x2A5C）とSensor Location（0x2A5D）はReadとする。Measurementはflags駆動の多フィールド（uint32累積wheel回転数＋uint16イベント時刻、uint16累積crank回転数＋uint16イベント時刻）で、`cycling_speed_cadence` PeerテストでLocation Read、Notification購読、全フィールドdecodeを検証済み。indicateだけでなくnotifyの標準Serviceも同じexample+Peer方針で扱う。
-7. Running Speed and CadenceのRSC Measurement（0x2A53）はNotification、RSC Feature（0x2A54）とSensor Location（0x2A5D、CSCと共有UUID）はReadとする。Measurementはflags駆動の混在幅（uint16 speed 1/256 m/s＋uint8 cadence＋任意のuint16 stride length＋uint32 total distance）で、`running_speed_cadence` PeerテストでLocation Read、Notification購読、全フィールドdecodeを検証済み。
-8. Cycling PowerのCP Measurement（0x2A63）はNotification、CP Feature（0x2A65、uint32）とSensor Location（0x2A5D）はReadとする。Measurementは16bit flags＋符号付き16bit instantaneous power（ワット）で始まり、`cycling_power` PeerテストでLocation Read、Notification購読、負値powerのsint16 decodeを検証済み。符号付きフィールドのdecodeを扱う。
-9. GlucoseのRecord Access Control Point（0x2A52）手続きは、Client write→Server Measurement（0x2A18）notify→Server RACP応答indicateの順に進める。BLE送信は同時1件のため、Server側はMeasurement notifyとRACP応答indicateを`onSent`で順次実行する（SysEx送信と同じ完了イベント駆動）。ライブラリ本体は変更せず既存のwrite event / notify / indicate primitiveの合成で実現し、`glucose` Peerテストで一連の振る舞いを検証済み。この手続き型パターンは独自profileのControl Pointにも応用できる。
-10. Pulse Oximeter（PLX）のPLX Spot-Check Measurement（0x2A5E）はIndication、PLX Features（0x2A60）はReadとする。SpO2とpulse rateは16-bit SFLOATで、`pulse_oximeter` PeerテストでFeatures Read、Indication購読、98 % / 60 bpmのSFLOAT decodeを検証済み。SFLOATは`EspBleMedicalFloat.h`を共有する。
-11. Fitness Machine Service（FTMS、0x1826、スマートトレーナー等で現役）はIndoor Bike Data（0x2AD2）Notify＋Fitness Machine Feature（0x2ACC）Readのデータ配信パスに対応する。Indoor Bike Dataはbit0が*More Data*（0でInstantaneous Speed存在）の反転論理で、以降のフィールドはflag順（average speed、cadence、distance、resistance、power…）に並ぶため、clientはflag順にoffsetを進めてdecodeする。`fitness_machine` Peerでspeed 30.00 km/h・cadence 90 rpm・power 250 Wを検証。対話制御のFitness Machine Control Point（0x2AD9、write+indicate）とFitness Machine Status（0x2ADA、notify）にも対応する。Control Point write→応答indication（Response Code 0x80＋request op＋result）を返し、Serverは設定値を"Target Power Changed"（0x08）statusとしてnotifyできる。indicationは1接続あたり同時1件のみ在中可能（confirm待ち）なため、Peerテストは単一のControl Point indication（Set Target Power 0x05、250 W）を検証する（Request Control 0x00とSet Target Powerを連続indicateするには各応答のconfirmを待つ必要があるため、テストでは連続させない）。statusは応答indicationのsend完了後にServer側コマンドで送出し検証する。テストはIndoor Bike Data購読解除・切断のcleanupまで通す。
-
-## 再接続・接続状態で確定
-
-1. discovery snapshotは接続ごとに保持する。`GattDatabaseSnapshot`を`connectionId`で識別する最大`ConnectionCapacity`個の配列とし、初回discoveryで確保、切断で解放する。ある接続のdiscoveryが他接続のsnapshotを追い出さず、`discoveredService()`等は問い合わせた`connectionId`のsnapshotを参照する。容量は接続容量と一致するため能動接続は必ず空きslotを得る。
-2. persistent subscriptionは既定onとし、利用者の追加operationなしで再接続時に購読を復元する。`subscribe()`成功時にpeer address＋service UUID＋characteristic UUIDで記録し（`unsubscribe()`成功で削除）、同一peer addressへ再接続した`Connected`イベント処理時に記録済み購読を自動で再`subscribe()`する。復元はUUID指定で行う（handleは再接続ごとに変わるため）。「利用者がシンプルに使える」方針を優先し、`EspBleConfig::persistentSubscriptions=false`で手動管理へ切り替えられる。安定したpeer address（bond済みidentity、public、static random）を前提とする。
-3. 記録はaddress単位で切断をまたいで保持する（それがpersistentの意味）。registryは固定容量（16件）で、満杯時は既存記録を保持して新規のみ無視する。同一key再登録はdedupで上書きするため、自動再購読自体が重複記録を生むことはない。
-4. 複数同時接続に公式対応する（接続ごとのdiscovery cache・subscription・GATT操作routingで実現）。同時接続数の上限は同梱NimBLE controllerの`CONFIG_BT_NIMBLE_MAX_CONNECTIONS`（precompiled esp32s3で3）で決まり、これを超える接続要求はslotが空いていてもbackendで失敗する。ライブラリの`ConnectionCapacity`（4）はslot数であり同時接続保証数ではない。auto-reconnectは`setAutoReconnect(bool)`（既定off）とし、connect済みCentral peerをaddressで記憶して想定外の切断時に同一addressへ自動再接続（`update()`から2秒間隔でretry）、`disconnect()`は意図的切断として再接続対象から除外、無効化で保留中の再接続を破棄する。persistent subscriptionと組み合わせるとアプリコードなしでnotifyが復旧する。3台目board前提のため`tests/manual/multi_connection/`（`peer_device2/`＝profile `s3_peer_device2`、port未設定時は自動skip）で複数同時接続・routing・auto-reconnect・購読復元を実機検証済み。
-5. HID Hostは汎用subscription registryを使わないためpersistent subscriptionの対象外。代わりに**opt-inの`EspBleHidHost::setAutoRediscover(bool)`**（既定off、#17を上書き）を設ける。discovery成功したCentral peerのaddressを記憶し、再接続後のSecurity確立イベントで自動的に`discover()`を再発行する。アプリが`onSecurityChanged`で従来どおり手動`discover()`を呼んでも、その接続に既にHID discoveryがqueue/実行中なら自動側はskipして二重discoveryを防ぐ（`EspBle::hasPendingHidDiscover()`で判定）。記憶は最大`MaxRediscoverPeers`(4)・`resetBackend()`でクリア・loop task専用で無lock。安定したpeer address（bond済みidentity/public/static random、#2と同じ前提）に依存する。`setAutoReconnect`＋`persistentSubscriptions`と併用でHID再接続がハンズオフになる。`hid_keyboard_host` Peerテストにapp駆動の再接続フェーズを追加し、手動discoverなしで自動再discoveryされることを検証。
-6. **op毎タスク生成を常駐workerへ統合する案は見送る（意図的）**。GATT client worker / HID discovery / server send はop毎に`xTaskCreate`し完了で`vTaskDelete`する。常駐化はメモリ逼迫時の`xTaskCreate`失敗（全実機テストで未観測）を避ける代わりに、idle時・未使用機能でも常駐task分（HIDは16KB級）を常時確保する。ライブラリとしてはidleコスト0・未使用機能は未確保の現行方式が一般ケースで有利なため維持する。
-
-## Privacy / Advertisingで確定
-
-1. Address privacyは`EspBleConfig::ownAddressType`（`Public`（既定） / `RandomStatic` / `ResolvablePrivate`）で選ぶ。`begin()`で`ble_hs_id_gen_rnd`（static random）→`BLEDevice::setOwnAddr`（`ble_hs_id_set_rnd`）→`BLEDevice::setOwnAddrType`の順に適用する。RandomStaticは`BLE_OWN_ADDR_RANDOM`、ResolvablePrivateは`BLE_OWN_ADDR_RPA_RANDOM_DEFAULT`（esp32s3のcontrollerがRPAを回転生成、`CONFIG_BT_NIMBLE_RPA_TIMEOUT`＝900秒）。RPAはpeerがbonding時のIRKで解決するためsecurity/bonding併用時のみ有用で、回転周期が900秒とテスト実時間に合わないため、Peerテストはrandom static advertising（addressType=Random、先頭octetの上位2bit=0b11）の検証に留める。
-2. Extended / Periodic Advertisingは対応不可とする。同梱NimBLEが`CONFIG_BT_NIMBLE_EXT_ADV`無効でビルドされており（`MYNEWT_VAL_BLE_EXT_ADV=0`）、Arduinoライブラリ側から有効化できない。ext-adv APIはbackendでコンパイル除外されている。
-
-3. iBeaconはbackend非依存codec `EspBleIBeacon.h`（`espBleEncodeIBeacon`/`espBleDecodeIBeacon`/`espBleIsIBeacon`）で実装する。keymap/medical float/CGM CRC/MIDIと同じ「backend非依存ロジックはheader＋host unit test」方針に揃える。iBeaconはmanufacturer specific data（company ID 0x004C＋type 0x02＋length 0x15＋16 byte UUID＋big-endian major/minor＋int8 measured power、計25 byte）で、既存の`setManufacturerData`（送信）と`EspBleScanResult::manufacturerData`（受信）にそのまま載るため、advertising/scan APIの追加なしで完結する。unit testと`ibeacon` Peer（broadcast→decode）で検証。
-
-4. 汎用のService Data API（`EspBleAdvertising::addServiceData(uuid, data, length)`で最大4ブロック送信、`EspBleScanResult::serviceData[]`/`serviceDataCount`/`hasServiceData()`/`serviceDataFor(uuid, data)`で受信）を追加する。標準16-bitサービスのService Data（AD 0x16）やservice-dataビーコン一般で使える汎用機能。`service_data` Peerで送受信を検証。なお当初Eddystone対応（URL/UID/TLM）を実装したが、Eddystone/Physical Webは事実上終息したプロトコルのため、デッドプロトコルの保守面を避けてEddystone固有部分（codec・example・test）は削除した（判断: 現実の利用価値でスコープを決める）。iBeaconは現役のため維持し、汎用Service Data APIも独立して有用なため残した。
-
-## アーキテクチャで確定
+## アーキテクチャ
 
 1. **同梱の`BLE`ラッパクラスには依存せず、NimBLEホストAPIを直接使う。** `BLEDevice` / `BLEClient` / `BLEServer` / `BLEScan` / `BLEAdvertising` などを一切使わない。
 
@@ -181,44 +19,130 @@
 
    個別に回避せず全面的に外したのは、**部分的な自前化が成立しないため**。NimBLEでは`ble_gap_adv_start()`に渡したコールバックがその広告から成立した接続の全GAPイベント（切断・購読・MTU・indication確認）を受け取るので、広告だけ自前にすると`BLEServer`へイベントが届かずGATT Serverが機能しなくなる。転送もできない——`BLEServer::handleGATTServerEvent()`はprivateで、`BLEDevice::setCustomGapHandler()`はNimBLEパスでは一度も呼ばれない死んだAPIである。
 
-   ビルド構成由来の制約だけは残る: Extended / Periodic Advertisingは`CONFIG_BT_NIMBLE_EXT_ADV`無効でビルドされたプリビルドライブラリに関数自体が無く、**唯一の真の不可能**として[FEATURE_MATRIX.ja.md](FEATURE_MATRIX.ja.md)の対象外に置く。
+   残るのはビルド構成由来の制約だけ: Extended / Periodic Advertisingは`CONFIG_BT_NIMBLE_EXT_ADV`無効でビルドされたプリビルドライブラリに関数自体が無く、**唯一の真の不可能**。
 
 2. **同一UUIDの重複は仕様が認める限り両役割で扱う。** Peripheralは属性テーブルを`ble_gatts_add_svcs()`で自前に組み、対象は`addService()` / `addCharacteristic()`が返すハンドルで指定する。Centralはdiscoveryを自前に走らせ、read / write / 購読 / descriptor操作をすべて属性ハンドルへ直接発行する。UUIDは「型」であって「どれか」ではないため、UUIDだけを対象指定の手段にしない。
 
-   例外は**再接続時の購読自動復元**で、peerアドレスとUUIDを手掛かりにするためUUIDが一意なCharacteristicに限られる。該当する場合はアプリがハンドル指定で再購読する。
+   descriptorにもハンドル指定を用意する。HIDのReport Reference（0x2908）は「0x2A4Dのcharacteristicの下の0x2908」で、UUIDの組では言い表せない。例外は**再接続時の購読自動復元**で、peerアドレスとUUIDを手掛かりにするためUUIDが一意なCharacteristicに限られる。
 
-## ガイドと文書構成で確定
+3. **イベント配送は明示`ble.update()`（呼び出したloop task context）を最終仕様とする。** 内部task配送や選択式は採用しない。`update()`を呼ばない限りconnect/discover等の完了通知も配送されない。stack callback内でユーザーcallbackを実行せず、backendのオブジェクトを外へ出さずに値へcopyしてqueueへ積む。
 
-1. **ガイドはGAP → セキュリティ → GATT → UUIDの順の5章構成とする。** SMPはGAP・GATTと並ぶ独立した層であり、読者の作業順も「つながる → どこまで信頼するかを決める → 属性に要求を書く」であるため、セキュリティをGAP章の一節に押し込まない。役割分担はセキュリティ章がリンク単位の方針、GATT章が属性単位の要求（`encryptedRead` など）。
-2. **「後述」で概念説明を飛ばさない。** examplesと同じく、ガイドもその場で完結して読めることを優先する。
-3. **標準Serviceに専用クラスを置かない。** 標準の側にあるのはUUIDとバイト並びの決まりだけで、GATTの仕組みとしては独自Serviceと違わない。専用クラスを増やすと仕様の一部だけを実装した抽象がその数だけ増える。例外はHIDとBLE MIDIの2つで、Report Descriptorという別の記述言語や13ビットタイムスタンプ・running statusのように「UUIDとバイト並び」で終わらないため抽象を置く価値がある。判断の余地がない変換（IEEE-11073 medical float、CGMのE2E-CRC）はヘッダで共有する。
-4. **概念説明はガイドに一本化する。** `examples/README` の概念節はガイドへの対応表に置き換える。二重に持つと必ず食い違う（実際に同一UUID重複の記述が食い違っていた）。HID / BLE MIDIも6章・7章を設けて移したので、概念説明はガイドだけにある。
-5. **利用者が読む文書は日本語と英語を同期させる。** 対象は root `README`、`docs/README`、`docs/GUIDE_BLE_BASICS`、`docs/STATUS`、`docs/FEATURE_MATRIX`、`docs/RELEASE_CHECKLIST`、`examples/README` と各example README。設計・計画文書（`API_DESIGN` / `CORE_DESIGN` / `DECISIONS` / `DESIGN_DEBT` / `REQUIREMENTS` / `PLAN_*` / `HID_*_SPEC` / `TERMINOLOGY` / `UPSTREAM_*` / `TEST_PLAN`）は日本語のみとし、`README.md` にその旨を明記する。
-6. **exampleの `sketch.yaml` の fqbn は `esp32:esp32:esp32s3`（オプション指定なし）に統一する。** `USBMode=default` はUSB系ライブラリから持ち込まれた値で、BLEしか使わないexampleには無関係。オプションを付けないことでIDEでボードを選んだままの既定値と一致し、`tools/version_matrix.py` が持つ esp32s3 の fqbn とも一致する。テスト側の `sketch.yaml` も同じ値に揃えた（全77 Peerテストで検証済み）。
+4. **event queueの容量はcompile-time定数とする。** Arduinoのlibrary buildでは利用者が`-D`で上書きする実用的な手段がないため、容量設定APIは設けない。overflowは専用イベントではなく、dropカウンタ（`droppedEventCount()`等）と**lifecycle・完了イベントの優先保持**で扱う——満杯時は最古のNotificationを追い出し、drop対象をNotificationに限定する。
+
+5. **操作APIの役割分担**: 受理時の同期エラーは`bool`戻り値＋`lastErrorName()` / `lastErrorDetail()`、完了・失敗は各イベントのerror/detailフィールドで通知する。`lastError*`は単一状態のため、操作呼び出しは単一のloop task contextから行うことを前提とする。operation IDと個別の強制cancelは導入しない。
+
+6. **公開の値containerはpointer+lengthを基本とし、`String`を便宜overloadとして提供する。** 値型container（`EspBleBytes`等）への移行余地は残す。
+
+7. **backend非依存のロジックはheader＋host unit testで持つ。** keymap変換（`EspBleKeymap.h`）、HID Report Map parser（`EspBleHidReportMap.h`）、BLE MIDI codec（`EspBleMidi.h`）、IEEE-11073 medical float（`EspBleMedicalFloat.h`）、CGMのE2E-CRC、iBeacon codec（`EspBleIBeacon.h`）。実機を要さず、Bluedroid版とも共有できる。
+
+8. **op毎のタスク生成を常駐workerへ統合する案は見送る（意図的）。** 常駐化はメモリ逼迫時の`xTaskCreate`失敗（全実機テストで未観測）を避ける代わりに、idle時・未使用機能でも常駐task分（HIDは16KB級）を常時確保する。ライブラリとしてはidleコスト0・未使用機能は未確保の現行方式が一般ケースで有利。
+
+9. **Arduino-ESP32 BLE stackが外部で初期化済みの場合は所有権競合として拒否する。** 初期化済みインスタンスへの2回目の`begin()`は、同一configなら成功、異なるconfigなら`InvalidState`で失敗する——黙って旧設定のまま成功を返さない。
+
+10. Descriptor Write eventは`connectionId`を持つ。属性テーブルを自前に組んでいるため、ホストのaccess callbackが`conn_handle`を渡す。
+
+11. 内部worker task（GATT operation、Server送信）は完了イベントをpushしてからbusy flagをクリアする。`end()`はbusy flagのクリアを待ってから共有状態を破棄するため、この順序でuse-after-freeを防ぐ。`end()`は実行中のconnect試行を打ち切り、Scannerの未配送resultをflushして次のsessionへ持ち越さない。
+
+## GAP（Advertising / Scan / Privacy）
+
+1. Legacy Advertisingの31-byte上限で要求fieldが欠落する場合は、黙って落とさず**明示的なargument error**とする。
+2. Advertisingのservice UUIDはサイズ（16/32/128-bit）ごとに1つの「Complete List」AD構造へまとめ、同一AD typeをpayload内に複数出現させない（CSS Part A 1.1）。
+3. Address privacyは`EspBleConfig::ownAddressType`（`Public`（既定） / `RandomStatic` / `ResolvablePrivate`）で選ぶ。RandomStaticは`BLE_OWN_ADDR_RANDOM`、ResolvablePrivateは`BLE_OWN_ADDR_RPA_RANDOM_DEFAULT`（controllerがRPAを回転生成、`CONFIG_BT_NIMBLE_RPA_TIMEOUT`＝900秒）。RPAはpeerがbonding時のIRKで解決するためsecurity/bonding併用時のみ有用で、回転周期がテスト実時間に合わないため自動テストはrandom staticに留める。
+4. iBeaconはmanufacturer specific dataへ載るだけなので、advertising/scan APIを増やさずcodec（`EspBleIBeacon.h`）で完結させる。
+5. 汎用のService Data API（`addServiceData()`最大4ブロック、受信側は`serviceDataFor()`）を持つ。**Eddystoneは一度実装したが削除した**——Eddystone/Physical Webは事実上終息したプロトコルで、デッドプロトコルの保守を抱えたくない。iBeaconは現役のため維持し、汎用Service Dataは独立して有用なため残した（判断: 現実の利用価値でスコープを決める）。
+
+## 接続とGATT
+
+1. **GATT Server構成は`begin()`前に全登録し、開始後の動的Service追加は禁止する。** 同梱ビルドは`CONFIG_BT_NIMBLE_DYNAMIC_SERVICE`無効で、開始後に追加したserviceは二度と登録されない。security permissionも登録時に決まるため、この順序は偶然ではなく維持すべき不変条件である。
+2. Connectionはbackend handleとは別の**library生成ID**、peer address、local role、MTUを持つ値snapshotとする。handleの再利用を検出できるため、接続と切断で同じIDを通知できる。
+3. 待機型の操作（Connect、Discovery、Read、Write、Server送信）は内部taskで実行し、公開操作の受理時にloopをblockしない。
+4. **Central側GATT操作はATT上は同時1件だが、呼び出しは自動でFIFOキューへ積まれ順に実行される。** 「operation already in progress」で拒否しないので、利用側は直列化を意識しない。キューは実行中1件のほかに8件までで、超過は`ResourceExhausted`で拒否する（電波に出る前に拒否されるため、失敗した購読はpersistent subscriptionのレコードにも残らない）。
+5. **切断時は、その接続のqueue済みopを失敗`GattResult`として配送してから捨てる。** 黙って消すとアプリが永遠に来ないcallbackを待つ。GATT op実行中の`disconnect()`はrejectせず遅延実行する——rejectしてfalseを返すと、切断を要求した直後のアプリに「まだ繋がっている」と読めてしまう。要求時点でそのconnectionのqueue済みopを落とすのは、`update()`が`pumpGattQueue()` → `drainPendingDisconnects()`の順に走るため、キューを残すと毎回次のopが始まって切断が飢餓するから。
+6. 最小Discoveryは既知Service/Characteristic UUIDを指定して存在とpropertyを確認する軽量経路として維持し、全列挙とは別に持つ。discovery snapshotは**接続ごと**に保持し（初回discoveryで確保、切断で解放）、ある接続のdiscoveryが他接続のsnapshotを追い出さない。
+7. **希望MTUは`begin()`前に23〜517で設定する。** Notification/Indication payloadの上限は`mtu - 3`とし、backendによる黙示的な切詰めを避けるため超過を送信前に拒否する。broadcast送信ではactiveな全Peripheral Connectionの最小値を使う保守的な判定とし、接続指定送信では対象接続のMTUだけを見る。MTU交換は両役割ともグローバルGAPイベント（`BLE_GAP_EVENT_MTU`）で追跡し、Central側で接続確立後に完了する交換も拾う。
+8. **Server送信はCentral clientと同じく内部FIFOへ積み、送信中でもrejectしない。** `EspBleGattSendResult`に`connectionId`（0=broadcast）を持ち、`notify(connectionId, …)`は`ble_gatts_notify_custom()`で単一接続へ送る。`indicate(connectionId, …)`は対称性のため用意するが、同梱backendのindication確認が`m_semaphoreConfEvt`（characteristic単位・private）で待つ設計のため接続単位の確認応答を安全に取り出せず、確認付きbroadcastパスへ委譲する。接続単位のindicate確認はbackend側が公開するまで見送る。
+9. **コアGATT callbackは「primary 1（`on*`）＋listener 複数（`add*Listener` / `removeGattListener`・`removeListener`）」の多observerモデルとする。** `on*`は従来どおり単一primaryを差し替えるだけなので後方互換。これによりprofile helper（MIDI等）が単一スロットを独占せず、appは同一イベントを合成観測できる。配送はlock外でsnapshotをprimary→登録順に実行し、callback内の登録変更は次イベントから反映する。listener idはowner単位で単調発番。connection系イベント（`onConnected`等）はprofileが独占しないため単一slotのまま。
+10. Peripheral向けイベント（Server書込み・購読変更・HID Output Report）でConnection IDを解決できない場合は、無効IDのまま配送せずdropしてカウントする。
+11. `connect()`のtimeoutは`update()`が経過時間を監視して打ち切る。同梱NimBLEは接続失敗を自前で数回リトライするため（`BLE_GAP_EVENT_REATTEMPT_COUNT`）、`ble_gap_connect()`のduration引数だけでは指定時間を守れない。
+12. **persistent subscriptionは既定onとする。** `subscribe()`成功時にpeer address＋service UUID＋characteristic UUIDで記録し、同一addressへ再接続した`Connected`処理で自動再購読する。復元はUUID指定（handleは再接続ごとに変わる）。registryは16件固定で、満杯時は既存を保持して新規のみ無視し、`droppedPersistentSubscriptionCount()`で観測できる。安定したpeer address（bond済みidentity、public、static random）を前提とする。`persistentSubscriptions=false`で手動管理へ切り替えられる。
+13. **複数同時接続に公式対応する。** 上限は同梱NimBLE controllerの`CONFIG_BT_NIMBLE_MAX_CONNECTIONS`（esp32s3で3）で決まり、ライブラリの`ConnectionCapacity`（4）はslot数であって保証数ではない。auto-reconnectは`setAutoReconnect(bool)`（既定off）で、想定外の切断時に同一addressへ2秒間隔でretryし、`disconnect()`は意図的切断として対象から除外する。
+
+## Security
+
+1. Securityは`begin()`前の設定で有効化する。LE Secure Connectionsは常に有効で、Just Works（No Input / No Output）から段階的に方式を選ぶ。完了は同期戻り値ではなく値イベントとして`update()` contextへ配送する。
+2. Connection snapshotはencrypted、authenticated、bonded、encryption key sizeを保持する。Just Worksの成功時はencryptedかつbondedだがauthenticatedではない。
+3. GATT Characteristic定義にencrypted / authenticated read/writeを持たせ、NimBLEのATT permissionで強制する。
+4. Bond列挙・特定削除・全削除は同梱NimBLE storeを使う。削除はactive Connectionがない場合だけ許可する。`bond(index)`はmutableなbond store上のsnapshot indexアクセスで、削除・追加により呼び出し間で並びが変わりうるため、特定削除は`deleteBond(const EspBleBond &)`がaddressで対象を特定する。
+5. MITM方式は静的6桁passkey（DisplayOnly / KeyboardOnly）、実行時passkey入力（`providePasskey()`）、Numeric Comparison（DisplayYesNo＋MITM、`onNumericComparison()` / `confirmNumericComparison()`）に対応する。**stack callbackは回答まで同期でhost taskをblockする**ため、回答は30秒以内に返す必要があり、`loop()`を長くblockする処理と併用できない。`ble_sm_inject_io()`が`BLE_GAP_EVENT_PASSKEY_ACTION`のcontextを要求するbackend由来の制約で、回避できない。
+6. passkey表示イベントのConnection IDは、Peripheral接続では自前の広告コールバックで`conn_handle`が取れるため正確。Central接続は「最初の未暗号化Connection」の推定となり、複数同時Pairingでは誤ったConnectionを報告しうる（STATUSの制限に記載）。なお`ble_gap_event_listener_register()`のグローバルリスナには**`PASSKEY_ACTION`が届かない**（`ENC_CHANGE`や`MTU`は届く）ため、接続コールバックで受ける必要がある。
+
+## HID
+
+1. **Device入口はprofileごとに分け、構成したものを1つのHID Serviceへ合成する。** `hidKeyboard()` / `hidMouse()` / `hidConsumerControl()` / `hidSystemControl()` / `hidGamepad()` / `hidVendor()` / `hidCustom()`。共通マネージャがHID/DIS/Battery登録、Report Map合成、Report characteristic、Report ID別CCCD、暗号化permission、notify routingを一元管理する。
+2. **Report IDはEspUsbDevice/EspUsbHostと同じ固定値**（keyboard=1、mouse=2、gamepad=3、consumer=4、system=5、vendor=6）とし、利用者configから除く。構成順で決めると、profileを1つ足すだけで他の番号が動く。
+3. Report payload自体にReport IDを含めない（Report MapとReport Referenceが持つ）。
+4. Host入口は`hidHost()`へ集約し、Report Mapで識別した全対応Input Reportを購読して種別別callbackへ配送する。event共通baseは`connectionId` / `reportId` / raw bytesを持つ`EspBleHidReport`。
+5. **Host入力の主境界は文字イベントではなく256-bit usage snapshot**（`EspBleHidKeyboardState`）とし、EspUsbHostとESP32KeyBridgeの入力境界へ揃える。modifier usagesもbitmapへ含める。切断時はheld usageの全release snapshotを配送し、bridgeにstuck keyを残さない。
+6. **6KRO判定はバイト列一致ではなくReport Map parserで行う。** keyboard Application collection内の「8×1-bit modifier(0xE0-0xE7) variable入力＋6個以上の8-bit array入力」を持つreportを探す。長さだけで推測しない。Report IDなしのkeyboardも受理する。長さが期待と異なるInput Reportは解釈せず`invalidInputReportCount()`で数える——「Discovery成功なのにキーが来ない」の診断手段になる。
+7. ErrorRollOver等のphantom report（key slotにusage 0x01-0x03）は一般的なHost同様に無視し、直前のkey状態を維持する。
+8. `onKeyboard()`は同一report内の変化をpress（usage昇順）→release（usage昇順）の順で配送する。一般的なOS Hostのchord処理（release先行）とは順序が異なるが、主境界はusage snapshotなので影響しない。順序に依存する用途はraw usage境界を使う。
+9. **NKROはEspUsbDeviceと同じmodifier 1 byte + 224-bit usage bitmap**とし、`enableNkro()`は`configure()`前に選ぶ。Hostは6KRO / NKROを同じsnapshotへ正規化する。29-byte notificationのため`preferredMtu`は32以上が必要で、**満たさない場合は`begin()`が拒否する**——黙ってMTUを引き上げてアプリの設定を隠すことも、毎回notifyが失敗する状態を作ることもしない。
+10. keymap変換はEspUsbHostのUnicode 4-plane表現に揃える（`uint16_t KEYCODE_TO_UNICODE_XX[N][4]`＝無shift/Shift/AltGr/AltGr+Shift）。`espBleUsageToUnicode()`がAltGr層選択と文字ペア判定CapsLockを行い、`espBleUsageToAscii()`はLatin-1 wrapperとして維持する。
+11. security有効時はHOGPのSecurity Mode 1 Level 2に従いHID Serviceの全attributeへ暗号化必須permissionを付け、暗号化されていないlinkへInput Reportを送らない。Device Information / Batteryは識別用途のため暗号化必須にしない。
+12. Input Report / Battery Levelの通知は、GAP subscribeイベントから追跡したCCCD購読状態を持つ接続にのみ送る。購読者がいない場合`sendReport()`は失敗を返し、`setBatteryLevel()`は値更新のみ行う。
+13. `setKeyboardLeds()`は同期`bool`を返すprofile helperとする。Write Without Responseを優先してATT応答を待たず、呼び出しtaskをblockしない。戻り値は受理を表し、配達確認はしない。汎用GATT側の非同期Resultへは統一しない。
+14. **HID Hostの再Discoveryは`setAutoRediscover(bool)`（既定off）でopt-in自動化する。** HID Hostは汎用subscription registryを使わないためpersistent subscriptionの対象外で、代わりにdiscovery成功したpeer addressを記憶して再接続後のsecurity確立で`discover()`を再発行する。アプリが手動`discover()`を呼んでいればskipして二重discoveryを防ぐ。既定offなので「security完了後に明示`discover()`」の規範は据え置く。
+15. Boot Protocol（Protocol Mode 0x2A4E＋Boot Keyboard Input/Output）は`EspBleHidKeyboardConfig::bootProtocol`によるopt-inで**既定off**とする。多くのHOGP HostはReport Protocol Modeで足り、characteristicが増えると全HostのDiscoveryが膨らむ。対象はkeyboardのみで、mouseのboot report（0x2A33）は非対応。
+16. `EspBleHidKeyboardState`はESP32KeyBridgeの`InputAdapter::keys()`へ変換なしで写像でき、LockStateは`setKeyboardLeds()`で返送できる。
+
+## BLE MIDI
+
+1. profile helperは既存の公開GATT API（`gattServer()`とClient側の`discover` / `subscribe` / `onNotification` / `writeCharacteristic`）の上に薄く実装する。raw NimBLE登録（HID Device managerの方式）は使わない——MIDI Serviceは単一characteristicで複雑なGATT tableを持たないため公開APIで完結できる。
+2. APIはUSB姉妹ライブラリに合わせる。`EspBleMidiDevice`は`EspBle &`参照で構築し`noteOn` / `noteOff` / `controlChange` / `programChange` / `polyPressure` / `channelPressure` / `pitchBend`を持つ。`EspBleMidiHost`は`onMidiMessage`と`sendNoteOn`等を持つ。`EspBleMidiMessage`は`EspUsbHostMidiMessage`と同じフィールド構成。
+3. timestampは`millis() & 0x1FFF`（13-bitミリ秒clock）から生成する。送信はrunning status圧縮を行わず全メッセージに完全なstatusバイトを付ける（あらゆる準拠receiverが受理できる保守的なencode）。受信側はrunning statusをdecodeする。
+4. 大きなSysExは`EspBleMidiSysExEncoder`でBLEパケットへ分割し、送信完了イベント駆動で1パケットずつ送る非同期queueとする。BLE送信は同時1件なので完了イベント駆動が排他制約と整合する。SysEx進行中は単発メッセージ送信をfalseで拒否してwire上のstreamを乱さない。1メッセージ上限は320 byte。
+5. MIDI helperは必要な汎用GATT callbackへlistenerとして登録し（`begin()`はremove-before-addで重複防止）、単一primaryを独占しない。
+
+## 標準Service
+
+1. **標準Serviceに専用クラスを置かない。** 標準の側にあるのはUUIDとバイト並びの決まりだけで、GATTの仕組みとしては独自Serviceと違わない。専用クラスを増やすと仕様の一部だけを実装した抽象がその数だけ増える。公開GATT API上のexample＋Peerテストで対応する。
+
+   例外はHIDとBLE MIDIの2つ。Report Descriptorという別の記述言語や13ビットタイムスタンプ・running statusのように「UUIDとバイト並び」で終わらず、**間違えてもエラーにならず「認識されない」「音がずれる」という形で失敗する**ため、抽象を置く価値がある。判断の余地がない変換（IEEE-11073 medical float、CGMのE2E-CRC）はヘッダで共有する。
+2. Control Point手続き（Glucose RACP、FTMS Control Point）は「Client write→Server measurement notify→Server応答indicate」の順に、`onSent`駆動で順次実行する。これは送信が同時1件だからではなく**配送順序の保証**として維持する。独自profileのControl Pointにも応用できるパターン。
+3. indicationは1接続あたり同時1件のみ在中できる（confirm待ち）。連続するControl Point応答は各confirmを待つ必要がある。
+
+## テスト方針
+
+1. **Peerテストを補助的なsmokeではなく主要な自動テストとする。** BLEは接続・切断・Discovery・購読・Security・Bondingが複数の非同期イベントにまたがるため、実機なしでは仕様を固定できない。
+2. 常設ESP32-S3 2台を`s3_peer_host` / `s3_peer_device` profileで使う。この名前にBLE roleの意味を持たせない。親側sketchをCentral、`peer_device/`側をPeripheralに固定し、役割を交換しない。
+3. **2台で成立するものは自動テスト、3台以上が必要なものはマニュアルテストとする。** 可能なら2台での自動テストが望ましい。3台前提のscenarioは`tests/manual/`へ置き、port未設定時は自動skipする。
+4. **Peerの一方は可能な範囲で同梱BLE低レベルAPIの直接実装にし**、EspBle同士だけの自己整合テストにしない。将来は兄弟ライブラリ`EspBleBluedroid`を相手にした相互接続テストを追加する——スタックそのものが異なるため、より強い検証になる。
+5. 実装だけでは完了とせず、対応するexampleとunit/build/Peerテストを同時に更新する。
+
+## 文書構成
+
+1. 公開APIと文書はBluetooth LEの標準用語を基本とし、Central/Peripheral、GATT Client/Server、HID Host/Deviceを同一視しない。stack ownerは役割中立の`EspBle`とする。
+2. examplesの変数名は役割の明確さを優先する。複数roleが登場する場合は`hidKeyboardHost` / `hidKeyboardDevice`のように明示し、単一roleで自明なexampleでは短い名前を許容する。
+3. **ガイドはGAP → セキュリティ → GATT → UUID → HID → BLE MIDIの章構成とする。** SMPはGAP・GATTと並ぶ独立した層であり、読者の作業順も「つながる → どこまで信頼するかを決める → 属性に要求を書く」であるため、セキュリティをGAP章の一節に押し込まない。役割分担はセキュリティ章がリンク単位の方針、GATT章が属性単位の要求（`encryptedRead`など）。
+4. **「後述」で概念説明を飛ばさない。** examplesと同じく、ガイドもその場で完結して読めることを優先する。
+5. **概念説明はガイドに一本化する。** 二重に持つと必ず食い違う（実際に同一UUID重複の記述が食い違っていた）。`examples/README`はガイドへの対応表を持つ。
+6. **利用者が読む文書は日本語と英語を同期させる。** 対象は root `README`、`docs/README`、`docs/GUIDE_BLE_BASICS`、`docs/STATUS`、`docs/FEATURE_MATRIX`、`docs/RELEASE_CHECKLIST`、`examples/README`と各example README。設計・計画文書（`API_DESIGN` / `CORE_DESIGN` / `DECISIONS` / `REQUIREMENTS` / `TERMINOLOGY` / `HID_*_SPEC` / `PLAN_*` / `TEST_PLAN`）は日本語のみとし、`README.md`にその旨を明記する。
+7. **過去の経緯や完了した作業計画は残さない。** 残すのは現在成立している仕様と、その理由だけ。examplesも最終仕様のみを書き、制限があるときはなぜできないのかを書く。上書きされた判断、撤去したラッパの挙動、完了した是正計画、未提出のupstream報告案はいずれも文書に置かない（必要ならgit履歴から辿る）。
+
+8. **同じ事実を2箇所に書かない。** 使用例はヘッダとexampleとguideが持ち、設計文書には書かない——三重に持つと必ず食い違い、実際にAPI_DESIGNのサンプルが古い署名のまま残っていた。
+9. exampleとテストの`sketch.yaml`のfqbnは`esp32:esp32:esp32s3`（オプション指定なし）に統一する。IDEでボードを選んだままの既定値と一致し、`tools/version_matrix.py`のfqbnとも一致する。
 
 ## 優先順位候補
 
 1. その他の現役標準Service（必要になった時点で）
 2. その他Connectionlessデータ（現役かつ検証容易なものに限る）
 
-候補は採用決定ではありません。ユースケース、実機、Peerテスト方法が揃った機能だけを正式スコープへ移します。
+候補は採用決定ではない。ユースケース、実機、Peerテスト方法が揃った機能だけを正式スコープへ移す。
 
-## 対象外
+## 未確定
 
-- Extended / Periodic Advertising（同梱NimBLEが`CONFIG_BT_NIMBLE_EXT_ADV`無効ビルド、Arduinoライブラリから有効化不可）
-- Bluetooth Classic
-- LE Audio
-- Mesh
-- Matter provisioning
-- Apple/Google固有Serviceの標準搭載
-- OTA/DFU方式の統一
-- ESP-IDF native API
-
-## 要確認
-
-- Arduino-ESP32の最小対応版と更新ポリシー（`core-matrix.yml`ワークフローが生成する`docs/COMPATIBILITY.<version>.md`で計測し、確定する。ローカルではsketchを書き換えて環境を汚すため実行せず、CIで回す）
-- ESP32-S3以外の初期build matrix（`board-matrix.yml`ワークフローが生成する`docs/BOARDS.<version>.md`で計測。NimBLE不在のBluedroid既定core（無印esp32等）はコンパイル時`#error`で拒否する設計）
-- HID Keyboard Hostで追加対応するReport Mapの優先順位
-- 実行時Passkey入力とNumeric Comparisonの応答context
+- Arduino-ESP32の最小対応版と更新ポリシー（`core-matrix.yml`が生成する`docs/COMPATIBILITY.<version>.md`で計測して確定する。ローカル実行はsketchを書き換えて環境を汚すためCIで回す）
+- ESP32-S3以外のbuild matrix（`board-matrix.yml`が生成する`docs/BOARDS.<version>.md`で計測。NimBLE不在のBluedroid既定coreはコンパイル時`#error`で拒否する）
+- HID Hostで追加対応するReport Mapの優先順位
 - public object handleの表現（値型、index+generation、参照class）
-- 暗号化必須keyboardへのDiscovery retry経路と、Keyboard Boot Protocol実装（Protocol Mode 0x2A4E＋Boot Keyboard Input/Output）の市販Host（BIOS等）との互換性、Mouse Boot Report 0x2A33対応要否（manual interoperabilityで確認）
+- Boot Protocolの市販Host（BIOS等）との互換性と、Mouse Boot Report 0x2A33の対応要否（manual interoperabilityで確認する）

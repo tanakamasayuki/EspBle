@@ -1,17 +1,14 @@
 # 用語と命名規則
 
-## 目的
-
-EspBleの公開API、文書、examplesで使用するBluetooth LE用語と命名規則を定義します。コアではBluetooth標準の概念を正確に表し、examplesでは利用者が役割を取り違えない読みやすさを優先します。
+公開API、文書、examplesで使うBluetooth LE用語と命名規則。コアではBluetooth標準の概念を正確に表し、examplesでは利用者が役割を取り違えない読みやすさを優先する。
 
 ## 基本原則
 
-1. 公開型、enum、状態、仕様書ではBluetooth LEの標準用語を使用する。
-2. Central / Peripheral、GATT Client / GATT Server、HID Host / HID Deviceを別の概念として扱う。
+1. 公開型、enum、状態、仕様書ではBluetooth LEの標準用語を使う。
+2. Central / Peripheral、GATT Client / GATT Server、HID Host / HID Deviceを**別の概念**として扱う。
 3. スタック全体をCentralまたはPeripheralへ固定する名前を付けない。
 4. `Host`、`Device`、`Client`、`Server`を文脈なしで単独使用しない。
-5. examplesの変数名は短さより役割の明確さを優先する。
-6. 文脈から役割が自明な小さいexampleでは、過剰に冗長な変数名を強制しない。
+5. examplesの変数名は短さより役割の明確さを優先する。ただし文脈から役割が自明な小さいexampleでは短い名前も許す。
 
 ## 基本用語
 
@@ -38,16 +35,11 @@ HID Host     != Central
 HID Device   != Peripheral
 ```
 
-典型的なHID over GATTでは次の組み合わせになりますが、EspBleコアの制約にはしません。
-
-```text
-HID Host   = Central + GATT Client
-HID Device = Peripheral + GATT Server
-```
+典型的なHID over GATTでは `HID Host = Central + GATT Client` / `HID Device = Peripheral + GATT Server` になるが、これをコアの制約にはしない。
 
 ## 公開APIの命名
 
-root objectは役割中立の`EspBle`とします。`EspBleCentral`や`EspBlePeripheral`のように、stack owner全体を単一roleへ固定する型は作りません。
+root objectは役割中立の`EspBle`とし、stack owner全体にlink roleを含む名前を付けない。
 
 ```cpp
 EspBle ble;
@@ -58,65 +50,34 @@ ble.advertising().start();
 ble.gattServer().addService(serviceUuid);
 ```
 
-roleはConnectionの属性として表します。
+roleはConnectionの属性として表す。
 
 ```cpp
 connection.localRole == EspBleRole::Central;
 connection.localRole == EspBleRole::Peripheral;
 ```
 
-Profileの型名にはprofile roleを含めます。
-
-```cpp
-EspBleHidHost
-EspBleHidKeyboard
-EspBleBatteryClient  // 未実装。standalone Battery Client採用時の命名案
-EspBleBatteryServer  // 未実装。standalone Battery Server採用時の命名案
-```
-
-具体的な公開型名はAPIスパイクで確定しますが、roleを省略して意味が変わる型名は避けます。
+Profileの型名にはprofile roleを含める（`EspBleHidHost` / `EspBleHidKeyboard` / `EspBleMidiDevice` / `EspBleMidiHost`）。roleを省略して意味が変わる型名は避ける。
 
 ## Examplesの変数名
 
-型が正確でも、変数名だけを読んだときに役割を誤解しやすい場合は少し長い名前を使用します。
-
-推奨例:
+型が正確でも、変数名だけを読んだときに役割を誤解しやすい場合は少し長い名前を使う。
 
 ```cpp
-EspBle ble;
+// 複数roleが登場する例
 auto &hidKeyboardDevice = ble.hidKeyboard();
 auto &hidKeyboardHost = ble.hidHost();
 
-auto &gattServer = ble.gattServer();
-auto remoteBatteryService = connection.findService(batteryServiceUuid); // findService()は未実装の将来API案
+// 避けたい例
+auto client = ...;   // BLE link roleかGATT roleか不明
+auto device = ...;   // local/peer、HID/BLEのどれか不明
 ```
 
-避けたい例:
-
-```cpp
-auto &keyboard = ble.hidKeyboard(); // Hostと同時に登場する例では曖昧
-auto client = ...;        // BLE link roleかGATT roleか不明
-auto device = ...;        // local/peer、HID/BLEのどれか不明
-```
-
-ただし、HID Keyboard Deviceだけを説明する短いexampleなど、ファイル名、見出し、型から役割が自明な場合は簡潔な名前を許容します。
-
-```cpp
-auto &keyboard = ble.hidKeyboard();
-```
-
-短い名前を一律に禁止したり、すべてのexampleへ同じ変数名を強制したりしません。複数role、複数connection、bridgeを扱うexampleほど明示的な名前にします。
+HID Keyboard Deviceだけを説明する短いexampleなど、ファイル名・見出し・型から役割が明らかな場合は`auto &keyboard = ble.hidKeyboard();`のような短い名前でよい。すべてのexampleへ同じ変数名を強制しない。
 
 ## ESP32KeyBridge adapter
 
-`Input` / `Output`はBluetooth標準用語ではありませんが、ESP32KeyBridgeのデータフローでは意味が定義されています。そのためadapter側では次のようなアプリケーション固有名を使用できます。
-
-```cpp
-EspBleHidInputAdapter bleHidInput;
-EspBleHidOutputAdapter bleHidOutput;
-```
-
-EspBleコアへInput/Outputというroleを持ち込みません。
+`Input` / `Output`はBluetooth標準用語ではないが、ESP32KeyBridgeのデータフローでは意味が明確なのでadapter側の名前に使う（`EspBleHidInputAdapter` / `EspBleHidOutputAdapter`）。EspBleコアへInput/Outputというroleを持ち込まない。
 
 ## 文書レビュー規則
 

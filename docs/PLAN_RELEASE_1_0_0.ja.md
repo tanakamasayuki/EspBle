@@ -1,18 +1,18 @@
 # 1.0.0リリース前タスクリスト
 
-[PLAN_GUIDE_REVAMP.ja.md](PLAN_GUIDE_REVAMP.ja.md)（Phase 0〜11）が完了したため、残作業をここへ集約する。この文書はリリースまでの唯一の作業リストとし、完了した項目は削除せず結果を書き足す。
+1.0.0リリースまでの作業リスト。完了した項目は結果を1行残す。
 
 **現在の状態**: Peerテスト65 suite / 82 test、unit 7、example compile 91。src配下に`TODO`/`FIXME`は無い。
 
 ## 棚卸しで判明した文書の食い違い
 
-リスト作成のために[DESIGN_DEBT.ja.md](DESIGN_DEBT.ja.md)と[STATUS.ja.md](STATUS.ja.md)を実テストと突き合わせた結果、**3件は作業ではなく記述の訂正**だった。再検証や再実装をしないよう先に分離しておく。
+リスト作成のために設計負債の記録と[STATUS.ja.md](STATUS.ja.md)を実テストと突き合わせた結果、**3件は作業ではなく記述の訂正**だった。再検証や再実装をしないよう先に分離しておく。
 
 | # | 記述 | 実際 |
 |---|---|---|
-| C-1 | DESIGN_DEBT クラスタB（Server送信の接続scope化）が「要実機再確認」 | **検証済み。** `notify_indicate` がbroadcast時の`connectionId=0`、queueされた連続3件、接続指定notify（`id=1`）、indicateをすべてassertしている |
-| C-2 | DESIGN_DEBT「HID Host の再接続時auto-rediscover」が「要実機再確認」 | **検証済み。** `hid_keyboard_host` が、2回目のsecurity確立で**sketchが`discover()`を呼ばない**（`HOST_RECONNECT_SECURITY`）にもかかわらずdiscoveryが走ることをassertしている |
-| C-3 | STATUS「1.0.0前の残作業」項目1 = 「FEATURE_MATRIXのHID拡張のうち1.0.0に含めるものを実装する」 | **対象が空。** FEATURE_MATRIXに未実装のHID拡張は残っていない（USB由来機能は任意DescriptorのCustom HID・BLE MIDI・複数同時接続すべて対応済み）。今後の候補は[DECISIONS.ja.md](DECISIONS.ja.md)の「優先順位候補」にある2件だが、そこに明記のとおり**採用決定ではない** |
+| C-1 | 設計負債の記録でクラスタB（Server送信の接続scope化）が「要実機再確認」 | **検証済み。** `notify_indicate` がbroadcast時の`connectionId=0`、queueされた連続3件、接続指定notify（`id=1`）、indicateをすべてassertしている |
+| C-2 | 設計負債の記録で「HID Host の再接続時auto-rediscover」が「要実機再確認」 | **検証済み。** `hid_keyboard_host` が、2回目のsecurity確立で**sketchが`discover()`を呼ばない**（`HOST_RECONNECT_SECURITY`）にもかかわらずdiscoveryが走ることをassertしている |
+| C-3 | STATUS「1.0.0前の残作業」項目1 = 「FEATURE_MATRIXのHID拡張のうち1.0.0に含めるものを実装する」 | **対象が空。** 未実装のHID拡張は残っていない。今後の候補は[DECISIONS.ja.md](DECISIONS.ja.md)の「優先順位候補」にある2件だが、採用決定ではない |
 
 ---
 
@@ -30,9 +30,9 @@
 
 `hid_custom` Peerを**HIDが本来宣言している方法**へ置き換えた: 各Report Reference（0x2908）をハンドル指定で読み、type byte（1=Input / 2=Output / 3=Feature）で役割を決める。従来のflagsによる代用は捨てず、「宣言されたtypeとflagsが一致すること」の照合として残した（Featureが応答付き書き込みのみであることの確認になる）。ゼロハンドルの拒否と存在しないハンドルの`NotFound`も検証済み。
 
-文書は FEATURE_MATRIX・STATUS・GUIDE_BLE_BASICS（いずれも日英）、DESIGN_DEBT小粒5、TEST_PLAN項目51を更新。`keywords.txt`は`readDescriptor`/`writeDescriptor`が既に登録済みでoverloadは同名のため変更不要（struct fieldは元から列挙していない）。
+文書は FEATURE_MATRIX・STATUS・GUIDE_BLE_BASICS（いずれも日英）とTEST_PLAN項目51を更新。`keywords.txt`は`readDescriptor`/`writeDescriptor`が既に登録済みでoverloadは同名のため変更不要（struct fieldは元から列挙していない）。
 
-出典: [DESIGN_DEBT.ja.md](DESIGN_DEBT.ja.md) 小粒5（Phase 10の作業中に発見）
+出典: 設計負債の記録（小粒5、Phase 10の作業中に発見）
 
 ---
 
@@ -54,7 +54,7 @@
 
 是正: `disconnect()` の時点で当該connectionのqueue済みopを落とす。落とす相手へ送る作業を待つ意味は無く、purge関数自身のコメント（「生存接続の前に詰まらせないため」）とも一致する。実行中のopは触らない。
 
-出典: [DESIGN_DEBT.ja.md](DESIGN_DEBT.ja.md) 小粒2
+出典: 設計負債の記録（小粒2）
 
 ### B-2. NKROのMTU下限拒否 — ✅ 完了
 
@@ -66,7 +66,7 @@
 
 device sketchが `end()`/`begin()` で境界を歩く: 仕様最小の23、上限の1つ下の31、上限そのものの32。23と31が`InvalidArgument`（detailまで照合）、32が受理されることと、拒否を挟んでもkeyboard構成が残っていることを確認する。`preferredMtu`の既定は247なので、この経路はアプリが明示的に下げたときにしか通らない——だからこそ黙って失敗させず明示エラーにしている。
 
-出典: [DESIGN_DEBT.ja.md](DESIGN_DEBT.ja.md) 小粒3
+出典: 設計負債の記録（小粒3）
 
 ---
 
@@ -74,9 +74,9 @@ device sketchが `end()`/`begin()` で境界を歩く: 仕様最小の23、上�
 
 「棚卸しで判明した文書の食い違い」C-1〜C-3を反映した。
 
-- C-1 / C-2: DESIGN_DEBTのクラスタBとHID Host auto-rediscoverの状況行を「要実機再確認」から、**どのテストが何をassertしているか**を名指しした記述へ更新。
+- C-1 / C-2: 「要実機再確認」のままだった2件を、**どのテストが何をassertしているか**で確認して解消。
 - C-3: STATUSの残作業から中身が空になっていた項目1を削除し、以降を繰り上げ（日英）。あわせて「残作業の一覧はこの計画が正本」であることをSTATUSの日英両方へ明記した。
-- AとBの完了に合わせてDESIGN_DEBT小粒2・3・5の状況行も更新（B-1で見つけた是正の経緯も残した）。
+- 設計負債の記録は全項目が完了したため、残すべき判断を[DECISIONS.ja.md](DECISIONS.ja.md)へ移して文書を削除した。
 
 ---
 
@@ -99,33 +99,23 @@ device sketchが `end()`/`begin()` で境界を歩く: 仕様最小の23、上�
 
 **A → B → C → D** を推奨する。
 
-理由は影響の向き。A-1は公開APIが増えるので`keywords.txt`・FEATURE_MATRIX・STATUS・guideに波及し、D-4/D-5より先でなければ二度手間になる。BはAと独立だがどちらもDESIGN_DEBTの状況行を書き換えるため、Cはその後にまとめて一度で済ませる。D-1（`--clean`反復）はコード変更が全部終わってからでないと意味がない。
+理由は影響の向き。A-1は公開APIが増えるので`keywords.txt`・FEATURE_MATRIX・STATUS・guideに波及し、D-4/D-5より先でなければ二度手間になる。Cはコード変更が文書へ及ぶため、AとBの後にまとめて一度で済ませる。D-1（`--clean`反復）はコード変更が全部終わってからでないと意味がない。
 
 D-2とD-3はコード変更に依存しないため、AとBと並行して進められる。**D-3の手動相互運用は実機と外部機器の都合で時間がかかりやすい**ので、着手を遅らせない方がよい。
 
 ---
 
-## D-4 / D-5 の結果
+## D-4 / D-5 で見つけて直したもの
 
-機械的に照合したので、見つかったものを残す。
+| 対象 | 内容 |
+|---|---|
+| `keywords.txt` | 公開APIの欠落。ヘッダと突き合わせて**型10・メソッド60・定数28**を追加。欠けていたのはチェックリストが名指ししている当のもの（`add*Listener()`族、accept list API、report/eventのaccessor、`ESP_BLE_HID_*`定数のほぼ全部） |
+| `library.properties` | `paragraph`が出荷内容より狭かった（複数同時接続・属性ハンドル指定・標準GATT Service・BLE MIDIが未記載）。他フィールドは一致 |
+| `CHANGELOG.md` | tagが1つも無く未公開なので`Unreleased: Initial release`が正。1.0.0見出しへの移動はD-6 |
+| `Gap/ScanResponse` / `Gap/ServiceData` README | 実装に無い`setServiceData()`を記載していた → `addServiceData()`。同一UUIDへの再addは**置き換え**でpayloadが増えないことも追記 |
+| `HID_DEVICE_SPEC.ja.md` | `hidCustom()`とBoot Protocolが丸ごと無かった。NKROのMTU下限は「32以上にします」ではなく`begin()`が**拒否する** |
+| `HID_HOST_SPEC.ja.md` | `setAutoRediscover()`と多listener APIが無かった |
+| `API_DESIGN.ja.md` | 「同時1件だけ受理」「`InvalidState`で拒否」「queueは今後」が実態と逆。構成上限もService 4/Characteristic 16 → **8/32** |
+| `DECISIONS.ja.md` / `STATUS` | ラッパ非依存の判断が完了済み計画の中にしか無く、STATUSがそこへリンクしていた。「アーキテクチャで確定」節を新設して移し、STATUSはそこを指す |
 
-### D-4 メタデータ
-
-- **`keywords.txt`に公開APIの取りこぼしが多数あった。** ヘッダから公開型・公開メソッド・`ESP_BLE_*`定数を抽出して突き合わせ、**型10・メソッド60・定数28**を追加した。欠けていたのはリリースチェックリストが名指ししている当のもの——`add*Listener()`族（12件）、`removeGattListener()`、accept list API、report/eventのaccessor（`buttons()` / `usage()` / `capsLock()`など）、`ESP_BLE_HID_*`定数のほぼ全部。`EspBleCallbackList`のメンバと`*Impl`前方宣言、private helperは利用者が名指ししないため除外した。
-- **`library.properties`の`paragraph`が出荷内容より狭かった。** 複数同時接続・属性ハンドル指定・標準GATT Service・BLE MIDIが書かれていなかったので実態へ更新した。`name` / `sentence` / `category` / `architectures` / `includes` は一致。
-- `CHANGELOG.md`は`Unreleased`に「Initial release」。tagが1つも無く未公開なのでこれが正しい。1.0.0見出しへの移動はD-6。
-
-### D-5 事前確認
-
-- **example READMEに実装に無いAPI名が1件。** `Gap/ScanResponse`と`Gap/ServiceData`のREADMEが`setServiceData()`と書いていたが、実装は`addServiceData()`。修正のついでに`ServiceData`のREADMEへ「同じservice UUIDへ再度addするとブロックが**置き換わる**（2つ目が足されない）ためpayloadは増えない」を追記した——`stop()`→`add`→`start()`を繰り返す例なので、読者が当然抱く疑問である。
-- **`HID_DEVICE_SPEC.ja.md`に`hidCustom()`とBoot Protocolが丸ごと無かった。** どちらも出荷済み・example済み・Peer検証済みなのに仕様書のAPI表に存在しない。Custom HIDの行（上限4 report、予約ID 1〜6の回避、Descriptorをライブラリが検証しないこと）、Boot Protocolの既定offとその理由、NKROのMTU下限を`begin()`が**拒否する**こと（「32以上にします」という願望的な記述だった）、Custom ReportのReport Referenceがハンドル指定でしか読めないことを追記。検証節も現在のsuite構成へ更新した。
-- **`HID_HOST_SPEC.ja.md`に`setAutoRediscover()`と多listener APIの記述が無かった。** 追記した。
-- **`API_DESIGN.ja.md`が「操作は同時1件だけ受理」「次操作を`InvalidState`で拒否」「operation queueは今後の対象」と書いていた**（A-1の作業中に発見・修正済み）。実際は自動FIFOキュー。構成上限も Service 4 / Characteristic 16 → 実際は **8 / 32** だった。
-- **`STATUS`が完了済み計画（`PLAN_GUIDE_REVAMP`）へ利用者を送っていた。** DECISIONSの規約（設計判断はDECISIONSへ、過去の計画は残さない）に従い、**「アーキテクチャで確定」節を新設**してラッパ非依存の判断と理由を移し、STATUSの日英からはそこを指すようにした。ラッパ制約とNimBLE制約の切り分け、部分的な自前化が成立しない理由（`ble_gap_adv_start()`のコールバックが全GAPイベントを受け取り、`BLEServer`へ転送する手段が無い）、ビルド構成由来の唯一の真の不可能（EXT_ADV）を記録した。
-- 相対リンクは**壊れ0件**、利用者向け文書のja/enは見出し構造が**全ペア一致**（116ペア検査）。
-
-### 未決: `docs/memo.ja.md`
-
-ガイド改訂の発端になったスクラッチ（100行）が残っている。DECISIONS #12 は「旧`memo.ja.md`は移行のうえ**削除済み**」と書いているが、それは別物で、これは後から作られたもの。内容はPhase 0〜11でガイドへ吸収済みで、`PLAN_GUIDE_REVAMP.ja.md`が「発端」としてリンクしている。
-
-削除は元に戻せず、リンクも切れるため独断では実施しない。選択肢は「削除してPLAN側のリンクも外す」「冒頭に『吸収済み・作業なし』と明記して残す」「そのまま」。
+検証: 相対リンク壊れ0件、利用者向け文書のja/enは116ペアすべて見出し構造一致。
