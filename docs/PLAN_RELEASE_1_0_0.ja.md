@@ -90,7 +90,7 @@ device sketchが `end()`/`begin()` で境界を歩く: 仕様最小の23、上�
 | D-2 | `board-matrix.yml` / `core-matrix.yml`を手動実行し、`docs/BOARDS.<version>.md` / `docs/COMPATIBILITY.<version>.md`を再生成して**対応環境を確定** | 現在の自動実機検証はESP32-S3中心 |
 | D-3 | 手動相互運用の実施と記録（実施日・OS/機器version付き） | HID Deviceを外部Host 2種類以上（例: Android・Linux）／HID Hostを市販BLE keyboard 1台以上／Just Worksと静的passkeyを外部実装から／汎用BLE toolでscan・GATT read/write・notify |
 | D-4 | メタデータ整合（`library.properties`、`keywords.txt`、`CHANGELOG.md`の`Unreleased`） | **✅ 完了**（versionのbumpはD-6） |
-| D-5 | 事前確認チェックリスト一巡（利用者向け文書の日英同期、`API_DESIGN` / `HID_DEVICE_SPEC` / `HID_HOST_SPEC`と公開APIの一致、examples READMEと実装の一致、完了済み計画や古いAPI名へのリンクが残っていないこと） | **✅ 完了**（`docs/memo.ja.md`の扱いのみ未決） |
+| D-5 | 事前確認チェックリスト一巡（利用者向け文書の日英同期、`API_DESIGN` / `HID_DEVICE_SPEC` / `HID_HOST_SPEC`と公開APIの一致、examples READMEと実装の一致、完了済み計画や古いAPI名へのリンクが残っていないこと） | **✅ 完了** |
 | D-6 | bump scriptのpreview → release workflow（version・CHANGELOG・release branch・tag・GitHub release）→ 公開後にLibrary Managerからの取得と最小exampleのcompileを確認 | 最後 |
 
 ---
@@ -119,3 +119,27 @@ D-2とD-3はコード変更に依存しないため、AとBと並行して進め
 | `DECISIONS.ja.md` / `STATUS` | ラッパ非依存の判断が完了済み計画の中にしか無く、STATUSがそこへリンクしていた。「アーキテクチャで確定」節を新設して移し、STATUSはそこを指す |
 
 検証: 相対リンク壊れ0件、利用者向け文書のja/enは116ペアすべて見出し構造一致。
+
+## あわせて実施した文書整理
+
+不要な文書を削除し、残す文書から経緯を落とした。方針は[DECISIONS.ja.md](DECISIONS.ja.md)の文書構成 #7・#8として記録した。
+
+| 対象 | 前 | 後 |
+|---|---:|---:|
+| `docs/memo.ja.md`（ガイド改訂の発端スクラッチ） | 100 | 削除 |
+| `docs/PLAN_GUIDE_REVAMP.ja.md`（完了済みの審議記録） | 704 | 削除 |
+| `docs/DESIGN_DEBT.ja.md`（全項目完了した是正計画） | 136 | 削除 |
+| `docs/UPSTREAM_REQUEST_*.ja.md` 3件（未提出の報告案） | 約210 | 削除 |
+| `docs/API_DESIGN.ja.md` | 345 | 65 |
+| `docs/DECISIONS.ja.md` | 225 | 148 |
+| `docs/REQUIREMENTS.ja.md` | 177 | 64 |
+| `docs/TERMINOLOGY.ja.md` | 127 | 88 |
+| `docs/CORE_DESIGN.ja.md` | 104 | 76 |
+
+削除の前に、残すべき判断を`DECISIONS`へ移した——ラッパ非依存の理由、同一UUID重複の扱い、`PASSKEY_ACTION`がグローバルリスナへ届かないこと、Descriptor Write eventが`connectionId`を持つこと、常駐worker化を見送る理由。
+
+`API_DESIGN`は345行のうち189行が使用例で、しかも`addCharacteristic(serviceUuid, ...)`のように**実装と違う署名**が残っていた。ヘッダ・example・設計文書の三重管理が食い違いを生んでいたため、使用例を持たない設計規則の文書に変えた。
+
+`DECISIONS`は「いつ判明したか」（"スパイクで確認済み（公開API確定前）"）で章立てされ、**撤去したラッパの挙動を記録した項目が多数残っていた**（`BLEClient`のretire、`deleteClient()`不在、client側MTU変更callback不在など）。話題別に組み替え、現在成立しているものだけを残した。
+
+あわせて実装と食い違っていた記述を2件直した: **Descriptor Write eventがConnection IDを持たない**（実際は`EspBleGattDescriptorWrite::connectionId`が埋まっている。ただしPeerテストでassertしていないため、その旨をSTATUSに明記した）と、**GATT client discoveryのヒープリークがHID/MIDI Hostに残る**（実際は`src`にラッパの使用が1箇所も無く、どの経路も該当しない）。
