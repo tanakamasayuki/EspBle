@@ -2,7 +2,7 @@
 
 [PLAN_GUIDE_REVAMP.ja.md](PLAN_GUIDE_REVAMP.ja.md)（Phase 0〜11）が完了したため、残作業をここへ集約する。この文書はリリースまでの唯一の作業リストとし、完了した項目は削除せず結果を書き足す。
 
-**現在の状態**: Peerテスト64 suite / 80 test（A-1実装後に全件通し実行してグリーン）、unit 7、example compile 91。src配下に`TODO`/`FIXME`は無い。
+**現在の状態**: Peerテスト65 suite / 82 test、unit 7、example compile 91。src配下に`TODO`/`FIXME`は無い。
 
 ## 棚卸しで判明した文書の食い違い
 
@@ -40,7 +40,7 @@
 
 いずれも2台の常設構成で自動テストにできる見込み。[MEMORY: 2台なら自動テスト]の方針に従い、マニュアルテストは作らない。
 
-### B-1. 切断時のGATT queue purgeと、GATT op中の `disconnect()` の遅延実行
+### B-1. 切断時のGATT queue purgeと、GATT op中の `disconnect()` の遅延実行 — ✅ 完了（是正あり）
 
 **実装内容**: `removeConnection`が`purgeQueuedGattOpsLocked(connectionId)`で当該接続のqueue済みopをdropする（generic opは失敗`GattResult`を配送して完了contractを維持、queued HidDiscoverはHID Host切断処理に委ねて静かにdrop、実行中opは無干渉）。`disconnect()`はGATT op中に**rejectせずdeferred**（`ConnectionSlot::pendingDisconnect` ＋ `update()`の`drainPendingDisconnects()`）。
 
@@ -48,25 +48,35 @@
 
 **なぜ検証が要るか**: どちらも「失敗するはずのものが静かに成功したように見える」経路。purgeが効かなければ切断済み接続のopが生存接続を遅延させ、deferredが効かなければ`disconnect()`がbusy時にfalseを返してアプリが切断できたと誤認する。どちらも症状が出るまで気づけない。
 
-**検証案**: 複数opをqueueへ積んだ直後に切断し、(a) その接続のqueue済みopが失敗`GattResult`として**すべて配送される**こと（黙って消えない）、(b) GATT op実行中に`disconnect()`を呼んでも`true`が返り、op完了後に実際に切断されることをassertする。GATT queueは実行中1件＋8件なので、積む数は8件以内にする。
+**完了内容**: Peerテスト `gatt_queue_purge` を新設。4件のreadを積んだ直後に`disconnect()`を呼び、queue済み3件が失敗完了（`InvalidState`）として**すべて配送される**こと、電波に出ていた1件は打ち切られず正常完了し**その成功が切断より先に届く**こと（遅延実行の証拠）、`droppedEventCount()`が0であること、その後の再接続・Discoveryが通ることをassertする。積む数はイベントキュー容量（8）を踏まえて4件に抑えた——大きくすると、このテストが観測したいイベント自体が溢れて落ちる。
+
+**検証中に是正が1件出た。** 最初の実行で4件**すべてが成功**してから切断された。原因は `update()` の順序: `pumpGattQueue()` → `drainPendingDisconnects()` で、drainは「そのconnectionのopが実行中なら待つ」だけなので、pumpが毎回次のopを開始して切断が後回しになる。つまりdeferredは「op完了後」ではなく「**キューが空になった後**」で、キューに積み続けるアプリでは無期限に飢餓し、purge経路は`disconnect()`からは到達不能だった（切断時点でキューが空なので落とすものが無い）。
+
+是正: `disconnect()` の時点で当該connectionのqueue済みopを落とす。落とす相手へ送る作業を待つ意味は無く、purge関数自身のコメント（「生存接続の前に詰まらせないため」）とも一致する。実行中のopは触らない。
 
 出典: [DESIGN_DEBT.ja.md](DESIGN_DEBT.ja.md) 小粒2
 
-### B-2. NKROのMTU下限拒否
+### B-2. NKROのMTU下限拒否 — ✅ 完了
 
 **実装内容**: 「NKRO keyboard configured かつ `preferredMtu < 32`」を`begin()`が`InvalidArgument`で拒否する（29-byte notifyの無言失敗を防ぐため、silentにMTUを上書きせず明示エラーにする方針）。
 
 **未検証**: `hid_keyboard_nkro`の両sketchは`preferredMtu = 64`を設定しているため、**拒否経路を一度も通っていない**。
 
-**検証案**: NKRO有効＋`preferredMtu`既定（23）で`begin()`が`false`＋`INVALID_ARGUMENT`を返し、`preferredMtu = 32`へ上げると成功することをassertする。Peer相手を必要としないが、Peer harnessのDUT側だけで完結させる（現在「single」層は無いため）。
+**完了内容**: 既存の `hid_keyboard_nkro` に `test_nkro_requires_mtu_32` を追加した。**新しいsuiteを作らなかった理由**: このsuiteのpeer sketchが既にNKROを構成済みで、必要な前提がそのまま揃っている。Peer相手を必要としないテストのために「single」層をharnessへ新設するのは、得られるものに対して変更が大きい。
+
+device sketchが `end()`/`begin()` で境界を歩く: 仕様最小の23、上限の1つ下の31、上限そのものの32。23と31が`InvalidArgument`（detailまで照合）、32が受理されることと、拒否を挟んでもkeyboard構成が残っていることを確認する。`preferredMtu`の既定は247なので、この経路はアプリが明示的に下げたときにしか通らない——だからこそ黙って失敗させず明示エラーにしている。
 
 出典: [DESIGN_DEBT.ja.md](DESIGN_DEBT.ja.md) 小粒3
 
 ---
 
-## C. 文書の訂正
+## C. 文書の訂正 — ✅ 完了
 
-上の「棚卸しで判明した文書の食い違い」C-1〜C-3を反映する。C-3はSTATUSの日英両方。あわせて、AとBの完了時にDESIGN_DEBTの該当項目の状況行も更新する。
+「棚卸しで判明した文書の食い違い」C-1〜C-3を反映した。
+
+- C-1 / C-2: DESIGN_DEBTのクラスタBとHID Host auto-rediscoverの状況行を「要実機再確認」から、**どのテストが何をassertしているか**を名指しした記述へ更新。
+- C-3: STATUSの残作業から中身が空になっていた項目1を削除し、以降を繰り上げ（日英）。あわせて「残作業の一覧はこの計画が正本」であることをSTATUSの日英両方へ明記した。
+- AとBの完了に合わせてDESIGN_DEBT小粒2・3・5の状況行も更新（B-1で見つけた是正の経緯も残した）。
 
 ---
 

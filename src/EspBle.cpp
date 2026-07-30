@@ -1251,12 +1251,14 @@ struct EspBleImpl
     slot = ConnectionSlot();
   }
 
-  // Drop queued (not-yet-started) GATT ops for a gone connection so they do not
-  // clog the single-slot queue ahead of live connections. The op in flight
-  // (gattOperating) is left untouched; it finishes with a backend error through
-  // its own worker. Each dropped generic op still gets a failure completion so
-  // the caller's callback contract holds; a queued HID discovery is dropped
-  // quietly (the HID host's disconnect handling covers its cleanup).
+  // Drop queued (not-yet-started) GATT ops for a connection that is gone, or that
+  // the application has asked to disconnect, so they do not clog the single-slot
+  // queue ahead of live connections. The op in flight (gattOperating) is left
+  // untouched; it finishes with a backend error through its own worker, or
+  // normally when the disconnect is still pending. Each dropped generic op still
+  // gets a failure completion so the caller's callback contract holds; a queued
+  // HID discovery is dropped quietly (the HID host's disconnect handling covers
+  // its cleanup).
   void purgeQueuedGattOpsLocked(EspBleConnectionId connectionId)
   {
     size_t readIdx = gattQueueHead;
@@ -9257,6 +9259,12 @@ bool EspBle::disconnect(EspBleConnectionId connectionId, uint8_t reason)
     {
       impl_->forgetDesiredLocked(found->connection.peerAddress);
     }
+    // Queued work aimed at a peer we are dropping is pointless, and leaving it in
+    // the queue would hold the disconnect back: update() pumps the queue before it
+    // drains pending disconnects, so each pump would start the next op and the
+    // disconnect could be starved indefinitely by an application that keeps
+    // enqueueing. Drop it here, with a failure completion each.
+    impl_->purgeQueuedGattOpsLocked(connectionId);
     if (impl_->gattOperating && impl_->gattConnectionId == connectionId)
     {
       // A GATT op is in flight on this connection; defer the disconnect until it

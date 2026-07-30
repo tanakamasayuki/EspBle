@@ -14,7 +14,7 @@ BLE MIDIはbackend非依存のpacket codec（timestamp・running status・複数
 
 ## 検証状況
 
-- Peer test: 64 suite、80 test。接続、GATT、接続ごとdiscovery cache、persistent subscription（再接続時に自動で再購読、registry上限超過の計数）、address privacy（random static address）、iBeacon broadcast/decode、Service Data送受信、Fitness Machine（Indoor Bike Data）、Security、標準Service、複合HID、NKRO、任意Report DescriptorのCustom HID、non-connectable Beacon、BLE MIDI、Health Thermometer、Blood Pressure、Weight Scale、Body Composition、Cycling / Running Speed and Cadence、Cycling Power、Pulse Oximeter、Glucose（RACP手続き）、Location and Navigation、User Data（書き込み→onWritten→notify）、Alert Notification（Control Point→notify）、Immediate Alert（Write Without Response）、Phone Alert Status（Control Point→状態変更notify）、Proximity（Link Loss + Tx Power、2 Service同居）、Reference Time Update（Control Point→state遷移）、Bond Management（Feature Read + Control Point）、Continuous Glucose Monitoring（E2E-CRC）、切断理由コード、接続パラメータ更新、PHY更新（2M）、Service Changed、実行時passkey入力、Numeric Comparison、Directed Advertising（チャネル絞り込み含む）、多重listenerの配送・解除・上限（generic側とHID Host側の両方）、HIDの便利入力API（`pressKey()` / `tapKey()` / `write()` / `tapUsage()` / `setLayout()` / mouse `wheel()` / `click()` / consumer・system `sendUsage()` / gamepad `send()`）が電波へ出すReport、Custom HIDのFeature Report、HID Boot Protocol切替、Custom HID Report Descriptor、non-connectable Beacon（送信間隔制御）、異常系、再接続を実機検証
+- Peer test: 65 suite、82 test。接続、GATT、接続ごとdiscovery cache、persistent subscription（再接続時に自動で再購読、registry上限超過の計数）、address privacy（random static address）、iBeacon broadcast/decode、Service Data送受信、Fitness Machine（Indoor Bike Data）、Security、標準Service、複合HID、NKRO、任意Report DescriptorのCustom HID、non-connectable Beacon、BLE MIDI、Health Thermometer、Blood Pressure、Weight Scale、Body Composition、Cycling / Running Speed and Cadence、Cycling Power、Pulse Oximeter、Glucose（RACP手続き）、Location and Navigation、User Data（書き込み→onWritten→notify）、Alert Notification（Control Point→notify）、Immediate Alert（Write Without Response）、Phone Alert Status（Control Point→状態変更notify）、Proximity（Link Loss + Tx Power、2 Service同居）、Reference Time Update（Control Point→state遷移）、Bond Management（Feature Read + Control Point）、Continuous Glucose Monitoring（E2E-CRC）、切断理由コード、接続パラメータ更新、PHY更新（2M）、Service Changed、実行時passkey入力、Numeric Comparison、Directed Advertising（チャネル絞り込み含む）、切断時のGATT queue purgeとGATT op中`disconnect()`の遅延実行、NKROのMTU下限拒否、多重listenerの配送・解除・上限（generic側とHID Host側の両方）、HIDの便利入力API（`pressKey()` / `tapKey()` / `write()` / `tapUsage()` / `setLayout()` / mouse `wheel()` / `click()` / consumer・system `sendUsage()` / gamepad `send()`）が電波へ出すReport、Custom HIDのFeature Report、HID Boot Protocol切替、Custom HID Report Descriptor、non-connectable Beacon（送信間隔制御）、異常系、再接続を実機検証
 - Manual test（3台目board前提、未接続時は自動skip）: `multi_connection`で複数同時接続・接続ごとのnotify routing・auto-reconnect（`setAutoReconnect`）・再接続時のpersistent subscription復元を実機検証
 - Unit test: keymap変換、HID Report Map parser、BLE MIDI codec、IEEE-11073 medical float codec、CGM E2E-CRC codec、iBeacon codec
 - Example compile: ESP32-S3向け91 example
@@ -45,14 +45,13 @@ BLE MIDIはbackend非依存のpacket codec（timestamp・running status・複数
 
 ## 1.0.0までの残作業
 
-1. `FEATURE_MATRIX.ja.md`のうち1.0.0へ含めるHID拡張を可能な範囲で実装する。
-2. 全Peer + unit testを`--clean`で連続実行し、複数回反復する。
-3. board / Arduino-ESP32 core matrixをCIで再生成し、対応環境を確定する。
-4. 市販BLE Keyboardと複数の外部Hostでmanual interoperabilityを確認する。
-5. metadata、CHANGELOG、example、仕様書を最終APIと照合する。
-6. `library.properties`を含むrelease metadataを1.0.0へ更新し、release workflowを実行する。
+1. 全Peer + unit testを`--clean`で連続実行し、複数回反復する。
+2. board / Arduino-ESP32 core matrixをCIで再生成し、対応環境を確定する。
+3. 市販BLE Keyboardと複数の外部Hostでmanual interoperabilityを確認する。
+4. metadata、CHANGELOG、example、仕様書を最終APIと照合する。
+5. `library.properties`を含むrelease metadataを1.0.0へ更新し、release workflowを実行する。
 
-初回リリース範囲は固定せず、安全に実装・検証できる機能は1.0.0へ含めます。未実装候補は約束ではなく、採用時に仕様、example、unit/build/Peer testを同時に追加します。今後の機能候補は[DECISIONS.ja.md](DECISIONS.ja.md)の「優先順位候補」を正とします。
+残作業の一覧は[PLAN_RELEASE_1_0_0.ja.md](PLAN_RELEASE_1_0_0.ja.md)が正本です。初回リリース範囲は固定せず、安全に実装・検証できる機能は1.0.0へ含めます。未実装候補は約束ではなく、採用時に仕様、example、unit/build/Peer testを同時に追加します。今後の機能候補は[DECISIONS.ja.md](DECISIONS.ja.md)の「優先順位候補」を正とします。
 
 ## 更新ルール
 
