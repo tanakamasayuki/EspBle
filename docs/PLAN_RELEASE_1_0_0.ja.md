@@ -2,7 +2,7 @@
 
 [PLAN_GUIDE_REVAMP.ja.md](PLAN_GUIDE_REVAMP.ja.md)（Phase 0〜11）が完了したため、残作業をここへ集約する。この文書はリリースまでの唯一の作業リストとし、完了した項目は削除せず結果を書き足す。
 
-**この時点での状態**: Peerテスト64 suite / 80 test、unit 7、example compile 91、いずれもグリーン。src配下に`TODO`/`FIXME`は無い。
+**現在の状態**: Peerテスト64 suite / 80 test（A-1実装後に全件通し実行してグリーン）、unit 7、example compile 91。src配下に`TODO`/`FIXME`は無い。
 
 ## 棚卸しで判明した文書の食い違い
 
