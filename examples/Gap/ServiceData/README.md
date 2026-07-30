@@ -23,7 +23,7 @@ This example broadcasts a temperature under the Environmental Sensing Service UU
 ## What it does
 
 - Broadcasts a temperature as Service Data under the Environmental Sensing Service (`0x181A`)
-- Updates the value every 5 seconds. Legacy advertising cannot rewrite a payload in place, so the sketch does `stop()` → `setServiceData()` → `start()`
+- Updates the value every 5 seconds. Legacy advertising cannot rewrite a payload in place, so the sketch does `stop()` → `addServiceData()` → `start()`. Re-adding the same service UUID replaces that block rather than appending a second one, so the payload does not grow
 - Runs as a non-connectable, non-scannable broadcaster
 
 ## Key APIs

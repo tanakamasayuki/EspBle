@@ -23,7 +23,7 @@ Service Data（AD type 0x16）を載せたadvertisingを行う例です。Servic
 ## 動作
 
 - Environmental Sensing Service（`0x181A`）のService Dataとして温度を放送します
-- 5秒ごとに値を更新します。Legacy advertisingにはpayloadをその場で書き換える手段がないため、`stop()` → `setServiceData()` → `start()` で載せ直します
+- 5秒ごとに値を更新します。Legacy advertisingにはpayloadをその場で書き換える手段がないため、`stop()` → `addServiceData()` → `start()` で載せ直します。同じservice UUIDへ再度addするとそのブロックが**置き換わる**（2つ目が足されるのではない）ため、payloadは増えていきません
 - non-connectable・non-scannableのbroadcasterとして動作します
 
 ## 主なAPI

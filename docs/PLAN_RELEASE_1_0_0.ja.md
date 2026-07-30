@@ -89,8 +89,8 @@ device sketchが `end()`/`begin()` で境界を歩く: 仕様最小の23、上�
 | D-1 | `--clean`付きで`pytest`（peer + unit）を通し、それを**複数回**繰り返してflaky failure・heap低下・task残留が無いことを確認 | AとBの実装後。今までの実行は差分単位で、全体の`--clean`反復はまだ |
 | D-2 | `board-matrix.yml` / `core-matrix.yml`を手動実行し、`docs/BOARDS.<version>.md` / `docs/COMPATIBILITY.<version>.md`を再生成して**対応環境を確定** | 現在の自動実機検証はESP32-S3中心 |
 | D-3 | 手動相互運用の実施と記録（実施日・OS/機器version付き） | HID Deviceを外部Host 2種類以上（例: Android・Linux）／HID Hostを市販BLE keyboard 1台以上／Just Worksと静的passkeyを外部実装から／汎用BLE toolでscan・GATT read/write・notify |
-| D-4 | メタデータ整合（`library.properties`、`keywords.txt`、`CHANGELOG.md`の`Unreleased`） | keywords.txtはA-1で公開APIが増えるため、その後に |
-| D-5 | 事前確認チェックリスト一巡（利用者向け文書の日英同期、`API_DESIGN` / `HID_DEVICE_SPEC` / `HID_HOST_SPEC`と公開APIの一致、examples READMEと実装の一致、完了済み計画や古いAPI名へのリンクが残っていないこと） | |
+| D-4 | メタデータ整合（`library.properties`、`keywords.txt`、`CHANGELOG.md`の`Unreleased`） | **✅ 完了**（versionのbumpはD-6） |
+| D-5 | 事前確認チェックリスト一巡（利用者向け文書の日英同期、`API_DESIGN` / `HID_DEVICE_SPEC` / `HID_HOST_SPEC`と公開APIの一致、examples READMEと実装の一致、完了済み計画や古いAPI名へのリンクが残っていないこと） | **✅ 完了**（`docs/memo.ja.md`の扱いのみ未決） |
 | D-6 | bump scriptのpreview → release workflow（version・CHANGELOG・release branch・tag・GitHub release）→ 公開後にLibrary Managerからの取得と最小exampleのcompileを確認 | 最後 |
 
 ---
@@ -102,3 +102,30 @@ device sketchが `end()`/`begin()` で境界を歩く: 仕様最小の23、上�
 理由は影響の向き。A-1は公開APIが増えるので`keywords.txt`・FEATURE_MATRIX・STATUS・guideに波及し、D-4/D-5より先でなければ二度手間になる。BはAと独立だがどちらもDESIGN_DEBTの状況行を書き換えるため、Cはその後にまとめて一度で済ませる。D-1（`--clean`反復）はコード変更が全部終わってからでないと意味がない。
 
 D-2とD-3はコード変更に依存しないため、AとBと並行して進められる。**D-3の手動相互運用は実機と外部機器の都合で時間がかかりやすい**ので、着手を遅らせない方がよい。
+
+---
+
+## D-4 / D-5 の結果
+
+機械的に照合したので、見つかったものを残す。
+
+### D-4 メタデータ
+
+- **`keywords.txt`に公開APIの取りこぼしが多数あった。** ヘッダから公開型・公開メソッド・`ESP_BLE_*`定数を抽出して突き合わせ、**型10・メソッド60・定数28**を追加した。欠けていたのはリリースチェックリストが名指ししている当のもの——`add*Listener()`族（12件）、`removeGattListener()`、accept list API、report/eventのaccessor（`buttons()` / `usage()` / `capsLock()`など）、`ESP_BLE_HID_*`定数のほぼ全部。`EspBleCallbackList`のメンバと`*Impl`前方宣言、private helperは利用者が名指ししないため除外した。
+- **`library.properties`の`paragraph`が出荷内容より狭かった。** 複数同時接続・属性ハンドル指定・標準GATT Service・BLE MIDIが書かれていなかったので実態へ更新した。`name` / `sentence` / `category` / `architectures` / `includes` は一致。
+- `CHANGELOG.md`は`Unreleased`に「Initial release」。tagが1つも無く未公開なのでこれが正しい。1.0.0見出しへの移動はD-6。
+
+### D-5 事前確認
+
+- **example READMEに実装に無いAPI名が1件。** `Gap/ScanResponse`と`Gap/ServiceData`のREADMEが`setServiceData()`と書いていたが、実装は`addServiceData()`。修正のついでに`ServiceData`のREADMEへ「同じservice UUIDへ再度addするとブロックが**置き換わる**（2つ目が足されない）ためpayloadは増えない」を追記した——`stop()`→`add`→`start()`を繰り返す例なので、読者が当然抱く疑問である。
+- **`HID_DEVICE_SPEC.ja.md`に`hidCustom()`とBoot Protocolが丸ごと無かった。** どちらも出荷済み・example済み・Peer検証済みなのに仕様書のAPI表に存在しない。Custom HIDの行（上限4 report、予約ID 1〜6の回避、Descriptorをライブラリが検証しないこと）、Boot Protocolの既定offとその理由、NKROのMTU下限を`begin()`が**拒否する**こと（「32以上にします」という願望的な記述だった）、Custom ReportのReport Referenceがハンドル指定でしか読めないことを追記。検証節も現在のsuite構成へ更新した。
+- **`HID_HOST_SPEC.ja.md`に`setAutoRediscover()`と多listener APIの記述が無かった。** 追記した。
+- **`API_DESIGN.ja.md`が「操作は同時1件だけ受理」「次操作を`InvalidState`で拒否」「operation queueは今後の対象」と書いていた**（A-1の作業中に発見・修正済み）。実際は自動FIFOキュー。構成上限も Service 4 / Characteristic 16 → 実際は **8 / 32** だった。
+- **`STATUS`が完了済み計画（`PLAN_GUIDE_REVAMP`）へ利用者を送っていた。** DECISIONSの規約（設計判断はDECISIONSへ、過去の計画は残さない）に従い、**「アーキテクチャで確定」節を新設**してラッパ非依存の判断と理由を移し、STATUSの日英からはそこを指すようにした。ラッパ制約とNimBLE制約の切り分け、部分的な自前化が成立しない理由（`ble_gap_adv_start()`のコールバックが全GAPイベントを受け取り、`BLEServer`へ転送する手段が無い）、ビルド構成由来の唯一の真の不可能（EXT_ADV）を記録した。
+- 相対リンクは**壊れ0件**、利用者向け文書のja/enは見出し構造が**全ペア一致**（116ペア検査）。
+
+### 未決: `docs/memo.ja.md`
+
+ガイド改訂の発端になったスクラッチ（100行）が残っている。DECISIONS #12 は「旧`memo.ja.md`は移行のうえ**削除済み**」と書いているが、それは別物で、これは後から作られたもの。内容はPhase 0〜11でガイドへ吸収済みで、`PLAN_GUIDE_REVAMP.ja.md`が「発端」としてリンクしている。
+
+削除は元に戻せず、リンクも切れるため独断では実施しない。選択肢は「削除してPLAN側のリンクも外す」「冒頭に『吸収済み・作業なし』と明記して残す」「そのまま」。

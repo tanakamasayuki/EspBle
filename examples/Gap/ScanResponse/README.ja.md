@@ -38,7 +38,7 @@ scan responseに何か1つでも設定すると、この自動配置は解除さ
 
 - `ble.advertising().data()` — advertising payloadのbuilder。`setName()`等の既存setterはこれへの転送
 - `ble.advertising().scanResponse()` — scan response payloadのbuilder
-- `EspBleAdvertisingData::setName()` / `addServiceUuid()` / `setManufacturerData()` / `setServiceData()` / `setAppearance()` / `setTxPowerIncluded()`
+- `EspBleAdvertisingData::setName()` / `addServiceUuid()` / `setManufacturerData()` / `addServiceData()` / `setAppearance()` / `setTxPowerIncluded()`
 - `ble.advertising().setScanResponseEnabled(false)` — scan responseそのものを無効化（純粋なbroadcaster用。[Beacon](../Beacon/)を参照）
 
 ## 注意

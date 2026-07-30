@@ -38,7 +38,7 @@ Every AD structure costs 2 bytes (length + type) on top of its value. The sketch
 
 - `ble.advertising().data()` — builder for the advertising payload; the existing setters such as `setName()` forward to it
 - `ble.advertising().scanResponse()` — builder for the scan response payload
-- `EspBleAdvertisingData::setName()` / `addServiceUuid()` / `setManufacturerData()` / `setServiceData()` / `setAppearance()` / `setTxPowerIncluded()`
+- `EspBleAdvertisingData::setName()` / `addServiceUuid()` / `setManufacturerData()` / `addServiceData()` / `setAppearance()` / `setTxPowerIncluded()`
 - `ble.advertising().setScanResponseEnabled(false)` — disable the scan response entirely (for a pure broadcaster; see [Beacon](../Beacon/))
 
 ## Notes

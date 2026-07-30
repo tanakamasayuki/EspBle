@@ -9,6 +9,8 @@ ble.hidHost().discover(connectionId);
 
 security有効時は`onSecurityChanged()`成功後に`discover()`を呼びます。再接続時は新しいConnection IDで再Discoveryします。
 
+再Discoveryは`setAutoRediscover(true)`（既定off）で自動化できます。HID Hostは汎用subscription registryを使わないため`persistentSubscriptions`の対象外で、その代わりに一度Discoveryできたpeer addressを記憶し、再接続後のsecurity確立で自動的に`discover()`を再発行します。アプリが従来どおり`onSecurityChanged`で手動`discover()`を呼んでいる場合は自動側をskipするため、二重Discoveryにはなりません。
+
 ## Discoveryと配送
 
 Report Map parserはApplication collectionとReport IDから次を識別します。
@@ -44,4 +46,4 @@ keyboard固有APIとして`setKeyboardLeds()`、`setKeyboardLayout()`、`keyboar
 
 ## 検証
 
-`tests/peer/hid_keyboard_host`は全6 profileの複合EspBle Deviceに接続し、横断Discovery、全Input購読、keyboard layout、mouse、consumer、system、gamepad field、Vendor Input / Output / Feature、LED Output、Battery、切断releaseを実機検証します。NKRO、boot keyboard、rollover、queue overflow、KeyBridge listener共存は各専用Peer suiteで回帰します。
+`tests/peer/hid_keyboard_host`は全6 profileの複合EspBle Deviceに接続し、横断Discovery、全Input購読、keyboard layout、mouse、consumer、system、gamepad field、Vendor Input / Output / Feature、LED Output、Battery、切断release、および`setAutoRediscover(true)`による再接続後の自動再Discoveryを実機検証します。多listener（`addKeyboardListener()`等の配送・選択解除・上限4件）は`tests/peer/hid_convenience`で検証します。NKRO、boot keyboard、rollover、queue overflow、KeyBridge listener共存は各専用Peer suiteで回帰します。

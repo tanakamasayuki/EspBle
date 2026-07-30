@@ -6,7 +6,7 @@ This document tracks only the current implementation status, the known limits, a
 
 ## Where things stand
 
-Using the NimBLE host API bundled with Arduino-ESP32 3.3.11 directly, central / peripheral, GATT client / server, security, and composite HID device / host all work. **There is no dependency on the bundled `BLE` wrapper classes** (`BLEDevice`, `BLEClient`, `BLEServer`, `BLEScan`, `BLEAdvertising` and the rest); the history and reasoning are in [PLAN_GUIDE_REVAMP.ja.md](PLAN_GUIDE_REVAMP.ja.md), Phase 4b. There is a peer test environment using two ESP32-S3 boards plus host unit tests, and every published example is compile-verified for the ESP32-S3.
+Using the NimBLE host API bundled with Arduino-ESP32 3.3.11 directly, central / peripheral, GATT client / server, security, and composite HID device / host all work. **There is no dependency on the bundled `BLE` wrapper classes** (`BLEDevice`, `BLEClient`, `BLEServer`, `BLEScan`, `BLEAdvertising` and the rest); the reasoning is recorded in [DECISIONS.ja.md](DECISIONS.ja.md) under "アーキテクチャで確定" (Japanese, as with the other design documents). There is a peer test environment using two ESP32-S3 boards plus host unit tests, and every published example is compile-verified for the ESP32-S3.
 
 HID can compose keyboard (6KRO / NKRO), mouse, consumer control, system control, gamepad, and vendor input / output / feature into a single service. The host discovers every supported input report and dispatches it to a per-kind event.
 

@@ -6,7 +6,7 @@
 
 ## 現在地
 
-Arduino-ESP32 3.3.11に同梱されるNimBLEホストAPIを直接使い、Central / Peripheral、GATT Client / Server、Security、複合HID Device / Hostが動作しています。**同梱の`BLE`ラッパクラス（`BLEDevice` / `BLEClient` / `BLEServer` / `BLEScan` / `BLEAdvertising` など）には依存していません**（経緯と理由は[PLAN_GUIDE_REVAMP.ja.md](PLAN_GUIDE_REVAMP.ja.md) Phase 4b）。ESP32-S3 2台を使うPeerテスト環境とhost unit testがあり、公開exampleはESP32-S3でコンパイル検証されています。
+Arduino-ESP32 3.3.11に同梱されるNimBLEホストAPIを直接使い、Central / Peripheral、GATT Client / Server、Security、複合HID Device / Hostが動作しています。**同梱の`BLE`ラッパクラス（`BLEDevice` / `BLEClient` / `BLEServer` / `BLEScan` / `BLEAdvertising` など）には依存していません**（理由は[DECISIONS.ja.md](DECISIONS.ja.md)の「アーキテクチャで確定」）。ESP32-S3 2台を使うPeerテスト環境とhost unit testがあり、公開exampleはESP32-S3でコンパイル検証されています。
 
 HIDはKeyboard（6KRO / NKRO）、Mouse、Consumer Control、System Control、Gamepad、Vendor Input / Output / Featureを1つのServiceへ合成できます。Hostは対応する全Input ReportをDiscoveryし、種別別eventへ配送します。
 

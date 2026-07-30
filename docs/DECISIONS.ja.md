@@ -173,6 +173,20 @@
 
 4. 汎用のService Data API（`EspBleAdvertising::addServiceData(uuid, data, length)`で最大4ブロック送信、`EspBleScanResult::serviceData[]`/`serviceDataCount`/`hasServiceData()`/`serviceDataFor(uuid, data)`で受信）を追加する。標準16-bitサービスのService Data（AD 0x16）やservice-dataビーコン一般で使える汎用機能。`service_data` Peerで送受信を検証。なお当初Eddystone対応（URL/UID/TLM）を実装したが、Eddystone/Physical Webは事実上終息したプロトコルのため、デッドプロトコルの保守面を避けてEddystone固有部分（codec・example・test）は削除した（判断: 現実の利用価値でスコープを決める）。iBeaconは現役のため維持し、汎用Service Data APIも独立して有用なため残した。
 
+## アーキテクチャで確定
+
+1. **同梱の`BLE`ラッパクラスには依存せず、NimBLEホストAPIを直接使う。** `BLEDevice` / `BLEClient` / `BLEServer` / `BLEScan` / `BLEAdvertising` などを一切使わない。
+
+   理由: 「backendの制約」として記録してきたものの大半が、調査の結果**ラッパの制約であってNimBLEの制約ではなかった**。同一Service内の同一UUID Characteristic（`BLEService::addCharacteristic()`が既存を再利用）、同一UUID Serviceが1つに潰れるCentral側（`BLEClient::m_servicesMap`がUUIDキー）、Directed Advertising（`start()`が`direct_addr = NULL`固定）、スキャン側Filter Accept List（`filter_policy`非公開）、advertisingチャネルマップ、`connect()`のtimeout（`esp_ble_gattc_open()`経由でcancelが空振り）、indication確認のcharacteristic単位セマフォ——いずれもホストAPIを直接呼べば解決する。**GATT client discoveryのヒープリーク（約2.6 KB/discovery）も、ラッパのremoteオブジェクトを作らなくなることで消える。**
+
+   個別に回避せず全面的に外したのは、**部分的な自前化が成立しないため**。NimBLEでは`ble_gap_adv_start()`に渡したコールバックがその広告から成立した接続の全GAPイベント（切断・購読・MTU・indication確認）を受け取るので、広告だけ自前にすると`BLEServer`へイベントが届かずGATT Serverが機能しなくなる。転送もできない——`BLEServer::handleGATTServerEvent()`はprivateで、`BLEDevice::setCustomGapHandler()`はNimBLEパスでは一度も呼ばれない死んだAPIである。
+
+   ビルド構成由来の制約だけは残る: Extended / Periodic Advertisingは`CONFIG_BT_NIMBLE_EXT_ADV`無効でビルドされたプリビルドライブラリに関数自体が無く、**唯一の真の不可能**として[FEATURE_MATRIX.ja.md](FEATURE_MATRIX.ja.md)の対象外に置く。
+
+2. **同一UUIDの重複は仕様が認める限り両役割で扱う。** Peripheralは属性テーブルを`ble_gatts_add_svcs()`で自前に組み、対象は`addService()` / `addCharacteristic()`が返すハンドルで指定する。Centralはdiscoveryを自前に走らせ、read / write / 購読 / descriptor操作をすべて属性ハンドルへ直接発行する。UUIDは「型」であって「どれか」ではないため、UUIDだけを対象指定の手段にしない。
+
+   例外は**再接続時の購読自動復元**で、peerアドレスとUUIDを手掛かりにするためUUIDが一意なCharacteristicに限られる。該当する場合はアプリがハンドル指定で再購読する。
+
 ## ガイドと文書構成で確定
 
 1. **ガイドはGAP → セキュリティ → GATT → UUIDの順の5章構成とする。** SMPはGAP・GATTと並ぶ独立した層であり、読者の作業順も「つながる → どこまで信頼するかを決める → 属性に要求を書く」であるため、セキュリティをGAP章の一節に押し込まない。役割分担はセキュリティ章がリンク単位の方針、GATT章が属性単位の要求（`encryptedRead` など）。
