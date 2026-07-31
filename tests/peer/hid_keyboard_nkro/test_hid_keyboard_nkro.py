@@ -69,6 +69,48 @@ def test_nkro_whole_state_is_one_report(dut, peers):
     dut.expect_exact("HOST_NKRO_STATE count=0 high=0 b=0 b_released=1", timeout=20)
 
 
+def test_held_state_tracks_what_the_host_was_told(dut, peers):
+    """`heldState()` is the NKRO state the host was last told about, so a caller
+    that rebuilds the whole state each cycle can compare against it instead of
+    keeping a shadow copy — the library deliberately does not suppress duplicate
+    reports itself, because after a `releaseAll()` it cannot know what the host
+    still holds.
+
+    It must reflect every path that sends: the whole-state overload, the
+    incremental `releaseUsage()`, and `releaseAll()`.
+    """
+    device = peers["device"]
+
+    device.write("w")
+    device.expect_exact(
+        "DEVICE_NKRO_STATE_SENT success=1 represented=1 modifiers=2", timeout=20
+    )
+    dut.expect(NKRO_STATE_PATTERN, timeout=20)
+
+    # Eight bitmap usages plus LeftShift, which lives in `modifiers`.
+    device.write("h")
+    device.expect_exact(
+        "DEVICE_HELD count=9 a=1 high=1 shift=1 modifiers=2", timeout=10
+    )
+
+    # An incremental release must move the held state too, not just the wire.
+    device.write("b")
+    device.expect_exact("DEVICE_RELEASE_USAGE success=1", timeout=10)
+    dut.expect(NKRO_STATE_PATTERN, timeout=20)
+    device.write("h")
+    device.expect_exact(
+        "DEVICE_HELD count=8 a=1 high=1 shift=1 modifiers=2", timeout=10
+    )
+
+    device.write("r")
+    device.expect_exact("DEVICE_RELEASE_ALL success=1", timeout=10)
+    dut.expect(NKRO_STATE_PATTERN, timeout=20)
+    device.write("h")
+    device.expect_exact(
+        "DEVICE_HELD count=0 a=0 high=0 shift=0 modifiers=0", timeout=10
+    )
+
+
 def test_nkro_requires_mtu_32(dut, peers):
     """An NKRO report is 29 bytes, so it needs an MTU of at least 32 (29 plus the
     3-byte ATT header). `begin()` refuses a lower `preferredMtu` up front instead of

@@ -653,12 +653,13 @@ struct EspBleHidKeyboardNkroReport
   static constexpr uint8_t MaxBitmapUsage = 0xdf;
 
   uint8_t modifiers = 0;
-  uint8_t keys[BitmapSize] = {};
+  // A bitmap, not a usage array (see EspBleHidKeyboardState::bitmap).
+  uint8_t bitmap[BitmapSize] = {};
 
   void clear()
   {
     modifiers = 0;
-    for (size_t index = 0; index < BitmapSize; ++index) keys[index] = 0;
+    for (size_t index = 0; index < BitmapSize; ++index) bitmap[index] = 0;
   }
 
   // Returns false when the usage is above MaxBitmapUsage and is not a modifier
@@ -671,7 +672,7 @@ struct EspBleHidKeyboardNkroReport
       return true;
     }
     if (usage > MaxBitmapUsage) return false;
-    keys[usage >> 3] |= static_cast<uint8_t>(1u << (usage & 7));
+    bitmap[usage >> 3] |= static_cast<uint8_t>(1u << (usage & 7));
     return true;
   }
 
@@ -683,7 +684,7 @@ struct EspBleHidKeyboardNkroReport
       return true;
     }
     if (usage > MaxBitmapUsage) return false;
-    keys[usage >> 3] &= static_cast<uint8_t>(~(1u << (usage & 7)));
+    bitmap[usage >> 3] &= static_cast<uint8_t>(~(1u << (usage & 7)));
     return true;
   }
 
@@ -694,7 +695,7 @@ struct EspBleHidKeyboardNkroReport
       return (modifiers & static_cast<uint8_t>(1u << (usage - 0xe0))) != 0;
     }
     if (usage > MaxBitmapUsage) return false;
-    return (keys[usage >> 3] & static_cast<uint8_t>(1u << (usage & 7))) != 0;
+    return (bitmap[usage >> 3] & static_cast<uint8_t>(1u << (usage & 7))) != 0;
   }
 };
 
@@ -732,8 +733,11 @@ struct EspBleHidKeyboardState
 
   EspBleConnectionId connectionId = 0;
   uint8_t reportId = 0;
-  uint8_t keys[BitmapSize] = {};
-  uint8_t changedKeys[BitmapSize] = {};
+  // A bitmap, not a usage array: bit (usage & 7) of byte (usage >> 3) is the
+  // state of that usage. The 6KRO EspBleHidKeyboardInputReport::keys[6] holds
+  // usages instead, which is why the two carry different names.
+  uint8_t bitmap[BitmapSize] = {};
+  uint8_t changedBitmap[BitmapSize] = {};
   uint8_t modifiers = 0;
   bool numLock = false;
   bool capsLock = false;
@@ -743,17 +747,17 @@ struct EspBleHidKeyboardState
 
   bool isDown(uint8_t usage) const
   {
-    return (keys[usage >> 3] & static_cast<uint8_t>(1u << (usage & 7))) != 0;
+    return (bitmap[usage >> 3] & static_cast<uint8_t>(1u << (usage & 7))) != 0;
   }
   bool wasPressed(uint8_t usage) const
   {
     return isDown(usage) &&
-      (changedKeys[usage >> 3] & static_cast<uint8_t>(1u << (usage & 7))) != 0;
+      (changedBitmap[usage >> 3] & static_cast<uint8_t>(1u << (usage & 7))) != 0;
   }
   bool wasReleased(uint8_t usage) const
   {
     return !isDown(usage) &&
-      (changedKeys[usage >> 3] & static_cast<uint8_t>(1u << (usage & 7))) != 0;
+      (changedBitmap[usage >> 3] & static_cast<uint8_t>(1u << (usage & 7))) != 0;
   }
 };
 
@@ -1186,6 +1190,17 @@ public:
   // valid and keeps working in both modes, and this report replaces the state
   // that pressUsage() / releaseUsage() build up.
   bool sendReport(const EspBleHidKeyboardNkroReport &report);
+  // The NKRO state the host was last told about, for callers that build the
+  // whole state each cycle: compare against it to skip an unchanged report, or
+  // re-synchronise after losing track without going through releaseAll().
+  // The library never suppresses a duplicate report on its own — after
+  // releaseAll() or a Protocol Mode switch, only the caller knows whether its
+  // state is still the one the host holds.
+  // NKRO only: with NKRO disabled this stays cleared, because a 6KRO report is
+  // held as the 8-byte wire value instead. In Boot Protocol Mode it is what was
+  // requested, not what went out: the bitmap is folded into an 8-byte boot
+  // report on the way to the host.
+  const EspBleHidKeyboardNkroReport &heldState() const;
   // A subscribed HID Host is present and reports can go out right now: a
   // Peripheral connection that is encrypted (when security is enabled) and has
   // subscribed to this profile's Input Report CCCD (the Boot Keyboard Input
@@ -1229,6 +1244,9 @@ private:
   bool realize();
   bool sendRawReport(uint8_t reportId, const uint8_t *data, size_t length);
   bool sendCustomInput(uint8_t reportId, const uint8_t *data, size_t length);
+  // Put nkroState_ on the wire as the 29-byte NKRO Input Report. Every NKRO
+  // send path funnels through here so the layout is written down once.
+  bool sendHeldNkroState();
   // The Host selected Boot Protocol Mode and this report travels over the
   // dedicated Boot Keyboard Input Report instead of the Report-protocol one.
   bool useBootKeyboard(uint8_t reportId) const;
@@ -1259,8 +1277,10 @@ private:
   ProtocolModeCallback protocolModeCallback_;
   EspBleKeyboardLayout layout_ = EspBleKeyboardLayout::EnUs;
   bool nkroEnabled_ = false;
-  uint8_t nkroModifiers_ = 0;
-  uint8_t nkroBitmap_[28] = {};
+  // The NKRO state the host was last told about. Holding it as the report type
+  // itself keeps one definition of the modifier routing (0xE0-0xE7) and of the
+  // bitmap layout, instead of repeating the bit math in every send path.
+  EspBleHidKeyboardNkroReport nkroState_;
 };
 
 class EspBleHidMouse

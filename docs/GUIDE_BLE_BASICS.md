@@ -877,6 +877,8 @@ ble.hidKeyboard().sendReport(report);
 
 The incremental `pressUsage()` / `releaseUsage()` API can also hold more than six keys, but each single key change is its own notification, so simultaneous presses and releases are paced by the connection interval. If you already keep the full pressed-key state each cycle, the state overload is the direct fit.
 
+Even when you send every cycle, **the library never suppresses a report that matches the previous one.** After a `releaseAll()` or a Protocol Mode switch it cannot decide what the host actually still holds. If you want that suppression, `heldState()` returns the state the host was last told about — compare against it.
+
 **Layouts and Unicode** — HID carries not characters but **the physical position number of a key** (a usage). The same number is a different character on a JIS layout and a US layout. EspBle carries conversion tables for 19 layouts: the device side maps a character such as `write("あ")` back to a usage, and the host side converts an incoming usage to a character. **Pick the wrong table and only the symbols come out wrong.**
 
 **LEDs go the other way** — the Caps Lock LED and friends are sent from the host to the device (an output report), the opposite direction from key input. The device side receives them at `onOutputReport()`.

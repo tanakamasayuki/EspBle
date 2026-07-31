@@ -66,6 +66,23 @@ void loop()
         represented ? 1 : 0,
         report.modifiers);
     }
+    else if (command == 'h')
+    {
+      // heldState() must be what the host was last told, whichever API set it:
+      // the whole-state overload, the 6-key overload, or the incremental
+      // pressUsage() / releaseUsage(). A caller that builds the state itself
+      // compares against this to skip an unchanged report.
+      const EspBleHidKeyboardNkroReport &held = ble.hidKeyboard().heldState();
+      unsigned count = 0;
+      for (unsigned usage = 0; usage <= 0xff; ++usage)
+        if (held.isDown(static_cast<uint8_t>(usage))) ++count;
+      Serial.printf("DEVICE_HELD count=%u a=%u high=%u shift=%u modifiers=%u\n",
+        count,
+        held.isDown(0x04) ? 1 : 0,
+        held.isDown(0x87) ? 1 : 0,
+        held.isDown(0xe1) ? 1 : 0,
+        held.modifiers);
+    }
     else if (command == 'b')
       Serial.printf("DEVICE_RELEASE_USAGE success=%u\n",
         ble.hidKeyboard().releaseUsage(0x05) ? 1 : 0);

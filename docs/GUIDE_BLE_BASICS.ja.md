@@ -877,6 +877,8 @@ ble.hidKeyboard().sendReport(report);
 
 `pressUsage()` / `releaseUsage()` の増分APIでも7キー以上を押せますが、1キーの変化ごとに1回の通知になるため、同時押し・同時離しが接続間隔に律速されます。押下状態を毎周期まるごと持っている作りなら、状態版のほうが素直です。
 
+毎周期送る作りでも、**ライブラリ側では「前回と同じなら送らない」抑制をしません。** `releaseAll()` やProtocol Modeの切り替えを挟んだあと、Hostが実際に何を保持しているかはライブラリからは決められないためです。抑制したい場合は `heldState()` が「Hostへ最後に伝えた状態」を返すので、それと比べてください。
+
 **レイアウトとUnicode** — HIDが運ぶのは文字ではなく**キーの物理的な位置番号**（usage）です。同じ番号がJIS配列とUS配列で違う文字になります。EspBleは19レイアウトの変換表を持ち、Device側は `write("あ")` のような文字からusageを逆引きし、Host側は届いたusageを文字へ変換します。**変換表を選び間違えると、記号だけが違う文字になります。**
 
 **LEDは逆方向** — Caps LockなどのLEDは、Host側からDeviceへ送られます（Output Report）。キー入力と逆向きです。Device側は `onOutputReport()` で受け取ります。

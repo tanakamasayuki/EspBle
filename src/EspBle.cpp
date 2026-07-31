@@ -4025,7 +4025,7 @@ struct EspBleHidKeyboardHostImpl
     uint8_t systemUsage = 0;
     uint8_t gamepadData[64] = {};
     size_t gamepadLength = 0;
-    uint8_t keys[EspBleHidKeyboardState::BitmapSize] = {};
+    uint8_t bitmap[EspBleHidKeyboardState::BitmapSize] = {};
     uint8_t modifiers = 0;
     bool numLock = false;
     bool capsLock = false;
@@ -4212,7 +4212,7 @@ struct EspBleHidKeyboardHostImpl
         const size_t sourceBit = format.keyboardBitmapBitOffset + bit;
         if (usage < 256 &&
             (data[sourceBit >> 3] & static_cast<uint8_t>(1u << (sourceBit & 7))) != 0)
-          event.state.keys[usage >> 3] |= static_cast<uint8_t>(1u << (usage & 7));
+          event.state.bitmap[usage >> 3] |= static_cast<uint8_t>(1u << (usage & 7));
       }
     }
     else
@@ -4222,14 +4222,14 @@ struct EspBleHidKeyboardHostImpl
       {
         const uint8_t usage = data[index + 2];
         if (usage >= 0x04)
-          event.state.keys[usage >> 3] |= static_cast<uint8_t>(1u << (usage & 7));
+          event.state.bitmap[usage >> 3] |= static_cast<uint8_t>(1u << (usage & 7));
       }
     }
     for (uint8_t bit = 0; bit < 8; ++bit)
       if ((event.state.modifiers & static_cast<uint8_t>(1u << bit)) != 0)
       {
         const uint8_t usage = static_cast<uint8_t>(0xe0 + bit);
-        event.state.keys[usage >> 3] |= static_cast<uint8_t>(1u << (usage & 7));
+        event.state.bitmap[usage >> 3] |= static_cast<uint8_t>(1u << (usage & 7));
       }
 
     {
@@ -4247,14 +4247,14 @@ struct EspBleHidKeyboardHostImpl
       bool changed = connection->modifiers != event.state.modifiers;
       for (size_t index = 0; index < EspBleHidKeyboardState::BitmapSize; ++index)
       {
-        event.state.changedKeys[index] = connection->keys[index] ^ event.state.keys[index];
-        changed = changed || event.state.changedKeys[index] != 0;
+        event.state.changedBitmap[index] = connection->bitmap[index] ^ event.state.bitmap[index];
+        changed = changed || event.state.changedBitmap[index] != 0;
       }
       if (!changed)
       {
         return;
       }
-      memcpy(connection->keys, event.state.keys, sizeof(connection->keys));
+      memcpy(connection->bitmap, event.state.bitmap, sizeof(connection->bitmap));
       connection->modifiers = event.state.modifiers;
       pushEventLocked(event, false);
     }
@@ -6624,8 +6624,7 @@ void EspBleHidKeyboard::enableNkro(bool enable)
     return;
   }
   nkroEnabled_ = enable;
-  nkroModifiers_ = 0;
-  memset(nkroBitmap_, 0, sizeof(nkroBitmap_));
+  nkroState_.clear();
   owner_->clearError();
 }
 
@@ -7065,18 +7064,30 @@ bool EspBleHidKeyboard::realize()
   return true;
 }
 
+bool EspBleHidKeyboard::sendHeldNkroState()
+{
+  uint8_t value[1 + EspBleHidKeyboardNkroReport::BitmapSize] = {nkroState_.modifiers};
+  memcpy(value + 1, nkroState_.bitmap, sizeof(nkroState_.bitmap));
+  return sendRawReport(ESP_BLE_HID_REPORT_ID_KEYBOARD, value, sizeof(value));
+}
+
+const EspBleHidKeyboardNkroReport &EspBleHidKeyboard::heldState() const
+{
+  return nkroState_;
+}
+
 bool EspBleHidKeyboard::sendReport(const EspBleHidKeyboardReport &report)
 {
   if (nkroEnabled_)
   {
-    nkroModifiers_ = report.modifiers;
-    memset(nkroBitmap_, 0, sizeof(nkroBitmap_));
+    nkroState_.clear();
+    nkroState_.modifiers = report.modifiers;
+    // A 6KRO report carries modifiers in its own byte, so key slots holding a
+    // modifier usage are dropped rather than routed, as they always were.
     for (uint8_t usage : report.keys)
-      if (usage != 0 && usage <= 0xdf)
-        nkroBitmap_[usage >> 3] |= static_cast<uint8_t>(1u << (usage & 7));
-    uint8_t value[29] = {nkroModifiers_};
-    memcpy(value + 1, nkroBitmap_, sizeof(nkroBitmap_));
-    return sendRawReport(ESP_BLE_HID_REPORT_ID_KEYBOARD, value, sizeof(value));
+      if (usage != 0 && usage <= EspBleHidKeyboardNkroReport::MaxBitmapUsage)
+        nkroState_.press(usage);
+    return sendHeldNkroState();
   }
   uint8_t value[8] = {report.modifiers, 0};
   memcpy(value + 2, report.keys, sizeof(report.keys));
@@ -7094,11 +7105,8 @@ bool EspBleHidKeyboard::sendReport(const EspBleHidKeyboardNkroReport &report)
   }
   // Replace the incremental state so a later pressUsage() / releaseUsage() sees
   // what the Host was actually told.
-  nkroModifiers_ = report.modifiers;
-  memcpy(nkroBitmap_, report.keys, sizeof(nkroBitmap_));
-  uint8_t value[29] = {nkroModifiers_};
-  memcpy(value + 1, nkroBitmap_, sizeof(nkroBitmap_));
-  return sendRawReport(ESP_BLE_HID_REPORT_ID_KEYBOARD, value, sizeof(value));
+  nkroState_ = report;
+  return sendHeldNkroState();
 }
 
 bool EspBleHidKeyboard::useBootKeyboard(uint8_t reportId) const
@@ -7392,19 +7400,15 @@ bool EspBleHidKeyboard::pressUsage(uint8_t usage, uint8_t modifiers, uint32_t)
 {
   if (nkroEnabled_)
   {
-    if (usage >= 0xe0 && usage <= 0xe7)
-      nkroModifiers_ |= static_cast<uint8_t>(1u << (usage - 0xe0));
-    else if (usage <= 0xdf)
-      nkroBitmap_[usage >> 3] |= static_cast<uint8_t>(1u << (usage & 7));
-    else
+    // press() reports a usage this report cannot represent; keep the error
+    // detail the incremental API has always returned for it.
+    if (!nkroState_.press(usage))
     {
       owner_->setError(EspBleError::InvalidArgument, "NKRO keyboard usage must be at most 0xe7");
       return false;
     }
-    nkroModifiers_ |= modifiers;
-    uint8_t value[29] = {nkroModifiers_};
-    memcpy(value + 1, nkroBitmap_, sizeof(nkroBitmap_));
-    return sendRawReport(ESP_BLE_HID_REPORT_ID_KEYBOARD, value, sizeof(value));
+    nkroState_.modifiers |= modifiers;
+    return sendHeldNkroState();
   }
   EspBleHidKeyboardReport report;
   report.modifiers = modifiers;
@@ -7415,18 +7419,12 @@ bool EspBleHidKeyboard::pressUsage(uint8_t usage, uint8_t modifiers, uint32_t)
 bool EspBleHidKeyboard::releaseUsage(uint8_t usage)
 {
   if (!nkroEnabled_) return releaseAll();
-  if (usage >= 0xe0 && usage <= 0xe7)
-    nkroModifiers_ &= static_cast<uint8_t>(~(1u << (usage - 0xe0)));
-  else if (usage <= 0xdf)
-    nkroBitmap_[usage >> 3] &= static_cast<uint8_t>(~(1u << (usage & 7)));
-  else
+  if (!nkroState_.release(usage))
   {
     owner_->setError(EspBleError::InvalidArgument, "NKRO keyboard usage must be at most 0xe7");
     return false;
   }
-  uint8_t value[29] = {nkroModifiers_};
-  memcpy(value + 1, nkroBitmap_, sizeof(nkroBitmap_));
-  return sendRawReport(ESP_BLE_HID_REPORT_ID_KEYBOARD, value, sizeof(value));
+  return sendHeldNkroState();
 }
 
 bool EspBleHidKeyboard::tapUsage(uint8_t usage, uint8_t modifiers, uint32_t holdMs)
@@ -7491,8 +7489,7 @@ EspBleKeyboardLayout EspBleHidKeyboard::layout() const
 
 bool EspBleHidKeyboard::releaseAll()
 {
-  nkroModifiers_ = 0;
-  memset(nkroBitmap_, 0, sizeof(nkroBitmap_));
+  nkroState_.clear();
   return sendReport(EspBleHidKeyboardReport());
 }
 
@@ -7570,8 +7567,7 @@ bool EspBleHidKeyboard::configured() const
 
 void EspBleHidKeyboard::resetBackend()
 {
-  nkroModifiers_ = 0;
-  memset(nkroBitmap_, 0, sizeof(nkroBitmap_));
+  nkroState_.clear();
   if (impl_ == nullptr)
   {
     return;
@@ -8505,9 +8501,9 @@ void EspBleHidHost::handleDisconnected(EspBleConnectionId connectionId)
   event.state.scrollLock = connection->scrollLock;
   event.state.compose = connection->compose;
   event.state.kana = connection->kana;
-  memcpy(event.state.changedKeys, connection->keys, sizeof(event.state.changedKeys));
+  memcpy(event.state.changedBitmap, connection->bitmap, sizeof(event.state.changedBitmap));
   bool hasHeldKey = connection->modifiers != 0;
-  for (uint8_t value : connection->keys)
+  for (uint8_t value : connection->bitmap)
   {
     hasHeldKey = hasHeldKey || value != 0;
   }
@@ -8603,7 +8599,7 @@ void EspBleHidHost::dispatchPendingEvents()
         for (uint8_t bit = 0; bit < 8; ++bit)
         {
           const uint8_t usage = static_cast<uint8_t>(0xe0 + bit);
-          if ((event.state.changedKeys[usage >> 3] &
+          if ((event.state.changedBitmap[usage >> 3] &
                static_cast<uint8_t>(1u << (usage & 7))) != 0)
           {
             previousModifiers ^= static_cast<uint8_t>(1u << bit);
@@ -8616,7 +8612,7 @@ void EspBleHidHost::dispatchPendingEvents()
           {
             const uint8_t usage = static_cast<uint8_t>(usageValue);
             const uint8_t mask = static_cast<uint8_t>(1u << (usage & 7));
-            if ((event.state.changedKeys[usage >> 3] & mask) == 0 ||
+            if ((event.state.changedBitmap[usage >> 3] & mask) == 0 ||
                 event.state.isDown(usage) != pressed)
             {
               continue;
