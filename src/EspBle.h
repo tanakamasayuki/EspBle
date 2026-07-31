@@ -1220,6 +1220,18 @@ public:
   EspBleKeyboardLayout layout() const;
   bool setBatteryLevel(uint8_t level);
   void onOutputReport(OutputReportCallback callback);
+  // The LED state (Caps Lock and friends) a host last wrote, for callers that
+  // need to answer "what is it now?" rather than react to onOutputReport().
+  // Both protocol modes are covered. Cleared before any host has written, when
+  // the last host disconnects, and on re-initialisation, so a previous host's
+  // LEDs are never reported as the current one's.
+  // With several hosts connected this is the most recent write from any of
+  // them, carrying the connectionId it came from — the same single state the
+  // LED Output Report characteristic serves on a GATT read.
+  // Updated when the host writes, not when onOutputReport() is dispatched, so
+  // a full output queue cannot leave it stale; it can therefore be one
+  // update() ahead of the callback.
+  EspBleHidKeyboardOutputReport ledState() const;
   // Current HID Protocol Mode (BootProtocolMode / ReportProtocolMode). The Host
   // selects it by writing the Protocol Mode characteristic; the default after a
   // connection is ReportProtocolMode.

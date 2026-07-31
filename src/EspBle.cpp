@@ -3811,6 +3811,13 @@ struct EspBleHidDeviceManagerImpl
     }
 
     std::lock_guard<std::mutex> lock(mutex);
+    // Both protocol modes reach this point (the Report-protocol LED Output
+    // Report and the Boot Keyboard Output Report store their byte in different
+    // fields), so recording ledState here needs no protocol-mode branch.
+    // Updated before the queue rather than at dispatch: ledState() is meant to
+    // be polled, so a queue overflow that drops the callback must not leave it
+    // stale. The cost is that it can be one update() ahead of the callback.
+    ledState = report;
     if (outputCount == OutputQueueCapacity)
     {
       ++droppedOutputReports;
@@ -3914,6 +3921,9 @@ struct EspBleHidDeviceManagerImpl
   uint8_t inputValues[ProfileCount][MaxVendorReportSize] = {};
   uint8_t inputLengths[ProfileCount] = {8, 4, 11, 2, 1, 63};
   uint8_t outputValue = 0;
+  // The LED Output Report a host last wrote, in either protocol mode, with the
+  // connection it came from. Serves ledState().
+  EspBleHidKeyboardOutputReport ledState;
   bool bootProtocolEnabled = false;
   uint8_t protocolMode = EspBleHidKeyboard::ReportProtocolMode;
   uint8_t bootKeyboardInput[8] = {};
@@ -7076,6 +7086,16 @@ const EspBleHidKeyboardNkroReport &EspBleHidKeyboard::heldState() const
   return nkroState_;
 }
 
+EspBleHidKeyboardOutputReport EspBleHidKeyboard::ledState() const
+{
+  if (impl_ == nullptr) return EspBleHidKeyboardOutputReport();
+  // By value, not by reference: unlike nkroState_ (written only from the send
+  // paths on the caller's task), this is written from the stack task when the
+  // host writes the report, so it is copied out under the lock.
+  std::lock_guard<std::mutex> lock(impl_->mutex);
+  return impl_->ledState;
+}
+
 bool EspBleHidKeyboard::sendReport(const EspBleHidKeyboardReport &report)
 {
   if (nkroEnabled_)
@@ -7584,6 +7604,8 @@ void EspBleHidKeyboard::resetBackend()
   impl_->bootKeyboardInputValueHandle = 0;
   memset(impl_->inputValues, 0, sizeof(impl_->inputValues));
   impl_->outputValue = 0;
+  // Do not carry a previous host's LED state into the next connection.
+  impl_->ledState = EspBleHidKeyboardOutputReport();
   impl_->protocolMode = ReportProtocolMode;
   memset(impl_->bootKeyboardInput, 0, sizeof(impl_->bootKeyboardInput));
   impl_->bootKeyboardOutput = 0;
@@ -10936,7 +10958,11 @@ void EspBle::dispatchConnectionEvents()
             std::lock_guard<std::mutex> lock(hidKeyboardDevice_.impl_->mutex);
             memset(hidKeyboardDevice_.impl_->inputValues, 0,
                    sizeof(hidKeyboardDevice_.impl_->inputValues));
+            // The LED state belonged to the host that just went away; keeping
+            // it would report a stale Caps Lock to whoever connects next.
+            hidKeyboardDevice_.impl_->ledState = EspBleHidKeyboardOutputReport();
           }
+          hidKeyboardDevice_.nkroState_.clear();
         }
       }
       {

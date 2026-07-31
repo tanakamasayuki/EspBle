@@ -103,6 +103,11 @@
 20. **NKROの内部保持状態は`EspBleHidKeyboardNkroReport`型のメンバ1個（`nkroState_`）で持つ。** modifier振り分け（0xE0〜0xE7）とbitmapレイアウトの定義を1箇所にするため。全NKRO送信経路は`sendHeldNkroState()`を通す。`pressUsage()`が表現できないusageへ返していた`InvalidArgument`は、`press()`の戻り値から再構成して維持する。
 21. **`heldState()`でHostへ最後に伝えたNKRO状態を公開し、同じ状態の再送はライブラリ側で抑制しない。** 状態ベースの呼び出し側は毎周期送るため抑制したくなるが、`releaseAll()`やProtocol Mode切替のあとHostが実際に何を保持しているかはライブラリからは決められない。抑制は呼び出し側の責務とし、shadow copyを持たせない代わりに比較対象を提供する。NKRO専用で、Boot Protocol Mode中は「要求した状態」であって電波に出たバイト列ではない（8 byteへ畳まれるため）。
 22. **`enableNkro()`未実行のNKRO送信は失敗させ、Boot Protocol Modeでは畳んで送る。** 同じ「NKROの形では送れない状況」で挙動を分ける基準は責任の所在。Boot Protocol ModeはHost主導の実行時条件でスケッチに責任がないため送れる形へ畳む。`enableNkro()`忘れは構成の誤りで、畳んで成功させると7キー目以降が恒久的に無言で消えるため`InvalidState`で失敗させる。
+23. **HostのLED状態は`ledState()`で公開する。** `onOutputReport()`は変化通知で、「今どうなっているか」を同期で答える手段がなかった。ESP32KeyBridgeの`OutputAdapter::getLockState()`のような同期クエリを実装する側が、コールバックを自前の変数へ写して保持することになる——`heldState()`で解消したのと同じ、ライブラリが持っている状態を公開しないためにずれる余地のある写しが増える構図。更新は両protocol modeの書き込み経路が合流する`queueOutputReport()`で行い、読み出し時のmode分岐を持たない（Report modeは`outputValue`、Boot modeは`bootKeyboardOutput`と格納先が違うため、片方だけを返す実装はBoot mode選択時に更新が止まる）。
+24. **`ledState()`はHostの書き込み時点で更新し、コールバック配送時ではない。** pollされるためのAPIなので、Output queueが溢れてコールバックが落ちても最新状態を保つことを優先する。代償の「`onOutputReport()`より最大1回の`update()`ぶん先行しうる」はSPECの約束として明記する。複数Hostではlast-write-winsとし`connectionId`を添える——GATT Readが単一の値をどのHostへも返している既存の意味論に合わせる（Device側の問い合わせを集約とするのは`ready()`と同じ判断）。
+25. **最後のHostが切断したら`ledState()`と`heldState()`をクリアする。** 前のHostの状態を次の接続へ持ち越さない。`heldState()`は再接続後の重複抑制の比較対象になるため、残すと「同じ状態だから送らない」と判断されてstuck keyになる。
+26. **LED Output Reportはlistener化せず、単一slotの`onOutputReport()`＋getterで扱う。** LEDは event ではなく**状態**で、競合しているのは「1回の通知を誰が消費するか」ではなく「最新値を誰が読めるか」でしかない。getterで解ける問題にlistener基盤を増やさない。接続系イベントをmulti-listener化した判断（接続とGATT 14）と矛盾しない——あちらは「同じ通知を複数が観測する」必要が実在した。`onOutputReport` / `onProtocolMode`のlistener化は将来の選択肢として残すが、やるならEspUsbDevice側と同時。
+27. **`ledState()`は値を返す（`heldState()`は参照）。** `ledState`はHostの書き込み時にstack taskから書かれるため、`impl_->mutex`保護下の実体への参照を返すとデータ競合になる。ロック内でコピーして返す。`nkroState_`は送信経路（呼び出し側task）からしか書かれないため`heldState()`は参照でよい。姉妹ライブラリEspUsbDeviceの`ledState()`が参照を返すのと署名が揃わないが、これはbackendのthreadモデルの差に由来する。
 
 ## BLE MIDI
 

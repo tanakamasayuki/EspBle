@@ -30,6 +30,13 @@ def test_hid_keyboard_nkro(dut, peers):
     dut.write("l")
     dut.expect_exact("HOST_LEDS_WRITTEN success=1", timeout=10)
     device.expect_exact("DEVICE_OUTPUT leds=3", timeout=20)
+    # ledState() answers "what is it now?" without the sketch caching the
+    # callback: the same value the host wrote (Num Lock + Caps Lock = 0x03),
+    # attributed to the connection it came from.
+    device.write("e")
+    device.expect_exact(
+        "DEVICE_LED_STATE leds=3 num=1 caps=1 scroll=0 connection=1", timeout=10
+    )
 
     device.write("r")
     device.expect_exact("DEVICE_RELEASE_ALL success=1", timeout=10)

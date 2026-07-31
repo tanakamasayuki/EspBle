@@ -881,7 +881,7 @@ Even when you send every cycle, **the library never suppresses a report that mat
 
 **Layouts and Unicode** — HID carries not characters but **the physical position number of a key** (a usage). The same number is a different character on a JIS layout and a US layout. EspBle carries conversion tables for 19 layouts: the device side maps a character such as `write("あ")` back to a usage, and the host side converts an incoming usage to a character. **Pick the wrong table and only the symbols come out wrong.**
 
-**LEDs go the other way** — the Caps Lock LED and friends are sent from the host to the device (an output report), the opposite direction from key input. The device side receives them at `onOutputReport()`.
+**LEDs go the other way** — the Caps Lock LED and friends are sent from the host to the device (an output report), the opposite direction from key input. The device side receives them at `onOutputReport()`. When you need "what is it now?" rather than a reaction to a change — handing the lock state to another library, say — `ledState()` returns what the host last wrote, so you do not have to keep a copy of your own.
 
 **Stuck keys on disconnect** — if the link drops while a key is held, the host is left believing it is still down. EspBle's host side **synthesises an all-released state on disconnect**, so this does not happen.
 

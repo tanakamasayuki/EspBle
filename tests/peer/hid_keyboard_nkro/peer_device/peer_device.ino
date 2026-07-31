@@ -66,6 +66,18 @@ void loop()
         represented ? 1 : 0,
         report.modifiers);
     }
+    else if (command == 'e')
+    {
+      // ledState() must answer with what the host wrote, without the sketch
+      // caching the onOutputReport() callback into a variable of its own.
+      const EspBleHidKeyboardOutputReport led = ble.hidKeyboard().ledState();
+      Serial.printf("DEVICE_LED_STATE leds=%u num=%u caps=%u scroll=%u connection=%u\n",
+        led.leds,
+        led.numLock() ? 1 : 0,
+        led.capsLock() ? 1 : 0,
+        led.scrollLock() ? 1 : 0,
+        static_cast<unsigned>(led.connectionId));
+    }
     else if (command == 'h')
     {
       // heldState() must be what the host was last told, whichever API set it:

@@ -881,7 +881,7 @@ ble.hidKeyboard().sendReport(report);
 
 **レイアウトとUnicode** — HIDが運ぶのは文字ではなく**キーの物理的な位置番号**（usage）です。同じ番号がJIS配列とUS配列で違う文字になります。EspBleは19レイアウトの変換表を持ち、Device側は `write("あ")` のような文字からusageを逆引きし、Host側は届いたusageを文字へ変換します。**変換表を選び間違えると、記号だけが違う文字になります。**
 
-**LEDは逆方向** — Caps LockなどのLEDは、Host側からDeviceへ送られます（Output Report）。キー入力と逆向きです。Device側は `onOutputReport()` で受け取ります。
+**LEDは逆方向** — Caps LockなどのLEDは、Host側からDeviceへ送られます（Output Report）。キー入力と逆向きです。Device側は `onOutputReport()` で受け取ります。 変化に反応するのではなく「今どうなっているか」が要る場面（他のライブラリへLock状態を渡すなど）では、`ledState()` が最後にHostが書いた状態を返します。自分で変数へ写して持つ必要はありません。
 
 **切断時のstuck key** — キーを押したまま接続が切れると、Host側には「押されたまま」の状態が残ります。EspBleのHost側は切断時に**全キーを離した状態を合成して配送**するので、この問題は起きません。
 

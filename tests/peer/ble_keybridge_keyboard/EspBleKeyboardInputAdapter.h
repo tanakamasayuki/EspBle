@@ -59,7 +59,7 @@ public:
     {
       for (size_t byte = 0; byte < EspBleHidKeyboardState::BitmapSize; ++byte)
       {
-        uint8_t bits = keyboards_[i].keys[byte];
+        uint8_t bits = keyboards_[i].bitmap[byte];
         while (bits != 0)
         {
           const int bit = __builtin_ctz(bits);
@@ -95,7 +95,7 @@ private:
   struct Keyboard
   {
     EspBleConnectionId connectionId = 0;
-    uint8_t keys[EspBleHidKeyboardState::BitmapSize] = {};
+    uint8_t bitmap[EspBleHidKeyboardState::BitmapSize] = {};
   };
 
   void subscribe()
@@ -126,7 +126,7 @@ private:
         Keyboard *keyboard = find(state.connectionId);
         if (keyboard != nullptr)
         {
-          memcpy(keyboard->keys, state.keys, sizeof(keyboard->keys));
+          memcpy(keyboard->bitmap, state.bitmap, sizeof(keyboard->bitmap));
         }
       });
   }
