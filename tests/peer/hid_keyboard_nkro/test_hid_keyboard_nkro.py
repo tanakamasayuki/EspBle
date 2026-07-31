@@ -1,3 +1,10 @@
+import re
+
+NKRO_STATE_PATTERN = re.compile(
+    rb"HOST_NKRO_STATE count=(\d+) high=(\d+) b=(\d+) b_released=(\d+)"
+)
+
+
 def test_hid_keyboard_nkro(dut, peers):
     device = peers["device"]
     dut.write("x")
@@ -23,6 +30,37 @@ def test_hid_keyboard_nkro(dut, peers):
     dut.write("l")
     dut.expect_exact("HOST_LEDS_WRITTEN success=1", timeout=10)
     device.expect_exact("DEVICE_OUTPUT leds=3", timeout=20)
+
+    device.write("r")
+    device.expect_exact("DEVICE_RELEASE_ALL success=1", timeout=10)
+    dut.expect_exact("HOST_NKRO_STATE count=0 high=0 b=0 b_released=0", timeout=20)
+
+
+def test_nkro_whole_state_is_one_report(dut, peers):
+    """`sendReport(EspBleHidKeyboardNkroReport)` puts the whole NKRO state into a
+    single notification. The `keys[6]` overload cannot: it carries six usages even
+    with NKRO enabled, and the incremental `pressUsage()` path emits one
+    notification per key, so the host would observe the chord building up one key
+    at a time and paced by the connection interval.
+
+    Proof that it was one report: the *first* state event the host sees already
+    holds all nine usages. Eight are in the 0x00-0xDF bitmap; LeftShift (0xE1) is
+    above it, so `press()` routes it into `modifiers` — the host bitmap carries
+    modifier usages too, hence a count of nine.
+    """
+    device = peers["device"]
+
+    device.write("w")
+    device.expect_exact(
+        "DEVICE_NKRO_STATE_SENT success=1 represented=1 modifiers=2", timeout=20
+    )
+    match = dut.expect(NKRO_STATE_PATTERN, timeout=20)
+    assert match.group(1) == b"9", (
+        "the first state event must already hold every key of the report "
+        f"(count={match.group(1).decode()})"
+    )
+    assert match.group(2) == b"1", "the high usage 0x87 must be down"
+    assert match.group(3) == b"1", "usage 0x05 must be down"
 
     device.write("r")
     device.expect_exact("DEVICE_RELEASE_ALL success=1", timeout=10)

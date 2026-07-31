@@ -33,12 +33,30 @@ void loop()
   {
     const char command = Serial.read();
     auto &keyboard = ble.hidKeyboard();
-    if (command == 'n')
+    // ready() is false until a host is connected, encrypted, and subscribed to
+    // the Input Report. Sending before that fails with InvalidState, and a host
+    // that has not arrived yet is a normal state rather than an error, so it
+    // does not touch lastError().
+    if (!keyboard.ready())
     {
-      const uint8_t usages[] = {0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b};
-      for (uint8_t usage : usages) keyboard.pressUsage(usage);
+      Serial.println("No subscribed HID Host yet.");
     }
-    else if (command == 'r') keyboard.releaseAll();
+    else if (command == 'n')
+    {
+      // sendReport(EspBleHidKeyboardReport) carries keys[6] and still expresses
+      // only six usages with NKRO enabled, so eight keys go out as one
+      // whole-state report. pressUsage() could hold eight keys too, but each
+      // key change would be its own notification and the chord would be paced
+      // by the connection interval.
+      EspBleHidKeyboardNkroReport report;
+      const uint8_t usages[] = {0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b};
+      for (uint8_t usage : usages) report.press(usage);
+      keyboard.sendReport(report);
+    }
+    else if (command == 'r')
+    {
+      keyboard.releaseAll();
+    }
   }
   ble.update();
   delay(1);

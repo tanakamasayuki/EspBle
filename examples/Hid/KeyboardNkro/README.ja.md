@@ -16,19 +16,23 @@
 - preferred MTUに64を要求します（29-byteのNKRO Input ReportにはMTU ≥ 32が必要）
 - Bondingつきでsecurityを有効化します — HOGPは暗号化linkを要求します
 - 切断のたびにadvertisingを再開します
-- `n` で8キー同時押し、`r` で全キーrelease
+- `n` で8キー同時押しを**1 report**として送信、`r` で全キーrelease
 
 ## 主なAPI
 
 - `ble.hidKeyboard().enableNkro()` — `configure()` より前に呼ぶ必要があります
 - `keyboard.configure()` — `begin()` 前にHID Serviceを構成
-- `keyboard.pressUsage(usage)` — NKROビットマップ上で1つのHID usageを押下状態にする
+- `keyboard.ready()` — 購読済みHostが居て今送れるか
+- `EspBleHidKeyboardNkroReport::press(usage)` — 送信するReport上で1つのHID usageを押下状態にする
+- `keyboard.sendReport(nkroReport)` — NKROの全状態を1 notificationとして送信
 - `keyboard.releaseAll()` — 全キーをクリア
 - `config.preferredMtu = 64` — Reportに十分なMTUをネゴシエート
 
 ## メモ
 
 - NKROビットマップReportのレイアウトはEspUsbDeviceと同じで、同一usageが同じようにマップされます。
+- `keys[6]` を持つ通常の `sendReport()` はNKRO有効でも1回に6キーまでです。7キー以上を1回で送るには `EspBleHidKeyboardNkroReport` 版を使います。
+- `EspBleHidKeyboardNkroReport` のbitmapが持てるのはusage `0x00`〜`0xDF` です。modifier usage `0xE0`〜`0xE7` は `press()` / `release()` が `modifiers` へ振り分けるため、呼び出し側でusageを区別する必要はありません。
 
 ## 期待されるSerial出力
 

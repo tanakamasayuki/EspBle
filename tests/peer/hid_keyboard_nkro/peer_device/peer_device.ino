@@ -51,6 +51,21 @@ void loop()
       }
       Serial.printf("DEVICE_NKRO_SENT success=%u\n", success ? 1 : 0);
     }
+    else if (command == 'w')
+    {
+      // The whole NKRO state in one notification. The keys[6] overload of
+      // sendReport() cannot express this: it carries six usages even with NKRO
+      // enabled. LeftShift (0xE1) is above the 0x00-0xDF bitmap, so press()
+      // routes it into `modifiers` instead.
+      EspBleHidKeyboardNkroReport report;
+      const uint8_t usages[] = {0x04,0x05,0x06,0x07,0x08,0x09,0x0a,0x87,0xe1};
+      bool represented = true;
+      for (uint8_t usage : usages) represented = report.press(usage) && represented;
+      Serial.printf("DEVICE_NKRO_STATE_SENT success=%u represented=%u modifiers=%u\n",
+        ble.hidKeyboard().sendReport(report) ? 1 : 0,
+        represented ? 1 : 0,
+        report.modifiers);
+    }
     else if (command == 'b')
       Serial.printf("DEVICE_RELEASE_USAGE success=%u\n",
         ble.hidKeyboard().releaseUsage(0x05) ? 1 : 0);

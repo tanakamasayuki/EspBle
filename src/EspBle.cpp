@@ -7083,29 +7083,47 @@ bool EspBleHidKeyboard::sendReport(const EspBleHidKeyboardReport &report)
   return sendRawReport(ESP_BLE_HID_REPORT_ID_KEYBOARD, value, sizeof(value));
 }
 
-bool EspBleHidKeyboard::sendRawReport(
-  uint8_t reportId, const uint8_t *data, size_t length)
+bool EspBleHidKeyboard::sendReport(const EspBleHidKeyboardNkroReport &report)
 {
-  if (!owner_->initialized() || impl_ == nullptr || !impl_->realized ||
-      reportId < 1 || reportId > EspBleHidDeviceManagerImpl::ProfileCount ||
-      impl_->inputValueHandles[reportId - 1] == 0)
+  if (!nkroEnabled_)
   {
-    owner_->setError(EspBleError::InvalidState, "HID Keyboard Device is not initialized");
+    owner_->setError(
+      EspBleError::InvalidState,
+      "NKRO reports need enableNkro() before configure()");
     return false;
   }
+  // Replace the incremental state so a later pressUsage() / releaseUsage() sees
+  // what the Host was actually told.
+  nkroModifiers_ = report.modifiers;
+  memcpy(nkroBitmap_, report.keys, sizeof(nkroBitmap_));
+  uint8_t value[29] = {nkroModifiers_};
+  memcpy(value + 1, nkroBitmap_, sizeof(nkroBitmap_));
+  return sendRawReport(ESP_BLE_HID_REPORT_ID_KEYBOARD, value, sizeof(value));
+}
 
+bool EspBleHidKeyboard::useBootKeyboard(uint8_t reportId) const
+{
   // In Boot Protocol Mode the keyboard report travels over the dedicated 8-byte
   // Boot Keyboard Input Report instead of the Report-protocol characteristic.
-  bool useBoot = false;
-  if (reportId == ESP_BLE_HID_REPORT_ID_KEYBOARD && impl_->bootKeyboardInputValueHandle != 0)
+  if (reportId != ESP_BLE_HID_REPORT_ID_KEYBOARD || impl_ == nullptr ||
+      impl_->bootKeyboardInputValueHandle == 0)
   {
-    std::lock_guard<std::mutex> lock(impl_->mutex);
-    useBoot = impl_->protocolMode == EspBleHidKeyboard::BootProtocolMode;
+    return false;
   }
+  std::lock_guard<std::mutex> lock(impl_->mutex);
+  return impl_->protocolMode == EspBleHidKeyboard::BootProtocolMode;
+}
 
-  uint16_t connectionHandles[ConnectionCapacity] = {};
+size_t EspBleHidKeyboard::eligibleConnections(
+  uint8_t reportId,
+  int customSlot,
+  bool useBoot,
+  uint16_t *handles,
+  size_t capacity,
+  bool &anyPeripheral) const
+{
+  anyPeripheral = false;
   size_t connectionCount = 0;
-  bool anyPeripheral = false;
   {
     std::lock_guard<std::mutex> lock(owner_->impl_->mutex);
     for (const EspBleImpl::ConnectionSlot &slot : owner_->impl_->connections)
@@ -7119,7 +7137,8 @@ bool EspBleHidKeyboard::sendRawReport(
         {
           continue;
         }
-        connectionHandles[connectionCount++] = slot.connection.handle;
+        if (connectionCount >= capacity) break;
+        handles[connectionCount++] = slot.connection.handle;
       }
     }
   }
@@ -7127,15 +7146,71 @@ bool EspBleHidKeyboard::sendRawReport(
   size_t eligibleCount = 0;
   for (size_t index = 0; index < connectionCount; ++index)
   {
-    const bool eligible = useBoot
-      ? impl_->subscribedBootKeyboard(connectionHandles[index])
-      : impl_->subscribed(connectionHandles[index], reportId);
+    bool eligible = false;
+    if (customSlot >= 0)
+    {
+      eligible = impl_->subscribedCustom(handles[index], static_cast<size_t>(customSlot));
+    }
+    else
+    {
+      eligible = useBoot
+        ? impl_->subscribedBootKeyboard(handles[index])
+        : impl_->subscribed(handles[index], reportId);
+    }
     if (eligible)
     {
-      connectionHandles[eligibleCount++] = connectionHandles[index];
+      handles[eligibleCount++] = handles[index];
     }
   }
-  connectionCount = eligibleCount;
+  return eligibleCount;
+}
+
+bool EspBleHidKeyboard::readyFor(uint8_t reportId, int customSlot) const
+{
+  if (!owner_->initialized() || impl_ == nullptr || !impl_->realized) return false;
+  if (customSlot >= 0)
+  {
+    if (static_cast<size_t>(customSlot) >= impl_->customReportCount) return false;
+    if (impl_->customReports[customSlot].valueHandle == 0) return false;
+  }
+  else if (reportId < 1 || reportId > EspBleHidDeviceManagerImpl::ProfileCount ||
+           impl_->inputValueHandles[reportId - 1] == 0)
+  {
+    return false;
+  }
+  uint16_t connectionHandles[ConnectionCapacity] = {};
+  bool anyPeripheral = false;
+  return eligibleConnections(
+           reportId,
+           customSlot,
+           useBootKeyboard(reportId),
+           connectionHandles,
+           ConnectionCapacity,
+           anyPeripheral) != 0;
+}
+
+bool EspBleHidKeyboard::ready() const
+{
+  return readyFor(ESP_BLE_HID_REPORT_ID_KEYBOARD, -1);
+}
+
+bool EspBleHidKeyboard::sendRawReport(
+  uint8_t reportId, const uint8_t *data, size_t length)
+{
+  if (!owner_->initialized() || impl_ == nullptr || !impl_->realized ||
+      reportId < 1 || reportId > EspBleHidDeviceManagerImpl::ProfileCount ||
+      impl_->inputValueHandles[reportId - 1] == 0)
+  {
+    owner_->setError(EspBleError::InvalidState, "HID Keyboard Device is not initialized");
+    return false;
+  }
+
+  const bool useBoot = useBootKeyboard(reportId);
+
+  uint16_t connectionHandles[ConnectionCapacity] = {};
+  bool anyPeripheral = false;
+  size_t connectionCount = eligibleConnections(
+    reportId, -1, useBoot, connectionHandles, ConnectionCapacity, anyPeripheral);
   if (connectionCount == 0)
   {
     owner_->setError(
@@ -7233,6 +7308,20 @@ bool EspBleHidKeyboard::sendRawReport(
   return true;
 }
 
+int EspBleHidKeyboard::customInputSlot(uint8_t reportId) const
+{
+  if (impl_ == nullptr) return -1;
+  for (size_t index = 0; index < impl_->customReportCount; ++index)
+  {
+    if (impl_->customReports[index].reportType == ESP_BLE_HID_REPORT_TYPE_INPUT &&
+        impl_->customReports[index].reportId == reportId)
+    {
+      return static_cast<int>(index);
+    }
+  }
+  return -1;
+}
+
 bool EspBleHidKeyboard::sendCustomInput(uint8_t reportId, const uint8_t *data, size_t length)
 {
   if (!owner_->initialized() || impl_ == nullptr || !impl_->realized)
@@ -7240,16 +7329,7 @@ bool EspBleHidKeyboard::sendCustomInput(uint8_t reportId, const uint8_t *data, s
     owner_->setError(EspBleError::InvalidState, "HID Custom Device is not initialized");
     return false;
   }
-  int slot = -1;
-  for (size_t index = 0; index < impl_->customReportCount; ++index)
-  {
-    if (impl_->customReports[index].reportType == ESP_BLE_HID_REPORT_TYPE_INPUT &&
-        impl_->customReports[index].reportId == reportId)
-    {
-      slot = static_cast<int>(index);
-      break;
-    }
-  }
+  const int slot = customInputSlot(reportId);
   if (slot < 0 || impl_->customReports[slot].valueHandle == 0)
   {
     owner_->setError(EspBleError::NotFound, "unknown custom HID input report");
@@ -7263,32 +7343,9 @@ bool EspBleHidKeyboard::sendCustomInput(uint8_t reportId, const uint8_t *data, s
   }
 
   uint16_t connectionHandles[ConnectionCapacity] = {};
-  size_t connectionCount = 0;
   bool anyPeripheral = false;
-  {
-    std::lock_guard<std::mutex> lock(owner_->impl_->mutex);
-    for (const EspBleImpl::ConnectionSlot &connectionSlot : owner_->impl_->connections)
-    {
-      if (connectionSlot.used && connectionSlot.connection.localRole == EspBleRole::Peripheral)
-      {
-        anyPeripheral = true;
-        if (owner_->impl_->securityEnabled && !connectionSlot.connection.encrypted)
-        {
-          continue;
-        }
-        connectionHandles[connectionCount++] = connectionSlot.connection.handle;
-      }
-    }
-  }
-  size_t eligibleCount = 0;
-  for (size_t index = 0; index < connectionCount; ++index)
-  {
-    if (impl_->subscribedCustom(connectionHandles[index], static_cast<size_t>(slot)))
-    {
-      connectionHandles[eligibleCount++] = connectionHandles[index];
-    }
-  }
-  connectionCount = eligibleCount;
+  const size_t connectionCount = eligibleConnections(
+    reportId, slot, false, connectionHandles, ConnectionCapacity, anyPeripheral);
   if (connectionCount == 0)
   {
     owner_->setError(
@@ -7618,6 +7675,9 @@ bool EspBleHidMouse::configure(const EspBleHidMouseConfig &config)
 }
 
 bool EspBleHidMouse::configured() const { return configured_; }
+
+bool EspBleHidMouse::ready() const
+{ return owner_->hidKeyboardDevice_.readyFor(ESP_BLE_HID_REPORT_ID_MOUSE, -1); }
 bool EspBleHidMouse::sendReport(const EspBleHidMouseReport &report)
 {
   return owner_->hidKeyboardDevice_.sendRawReport(
@@ -7648,6 +7708,9 @@ bool EspBleHidConsumerControl::configure(const EspBleHidConsumerControlConfig &c
   return configured_;
 }
 bool EspBleHidConsumerControl::configured() const { return configured_; }
+
+bool EspBleHidConsumerControl::ready() const
+{ return owner_->hidKeyboardDevice_.readyFor(ESP_BLE_HID_REPORT_ID_CONSUMER_CONTROL, -1); }
 bool EspBleHidConsumerControl::sendReport(uint16_t usage)
 {
   uint8_t value[] = {static_cast<uint8_t>(usage), static_cast<uint8_t>(usage >> 8)};
@@ -7668,6 +7731,9 @@ bool EspBleHidSystemControl::configure(const EspBleHidSystemControlConfig &confi
   return configured_;
 }
 bool EspBleHidSystemControl::configured() const { return configured_; }
+
+bool EspBleHidSystemControl::ready() const
+{ return owner_->hidKeyboardDevice_.readyFor(ESP_BLE_HID_REPORT_ID_SYSTEM_CONTROL, -1); }
 bool EspBleHidSystemControl::sendReport(uint8_t usage)
 { return owner_->hidKeyboardDevice_.sendRawReport(ESP_BLE_HID_REPORT_ID_SYSTEM_CONTROL, &usage, 1); }
 bool EspBleHidSystemControl::sendUsage(uint8_t usage) { usage_ = usage; return sendReport(usage); }
@@ -7685,6 +7751,9 @@ bool EspBleHidGamepad::configure(const EspBleHidGamepadConfig &config)
   return configured_;
 }
 bool EspBleHidGamepad::configured() const { return configured_; }
+
+bool EspBleHidGamepad::ready() const
+{ return owner_->hidKeyboardDevice_.readyFor(ESP_BLE_HID_REPORT_ID_GAMEPAD, -1); }
 bool EspBleHidGamepad::sendReport(const EspBleHidGamepadReport &report)
 {
   uint8_t value[11] = {static_cast<uint8_t>(report.x), static_cast<uint8_t>(report.y),
@@ -7721,6 +7790,9 @@ bool EspBleHidVendor::configure(const EspBleHidVendorConfig &config)
 }
 
 bool EspBleHidVendor::configured() const { return configured_; }
+
+bool EspBleHidVendor::ready() const
+{ return owner_->hidKeyboardDevice_.readyFor(ESP_BLE_HID_REPORT_ID_VENDOR, -1); }
 
 bool EspBleHidVendor::sendInput(const void *data, size_t length)
 {
@@ -7782,6 +7854,13 @@ bool EspBleHidCustom::configure(const EspBleHidDeviceConfig &config)
 }
 
 bool EspBleHidCustom::configured() const { return configured_; }
+
+bool EspBleHidCustom::ready(uint8_t reportId) const
+{
+  const int slot = owner_->hidKeyboardDevice_.customInputSlot(reportId);
+  if (slot < 0) return false;
+  return owner_->hidKeyboardDevice_.readyFor(reportId, slot);
+}
 
 bool EspBleHidCustom::setReportMap(const uint8_t *descriptor, size_t length)
 {
@@ -9858,37 +9937,44 @@ bool EspBle::deleteAllBonds()
 
 void EspBle::onConnected(ConnectionCallback callback)
 {
-  connectedCallback_ = std::move(callback);
+  std::lock_guard<std::mutex> lock(listenerMutex_);
+  connectedListeners_.setPrimary(std::move(callback));
 }
 
 void EspBle::onDisconnected(ConnectionCallback callback)
 {
-  disconnectedCallback_ = std::move(callback);
+  std::lock_guard<std::mutex> lock(listenerMutex_);
+  disconnectedListeners_.setPrimary(std::move(callback));
 }
 
 void EspBle::onConnectionFailed(ConnectionFailureCallback callback)
 {
-  connectionFailedCallback_ = std::move(callback);
+  std::lock_guard<std::mutex> lock(listenerMutex_);
+  connectionFailedListeners_.setPrimary(std::move(callback));
 }
 
 void EspBle::onMtuChanged(MtuChangedCallback callback)
 {
-  mtuChangedCallback_ = std::move(callback);
+  std::lock_guard<std::mutex> lock(listenerMutex_);
+  mtuChangedListeners_.setPrimary(std::move(callback));
 }
 
 void EspBle::onConnectionParametersUpdated(ConnectionCallback callback)
 {
-  connectionParametersUpdatedCallback_ = std::move(callback);
+  std::lock_guard<std::mutex> lock(listenerMutex_);
+  connectionParametersUpdatedListeners_.setPrimary(std::move(callback));
 }
 
 void EspBle::onPhyUpdated(ConnectionCallback callback)
 {
-  phyUpdatedCallback_ = std::move(callback);
+  std::lock_guard<std::mutex> lock(listenerMutex_);
+  phyUpdatedListeners_.setPrimary(std::move(callback));
 }
 
 void EspBle::onSecurityChanged(SecurityChangedCallback callback)
 {
-  securityChangedCallback_ = std::move(callback);
+  std::lock_guard<std::mutex> lock(listenerMutex_);
+  securityChangedListeners_.setPrimary(std::move(callback));
 }
 
 void EspBle::onPasskeyDisplayed(PasskeyDisplayedCallback callback)
@@ -10348,76 +10434,77 @@ bool EspBle::writeDescriptor(
 
 void EspBle::onCharacteristicDiscovered(GattResultCallback callback)
 {
-  std::lock_guard<std::mutex> lock(gattListenerMutex_);
+  std::lock_guard<std::mutex> lock(listenerMutex_);
   characteristicDiscoveredListeners_.setPrimary(std::move(callback));
 }
 
 void EspBle::onCharacteristicRead(GattResultCallback callback)
 {
-  std::lock_guard<std::mutex> lock(gattListenerMutex_);
+  std::lock_guard<std::mutex> lock(listenerMutex_);
   characteristicReadListeners_.setPrimary(std::move(callback));
 }
 
 void EspBle::onCharacteristicWritten(GattResultCallback callback)
 {
-  std::lock_guard<std::mutex> lock(gattListenerMutex_);
+  std::lock_guard<std::mutex> lock(listenerMutex_);
   characteristicWrittenListeners_.setPrimary(std::move(callback));
 }
 
 void EspBle::onServicesDiscovered(GattResultCallback callback)
 {
-  std::lock_guard<std::mutex> lock(gattListenerMutex_);
+  std::lock_guard<std::mutex> lock(listenerMutex_);
   servicesDiscoveredListeners_.setPrimary(std::move(callback));
 }
 
 void EspBle::onDescriptorRead(GattResultCallback callback)
 {
-  std::lock_guard<std::mutex> lock(gattListenerMutex_);
+  std::lock_guard<std::mutex> lock(listenerMutex_);
   descriptorReadListeners_.setPrimary(std::move(callback));
 }
 
 void EspBle::onDescriptorWritten(GattResultCallback callback)
 {
-  std::lock_guard<std::mutex> lock(gattListenerMutex_);
+  std::lock_guard<std::mutex> lock(listenerMutex_);
   descriptorWrittenListeners_.setPrimary(std::move(callback));
 }
 
 void EspBle::onSubscribed(GattResultCallback callback)
 {
-  std::lock_guard<std::mutex> lock(gattListenerMutex_);
+  std::lock_guard<std::mutex> lock(listenerMutex_);
   subscribedListeners_.setPrimary(std::move(callback));
 }
 
 void EspBle::onUnsubscribed(GattResultCallback callback)
 {
-  std::lock_guard<std::mutex> lock(gattListenerMutex_);
+  std::lock_guard<std::mutex> lock(listenerMutex_);
   unsubscribedListeners_.setPrimary(std::move(callback));
 }
 
 void EspBle::onNotification(NotificationCallback callback)
 {
-  std::lock_guard<std::mutex> lock(gattListenerMutex_);
+  std::lock_guard<std::mutex> lock(listenerMutex_);
   notificationListeners_.setPrimary(std::move(callback));
 }
 
-EspBleListenerId EspBle::allocateGattListenerIdLocked()
+EspBleListenerId EspBle::allocateListenerIdLocked()
 {
-  // Monotonic and owner-unique; wraps past ~4 billion adds, skipping the invalid
-  // sentinel. Never reuses a live id in practice, so removeGattListener() by id
-  // is unambiguous across every client list.
-  const EspBleListenerId id = nextGattListenerId_;
-  nextGattListenerId_ = (id == 0xffffffffu) ? 1 : id + 1;
+  // Monotonic and owner-unique across every listener list on this object (GATT
+  // client and connection events alike); wraps past ~4 billion adds, skipping
+  // the invalid sentinel. Never reuses a live id in practice, so removal by id
+  // is unambiguous.
+  const EspBleListenerId id = nextListenerId_;
+  nextListenerId_ = (id == 0xffffffffu) ? 1 : id + 1;
   return id;
 }
 
 // Allocate an id and store callback in `list`, reporting a full list. Serialized
-// by gattListenerMutex_.
+// by listenerMutex_.
 #define ESPBLE_ADD_GATT_LISTENER(list, cbType)                                   \
   do                                                                             \
   {                                                                              \
-    std::lock_guard<std::mutex> lock(gattListenerMutex_);                        \
+    std::lock_guard<std::mutex> lock(listenerMutex_);                        \
     const EspBleListenerId id = (list).add(std::move(callback),                  \
-                                           allocateGattListenerIdLocked());      \
+                                           allocateListenerIdLocked());      \
     if (id == EspBleInvalidListenerId)                                           \
     {                                                                            \
       setError(EspBleError::ResourceExhausted, "too many GATT client listeners");\
@@ -10448,6 +10535,65 @@ EspBleListenerId EspBle::addNotificationListener(NotificationCallback callback)
 
 #undef ESPBLE_ADD_GATT_LISTENER
 
+// Same as ESPBLE_ADD_GATT_LISTENER for the connection-event lists; only the
+// error detail differs, so a caller that overflows one can tell which.
+#define ESPBLE_ADD_CONNECTION_LISTENER(list)                                    \
+  do                                                                            \
+  {                                                                             \
+    std::lock_guard<std::mutex> lock(listenerMutex_);                           \
+    const EspBleListenerId id = (list).add(std::move(callback),                 \
+                                           allocateListenerIdLocked());         \
+    if (id == EspBleInvalidListenerId)                                          \
+    {                                                                           \
+      setError(EspBleError::ResourceExhausted, "too many connection listeners");\
+      return EspBleInvalidListenerId;                                           \
+    }                                                                           \
+    clearError();                                                               \
+    return id;                                                                  \
+  } while (0)
+
+EspBleListenerId EspBle::addConnectedListener(ConnectionCallback callback)
+{ ESPBLE_ADD_CONNECTION_LISTENER(connectedListeners_); }
+EspBleListenerId EspBle::addDisconnectedListener(ConnectionCallback callback)
+{ ESPBLE_ADD_CONNECTION_LISTENER(disconnectedListeners_); }
+EspBleListenerId EspBle::addConnectionFailedListener(ConnectionFailureCallback callback)
+{ ESPBLE_ADD_CONNECTION_LISTENER(connectionFailedListeners_); }
+EspBleListenerId EspBle::addMtuChangedListener(MtuChangedCallback callback)
+{ ESPBLE_ADD_CONNECTION_LISTENER(mtuChangedListeners_); }
+EspBleListenerId EspBle::addConnectionParametersUpdatedListener(ConnectionCallback callback)
+{ ESPBLE_ADD_CONNECTION_LISTENER(connectionParametersUpdatedListeners_); }
+EspBleListenerId EspBle::addPhyUpdatedListener(ConnectionCallback callback)
+{ ESPBLE_ADD_CONNECTION_LISTENER(phyUpdatedListeners_); }
+EspBleListenerId EspBle::addSecurityChangedListener(SecurityChangedCallback callback)
+{ ESPBLE_ADD_CONNECTION_LISTENER(securityChangedListeners_); }
+
+#undef ESPBLE_ADD_CONNECTION_LISTENER
+
+bool EspBle::removeConnectionListener(EspBleListenerId listenerId)
+{
+  if (listenerId == EspBleInvalidListenerId)
+  {
+    setError(EspBleError::InvalidArgument, "listener ID is invalid");
+    return false;
+  }
+  std::lock_guard<std::mutex> lock(listenerMutex_);
+  const bool removed =
+    connectedListeners_.remove(listenerId) ||
+    disconnectedListeners_.remove(listenerId) ||
+    connectionFailedListeners_.remove(listenerId) ||
+    mtuChangedListeners_.remove(listenerId) ||
+    connectionParametersUpdatedListeners_.remove(listenerId) ||
+    phyUpdatedListeners_.remove(listenerId) ||
+    securityChangedListeners_.remove(listenerId);
+  if (!removed)
+  {
+    setError(EspBleError::NotFound, "listener ID was not found");
+    return false;
+  }
+  clearError();
+  return true;
+}
+
 bool EspBle::removeGattListener(EspBleListenerId listenerId)
 {
   if (listenerId == EspBleInvalidListenerId)
@@ -10455,7 +10601,7 @@ bool EspBle::removeGattListener(EspBleListenerId listenerId)
     setError(EspBleError::InvalidArgument, "listener ID is invalid");
     return false;
   }
-  std::lock_guard<std::mutex> lock(gattListenerMutex_);
+  std::lock_guard<std::mutex> lock(listenerMutex_);
   const bool removed =
     characteristicDiscoveredListeners_.remove(listenerId) ||
     characteristicReadListeners_.remove(listenerId) ||
@@ -10739,9 +10885,14 @@ void EspBle::dispatchConnectionEvents()
     switch (event.type)
     {
     case EspBleImpl::EventType::Connected:
-      if (connectedCallback_)
       {
-        connectedCallback_(event.connection);
+        std::shared_ptr<ConnectionCallback> callbacks[decltype(connectedListeners_)::Capacity];
+        size_t count = 0;
+        {
+          std::lock_guard<std::mutex> lock(listenerMutex_);
+          count = connectedListeners_.snapshot(callbacks);
+        }
+        for (size_t i = 0; i < count; ++i) (*callbacks[i])(event.connection);
       }
       // Auto-restore any subscriptions recorded for this peer on a previous
       // connection. On the first connection to a peer the registry is empty, so
@@ -10792,15 +10943,25 @@ void EspBle::dispatchConnectionEvents()
           }
         }
       }
-      if (disconnectedCallback_)
       {
-        disconnectedCallback_(event.connection);
+        std::shared_ptr<ConnectionCallback> callbacks[decltype(disconnectedListeners_)::Capacity];
+        size_t count = 0;
+        {
+          std::lock_guard<std::mutex> lock(listenerMutex_);
+          count = disconnectedListeners_.snapshot(callbacks);
+        }
+        for (size_t i = 0; i < count; ++i) (*callbacks[i])(event.connection);
       }
       break;
     case EspBleImpl::EventType::Failed:
-      if (connectionFailedCallback_)
       {
-        connectionFailedCallback_(event.failure);
+        std::shared_ptr<ConnectionFailureCallback> callbacks[decltype(connectionFailedListeners_)::Capacity];
+        size_t count = 0;
+        {
+          std::lock_guard<std::mutex> lock(listenerMutex_);
+          count = connectionFailedListeners_.snapshot(callbacks);
+        }
+        for (size_t i = 0; i < count; ++i) (*callbacks[i])(event.failure);
       }
       break;
     case EspBleImpl::EventType::GattResult:
@@ -10842,7 +11003,7 @@ void EspBle::dispatchConnectionEvents()
         std::shared_ptr<GattResultCallback> callbacks[decltype(characteristicDiscoveredListeners_)::Capacity];
         size_t count = 0;
         {
-          std::lock_guard<std::mutex> lock(gattListenerMutex_);
+          std::lock_guard<std::mutex> lock(listenerMutex_);
           count = list->snapshot(callbacks);
         }
         for (size_t i = 0; i < count; ++i) (*callbacks[i])(event.gattResult);
@@ -10869,7 +11030,7 @@ void EspBle::dispatchConnectionEvents()
       std::shared_ptr<NotificationCallback> callbacks[decltype(notificationListeners_)::Capacity];
       size_t count = 0;
       {
-        std::lock_guard<std::mutex> lock(gattListenerMutex_);
+        std::lock_guard<std::mutex> lock(listenerMutex_);
         count = notificationListeners_.snapshot(callbacks);
       }
       for (size_t i = 0; i < count; ++i) (*callbacks[i])(event.notification);
@@ -10882,27 +11043,47 @@ void EspBle::dispatchConnectionEvents()
       gattServer_.dispatchSendResult(event.serverSendResult);
       break;
     case EspBleImpl::EventType::MtuChanged:
-      if (mtuChangedCallback_)
       {
-        mtuChangedCallback_(event.mtuChanged);
+        std::shared_ptr<MtuChangedCallback> callbacks[decltype(mtuChangedListeners_)::Capacity];
+        size_t count = 0;
+        {
+          std::lock_guard<std::mutex> lock(listenerMutex_);
+          count = mtuChangedListeners_.snapshot(callbacks);
+        }
+        for (size_t i = 0; i < count; ++i) (*callbacks[i])(event.mtuChanged);
       }
       break;
     case EspBleImpl::EventType::ConnParamsUpdated:
-      if (connectionParametersUpdatedCallback_)
       {
-        connectionParametersUpdatedCallback_(event.connection);
+        std::shared_ptr<ConnectionCallback> callbacks[decltype(connectionParametersUpdatedListeners_)::Capacity];
+        size_t count = 0;
+        {
+          std::lock_guard<std::mutex> lock(listenerMutex_);
+          count = connectionParametersUpdatedListeners_.snapshot(callbacks);
+        }
+        for (size_t i = 0; i < count; ++i) (*callbacks[i])(event.connection);
       }
       break;
     case EspBleImpl::EventType::PhyUpdated:
-      if (phyUpdatedCallback_)
       {
-        phyUpdatedCallback_(event.connection);
+        std::shared_ptr<ConnectionCallback> callbacks[decltype(phyUpdatedListeners_)::Capacity];
+        size_t count = 0;
+        {
+          std::lock_guard<std::mutex> lock(listenerMutex_);
+          count = phyUpdatedListeners_.snapshot(callbacks);
+        }
+        for (size_t i = 0; i < count; ++i) (*callbacks[i])(event.connection);
       }
       break;
     case EspBleImpl::EventType::SecurityChanged:
-      if (securityChangedCallback_)
       {
-        securityChangedCallback_(event.securityChanged);
+        std::shared_ptr<SecurityChangedCallback> callbacks[decltype(securityChangedListeners_)::Capacity];
+        size_t count = 0;
+        {
+          std::lock_guard<std::mutex> lock(listenerMutex_);
+          count = securityChangedListeners_.snapshot(callbacks);
+        }
+        for (size_t i = 0; i < count; ++i) (*callbacks[i])(event.securityChanged);
       }
       // After the app's handler (which may itself call discover()), give the HID
       // Host a chance to auto-rediscover a reconnected peer, de-duped against a

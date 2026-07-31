@@ -50,6 +50,20 @@ void loop()
     {
       Serial.printf("DEVICE_ADVERTISING %u\n", ble.advertising().isAdvertising() ? 1 : 0);
     }
+    else if (command == 'y')
+    {
+      // ready() must answer the same gate sendReport() applies, without
+      // touching lastError(): no host and an unsubscribed host are normal
+      // states, not failures. Comparing the error before and after makes that
+      // independent of whatever the previous command left behind.
+      const String before = ble.lastErrorName();
+      const bool ready = ble.hidKeyboard().ready();
+      const String after = ble.lastErrorName();
+      Serial.printf(
+        "DEVICE_READY ready=%u error_kept=%u\n",
+        ready ? 1 : 0,
+        before == after ? 1 : 0);
+    }
     else if (command == 'k')
     {
       EspBleHidKeyboardInputReport report;

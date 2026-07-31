@@ -10,6 +10,7 @@ DISCOVER_DISCONNECT_PATTERN = re.compile(
 )
 REBEGIN_PATTERN = re.compile(rb"HOST_REBEGIN success=(\d+) error=(\w+)")
 INPUT_SENT_PATTERN = re.compile(rb"DEVICE_INPUT_SENT success=(\d+) error=(\w+)")
+READY_PATTERN = re.compile(rb"DEVICE_READY ready=(\d+) error_kept=(\d+)")
 
 
 def _reset(dut, device):
@@ -81,6 +82,47 @@ def test_unsubscribed_input_report_is_not_sent(dut, peers):
     dut.expect_exact("HOST_DISCONNECT_STARTED success=1", timeout=10)
     dut.expect(re.compile(rb"HOST_DISCONNECTED id=(\d+)"), timeout=20)
     device.expect_exact("DEVICE_READVERTISING 1", timeout=20)
+
+
+def _device_ready(device):
+    device.write("y")
+    match = device.expect(READY_PATTERN, timeout=10)
+    assert match.group(2) == b"1", "ready() must not touch lastError()"
+    return match.group(1) == b"1"
+
+
+def test_device_ready_follows_the_subscription_gate(dut, peers):
+    """hidKeyboard().ready() must report exactly when a report can go out: false
+    with no host, false while a connected host has not subscribed, true after
+    the host's HID discovery subscribes, and false again after disconnection."""
+    device = peers["device"]
+    _reset(dut, device)
+
+    assert not _device_ready(device), "ready() must be false with no host connected"
+
+    _connect(dut, device)
+    time.sleep(0.5)
+    assert not _device_ready(device), (
+        "ready() must be false while the connected host has not subscribed"
+    )
+
+    _discover(dut)
+    assert _device_ready(device), "ready() must be true once the host subscribed"
+
+    # The gate ready() reports is the one sendReport() applies.
+    device.write("k")
+    match = device.expect(INPUT_SENT_PATTERN, timeout=10)
+    assert match.group(1) == b"1"
+    dut.expect_exact("HOST_STATE a_down=1 a_released=0", timeout=20)
+    device.write("r")
+    device.expect_exact("DEVICE_RELEASE_SENT success=1", timeout=10)
+    dut.expect_exact("HOST_STATE a_down=0 a_released=1", timeout=20)
+
+    dut.write("d")
+    dut.expect_exact("HOST_DISCONNECT_STARTED success=1", timeout=10)
+    dut.expect(re.compile(rb"HOST_DISCONNECTED id=(\d+)"), timeout=20)
+    device.expect_exact("DEVICE_READVERTISING 1", timeout=20)
+    assert not _device_ready(device), "ready() must be false again after disconnection"
 
 
 def test_rollover_report_is_ignored(dut, peers):

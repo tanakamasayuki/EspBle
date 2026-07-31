@@ -640,6 +640,64 @@ struct EspBleHidGamepadReport
 
 using EspBleHidKeyboardReport = EspBleHidKeyboardInputReport;
 
+// Full NKRO keyboard state in one report: modifier byte + a bitmap of usages
+// 0x00-0xDF (the EspUsbDevice-compatible 29-byte layout). Modifier usages
+// 0xE0-0xE7 live in `modifiers`, not the bitmap, and press() / release() route
+// them there automatically. isDown() matches the Host-side
+// EspBleHidKeyboardState accessor so a Host snapshot can be replayed on a
+// Device with the same vocabulary; the bitmaps differ in size (the Host tracks
+// usages up to 0xFF, this report up to MaxBitmapUsage).
+struct EspBleHidKeyboardNkroReport
+{
+  static constexpr size_t BitmapSize = 28;
+  static constexpr uint8_t MaxBitmapUsage = 0xdf;
+
+  uint8_t modifiers = 0;
+  uint8_t keys[BitmapSize] = {};
+
+  void clear()
+  {
+    modifiers = 0;
+    for (size_t index = 0; index < BitmapSize; ++index) keys[index] = 0;
+  }
+
+  // Returns false when the usage is above MaxBitmapUsage and is not a modifier
+  // (0xE0-0xE7), i.e. this report cannot represent it.
+  bool press(uint8_t usage)
+  {
+    if (usage >= 0xe0 && usage <= 0xe7)
+    {
+      modifiers |= static_cast<uint8_t>(1u << (usage - 0xe0));
+      return true;
+    }
+    if (usage > MaxBitmapUsage) return false;
+    keys[usage >> 3] |= static_cast<uint8_t>(1u << (usage & 7));
+    return true;
+  }
+
+  bool release(uint8_t usage)
+  {
+    if (usage >= 0xe0 && usage <= 0xe7)
+    {
+      modifiers &= static_cast<uint8_t>(~(1u << (usage - 0xe0)));
+      return true;
+    }
+    if (usage > MaxBitmapUsage) return false;
+    keys[usage >> 3] &= static_cast<uint8_t>(~(1u << (usage & 7)));
+    return true;
+  }
+
+  bool isDown(uint8_t usage) const
+  {
+    if (usage >= 0xe0 && usage <= 0xe7)
+    {
+      return (modifiers & static_cast<uint8_t>(1u << (usage - 0xe0))) != 0;
+    }
+    if (usage > MaxBitmapUsage) return false;
+    return (keys[usage >> 3] & static_cast<uint8_t>(1u << (usage & 7))) != 0;
+  }
+};
+
 struct EspBleHidKeyboardOutputReport
 {
   EspBleConnectionId connectionId = 0;
@@ -1121,6 +1179,21 @@ public:
   void enableNkro(bool enable = true);
   bool nkroEnabled() const;
   bool sendReport(const EspBleHidKeyboardReport &report);
+  // Send the whole NKRO state as one notification, which the 6-key overload
+  // cannot do: it carries keys[6] and is expanded into the bitmap, so only six
+  // usages fit per report even with NKRO enabled. Requires enableNkro() before
+  // configure(); fails with InvalidState otherwise. The 6-key overload stays
+  // valid and keeps working in both modes, and this report replaces the state
+  // that pressUsage() / releaseUsage() build up.
+  bool sendReport(const EspBleHidKeyboardNkroReport &report);
+  // A subscribed HID Host is present and reports can go out right now: a
+  // Peripheral connection that is encrypted (when security is enabled) and has
+  // subscribed to this profile's Input Report CCCD (the Boot Keyboard Input
+  // CCCD while the Host selected Boot Protocol Mode). False before configure()
+  // / begin(), while no host is connected, and while a connected host has not
+  // subscribed yet. sendReport() on a false ready() fails with InvalidState, so
+  // poll this instead of inferring connectivity from the send result.
+  bool ready() const;
   bool pressUsage(uint8_t usage, uint8_t modifiers = 0, uint32_t holdMs = 10);
   bool releaseUsage(uint8_t usage);
   bool tapUsage(uint8_t usage, uint8_t modifiers = 0, uint32_t holdMs = 10);
@@ -1156,6 +1229,26 @@ private:
   bool realize();
   bool sendRawReport(uint8_t reportId, const uint8_t *data, size_t length);
   bool sendCustomInput(uint8_t reportId, const uint8_t *data, size_t length);
+  // The Host selected Boot Protocol Mode and this report travels over the
+  // dedicated Boot Keyboard Input Report instead of the Report-protocol one.
+  bool useBootKeyboard(uint8_t reportId) const;
+  // Peripheral connections that may receive this HID input right now: encrypted
+  // when security is enabled, and subscribed to the matching Input Report CCCD.
+  // customSlot >= 0 selects a hidCustom() report slot and ignores reportId.
+  // anyPeripheral reports whether any Peripheral connection existed at all, so
+  // the send path can tell "not connected" from "connected but not subscribed".
+  size_t eligibleConnections(
+    uint8_t reportId,
+    int customSlot,
+    bool useBoot,
+    uint16_t *handles,
+    size_t capacity,
+    bool &anyPeripheral) const;
+  // Shared by every profile's ready(). Never calls setError(): this is a query,
+  // not a failure. customSlot >= 0 selects a hidCustom() report slot.
+  bool readyFor(uint8_t reportId, int customSlot) const;
+  // Index of the declared hidCustom() Input Report with this ID, or -1.
+  int customInputSlot(uint8_t reportId) const;
   void resetBackend();
   void dispatchPendingOutputReports();
   void dispatchPendingProtocolMode();
@@ -1176,6 +1269,9 @@ public:
   bool configure(const EspBleHidMouseConfig &config = EspBleHidMouseConfig());
   bool configured() const;
   bool sendReport(const EspBleHidMouseReport &report);
+  // See EspBleHidKeyboard::ready(): a subscribed HID Host can receive this
+  // profile's reports right now.
+  bool ready() const;
   bool move(int8_t x, int8_t y, int8_t wheel = 0, uint8_t buttons = 0);
   bool wheel(int8_t amount);
   bool press(uint8_t buttons);
@@ -1198,6 +1294,9 @@ public:
   bool configure(const EspBleHidConsumerControlConfig &config = EspBleHidConsumerControlConfig());
   bool configured() const;
   bool sendReport(uint16_t usage);
+  // See EspBleHidKeyboard::ready(): a subscribed HID Host can receive this
+  // profile's reports right now.
+  bool ready() const;
   bool sendUsage(uint16_t usage);
   bool press(uint16_t usage);
   bool release();
@@ -1219,6 +1318,9 @@ public:
   bool configure(const EspBleHidSystemControlConfig &config = EspBleHidSystemControlConfig());
   bool configured() const;
   bool sendReport(uint8_t usage);
+  // See EspBleHidKeyboard::ready(): a subscribed HID Host can receive this
+  // profile's reports right now.
+  bool ready() const;
   bool sendUsage(uint8_t usage);
   bool press(uint8_t usage);
   bool release();
@@ -1240,6 +1342,9 @@ public:
   bool configure(const EspBleHidGamepadConfig &config = EspBleHidGamepadConfig());
   bool configured() const;
   bool sendReport(const EspBleHidGamepadReport &report);
+  // See EspBleHidKeyboard::ready(): a subscribed HID Host can receive this
+  // profile's reports right now.
+  bool ready() const;
   bool send(int8_t x, int8_t y, int8_t z, int8_t rz, int8_t rx, int8_t ry,
             uint8_t hat, uint32_t buttons);
   bool releaseAll();
@@ -1259,6 +1364,9 @@ public:
   bool configure(const EspBleHidVendorConfig &config = EspBleHidVendorConfig());
   bool configured() const;
   bool sendInput(const void *data, size_t length);
+  // See EspBleHidKeyboard::ready(): a subscribed HID Host can receive this
+  // profile's reports right now.
+  bool ready() const;
   void onOutputReport(ReportCallback callback);
   void onFeatureReport(ReportCallback callback);
 
@@ -1292,6 +1400,9 @@ public:
   bool addFeatureReport(uint8_t reportId, uint16_t sizeBytes);
   bool configured() const;
   bool sendInput(uint8_t reportId, const uint8_t *data, size_t length);
+  // See EspBleHidKeyboard::ready(), per declared Input Report: a subscribed HID
+  // Host can receive this report right now. False for an unknown report ID.
+  bool ready(uint8_t reportId) const;
   void onOutputReport(ReportCallback callback);
   void onFeatureReport(ReportCallback callback);
 
@@ -1577,6 +1688,23 @@ public:
   void onNumericComparison(PasskeyDisplayedCallback callback);
   bool confirmNumericComparison(bool accept);
 
+  // Additional connection-event observers that coexist with the primary on*()
+  // callback and with each other, so a profile helper or an integration adapter
+  // can watch connections without taking the application's slot. Mirrors the
+  // GATT-client listener API: the primary callback runs first, then the
+  // listeners in registration order. Remove any of them with
+  // removeConnectionListener(); ids are unique across every listener list on
+  // this object. onPasskeyDisplayed() / onNumericComparison() have no listener
+  // form on purpose — they ask for an answer, not for an observer.
+  EspBleListenerId addConnectedListener(ConnectionCallback callback);
+  EspBleListenerId addDisconnectedListener(ConnectionCallback callback);
+  EspBleListenerId addConnectionFailedListener(ConnectionFailureCallback callback);
+  EspBleListenerId addMtuChangedListener(MtuChangedCallback callback);
+  EspBleListenerId addConnectionParametersUpdatedListener(ConnectionCallback callback);
+  EspBleListenerId addPhyUpdatedListener(ConnectionCallback callback);
+  EspBleListenerId addSecurityChangedListener(SecurityChangedCallback callback);
+  bool removeConnectionListener(EspBleListenerId listenerId);
+
   bool discoverCharacteristic(
     EspBleConnectionId connectionId,
     const char *serviceUuid,
@@ -1814,7 +1942,7 @@ private:
   // True when a HID discovery for connectionId is already queued or in flight.
   // Lets HID auto-rediscover avoid a second discovery when the app also asked.
   bool hasPendingHidDiscover(EspBleConnectionId connectionId) const;
-  EspBleListenerId allocateGattListenerIdLocked();
+  EspBleListenerId allocateListenerIdLocked();
 
   bool initialized_ = false;
   bool autoReconnect_ = false;
@@ -1840,13 +1968,16 @@ private:
   EspBleHidCustom hidCustom_;
   EspBleHidHost hidKeyboardHost_;
   EspBleImpl *impl_ = nullptr;
-  ConnectionCallback connectedCallback_;
-  ConnectionCallback disconnectedCallback_;
-  ConnectionFailureCallback connectionFailedCallback_;
-  MtuChangedCallback mtuChangedCallback_;
-  ConnectionCallback connectionParametersUpdatedCallback_;
-  ConnectionCallback phyUpdatedCallback_;
-  SecurityChangedCallback securityChangedCallback_;
+  EspBleCallbackList<ConnectionCallback> connectedListeners_;
+  EspBleCallbackList<ConnectionCallback> disconnectedListeners_;
+  EspBleCallbackList<ConnectionFailureCallback> connectionFailedListeners_;
+  EspBleCallbackList<MtuChangedCallback> mtuChangedListeners_;
+  EspBleCallbackList<ConnectionCallback> connectionParametersUpdatedListeners_;
+  EspBleCallbackList<ConnectionCallback> phyUpdatedListeners_;
+  EspBleCallbackList<SecurityChangedCallback> securityChangedListeners_;
+  // Pairing responses stay single-slot: these ask the application to answer
+  // (providePasskey() / confirmNumericComparison()), and with several observers
+  // it would be ambiguous which one is responsible for replying.
   PasskeyDisplayedCallback passkeyDisplayedCallback_;
   PasskeyDisplayedCallback numericComparisonCallback_;
   EspBleCallbackList<GattResultCallback> characteristicDiscoveredListeners_;
@@ -1858,8 +1989,8 @@ private:
   EspBleCallbackList<GattResultCallback> subscribedListeners_;
   EspBleCallbackList<GattResultCallback> unsubscribedListeners_;
   EspBleCallbackList<NotificationCallback> notificationListeners_;
-  mutable std::mutex gattListenerMutex_;
-  EspBleListenerId nextGattListenerId_ = 1;
+  mutable std::mutex listenerMutex_;
+  EspBleListenerId nextListenerId_ = 1;
 };
 
 #endif // ESP_BLE_H

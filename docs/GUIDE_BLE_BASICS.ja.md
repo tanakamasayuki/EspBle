@@ -705,6 +705,10 @@ UUIDには、Bluetooth SIGが用途を定めた**標準UUID**と、自分で決�
 
 なおこれらの専用クラスは、汎用イベントを `add*Listener()` の追加リスナとして受け取ります。**専用クラスを使いながら、同じイベントに自分のコールバックを併設できる**のはそのためです（`on*()` の主コールバックは奪われません）。
 
+接続系のイベント（`onConnected` / `onDisconnected` / `onConnectionFailed` / `onSecurityChanged` / `onMtuChanged` / `onConnectionParametersUpdated` / `onPhyUpdated`）も同じ形です。`addConnectedListener()` のような `add*Listener()` で併設し、`removeConnectionListener()` で外します。自分のライブラリ層が接続を追いかけたいとき、アプリの `on*()` を奪わずに済みます。
+
+例外は `onPasskeyDisplayed` と `onNumericComparison` で、これらは**主コールバック1つだけ**です。この2つは「見る」のではなく「答える」ためのもので（`providePasskey()` / `confirmNumericComparison()` を呼ぶ）、観測者が複数いると誰が答えるのかが決まらないためです。
+
 独自の機能には独自UUIDを使ってください。**標準UUIDを別の意味で使い回すと、汎用アプリが誤って解釈します。**
 
 ### 4.9 GATTで対応していないこと
@@ -829,6 +833,16 @@ ble.begin(config);
 
 Battery ServiceとDevice Information Serviceは、HIDを構成すると自動的に登録されます。OSが電池残高と製品名を期待するためです。
 
+**送ってよいかは `ready()` で確かめます。** HID Reportが実際に電波へ出るのは、Hostが接続していて、（セキュリティ有効時は）暗号化が済んでいて、そのReportのCCCDを購読した後です（4.6節）。この3つが揃うまで `sendReport()` は `InvalidState` で失敗します。
+
+```cpp
+if (ble.hidKeyboard().ready()) {
+  ble.hidKeyboard().sendReport(report);
+}
+```
+
+各profileが `ready()` を持ち、`hidCustom()` はReport IDごとの `ready(reportId)` です。**Hostがまだ居ないのは正常な状態であって失敗ではない**ので、`ready()` は `lastError()` を書き換えません。毎周期送信を試して失敗を数えるのではなく、こちらを見てください。
+
 ### 6.4 Host側 — 横断Discoveryと種別別イベント
 
 Host（Central）側は `ble.hidHost()` ひとつで扱います。
@@ -851,6 +865,17 @@ ble.hidHost().discover(connectionId);
 **6KROとNKRO** — 標準の8バイトReportは、同時に押せるキーが**6個まで**です（modifierは別枠）。それを超えると、どのキーが押されているか表現できません。**NKRO**（N-Key Rollover）は押下状態をビットマップで持つ形式で、全キー同時押しを表現できます。`configure()` の前に `enableNkro()` を呼ぶと切り替わります。
 
 NKROのReportは29バイトになるため、**MTUを32以上にする必要があります**。`preferredMtu` が足りないまま構成すると `begin()` が `InvalidArgument` で拒否します。黙って送信が失敗するより明示的なエラーのほうがよいからです。
+
+NKROを有効にしても、`keys[6]` を持つ通常の `sendReport()` で送れるのは**1回あたり6キーまで**です。7キー以上を1回で送るには、状態全体を持つ `EspBleHidKeyboardNkroReport` を取る `sendReport()` を使います。
+
+```cpp
+EspBleHidKeyboardNkroReport report;
+report.press(0x04);  // a
+report.press(0xe1);  // Left Shift（modifierは自動的にmodifiersへ入る）
+ble.hidKeyboard().sendReport(report);
+```
+
+`pressUsage()` / `releaseUsage()` の増分APIでも7キー以上を押せますが、1キーの変化ごとに1回の通知になるため、同時押し・同時離しが接続間隔に律速されます。押下状態を毎周期まるごと持っている作りなら、状態版のほうが素直です。
 
 **レイアウトとUnicode** — HIDが運ぶのは文字ではなく**キーの物理的な位置番号**（usage）です。同じ番号がJIS配列とUS配列で違う文字になります。EspBleは19レイアウトの変換表を持ち、Device側は `write("あ")` のような文字からusageを逆引きし、Host側は届いたusageを文字へ変換します。**変換表を選び間違えると、記号だけが違う文字になります。**
 

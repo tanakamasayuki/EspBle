@@ -29,7 +29,8 @@
 ## イベント
 
 - 通常callbackは`update()` contextで配送する。stack contextで呼ぶraw callbackを追加する場合は、API名と文書でそれを明示する。
-- コアGATT callbackは**primary 1（`on*`）＋listener 複数（`add*Listener` / `removeGattListener`・`removeListener`）**の多observerモデル。`on*`はprimaryを差し替えるだけなので単一observer用途はそのまま満たす。listener上限はowner種別ごとに4件。
+- コアGATT callbackと接続系callbackは**primary 1（`on*`）＋listener 複数（`add*Listener` / `removeGattListener`・`removeConnectionListener`・`removeListener`）**の多observerモデル。`on*`はprimaryを差し替えるだけなので単一observer用途はそのまま満たす。listener上限はowner種別ごとに4件。
+- ただし**応答を求めるcallbackはprimary 1つのみ**とする（`onPasskeyDisplayed` / `onNumericComparison`）。観測は何人いてもよいが、答える責任者は1人でなければ誰が答えるのかが決まらない。
 - イベントはConnection ID、対象UUIDまたは属性ハンドル、結果、payloadを必要に応じて持つ。payloadの寿命を型ごとに明記する。
 - callbackを使わない利用者向けに状態getterを提供する。
 - queue overflowは専用イベントではなくdropカウンタ（`droppedEventCount()` / `droppedResultCount()` / `droppedPersistentSubscriptionCount()` / `invalidInputReportCount()`）で観測する。

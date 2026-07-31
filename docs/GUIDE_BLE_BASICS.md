@@ -705,6 +705,10 @@ The only dedicated classes are for **HID and BLE MIDI**, because those two do no
 
 Those dedicated classes take the generic events as additional listeners registered through `add*Listener()`. That is why **you can install your own callback for the same event while using a dedicated class** — the `on*()` primary is not taken from you.
 
+Connection events work the same way (`onConnected` / `onDisconnected` / `onConnectionFailed` / `onSecurityChanged` / `onMtuChanged` / `onConnectionParametersUpdated` / `onPhyUpdated`). Register extras with `addConnectedListener()` and friends, and drop them with `removeConnectionListener()`. A layer of your own can follow connections without taking the application's `on*()` slot.
+
+The exceptions are `onPasskeyDisplayed` and `onNumericComparison`, which stay **single primary callbacks**. Those two exist to be answered, not observed (`providePasskey()` / `confirmNumericComparison()`), and with several observers it would be undecided which one is responsible for replying.
+
 Use custom UUIDs for your own functionality. **Reusing a standard UUID for another meaning makes generic apps misinterpret it.**
 
 ### 4.9 What GATT does not support
@@ -829,6 +833,16 @@ To write your own Report Descriptor, use `ble.hidCustom()`. It composes into the
 
 The Battery Service and Device Information Service are registered automatically when HID is configured, because operating systems expect a battery level and a product name.
 
+**Check `ready()` before you send.** A HID report only reaches the air once a host is connected, the link is encrypted (when security is enabled), and the host has subscribed to that report's CCCD (section 4.6). Until all three hold, `sendReport()` fails with `InvalidState`.
+
+```cpp
+if (ble.hidKeyboard().ready()) {
+  ble.hidKeyboard().sendReport(report);
+}
+```
+
+Every profile has `ready()`; `hidCustom()` has a per-report-ID `ready(reportId)`. **Having no host yet is a normal state, not a failure**, so `ready()` does not touch `lastError()`. Poll it instead of sending every cycle and counting the failures.
+
 ### 6.4 The host side — cross-service discovery and per-kind events
 
 The host (central) side is handled entirely through `ble.hidHost()`.
@@ -851,6 +865,17 @@ Keyboards carry the most detail, so they get their own section.
 **6KRO and NKRO** — the standard 8-byte report holds **at most six** simultaneous keys (modifiers are separate). Beyond that it cannot express which keys are down. **NKRO** (N-key rollover) holds the pressed state as a bitmap and can express every key at once. Call `enableNkro()` before `configure()` to switch.
 
 An NKRO report is 29 bytes, so **the MTU has to be 32 or more**. Configuring it with an insufficient `preferredMtu` makes `begin()` refuse with `InvalidArgument`, because an explicit error beats sends that silently fail.
+
+Even with NKRO enabled, the ordinary `sendReport()` carries `keys[6]`, so **one call still expresses at most six keys**. To send seven or more at once, use the `sendReport()` overload that takes a whole-state `EspBleHidKeyboardNkroReport`.
+
+```cpp
+EspBleHidKeyboardNkroReport report;
+report.press(0x04);  // a
+report.press(0xe1);  // Left Shift (modifiers are routed into `modifiers` for you)
+ble.hidKeyboard().sendReport(report);
+```
+
+The incremental `pressUsage()` / `releaseUsage()` API can also hold more than six keys, but each single key change is its own notification, so simultaneous presses and releases are paced by the connection interval. If you already keep the full pressed-key state each cycle, the state overload is the direct fit.
 
 **Layouts and Unicode** — HID carries not characters but **the physical position number of a key** (a usage). The same number is a different character on a JIS layout and a US layout. EspBle carries conversion tables for 19 layouts: the device side maps a character such as `write("あ")` back to a usage, and the host side converts an incoming usage to a character. **Pick the wrong table and only the symbols come out wrong.**
 

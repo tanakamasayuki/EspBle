@@ -61,7 +61,9 @@
 6. 最小Discoveryは既知Service/Characteristic UUIDを指定して存在とpropertyを確認する軽量経路として維持し、全列挙とは別に持つ。discovery snapshotは**接続ごと**に保持し（初回discoveryで確保、切断で解放）、ある接続のdiscoveryが他接続のsnapshotを追い出さない。
 7. **希望MTUは`begin()`前に23〜517で設定する。** Notification/Indication payloadの上限は`mtu - 3`とし、backendによる黙示的な切詰めを避けるため超過を送信前に拒否する。broadcast送信ではactiveな全Peripheral Connectionの最小値を使う保守的な判定とし、接続指定送信では対象接続のMTUだけを見る。MTU交換は両役割ともグローバルGAPイベント（`BLE_GAP_EVENT_MTU`）で追跡し、Central側で接続確立後に完了する交換も拾う。
 8. **Server送信はCentral clientと同じく内部FIFOへ積み、送信中でもrejectしない。** `EspBleGattSendResult`に`connectionId`（0=broadcast）を持ち、`notify(connectionId, …)`は`ble_gatts_notify_custom()`で単一接続へ送る。`indicate(connectionId, …)`は対称性のため用意するが、同梱backendのindication確認が`m_semaphoreConfEvt`（characteristic単位・private）で待つ設計のため接続単位の確認応答を安全に取り出せず、確認付きbroadcastパスへ委譲する。接続単位のindicate確認はbackend側が公開するまで見送る。
-9. **コアGATT callbackは「primary 1（`on*`）＋listener 複数（`add*Listener` / `removeGattListener`・`removeListener`）」の多observerモデルとする。** `on*`は従来どおり単一primaryを差し替えるだけなので後方互換。これによりprofile helper（MIDI等）が単一スロットを独占せず、appは同一イベントを合成観測できる。配送はlock外でsnapshotをprimary→登録順に実行し、callback内の登録変更は次イベントから反映する。listener idはowner単位で単調発番。connection系イベント（`onConnected`等）はprofileが独占しないため単一slotのまま。
+9. **コアGATT callbackは「primary 1（`on*`）＋listener 複数（`add*Listener` / `removeGattListener`・`removeListener`）」の多observerモデルとする。** `on*`は従来どおり単一primaryを差し替えるだけなので後方互換。これによりprofile helper（MIDI等）が単一スロットを独占せず、appは同一イベントを合成観測できる。配送はlock外でsnapshotをprimary→登録順に実行し、callback内の登録変更は次イベントから反映する。listener idはowner単位で単調発番。
+14. **connection系イベントも同じ多observerモデルとする。** `onConnected` / `onDisconnected` / `onConnectionFailed` / `onSecurityChanged` / `onMtuChanged` / `onConnectionParametersUpdated` / `onPhyUpdated`に`add*Listener()`と`removeConnectionListener()`を用意する。接続追跡はprofile helperや統合adapterも必要とする観測で、単一slotだとアプリと取り合いになり、利用側は自前の共有ハブを書くはめになる。配送順はGATT系と同じくprimary → 登録順。
+   `onPasskeyDisplayed` / `onNumericComparison`は**単一slotのまま**とする。これらは観測ではなく応答（`providePasskey()` / `confirmNumericComparison()`を呼ぶ責任者）であり、複数listenerを許すと誰が答えるのかが曖昧になる。観測系と応答系を区別する。
 10. Peripheral向けイベント（Server書込み・購読変更・HID Output Report）でConnection IDを解決できない場合は、無効IDのまま配送せずdropしてカウントする。
 11. `connect()`のtimeoutは`update()`が経過時間を監視して打ち切る。同梱NimBLEは接続失敗を自前で数回リトライするため（`BLE_GAP_EVENT_REATTEMPT_COUNT`）、`ble_gap_connect()`のduration引数だけでは指定時間を守れない。
 12. **persistent subscriptionは既定onとする。** `subscribe()`成功時にpeer address＋service UUID＋characteristic UUIDで記録し、同一addressへ再接続した`Connected`処理で自動再購読する。復元はUUID指定（handleは再接続ごとに変わる）。registryは16件固定で、満杯時は既存を保持して新規のみ無視し、`droppedPersistentSubscriptionCount()`で観測できる。安定したpeer address（bond済みidentity、public、static random）を前提とする。`persistentSubscriptions=false`で手動管理へ切り替えられる。
@@ -94,6 +96,9 @@
 14. **HID Hostの再Discoveryは`setAutoRediscover(bool)`（既定off）でopt-in自動化する。** HID Hostは汎用subscription registryを使わないためpersistent subscriptionの対象外で、代わりにdiscovery成功したpeer addressを記憶して再接続後のsecurity確立で`discover()`を再発行する。アプリが手動`discover()`を呼んでいればskipして二重discoveryを防ぐ。既定offなので「security完了後に明示`discover()`」の規範は据え置く。
 15. Boot Protocol（Protocol Mode 0x2A4E＋Boot Keyboard Input/Output）は`EspBleHidKeyboardConfig::bootProtocol`によるopt-inで**既定off**とする。多くのHOGP HostはReport Protocol Modeで足り、characteristicが増えると全HostのDiscoveryが膨らむ。対象はkeyboardのみで、mouseのboot report（0x2A33）は非対応。
 16. `EspBleHidKeyboardState`はESP32KeyBridgeの`InputAdapter::keys()`へ変換なしで写像でき、LockStateは`setKeyboardLeds()`で返送できる。
+17. **Device側profileは送信可否クエリ`ready()`を持つ。** 「購読済みHostが居て今notifyできるか」は`sendReport()`を試すまで外から分からず、Host未接続という正常状態が`InvalidState`エラーとして`lastError()`を汚していた。判定は`sendRawReport()`のゲート（Peripheral role → security → Report ID別CCCD、Boot Protocol Mode時はBoot Keyboard Input CCCD）を`readyFor()`へ切り出して共有し、二重に持たない。問い合わせであって失敗ではないので`ready()`は`setError()`を呼ばない。`hidCustom()`はReport ID単位なので`ready(uint8_t reportId)`。
+    Host側`EspBleHidHost::ready(connectionId)`が接続を取るのに対しDevice側が引数を取らないのは、Deviceが購読済み全Hostへ同報するため「どれか1つ送れる」が答えだから。`EspBleMidiProfile::ready()`と同じ形。
+18. **NKROは`EspBleHidKeyboardNkroReport`で全状態を1 reportとして送る。** `enableNkro()`しても`sendReport()`が受けるのは`keys[6]`のままで、7キー以上は`pressUsage()` / `releaseUsage()`の増分APIしかなかった。状態ベースのbridge（ESP32KeyBridgeの`OutputAdapter::write()`）から使うと、差分計算とライブラリ内部状態の同期が呼び出し側に要り、1キーの変化ごとに1 notifyでconnection intervalに律速される。アクセサ名`isDown()`はHost側`EspBleHidKeyboardState`と揃える——Hostが32 byte（usage 0x00〜0xFF）、Deviceが28 byte（0x00〜0xDF）とサイズは異なるが、「Hostで受けてDeviceで出す」用途で語彙が揃う。modifier usage 0xE0〜0xE7はbitmap範囲外なので`press()` / `release()`が`modifiers`側へ振り分け、呼び出し側にusageの区別を意識させない。6キー版overloadは両モードで有効なまま残す。
 
 ## BLE MIDI
 
@@ -136,6 +141,9 @@
 
 1. その他の現役標準Service（必要になった時点で）
 2. その他Connectionlessデータ（現役かつ検証容易なものに限る）
+3. HID Hostの初回自動discover（`setAutoDiscover()`）。接続系multi-listenerが入ったことで、利用側が`addSecurityChangedListener()`から`discover()`を呼べば自己完結するため必須ではなくなった。「security完了後に明示`discover()`」の規範をEspBle自身の使い勝手として崩すかどうかの判断が残る
+4. `setKeyboardLeds()`のbroadcast版。全HID接続への一括送信は呼び出し側のループで足りる
+5. mouse reportのpan（水平ホイール）。`EspBleHidMouseReport`にフィールドが無くUSB boot mouseも同じ。必要なら`hidCustom()`で表現できる
 
 候補は採用決定ではない。ユースケース、実機、Peerテスト方法が揃った機能だけを正式スコープへ移す。
 

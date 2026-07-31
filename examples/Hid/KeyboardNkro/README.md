@@ -16,19 +16,23 @@ A BLE HID keyboard over GATT (HOGP) that uses the 29-byte NKRO (N-key rollover) 
 - Requests a preferred MTU of 64 (a 29-byte NKRO input report needs MTU ≥ 32)
 - Enables security with bonding — HOGP requires an encrypted link
 - Restarts advertising on each disconnect
-- Send `n` to press eight simultaneous keys, `r` to release all
+- Send `n` to press eight simultaneous keys as **one report**, `r` to release all
 
 ## Key APIs
 
 - `ble.hidKeyboard().enableNkro()` — must be called before `configure()`
 - `keyboard.configure()` — compose the HID service before `begin()`
-- `keyboard.pressUsage(usage)` — set one HID usage down in the NKRO bitmap
+- `keyboard.ready()` — whether a subscribed host can receive a report right now
+- `EspBleHidKeyboardNkroReport::press(usage)` — set one HID usage down in the report being built
+- `keyboard.sendReport(nkroReport)` — send the whole NKRO state as one notification
 - `keyboard.releaseAll()` — clear all keys
 - `config.preferredMtu = 64` — negotiate an MTU large enough for the report
 
 ## Notes
 
 - The NKRO bitmap report layout matches EspUsbDevice, so the same usages map identically.
+- The ordinary `sendReport()` carries `keys[6]` and expresses at most six keys per call even with NKRO enabled. Use the `EspBleHidKeyboardNkroReport` overload to send seven or more at once.
+- The bitmap in `EspBleHidKeyboardNkroReport` covers usages `0x00`-`0xDF`. Modifier usages `0xE0`-`0xE7` are routed into `modifiers` by `press()` / `release()`, so callers do not have to distinguish them.
 
 ## Expected Serial output
 

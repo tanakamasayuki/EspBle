@@ -82,6 +82,7 @@ EspBleGattDescriptor	KEYWORD1
 EspBleGattReadRequest	KEYWORD1
 EspBleGattOperation	KEYWORD1
 EspBleHidKeyboardReport	KEYWORD1
+EspBleHidKeyboardNkroReport	KEYWORD1
 EspBleAdvertisingData	KEYWORD1
 EspBleAdvertisingFilterPolicy	KEYWORD1
 EspBleOwnAddressType	KEYWORD1
@@ -291,6 +292,14 @@ addWrittenListener	KEYWORD2
 addSubscriptionChangedListener	KEYWORD2
 addSentListener	KEYWORD2
 removeGattListener	KEYWORD2
+addConnectedListener	KEYWORD2
+addDisconnectedListener	KEYWORD2
+addConnectionFailedListener	KEYWORD2
+addMtuChangedListener	KEYWORD2
+addConnectionParametersUpdatedListener	KEYWORD2
+addPhyUpdatedListener	KEYWORD2
+addSecurityChangedListener	KEYWORD2
+removeConnectionListener	KEYWORD2
 addServiceData	KEYWORD2
 serviceDataFor	KEYWORD2
 hasServiceData	KEYWORD2

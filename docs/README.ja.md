@@ -36,6 +36,7 @@ EspBleの開発ドキュメント一覧と、初見の人が状況を把握す�
 
 - **確定仕様（正）**: [REQUIREMENTS.ja.md](REQUIREMENTS.ja.md)、[DECISIONS.ja.md](DECISIONS.ja.md)、各SPEC。仕様の最終的な根拠。
 - **現況の追跡**: [STATUS.ja.md](STATUS.ja.md)。進捗・制限・TODOを追う。まとまった作業ごとに更新。
+- **提案（未確定）**: `PROPOSAL_*.ja.md`。採用が決まった項目はDECISIONSと各SPECへ移し、提案文書からは消す。
 - **CI生成物（手動編集しない）**: `BOARDS.<version>.md`、`COMPATIBILITY.<version>.md`。`.github/workflows/`の`board-matrix.yml`/`core-matrix.yml`が生成する。
 
 ## 現在の一言サマリ

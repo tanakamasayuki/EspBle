@@ -18,6 +18,17 @@ unsigned secondCount = 0;
 EspBleListenerId firstListener = EspBleInvalidListenerId;
 EspBleListenerId secondListener = EspBleInvalidListenerId;
 
+// Connection events carry the same primary + listeners model. `connectionOrder`
+// records who ran and in what order, so the primary-first, registration-order
+// contract is observable rather than inferred from counts.
+unsigned connectedPrimaryCount = 0;
+unsigned connectedFirstCount = 0;
+unsigned connectedSecondCount = 0;
+unsigned disconnectedListenerCount = 0;
+String connectionOrder;
+EspBleListenerId connectedFirstListener = EspBleInvalidListenerId;
+EspBleListenerId connectedSecondListener = EspBleInvalidListenerId;
+
 void setup()
 {
   Serial.begin(115200);
@@ -46,9 +57,22 @@ void setup()
 
   ble.onConnected([](const EspBleConnection &connection) {
     connectionId = connection.id;
+    ++connectedPrimaryCount;
+    connectionOrder += 'P';
     Serial.printf("CENTRAL_CONNECTED id=%u\n", static_cast<unsigned>(connection.id));
     // Writing by UUID needs the characteristic discovered first.
     ble.discoverCharacteristic(connection.id, SERVICE_UUID, CHARACTERISTIC_UUID);
+  });
+  connectedFirstListener = ble.addConnectedListener([](const EspBleConnection &) {
+    ++connectedFirstCount;
+    connectionOrder += '1';
+  });
+  connectedSecondListener = ble.addConnectedListener([](const EspBleConnection &) {
+    ++connectedSecondCount;
+    connectionOrder += '2';
+  });
+  ble.addDisconnectedListener([](const EspBleConnection &) {
+    ++disconnectedListenerCount;
   });
   ble.onCharacteristicDiscovered([](const EspBleGattResult &result) {
     Serial.printf("CENTRAL_READY success=%u\n", result.success ? 1 : 0);
@@ -94,6 +118,29 @@ void loop()
       firstCount = 0;
       secondCount = 0;
       Serial.println("WRITE_STATE_RESET");
+    }
+    else if (command == 'k')
+    {
+      Serial.printf("CONN_STATE primary=%u first=%u second=%u disconnected=%u order=%s\n",
+        connectedPrimaryCount, connectedFirstCount, connectedSecondCount,
+        disconnectedListenerCount,
+        connectionOrder.length() == 0 ? "-" : connectionOrder.c_str());
+    }
+    else if (command == 'j')
+    {
+      connectedPrimaryCount = 0;
+      connectedFirstCount = 0;
+      connectedSecondCount = 0;
+      disconnectedListenerCount = 0;
+      connectionOrder = "";
+      Serial.println("CONN_STATE_RESET");
+    }
+    else if (command == 'x')
+    {
+      const bool removed = ble.removeConnectionListener(connectedSecondListener);
+      Serial.printf("CONN_LISTENER_REMOVED success=%u id=%u\n",
+        removed ? 1 : 0, static_cast<unsigned>(connectedSecondListener));
+      connectedSecondListener = EspBleInvalidListenerId;
     }
     else if (command == 'r')
     {

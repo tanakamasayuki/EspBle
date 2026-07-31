@@ -61,6 +61,66 @@ def test_every_observer_receives_the_event_and_removal_is_selective(dut, peers):
     dut.expect("CENTRAL_DISCONNECTED id=", timeout=15)
 
 
+def test_connection_events_reach_primary_then_listeners(dut, peers):
+    """Connection events use the same primary + listeners model as the GATT
+    events, so an integration layer can follow connections without taking the
+    application's `on*()` slot.
+
+    Two properties that counts alone would not show: the primary runs before the
+    listeners and the listeners run in registration order (checked through the
+    recorded order string), and `removeConnectionListener()` drops exactly one
+    observer while the primary and the remaining listener keep firing.
+    """
+    peripheral = peers["device"]
+
+    peripheral.write("?")
+    peripheral.expect_exact("ADVERTISING 1", timeout=15)
+
+    dut.write("j")
+    dut.expect_exact("CONN_STATE_RESET", timeout=10)
+
+    dut.write("c")
+    dut.expect_exact("SCAN_STARTED", timeout=10)
+    dut.expect_exact("CONNECT_REQUESTED", timeout=15)
+    dut.expect("CENTRAL_CONNECTED id=", timeout=20)
+    peripheral.expect("PERIPHERAL_CONNECTED id=", timeout=10)
+    time.sleep(1)
+
+    dut.write("k")
+    dut.expect_exact(
+        "CONN_STATE primary=1 first=1 second=1 disconnected=0 order=P12", timeout=10
+    )
+
+    dut.write("d")
+    dut.expect_exact("DISCONNECT_REQUESTED", timeout=10)
+    dut.expect("CENTRAL_DISCONNECTED id=", timeout=15)
+    time.sleep(1)
+
+    dut.write("k")
+    dut.expect_exact(
+        "CONN_STATE primary=1 first=1 second=1 disconnected=1 order=P12", timeout=10
+    )
+
+    # Removing one connected listener must leave the primary and the other one.
+    dut.write("x")
+    dut.expect_exact("CONN_LISTENER_REMOVED success=1", timeout=10)
+
+    dut.write("c")
+    dut.expect_exact("SCAN_STARTED", timeout=10)
+    dut.expect_exact("CONNECT_REQUESTED", timeout=15)
+    dut.expect("CENTRAL_CONNECTED id=", timeout=20)
+    time.sleep(1)
+
+    dut.write("k")
+    dut.expect_exact(
+        "CONN_STATE primary=2 first=2 second=1 disconnected=1 order=P12P1", timeout=10
+    )
+
+    dut.write("d")
+    dut.expect_exact("DISCONNECT_REQUESTED", timeout=10)
+    dut.expect("CENTRAL_DISCONNECTED id=", timeout=15)
+
+
 def test_listener_list_refuses_unknown_removal_and_overflow(dut, peers):
     peripheral = peers["device"]
 
