@@ -24,7 +24,8 @@ Turns the board into a BLE HID keyboard over GATT (HOGP, fixed 6-key rollover) t
 - `ble.hidKeyboard()` / `keyboard.configure(config)` — configure before `begin()`; `EspBleHidKeyboardConfig` sets `manufacturer` and opts into `bootProtocol`
 - `EspBleHidKeyboardInputReport` — `modifiers` bitmask (e.g. `LeftShift`) plus up to 6 HID usages in `keys[]`
 - `keyboard.sendReport(report)` / `keyboard.releaseAll()`
-- `keyboard.onOutputReport(cb)` — LED state (`numLock()`, `capsLock()`, `scrollLock()`)
+- `keyboard.onOutputReport(cb)` — LED state (`numLock`, `capsLock`, `scrollLock`)
+- `keyboard.ledState()` — ask for the current LED state instead of reacting to a change
 - `keyboard.onProtocolMode(cb)` — compare against `EspBleHidKeyboard::BootProtocolMode`
 
 ## Notes

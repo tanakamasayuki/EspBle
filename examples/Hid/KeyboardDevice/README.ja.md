@@ -24,7 +24,8 @@
 - `ble.hidKeyboard()` / `keyboard.configure(config)` — `begin()` 前に構成。`EspBleHidKeyboardConfig` で `manufacturer` を設定し、`bootProtocol` を有効化
 - `EspBleHidKeyboardInputReport` — `modifiers` bitmask（例: `LeftShift`）と最大6個のHID usageを持つ `keys[]`
 - `keyboard.sendReport(report)` / `keyboard.releaseAll()`
-- `keyboard.onOutputReport(cb)` — LED状態（`numLock()`、`capsLock()`、`scrollLock()`）
+- `keyboard.onOutputReport(cb)` — LED状態（`numLock`、`capsLock`、`scrollLock`）
+- `keyboard.ledState()` — 変化の通知ではなく「今のLED状態」を問い合わせる
 - `keyboard.onProtocolMode(cb)` — `EspBleHidKeyboard::BootProtocolMode` と比較
 
 ## メモ

@@ -54,7 +54,7 @@ def test_hid_boot_protocol(dut, peers):
     dut.expect_exact("BOOT_OUTPUT_WRITTEN success=1", timeout=20)
     output = device.expect(re.compile(rb"OUTPUT_REPORT leds=(\d+) caps=(\d+) context=(\w+)"), timeout=20)
     assert int(output.group(1)) == 2, "Caps Lock LED bit (0x02)"
-    assert output.group(2) == b"1", "capsLock() must be set"
+    assert output.group(2) == b"1", "capsLock must be set"
     assert output.group(3) == b"loop", "onOutputReport must fire from update()/loop"
 
     dut.write("d")
