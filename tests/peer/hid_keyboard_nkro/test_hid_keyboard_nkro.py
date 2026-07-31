@@ -62,9 +62,11 @@ def test_nkro_whole_state_is_one_report(dut, peers):
     assert match.group(2) == b"1", "the high usage 0x87 must be down"
     assert match.group(3) == b"1", "usage 0x05 must be down"
 
+    # Everything this report put down goes away together. Unlike the first test,
+    # usage 0x05 is still held here, so releaseAll() is what releases it.
     device.write("r")
     device.expect_exact("DEVICE_RELEASE_ALL success=1", timeout=10)
-    dut.expect_exact("HOST_NKRO_STATE count=0 high=0 b=0 b_released=0", timeout=20)
+    dut.expect_exact("HOST_NKRO_STATE count=0 high=0 b=0 b_released=1", timeout=20)
 
 
 def test_nkro_requires_mtu_32(dut, peers):
