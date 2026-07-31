@@ -1,4 +1,5 @@
 import re
+import time
 
 NKRO_STATE_PATTERN = re.compile(
     rb"HOST_NKRO_STATE count=(\d+) high=(\d+) b=(\d+) b_released=(\d+)"
@@ -115,6 +116,32 @@ def test_held_state_tracks_what_the_host_was_told(dut, peers):
     device.write("h")
     device.expect_exact(
         "DEVICE_HELD count=0 a=0 high=0 shift=0 modifiers=0", timeout=10
+    )
+
+
+def test_led_state_follows_the_host_without_a_callback(dut, peers):
+    """`ledState()` must track the host whether or not `onOutputReport()` is
+    installed. Without a callback, `dispatchPendingOutputReports()` returns early
+    and nothing drains the output queue, so the queue sits full and every later
+    report is dropped — the saved state therefore has to be updated before the
+    queue rather than at dispatch time.
+
+    The flood writes ten LED values while the queue holds eight, so reports are
+    definitely dropped, and ends on a value distinct from the earlier test's.
+    """
+    device = peers["device"]
+
+    device.write("u")
+    device.expect_exact("DEVICE_OUTPUT_CALLBACK installed=0", timeout=10)
+
+    dut.write("L")
+    dut.expect_exact("HOST_LEDS_FLOOD sent=10", timeout=20)
+    time.sleep(1)
+
+    # Num + Caps + Scroll = 0x07, the last value written.
+    device.write("e")
+    device.expect_exact(
+        "DEVICE_LED_STATE leds=7 num=1 caps=1 scroll=1 connection=1", timeout=10
     )
 
 

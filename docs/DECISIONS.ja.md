@@ -108,6 +108,7 @@
 25. **最後のHostが切断したら`ledState()`と`heldState()`をクリアする。** 前のHostの状態を次の接続へ持ち越さない。`heldState()`は再接続後の重複抑制の比較対象になるため、残すと「同じ状態だから送らない」と判断されてstuck keyになる。
 26. **LED Output Reportはlistener化せず、単一slotの`onOutputReport()`＋getterで扱う。** LEDは event ではなく**状態**で、競合しているのは「1回の通知を誰が消費するか」ではなく「最新値を誰が読めるか」でしかない。getterで解ける問題にlistener基盤を増やさない。接続系イベントをmulti-listener化した判断（接続とGATT 14）と矛盾しない——あちらは「同じ通知を複数が観測する」必要が実在した。`onOutputReport` / `onProtocolMode`のlistener化は将来の選択肢として残すが、やるならEspUsbDevice側と同時。
 27. **`ledState()`は値を返す（`heldState()`は参照）。** `ledState`はHostの書き込み時にstack taskから書かれるため、`impl_->mutex`保護下の実体への参照を返すとデータ競合になる。ロック内でコピーして返す。`nkroState_`は送信経路（呼び出し側task）からしか書かれないため`heldState()`は参照でよい。姉妹ライブラリEspUsbDeviceの`ledState()`が参照を返すのと署名が揃わないが、これはbackendのthreadモデルの差に由来する。
+28. **Lock状態のフラグはメソッドではなくbool メンバとする。** `EspBleHidKeyboardOutputReport`の`numLock()`等をメンバへ変えた。Host側`EspBleHidKeyboardState`が既に`bool numLock;`のメンバ形で、同じ「Lock状態」という概念がHost側とDevice側で別の形をしていた——`keys` / `bitmap`と同じ構図。姉妹ライブラリ`EspUsbDevice` / `EspUsbHost`もメンバ形なので、揃えるとライブラリ内と3ライブラリ間の不統一が同時に解消する。raw byteから都度計算するメソッド形は状態を二重に持たない利点があるが、この型は**ライブラリだけが生成するイベントpayload**（利用者は受け取るだけ）で、`setLeds()`が`leds`とフラグを同時に決める1箇所になるため食い違わない。
 
 ## BLE MIDI
 

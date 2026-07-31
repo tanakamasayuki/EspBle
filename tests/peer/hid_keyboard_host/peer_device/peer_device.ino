@@ -52,8 +52,8 @@ void setup()
     Serial.printf(
       "DEVICE_OUTPUT leds=%u num=%u caps=%u context=%s\n",
       report.leds,
-      report.numLock() ? 1 : 0,
-      report.capsLock() ? 1 : 0,
+      report.numLock ? 1 : 0,
+      report.capsLock ? 1 : 0,
       callbackContext());
   });
   ble.hidVendor().onOutputReport([](const EspBleHidVendorReport &report) {

@@ -41,8 +41,8 @@ void setup()
       "OUTPUT_REPORT id=%u leds=%u num=%u caps=%u context=%s\n",
       static_cast<unsigned>(report.connectionId),
       report.leds,
-      report.numLock() ? 1 : 0,
-      report.capsLock() ? 1 : 0,
+      report.numLock ? 1 : 0,
+      report.capsLock ? 1 : 0,
       callbackContext());
   });
 

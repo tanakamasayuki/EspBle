@@ -40,7 +40,7 @@ void setup()
   });
   keyboard.onOutputReport([](const EspBleHidKeyboardOutputReport &report) {
     Serial.printf("OUTPUT_REPORT leds=%u caps=%u context=%s\n",
-      report.leds, report.capsLock() ? 1 : 0, contextName());
+      report.leds, report.capsLock ? 1 : 0, contextName());
   });
 
   EspBleConfig config;

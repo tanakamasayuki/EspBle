@@ -31,9 +31,9 @@ void setup()
   keyboard.onOutputReport([](const EspBleHidKeyboardOutputReport &report) {
     Serial.printf(
       "Keyboard LEDs: num=%u caps=%u scroll=%u\n",
-      report.numLock() ? 1 : 0,
-      report.capsLock() ? 1 : 0,
-      report.scrollLock() ? 1 : 0);
+      report.numLock ? 1 : 0,
+      report.capsLock ? 1 : 0,
+      report.scrollLock ? 1 : 0);
   });
   // en: Notified when the host switches Protocol Mode. Boot Protocol Mode (0) is used
   //     by e.g. a BIOS; input is then sent over the 8-byte Boot Keyboard Input Report

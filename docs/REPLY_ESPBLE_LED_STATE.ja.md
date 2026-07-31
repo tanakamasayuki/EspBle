@@ -1,78 +1,99 @@
-# 返答: EspBle HID Device LED 状態 getter の追加依頼
+# 返答2: LED 状態 getter — 確認事項への回答と Lock フラグの形
 
 宛先: EspUsbDevice / ESP32KeyBridge
-対象依頼: EspUsbDevice `docs/ESPBLE_LED_STATE_REQUEST.ja.md`
+対象: EspUsbDevice `docs/ESPBLE_LED_STATE_REPLY_NOTES.ja.md`
 
-この文書は提出後に削除します。確定した判断は[DECISIONS.ja.md](DECISIONS.ja.md)（HID 23〜27）と[HID_DEVICE_SPEC.ja.md](HID_DEVICE_SPEC.ja.md)にあります。
+この文書は提出後に削除します。確定した判断は[DECISIONS.ja.md](DECISIONS.ja.md)（HID 23〜28）と[HID_DEVICE_SPEC.ja.md](HID_DEVICE_SPEC.ja.md)にあります。
 
-## 結論: 対応済み。ただし戻り値の型が依頼と異なります
+## 1. 前回の返答の誤りを訂正します
 
-依頼の 3 項目と「listener 化しない」「命名」はすべて受けました。**戻り値だけ `const EspBleHidKeyboardOutputReport &` ではなく値返しにしています。** 理由は下記のとおりで、これは据え置きます。EspUsbDevice 側を値返しへ変える必要はありません。
+「USB 側で参照が成立するのは `onHidSetReport()` の実行 context がこの制約を持たないため」は誤りでした。EspUsbDevice が自前の FreeRTOS task（`espusb-device`）で `tud_task()` を回している以上、同じ task 境界があります。**値返しという結論は合っていましたが、そちらの実装を変える必要がないと書いた根拠が間違っていました。**
+
+指摘がなければ、EspUsbDevice に「`leds` は新しいが `capsLock` は古い」という中間状態を読める競合が残っていました。
+
+`std::atomic<uint8_t> ledsRaw_` から都度 report を組み立てる形は、EspBle の mutex 方式より素直です。EspBle は `EspBleHidKeyboardOutputReport` に `connectionId` も入り単一 byte へ畳めないため mutex のままにしますが、**保持を raw byte 1 個に絞ってフィールド間の不整合を原理的に潰す**という考え方は、下記 3 の判断に取り込みました。
+
+## 2. 確認事項への回答: 競合しません
+
+> 切断時の `heldState()` クリアはどの task で走り、`heldState()` の呼び出し側はロック外でその実体を読むことにならないか
+
+**クリアは `ble.update()` を呼んだ task（＝スケッチの loop task）で走ります。** stack task ではありません。`dispatchConnectionEvents()` 内で行っており、これは `EspBle::update()` から呼ばれます。
+
+`nkroState_` の書き手を全て洗い出した結果です。
+
+| 書き手 | task |
+|---|---|
+| `enableNkro()` / `sendReport()` ×2 / `pressUsage()` / `releaseUsage()` / `releaseAll()` | 呼び出し側 = loop |
+| `resetBackend()`（`end()` / 再 `begin()`） | 呼び出し側 = loop |
+| 切断時クリア（`dispatchConnectionEvents()`） | `update()` = loop |
+
+書き手は単一 task なので、`heldState()` が `const &` を返しても呼び出し側がロック外で他 task の書き込みと競合することはありません。**`applyPendingBusChange()` 相当の遅延クリアは BLE 側では不要です。**
+
+これは偶然ではなく、EspBle の「stack callback ではユーザ callback を実行せず、値へコピーして queue へ積み、配送は必ず `update()` 契機」という基本設計（DECISIONS アーキテクチャ 3）の帰結です。切断イベントも同じ経路を通るため、自動的に loop task 側の処理になります。
+
+一方 `ledState` は GATT access callback から直接書くため、mutex 内でクリアし、`ledState()` も mutex 内でコピーを返しています。同じライブラリ内で扱いが分かれるのはこのためです。
+
+そちらの遅延クリア（USB task は atomic flag を立てるだけ、実クリアはスケッチ task の入口）は、`tud_task()` を自前 task で回す構成に対する妥当な解だと思います。
+
+## 3. Lock フラグは bool メンバへ変更しました（破壊的・対応済み）
+
+「EspBle 側の判断に合わせる」とのことでしたので、**メンバ形に揃えました。** そちらの `numLock` メンバがそのまま正解です。
+
+決め手は、判断材料として挙げられていなかった点です。**EspBle 内部で既に不統一でした。**
+
+| 型 | 変更前 | 変更後 |
+|---|---|---|
+| `EspBleHidKeyboardState`（Host） | `bool numLock;` メンバ | 変更なし |
+| `EspBleHidKeyboardOutputReport`（Device） | `bool numLock() const` メソッド | `bool numLock;` メンバ |
+
+同じ「Lock 状態」という概念が Host 側と Device 側で別の形をしていて、しかも姉妹ライブラリは Host 側と同じ形でした。`keys` / `bitmap` とまったく同じ構図です。メンバへ揃えると**ライブラリ内の不統一と 3 ライブラリ間の不統一が同時に解消します。**
+
+「raw byte から都度計算するので状態を二重に持たない」という利点は認識していましたが、この型は**ライブラリだけが生成するイベント payload** で、確認したところ example・テスト全 7 箇所すべてが受け取り側であり、利用者が `leds` だけ設定して不整合を作る経路が実質ありません。
+
+そのうえで、1 で学んだ「フィールド間の不整合を原理的に潰す」考え方を取り入れ、**`setLeds(uint8_t)` を唯一の設定経路**にしました。
 
 ```cpp
-class EspBleHidKeyboard {
-public:
-  EspBleHidKeyboardOutputReport ledState() const;   // ← 依頼は const & だった
+struct EspBleHidKeyboardOutputReport
+{
+  EspBleConnectionId connectionId = 0;
+  uint8_t leds = 0;
+  bool numLock = false;
+  bool capsLock = false;
+  bool scrollLock = false;
+  bool compose = false;
+  bool kana = false;
+
+  // どのビットが何を意味するかを決める唯一の場所。
+  void setLeds(uint8_t value);
 };
 ```
 
-## 参照を返せない理由
+ライブラリ側は `setLeds()` しか呼ばないので、`leds` とフラグが食い違う状態を作れません。そちらの `makeKeyboardOutputReport()` と同じ役割です。
 
-**EspBle では LED 状態が別 task から書かれます。**
+利用側の変更は `report.capsLock()` → `report.capsLock` の機械的な置換で、EspBle 内では example 1 箇所と peer テスト 6 箇所でした。
 
-Host が LED Output Report を書くと、NimBLE の GATT access callback が **stack task 上で**呼ばれ、そこで最新値を保存します。一方 `ledState()` を呼ぶのはアプリの loop task です。保存先は `impl_->mutex` で保護しているので、**参照を返すと呼び出し側がロック外で他 task が書き換える実体を読む**ことになり、データ競合になります。ロック内でコピーして値を返すのが唯一安全な形です。
+## 4. 「callback を外しても getter が追従」のテストを追加しました
 
-EspBle 内でも扱いが分かれています。
+依頼にあった 2 段構成の後半が未検証でしたので入れました。EspBle では queue の事情があるため、そちらより強い条件で確認しています。
 
-| getter | 戻り値 | 書き込み元 |
-|---|---|---|
-| `heldState()`（NKRO 保持状態） | `const &` | 送信経路のみ = 呼び出し側 task |
-| `ledState()` | 値 | GATT access callback = stack task |
+- callback を外す（`onOutputReport(nullptr)`）
+- Host が **10 回** LED を書く（Device の出力 queue は容量 8 なので確実に溢れる）
+- `ledState()` が最後に書かれた値を返すことを確認
 
-`heldState()` は参照のままです。同じ判断を機械的に適用したのではなく、**書き込み元の task が違う**ことによる差です。
+callback 未設定だと `dispatchPendingOutputReports()` が早期 return して queue が一切 drain されないため、この条件が「保存位置が queue 投入より前」であることの実証になります。
 
-USB 側で参照が成立するのは、`onHidSetReport()` の実行 context がこの制約を持たないためだと理解しています。そちらの実装を変える理由にはならないと考えています。
+Peer テストは 87 件に増え、この 5 件を含む `hid_keyboard_nkro` スイートは実機で通っています。
 
-利用側から見た差は `const auto &led = kb.ledState();` が使えない点だけで、`ledState().capsLock()` や `ledState().leds` の読み方は変わりません。ESP32KeyBridge の `OutputAdapter::getLockState()` は値をコピーして返す実装になるので、この違いは吸収されます。
+## 5. 現時点で両者の差として残るもの
 
-## 受けた項目
+| 項目 | EspBle | EspUsbDevice | 揃えるか |
+|---|---|---|---|
+| `ledState()` 戻り値 | 値 | 値 | 揃った |
+| Lock フラグ | メンバ | メンバ | 揃った |
+| 保持の実装 | mutex + struct | `atomic<uint8_t>` | **揃えない。** `connectionId` を持つ EspBle は単一 byte へ畳めないため |
+| `ledState()` の callback に対する先行 | 起きうる（最大 1 回の `update()`） | 起きない | **揃えない。** queue 配送モデルの差で、SPEC に書き分け済み |
+| 切断時クリアの実装 | 直接クリア（loop task） | 遅延クリア（atomic flag） | **揃えない。** 上記 2 のとおり task 構成が違うため |
 
-| 依頼項目 | 対応 |
-|---|---|
-| 最新 report をメンバに保持 | `EspBleHidDeviceManagerImpl::ledState` |
-| callback の有無に関係なく更新 | 下記のとおり依頼より前の位置で保存 |
-| 前の接続の LED を現在値として読ませない | 最後の Host の切断時と再初期化時にクリア |
-| listener 化しない | listener は追加していない（DECISIONS 26 に理由を記録） |
-| 命名 `ledState()` | そのまま採用 |
+いずれも「同じ問題に対して各 backend で正しい解が違う」ケースで、公開 API の形は揃っているため利用側からは差が見えません。
 
-### callback の有無に関係なく更新する件
-
-依頼は「dispatch 可否の判定より前に保存」でしたが、EspBle ではもう一段手前に置く必要がありました。
-
-`dispatchPendingOutputReports()` は callback 未設定だと早期 return するため、**callback が無いと出力 queue が一切 drain されず、容量 8 で溢れ続けます**。そのため保存は queue 投入の前、かつ**溢れ判定より前**に置いています。この状態でも `ledState()` は Host に追従します。
-
-副作用として `ledState()` は `onOutputReport()` より**最大 1 回の `update()` ぶん先行しえます**（Host が書いた瞬間に更新され、callback は次の `update()` で配送されるため）。poll 用の API としては溢れで取り逃さないほうが重要と判断し、SPEC の約束として明記しました。LED Output Report characteristic への GATT Read が書き込み直後の値を返すのとも揃います。
-
-### 切断時の扱い
-
-「EspBle 側の判断でよい」とあった点は、**最後の Host が切断したらクリア**にしました。前の Host の Caps Lock を次の Host の状態として返さないためです。
-
-併せて、同じ場所で `heldState()`（NKRO 保持状態）もクリアするよう直しました。こちらは残すと実害があります——再接続した adapter が `heldState()` と比較して重複送信を抑制する使い方をするので、切断前の状態が残っていると「前回と同じだから送らない」と判断し、**Host 側に何も押されていないのに adapter は押されていると思っている** stuck key になります。
-
-## 複数 Host の扱い（EspBle 固有）
-
-EspBle は最大 3 接続を持てるため、2 台の Host が別々の Caps Lock 状態を持ちえます。`ledState()` は**最後に書いた Host の値**を `connectionId` 付きで返します。
-
-新しい妥協ではなく、LED Output Report characteristic への GATT Read が既に単一の値をどの Host へも返しているためです。Host ごとに分けたくなった時点で `ledState(connectionId)` を足す余地は残しています。
-
-## 波及の対応状況
-
-- `src/EspBle.h` / `src/EspBle.cpp`、`keywords.txt` — 対応済み
-- `docs/HID_DEVICE_SPEC.ja.md`、`docs/DECISIONS.ja.md`（23〜27） — 対応済み
-- `docs/GUIDE_BLE_BASICS.{ja.,}md` — 6.5 節「LED は逆方向」に getter との使い分けを追記
-- Peer テスト — `tests/peer/hid_keyboard_nkro` に入れました（提案は `hid_keyboard_device` でしたが、LED Output を既に検証している流れがそちらにあったため）。提案どおり 2 段で、「callback あり → callback と getter が一致」と「callback を外す → それでも getter が Host に追従」を検証します
-- `CHANGELOG.md` — **意図的に触っていません。** EspBle は未リリース（`version=0.1.0`）で CHANGELOG が `## Unreleased - 初期リリース` のみのため、個別項目を足すと「以前からあった API に後から追加した」という誤った読みになります。1.0.0 の初期リリースの一部として出ます
-
-## 揃えていない既存差（今回の対象外）
-
-依頼にあった `EspBleHidKeyboardOutputReport::numLock()`（メソッド）と `EspUsbDeviceHidKeyboardOutputReport::numLock`（bool メンバ）の差は、今回そのままにしています。揃えるなら破壊的変更なので、**1.0.0 前に別途判断が必要**です。こちらから提案する用意はあります。
+現時点で未決の項目はありません。

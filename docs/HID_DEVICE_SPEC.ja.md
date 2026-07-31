@@ -47,7 +47,7 @@ Host側`EspBleHidHost::ready(connectionId)`が接続を取るのに対しDevice�
 - security有効時はHID attributeへHOGP Security Mode 1 Level 2（暗号化必須）を適用し、未暗号化linkへHID入力を送りません。
 - 切断・再初期化時はhandle、購読状態、保持reportを破棄します。
 
-- **LED状態は`ledState()`でも取れます。** `onOutputReport()`が「変化したとき」の通知なのに対し、`ledState()`は「今どうなっているか」の問い合わせで、Lock状態を同期的に返す必要がある利用側（ESP32KeyBridgeの`OutputAdapter::getLockState()`など）が自前の写しを持たずに済みます。返すのは既存の`EspBleHidKeyboardOutputReport`で、Boot Protocol Modeの`0x2A32`書き込みも同じ値へ入ります。
+- **LED状態は`ledState()`でも取れます。** `onOutputReport()`が「変化したとき」の通知なのに対し、`ledState()`は「今どうなっているか」の問い合わせで、Lock状態を同期的に返す必要がある利用側（ESP32KeyBridgeの`OutputAdapter::getLockState()`など）が自前の写しを持たずに済みます。返すのは`onOutputReport()`と同じ`EspBleHidKeyboardOutputReport`で、Boot Protocol Modeの`0x2A32`書き込みも同じ値へ入ります。Lock状態は`numLock` / `capsLock` / `scrollLock` / `compose` / `kana`の**boolメンバ**で、raw byteの`leds`と併せて`setLeds()`が同時に決めるため食い違いません（Host側`EspBleHidKeyboardState`および姉妹ライブラリと同じ形）。
 - `ledState()`は**Hostが書いた時点**で更新し、コールバック配送時ではありません。Output queue（容量8）が溢れてコールバックが落ちても最新状態を取り逃さないためで、代償として`onOutputReport()`より最大1回の`update()`ぶん先行しうる点はSPEC上の約束とします。LED Output Report characteristicへのGATT Readが書き込み直後の値を返すのと揃います。
 - 複数Hostが接続している場合、`ledState()`は**最後に書いたHostの値**を`connectionId`付きで返します。GATT Readが単一の値をどのHostへも返しているのと同じ意味論です。Hostごとに分けたくなった時点で`ledState(connectionId)`を足す余地は残します。
 - 最後のHostが切断したとき、`ledState()`と`heldState()`はクリアします。前のHostのLED状態や押下状態を次の接続へ持ち越さないためで、特に`heldState()`は再接続後の重複抑制の比較対象になるため、残すと「送ったつもりで送っていない」stuck keyを生みます。

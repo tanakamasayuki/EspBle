@@ -57,6 +57,25 @@ void loop()
     else if (command == 'l')
       Serial.printf("HOST_LEDS_WRITTEN success=%u\n",
         ble.hidHost().setKeyboardLeds(connectionId, true, true, false) ? 1 : 0);
+    else if (command == 'L')
+    {
+      // More writes than the device's output queue holds (capacity 8), so the
+      // device side must keep its saved LED state current even while reports
+      // are being dropped. Ends on num+caps+scroll so the final value is
+      // distinct from the 'l' command's.
+      unsigned sent = 0;
+      for (unsigned index = 0; index < 10; ++index)
+      {
+        const bool last = index == 9;
+        if (ble.hidHost().setKeyboardLeds(
+              connectionId, last, last, last || (index & 1) == 0))
+        {
+          ++sent;
+        }
+        delay(20);
+      }
+      Serial.printf("HOST_LEDS_FLOOD sent=%u\n", sent);
+    }
   }
   ble.update();
   delay(1);

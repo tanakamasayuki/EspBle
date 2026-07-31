@@ -699,16 +699,30 @@ struct EspBleHidKeyboardNkroReport
   }
 };
 
+// The LED state a host wrote. The library fills the flags from `leds`, so the
+// two never disagree; they are plain members rather than accessors to match the
+// Host-side EspBleHidKeyboardState and the EspUsbDevice / EspUsbHost siblings.
 struct EspBleHidKeyboardOutputReport
 {
   EspBleConnectionId connectionId = 0;
   uint8_t leds = 0;
+  bool numLock = false;
+  bool capsLock = false;
+  bool scrollLock = false;
+  bool compose = false;
+  bool kana = false;
 
-  bool numLock() const { return (leds & 0x01) != 0; }
-  bool capsLock() const { return (leds & 0x02) != 0; }
-  bool scrollLock() const { return (leds & 0x04) != 0; }
-  bool compose() const { return (leds & 0x08) != 0; }
-  bool kana() const { return (leds & 0x10) != 0; }
+  // Set `leds` and derive the flags from it. The single place that decides what
+  // each bit means, so no caller has to keep the two in step by hand.
+  void setLeds(uint8_t value)
+  {
+    leds = value;
+    numLock = (value & 0x01) != 0;
+    capsLock = (value & 0x02) != 0;
+    scrollLock = (value & 0x04) != 0;
+    compose = (value & 0x08) != 0;
+    kana = (value & 0x10) != 0;
+  }
 };
 
 struct EspBleHidKeyboardHostDiscovery

@@ -19,9 +19,9 @@ void setup()
   ble.hidKeyboard().onOutputReport(
     [](const EspBleHidKeyboardOutputReport &report) {
       Serial.printf("DEVICE_LEDS num=%u caps=%u scroll=%u\n",
-        report.numLock() ? 1 : 0,
-        report.capsLock() ? 1 : 0,
-        report.scrollLock() ? 1 : 0);
+        report.numLock ? 1 : 0,
+        report.capsLock ? 1 : 0,
+        report.scrollLock ? 1 : 0);
     });
 
   EspBleConfig config;

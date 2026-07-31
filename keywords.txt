@@ -312,6 +312,7 @@ enableNkro	KEYWORD2
 nkroEnabled	KEYWORD2
 heldState	KEYWORD2
 ledState	KEYWORD2
+setLeds	KEYWORD2
 releaseUsage	KEYWORD2
 buttons	KEYWORD2
 usage	KEYWORD2

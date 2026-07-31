@@ -1,6 +1,7 @@
 #include <EspBle.h>
 
 EspBle ble;
+bool outputCallbackInstalled = false;
 
 static EspBleConfig makeConfig(uint16_t preferredMtu)
 {
@@ -28,6 +29,7 @@ void setup()
   keyboard.onOutputReport([](const EspBleHidKeyboardOutputReport &report) {
     Serial.printf("DEVICE_OUTPUT leds=%u\n", report.leds);
   });
+  outputCallbackInstalled = true;
 
   if (!ble.begin(makeConfig(64))) return;
   startAdvertising();
@@ -73,10 +75,21 @@ void loop()
       const EspBleHidKeyboardOutputReport led = ble.hidKeyboard().ledState();
       Serial.printf("DEVICE_LED_STATE leds=%u num=%u caps=%u scroll=%u connection=%u\n",
         led.leds,
-        led.numLock() ? 1 : 0,
-        led.capsLock() ? 1 : 0,
-        led.scrollLock() ? 1 : 0,
+        led.numLock ? 1 : 0,
+        led.capsLock ? 1 : 0,
+        led.scrollLock ? 1 : 0,
         static_cast<unsigned>(led.connectionId));
+    }
+    else if (command == 'u')
+    {
+      // Drop the output-report callback. ledState() must keep following the
+      // host afterwards: dispatchPendingOutputReports() returns early without a
+      // callback, so nothing drains the output queue and it stays full — the
+      // saved state has to be updated before that queue, not at dispatch.
+      ble.hidKeyboard().onOutputReport(nullptr);
+      outputCallbackInstalled = false;
+      Serial.printf("DEVICE_OUTPUT_CALLBACK installed=%u\n",
+        outputCallbackInstalled ? 1 : 0);
     }
     else if (command == 'h')
     {

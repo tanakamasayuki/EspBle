@@ -3796,7 +3796,7 @@ struct EspBleHidDeviceManagerImpl
   void queueOutputReport(uint16_t connectionHandle, uint8_t leds)
   {
     EspBleHidKeyboardOutputReport report;
-    report.leds = leds;
+    report.setLeds(leds);
     if (device->owner_->impl_ != nullptr)
     {
       std::lock_guard<std::mutex> connectionLock(device->owner_->impl_->mutex);
