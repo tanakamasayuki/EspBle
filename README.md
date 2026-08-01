@@ -67,7 +67,7 @@ The full feature set above is verified with an automated two-board ESP32-S3 peer
 test suite plus host-side unit tests. On P4/C6 Hosted, connections, GATT,
 notify/indicate, MTU, Wi-Fi/BLE coexistence, and shared-transport lifecycle have
 been verified with a P4/S3 pair. For excluded security paths and other details,
-see [tests/TEST_PLAN.ja.md](tests/TEST_PLAN.ja.md) and the
+see [tests/TEST_PLAN.md](tests/TEST_PLAN.md) and the
 [ESP-Hosted limitations](docs/ESP_HOSTED_LIMITATIONS.ja.md).
 
 ## Compatibility
@@ -152,7 +152,7 @@ The user-facing documents below are available in English; the remaining design d
 - [Terminology and naming rules](docs/TERMINOLOGY.ja.md)
 - [Design decision ledger](docs/DECISIONS.ja.md)
 - [Feature support matrix](docs/FEATURE_MATRIX.md)
-- [Test plan](tests/TEST_PLAN.ja.md)
+- [Test plan](tests/TEST_PLAN.md)
 - [Release checklist](docs/RELEASE_CHECKLIST.md)
 
 ## Sibling libraries

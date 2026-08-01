@@ -26,7 +26,7 @@ The design documents are written in Japanese. This guide lists them and shows th
 | Settled decisions and their rationale | [DECISIONS.ja.md](DECISIONS.ja.md) |
 | HID spec (Device / Host) | [HID_DEVICE_SPEC.ja.md](HID_DEVICE_SPEC.ja.md) / [HID_HOST_SPEC.ja.md](HID_HOST_SPEC.ja.md) |
 | BLE communication beginner guide: GAP / security / GATT / UUID / HID / BLE MIDI | [GUIDE_BLE_BASICS.md](GUIDE_BLE_BASICS.md) |
-| Test strategy and coverage | [../tests/TEST_PLAN.ja.md](../tests/TEST_PLAN.ja.md) |
+| Test strategy and coverage | [../tests/TEST_PLAN.md](../tests/TEST_PLAN.md) |
 | Release checks | [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) |
 | Board / core build matrices (CI-generated) | `BOARDS.<version>.md` / `COMPATIBILITY.<version>.md` |
 | ESP32-P4 / ESP-Hosted setup, versions, and C6 update (Japanese) | [ESP_HOSTED_SETUP.ja.md](ESP_HOSTED_SETUP.ja.md) |

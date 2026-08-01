@@ -31,7 +31,7 @@ BLE MIDI provides a backend-independent packet codec (timestamps, running status
 - Example compilation: 92 examples for the ESP32-S3
 - ESP32KeyBridge prototype adapter: raw usage, remap, modifiers, release on disconnect, LED reporting, and bonded reconnection verified with peer tests
 
-For how to run them see [tests/TEST_PLAN.ja.md](../tests/TEST_PLAN.ja.md); for the release-time checks, [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md).
+For how to run them see [tests/TEST_PLAN.md](../tests/TEST_PLAN.md); for the release-time checks, [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md).
 
 ## Known limits
 

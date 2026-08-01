@@ -5,7 +5,7 @@ Use this checklist before releasing EspBle. The GitHub Actions workflows and `to
 ## Preflight
 
 - `README.ja.md` / `README.md`, `docs/STATUS.ja.md` / `docs/STATUS.md`, and `docs/FEATURE_MATRIX.ja.md` / `docs/FEATURE_MATRIX.md` match the implemented scope.
-- The Japanese and English editions of the user-facing documents are in sync (root `README`, `docs/README`, `docs/GUIDE_BLE_BASICS`, `docs/STATUS`, `docs/FEATURE_MATRIX`, `docs/RELEASE_CHECKLIST`, `examples/README` and the per-example READMEs).
+- The Japanese and English editions of the user-facing documents are in sync (root `README`, `docs/README`, `docs/GUIDE_BLE_BASICS`, `docs/STATUS`, `docs/FEATURE_MATRIX`, `docs/RELEASE_CHECKLIST`, `tests/TEST_PLAN`, `examples/README`, and the per-example READMEs).
 - `docs/API_DESIGN.ja.md`, `docs/HID_DEVICE_SPEC.ja.md`, and `docs/HID_HOST_SPEC.ja.md` match the public API.
 - `examples/README.ja.md` / `examples/README.md` and per-example READMEs use the implemented APIs.
 - No links to completed temporary plans or removed API names remain.
@@ -36,7 +36,7 @@ uv run --env-file .env pytest --clean \
   --peer-profile device:s3_peer_device
 ```
 
-See the [ESP-Hosted setup guide (Japanese)](ESP_HOSTED_SETUP.ja.md) for fixture and pin requirements, the [test policy](../tests/TEST_PLAN.ja.md#p4c6-esp-hosted回帰) for frequency and pass criteria, and the [known limitations (Japanese)](ESP_HOSTED_LIMITATIONS.ja.md) for current exclusions. Security and repeated full initialization/deinitialization cases affected by those limitations are not current release gates; re-run them after any Core or C6 firmware update to check whether the limitation has been resolved.
+See the [ESP-Hosted setup guide (Japanese)](ESP_HOSTED_SETUP.ja.md) for fixture and pin requirements, the [test policy](../tests/TEST_PLAN.md#p4c6-esp-hosted-regression) for frequency and pass criteria, and the [known limitations (Japanese)](ESP_HOSTED_LIMITATIONS.ja.md) for current exclusions. Security and repeated full initialization/deinitialization cases affected by those limitations are not current release gates; re-run them after any Core or C6 firmware update to check whether the limitation has been resolved.
 
 Compile every example for ESP32-S3:
 

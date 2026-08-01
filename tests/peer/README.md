@@ -18,7 +18,7 @@ The profiles and environment variables reuse the existing EspUsbHost/EspUsbDevic
 
 The profile names do not describe BLE roles. Sketches are flashed to and run on both boards, and both serial ports are observed from pytest. The parent-side sketch is fixed as central and the `peer_device/` sketch as peripheral; the roles are never swapped.
 
-`pytest peer/` defaults to the two-S3 fixture. The P4 fixture may remain disconnected between runs; select it explicitly for Hosted-related changes, Core/C6 firmware updates, and release candidates. See the [tests README](../README.md) and [test policy](../TEST_PLAN.ja.md#p4c6-esp-hosted回帰) for reference wiring, commands, frequency, and known-limit exclusions.
+`pytest peer/` defaults to the two-S3 fixture. The P4 fixture may remain disconnected between runs; select it explicitly for Hosted-related changes, Core/C6 firmware updates, and release candidates. See the [tests README](../README.md) and [test policy](../TEST_PLAN.md#p4c6-esp-hosted-regression) for reference wiring, commands, frequency, and known-limit exclusions.
 
 ## Test suites
 
@@ -63,4 +63,4 @@ The profile names do not describe BLE roles. Sketches are flashed to and run on 
 - `cycling_power`: the standard Cycling Power server notifies a Measurement with 16-bit flags and a signed 16-bit instantaneous power; the client reads Sensor Location, subscribes, and decodes a negative power exactly.
 - `pulse_oximeter`: the standard Pulse Oximeter server indicates a Spot-Check Measurement whose SpO2 and pulse rate are IEEE-11073 16-bit SFLOATs; the client reads PLX Features and decodes 98 % / 60 bpm exactly.
 - `glucose`: exercises the Record Access Control Point procedure — the client writes "Report Stored Records (all)"; the server notifies one Glucose Measurement (sequence, base time, SFLOAT concentration) and then indicates the RACP response, sequenced from `onSent`. Validates the write → notify → indicate choreography.
-- `connect_disconnect`, `gatt_read_write`, `notify_indicate`, `mtu`, `security_bond`, `security_passkey`, `hid_keyboard_device`, `hid_keyboard_host`, `ble_keybridge_keyboard`: the per-feature suites listed in the [test plan](../TEST_PLAN.ja.md).
+- `connect_disconnect`, `gatt_read_write`, `notify_indicate`, `mtu`, `security_bond`, `security_passkey`, `hid_keyboard_device`, `hid_keyboard_host`, `ble_keybridge_keyboard`: the per-feature suites listed in the [test plan](../TEST_PLAN.md).

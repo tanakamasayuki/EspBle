@@ -2,7 +2,7 @@
 
 > 日本語版: [README.ja.md](README.ja.md)
 
-EspBle tests use pytest-embedded with the Arduino CLI backend. See the [test plan](TEST_PLAN.ja.md) (Japanese) for the coverage policy.
+EspBle tests use pytest-embedded with the Arduino CLI backend. See the [test plan](TEST_PLAN.md) for the coverage policy.
 
 ```text
 unit/   pure C++/data-conversion tests that run on the host (no boards required)
@@ -14,7 +14,7 @@ peer/   hardware BLE tests for the S3 baseline and P4+C6 ESP-Hosted paths
 | ESP32-S3 + ESP32-S3 | Full functional baseline | Keep connected if practical; this is the default for `pytest peer/` |
 | ESP32-P4 + ESP32-C6, with an ESP32-S3 peer | SDIO/ESP-Hosted/C6-controller and Wi-Fi/BLE coexistence regression | One fixture connected on demand; select the P4 profile explicitly |
 
-Compiling for P4 does not exercise the ESP-Hosted transport, and S3-only tests cannot detect Hosted initialization or SDIO failures. P4 hardware testing is therefore required, but the fixture does not need to remain connected. Run it for Hosted-related changes, after an Arduino-ESP32 Core or C6 firmware update, and for every release candidate. See the [test plan](TEST_PLAN.ja.md#p4c6-esp-hosted回帰) for the detailed policy, the [ESP-Hosted setup guide (Japanese)](../docs/ESP_HOSTED_SETUP.ja.md) for preparation, and the [known limitations (Japanese)](../docs/ESP_HOSTED_LIMITATIONS.ja.md) for current exclusions.
+Compiling for P4 does not exercise the ESP-Hosted transport, and S3-only tests cannot detect Hosted initialization or SDIO failures. P4 hardware testing is therefore required, but the fixture does not need to remain connected. Run it for Hosted-related changes, after an Arduino-ESP32 Core or C6 firmware update, and for every release candidate. See the [test plan](TEST_PLAN.md#p4c6-esp-hosted-regression) for the detailed policy, the [ESP-Hosted setup guide (Japanese)](../docs/ESP_HOSTED_SETUP.ja.md) for preparation, and the [known limitations (Japanese)](../docs/ESP_HOSTED_LIMITATIONS.ja.md) for current exclusions.
 
 Example build regressions are caught by GitHub Actions (`.github/workflows/compile-examples.yml`), which compiles every example with the esp32s3 profile. Interoperability with OSes and commercial BLE devices is covered by manual tests.
 

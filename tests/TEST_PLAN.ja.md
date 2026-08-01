@@ -1,5 +1,7 @@
 # テスト計画
 
+> English: [TEST_PLAN.md](TEST_PLAN.md)
+
 ## 方針
 
 BLEは接続、切断、Discovery、購読、Security、Bondingが複数の非同期イベントにまたがります。このためPeerテストを補助的なsmokeではなく、実装を進めるための主要な自動テストにします。
