@@ -1,4 +1,15 @@
+import re
+
+
+HOSTED_CAPABILITY_PATTERN = re.compile(rb"ESP_HOSTED_CAPABLE ([01])")
+
+
 def test_wifi_ble_coexistence_and_shared_transport_lifecycle(dut, peers):
+    dut.write("?")
+    capability = dut.expect(HOSTED_CAPABILITY_PATTERN, timeout=10).group(1)
+    if capability == b"0":
+        return
+
     peripheral = peers["device"]
 
     peripheral.write("?")

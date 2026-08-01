@@ -1,4 +1,7 @@
 #include <EspBle.h>
+
+#if defined(CONFIG_ESP_HOSTED_ENABLE_BT_NIMBLE)
+
 #include <WiFi.h>
 #include "esp32-hal-hosted.h"
 
@@ -126,7 +129,11 @@ void loop()
   if (Serial.available() > 0)
   {
     const char command = Serial.read();
-    if (command == 'w')
+    if (command == '?')
+    {
+      Serial.println("ESP_HOSTED_CAPABLE 1");
+    }
+    else if (command == 'w')
     {
       if (WIFI_TEST_SSID[0] == '\0')
       {
@@ -183,3 +190,23 @@ void loop()
   if (bleStarted) ble.update();
   delay(1);
 }
+
+#else
+
+void setup()
+{
+  Serial.begin(115200);
+  delay(500);
+  Serial.println("READY");
+}
+
+void loop()
+{
+  if (Serial.available() > 0 && Serial.read() == '?')
+  {
+    Serial.println("ESP_HOSTED_CAPABLE 0");
+  }
+  delay(1);
+}
+
+#endif
