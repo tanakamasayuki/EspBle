@@ -12,6 +12,9 @@ EspBleの既存公開APIをESP32-S3などの内蔵BLE構成と同じ形で利用
 | Hosted DUT | ESP32-P4 + ESP32-C6 | `/dev/ttyUSB2` |
 | 基準Peer | ESP32-S3 | 既存の`.env`設定 |
 
+P4/C6のfirmware準備と更新手順は
+[ESP32-P4 / ESP-Hosted セットアップ](ESP_HOSTED_SETUP.ja.md)に分離する。
+
 ## 技術方針
 
 ESP-Hosted専用ライブラリは作らず、EspBle内のNimBLE backendへHostedの
@@ -122,8 +125,8 @@ ESP-Hosted対応はEspBle内へ実装する方がよい。P4でもGAP/GATT/Secur
 
 ## 2026-08-01 実装・検証結果
 
-対象環境はArduino-ESP32 3.3.11、P4側ESP-Hosted Host 2.12.11、C6側Slave
-firmware 2.3.2である。
+対象環境はArduino-ESP32 3.3.11、P4側ESP-Hosted Host 2.12.11である。検証開始時の
+C6側Slave 2.3.2は、検証中に2.12.11へ更新した。
 
 | 検証 | 結果 | 備考 |
 | --- | --- | --- |
@@ -140,13 +143,18 @@ firmware 2.3.2である。
 1. Securityとbonding
    - P4側はbackend status `1291` (`0x50b`)、S3側は`1035` (`0x40b`)で失敗した。
    - いずれもSecurity ManagerのDHKey check failure (`0x0b`)を示す。
-   - 同一コードのS3/S3試験は成功するため、EspBleのGATT処理ではなく、Host 2.12.11に
-     対して古いC6 Slave 2.3.2を使用しているfirmware互換性が第一候補である。
-   - Arduino-ESP32 3.3.11にはC6を2.12.11へ更新する`ESP_HostedOTA`機構がある。
-     firmware書き換えを伴うため、この計画では未実施とし、許可後に更新・再試験する。
+   - C6 Slaveを2.3.2から2.12.11へ更新し、Host/Slaveがともに2.12.11であることを
+     確認した後も同じDHKey check failureが再現した。firmware version不一致が原因ではない。
+   - P4側だけLE Secure Connectionsを無効にする切り分けでは、初回のLegacy pairing、
+     bond保存、暗号化GATTが成功した。このためESP-Hosted経由のSecure Connections
+     またはDHKey処理に問題があると判断する。
+   - Legacy pairingでbond再接続するとS3側は暗号化成功したが、P4側にSecurity eventが
+     通知されずtimeoutした。暗黙のLegacy downgradeは行わず、初期実装では既知制限とする。
 2. `end()` / `begin()`の繰り返し
    - 1回目の再初期化は成功したが、2回目にESP-Hosted SDIO driverの
      `sdio_mempool_create`がメモリ確保失敗でassertした。
+   - Slave 2.12.11への更新後は対象testの単独実行が1回成功したが、lifecycle suite
+     全体では7 passed / 1 failedとなり、同じassertが再現した。解消済みとは扱わない。
    - Arduino coreにもsecond initが未修正である旨のコメントがあり、EspBle外の
      Hosted transport再初期化制限と判断する。
    - `end()`でHostedを解放しない回避は、電力・SDIO resource・Wi-Fi共有時の意味を
@@ -156,8 +164,8 @@ firmware 2.3.2である。
 
 compile、接続、GATT、notify/indicate、MTUまでを初期対応済みとする。Security、HIDの
 bonding経路と複数回の完全再初期化は未合格であり、ESP-Hosted対応全体を完全合格とは
-しない。C6 firmware更新後にSecurity/HIDを再試験し、再初期化についてはArduino coreの
-修正状況を追跡する。
+しない。Securityはversionを揃えても再現するためESP-Hosted/Arduino coreの上流issue
+候補とし、再初期化と合わせてcoreの修正状況を追跡する。
 
 ## 完了時の記録
 
