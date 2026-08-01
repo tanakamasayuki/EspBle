@@ -1,6 +1,14 @@
 #include "EspBle.h"
 
+#include <soc/soc_caps.h>
+
+#if SOC_BLE_SUPPORTED
 #include <esp_bt.h>
+#endif
+
+#if defined(CONFIG_ESP_HOSTED_ENABLE_BT_NIMBLE)
+#include "esp32-hal-hosted.h"
+#endif
 
 // The Arduino core releases the BLE controller's memory (~36 KB) before setup()
 // runs unless a BLE library announces itself; the constructor in this header is
@@ -91,7 +99,18 @@ void hostTask(void *)
 bool startNimbleHost()
 {
   if (hostSynced) return true;
-  if (nimble_port_init() != ESP_OK) return false;
+#if defined(CONFIG_ESP_HOSTED_ENABLE_BT_NIMBLE)
+  // On radio-less hosts such as ESP32-P4, bring up the ESP-Hosted transport
+  // and the controller on the co-processor before NimBLE opens its HCI path.
+  if (!hostedInitBLE()) return false;
+#endif
+  if (nimble_port_init() != ESP_OK)
+  {
+#if defined(CONFIG_ESP_HOSTED_ENABLE_BT_NIMBLE)
+    hostedDeinitBLE();
+#endif
+    return false;
+  }
   ble_hs_cfg.reset_cb = onHostReset;
   ble_hs_cfg.sync_cb = onHostSync;
   // Bonds live in NVS, so they survive a reboot; this is the store that does it.
@@ -102,7 +121,15 @@ bool startNimbleHost()
   const uint32_t deadline = millis() + 5000;
   while (!hostSynced)
   {
-    if (static_cast<int32_t>(millis() - deadline) >= 0) return false;
+    if (static_cast<int32_t>(millis() - deadline) >= 0)
+    {
+      nimble_port_stop();
+      nimble_port_deinit();
+#if defined(CONFIG_ESP_HOSTED_ENABLE_BT_NIMBLE)
+      hostedDeinitBLE();
+#endif
+      return false;
+    }
     delay(1);
   }
   return true;
@@ -112,6 +139,11 @@ void stopNimbleHost()
 {
   nimble_port_stop();
   nimble_port_deinit();
+#if defined(CONFIG_ESP_HOSTED_ENABLE_BT_NIMBLE)
+  // hostedDeinitBLE() keeps the shared transport alive when Wi-Fi still owns
+  // it, and tears it down only after the final user has stopped.
+  hostedDeinitBLE();
+#endif
   hostSynced = false;
 }
 
@@ -1108,7 +1140,8 @@ struct EspBleImpl
       ble_gap_conn_desc description{};
       if (ble_gap_conn_find(event->enc_change.conn_handle, &description) == 0)
       {
-        impl->updateSecurity(event->enc_change.conn_handle, description.sec_state);
+        impl->updateSecurity(
+          event->enc_change.conn_handle, description.sec_state, event->enc_change.status);
       }
     }
     else if (event->type == BLE_GAP_EVENT_SUBSCRIBE)
@@ -1322,7 +1355,8 @@ struct EspBleImpl
     }
   }
 
-  void updateSecurity(uint16_t connectionHandle, const ble_gap_sec_state &state)
+  void updateSecurity(
+    uint16_t connectionHandle, const ble_gap_sec_state &state, int backendStatus)
   {
     std::lock_guard<std::mutex> lock(mutex);
     for (ConnectionSlot &slot : connections)
@@ -1344,7 +1378,9 @@ struct EspBleImpl
       if (!event.securityChanged.success)
       {
         event.securityChanged.error = EspBleError::BackendFailure;
-        event.securityChanged.detail = "BLE pairing or encryption failed";
+        event.securityChanged.detail =
+          String("BLE pairing or encryption failed (backend status ") +
+          String(backendStatus) + ")";
       }
       pushEvent(event);
       return;
@@ -9682,6 +9718,7 @@ EspBleAddressType EspBle::localAddressType() const
 
 namespace
 {
+#if SOC_BLE_SUPPORTED
 // Transmit power levels the radio supports, paired with their dBm value.
 struct TxPowerLevel
 {
@@ -9693,6 +9730,7 @@ constexpr TxPowerLevel TxPowerLevels[] = {
   {-3, ESP_PWR_LVL_N3},   {0, ESP_PWR_LVL_N0},  {3, ESP_PWR_LVL_P3},
   {6, ESP_PWR_LVL_P6},    {9, ESP_PWR_LVL_P9},
 };
+#endif
 } // namespace
 
 bool EspBle::setTxPower(int8_t dBm)
@@ -9702,6 +9740,7 @@ bool EspBle::setTxPower(int8_t dBm)
     setError(EspBleError::InvalidState, "BLE stack is not initialized");
     return false;
   }
+#if SOC_BLE_SUPPORTED
 
   const TxPowerLevel *nearest = &TxPowerLevels[0];
   for (const TxPowerLevel &candidate : TxPowerLevels)
@@ -9715,6 +9754,13 @@ bool EspBle::setTxPower(int8_t dBm)
     ESP_BLE_PWR_TYPE_DEFAULT, static_cast<esp_power_level_t>(nearest->level));
   clearError();
   return true;
+#else
+  (void)dBm;
+  setError(
+    EspBleError::BackendFailure,
+    "transmit power is controlled by the ESP-Hosted co-processor");
+  return false;
+#endif
 }
 
 int8_t EspBle::txPower() const
@@ -9723,12 +9769,16 @@ int8_t EspBle::txPower() const
   {
     return INT8_MIN;
   }
+#if SOC_BLE_SUPPORTED
   const esp_power_level_t level = esp_ble_tx_power_get(ESP_BLE_PWR_TYPE_DEFAULT);
   for (const TxPowerLevel &candidate : TxPowerLevels)
   {
     if (candidate.level == level) return candidate.dBm;
   }
   return INT8_MIN;
+#else
+  return INT8_MIN;
+#endif
 }
 
 bool EspBle::addToAcceptList(const char *address, EspBleAddressType addressType)

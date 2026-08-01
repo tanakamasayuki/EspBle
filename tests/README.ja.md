@@ -9,6 +9,10 @@ unit/   host上で実行する純粋C++/データ変換テスト（実機不要�
 peer/   ESP32-S3 2台のBLE接続自動テスト
 ```
 
+ESP32-P4 + ESP32-C6 (ESP-Hosted) は、P4を親側DUT、S3をPeer側として代表testを
+実行できる。対応状況と既知制限は
+[ESP-Hosted対応 実行計画](../docs/PLAN_ESP_HOSTED.ja.md)を参照する。
+
 examplesのbuild回帰はGitHub Actions（`.github/workflows/compile-examples.yml`）が全exampleをesp32s3 profileでコンパイルして検出します。OSや市販BLE機器との相互運用はmanualテストとして初回リリース前に実施します。
 
 ## セットアップ
@@ -34,6 +38,14 @@ uv run --env-file .env pytest          # unit + peer全部
 uv run --env-file .env pytest unit/
 uv run --env-file .env pytest peer/
 uv run --env-file .env pytest peer/stack_smoke/
+```
+
+P4を`/dev/ttyUSB2`、`.env`で設定済みのS3をPeerとして実行する例:
+
+```sh
+uv run --env-file .env pytest peer/connect_disconnect/ \
+  --profile p4_peer_host --port /dev/ttyUSB2 \
+  --peer-profile device:s3_peer_device
 ```
 
 初回の`stack_smoke`は、親側をCentral、`peer_device/`側をPeripheralとしてArduino-ESP32同梱NimBLE backendのBLE APIだけで接続します。EspBle公開API実装前に、2台のポート、書き込み、無線接続、双方のSerial、テストfixtureが動くことを確認する基盤テストです。

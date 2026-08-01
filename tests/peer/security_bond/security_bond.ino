@@ -2,6 +2,10 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
+#if defined(CONFIG_ESP_HOSTED_ENABLE_BT_NIMBLE)
+#include "esp32-hal-hosted.h"
+#endif
+
 static constexpr const char *TEST_SERVICE_UUID = "e20ab920-8f4a-4e1d-9003-736563757269";
 static constexpr const char *TEST_CHARACTERISTIC_UUID = "e20ab921-8f4a-4e1d-9003-736563757269";
 
@@ -36,6 +40,25 @@ void setup()
     Serial.printf("BLE_INIT_FAILED %s %s\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
     return;
   }
+#if defined(CONFIG_ESP_HOSTED_ENABLE_BT_NIMBLE)
+  uint32_t hostedHostMajor = 0;
+  uint32_t hostedHostMinor = 0;
+  uint32_t hostedHostPatch = 0;
+  uint32_t hostedSlaveMajor = 0;
+  uint32_t hostedSlaveMinor = 0;
+  uint32_t hostedSlavePatch = 0;
+  hostedGetHostVersion(&hostedHostMajor, &hostedHostMinor, &hostedHostPatch);
+  hostedGetSlaveVersion(&hostedSlaveMajor, &hostedSlaveMinor, &hostedSlavePatch);
+  Serial.printf(
+    "ESP_HOSTED_VERSION host=%u.%u.%u slave=%u.%u.%u target=%s\n",
+    static_cast<unsigned>(hostedHostMajor),
+    static_cast<unsigned>(hostedHostMinor),
+    static_cast<unsigned>(hostedHostPatch),
+    static_cast<unsigned>(hostedSlaveMajor),
+    static_cast<unsigned>(hostedSlaveMinor),
+    static_cast<unsigned>(hostedSlavePatch),
+    hostedGetSlaveTargetName());
+#endif
 
   ble.onConnected([](const EspBleConnection &connection) {
     connectionId = connection.id;
@@ -64,6 +87,10 @@ void setup()
           event.connection.id, TEST_SERVICE_UUID, TEST_CHARACTERISTIC_UUID)
           ? "DISCOVER_REQUESTED"
           : "DISCOVER_REQUEST_FAILED");
+    }
+    else
+    {
+      Serial.printf("CENTRAL_SECURITY_FAILURE detail=%s\n", event.detail.c_str());
     }
   });
   ble.onDisconnected([](const EspBleConnection &connection) {

@@ -68,6 +68,10 @@ void setup()
       event.connection.encryptionKeySize,
       stored && storedConnection.encrypted && storedConnection.bonded ? 1 : 0,
       callbackContext());
+    if (!event.success)
+    {
+      Serial.printf("PERIPHERAL_SECURITY_FAILURE detail=%s\n", event.detail.c_str());
+    }
   });
   ble.onDisconnected([](const EspBleConnection &connection) {
     Serial.printf("PERIPHERAL_DISCONNECTED id=%u context=%s\n",
