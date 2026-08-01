@@ -14,6 +14,8 @@ EspBleの既存公開APIをESP32-S3などの内蔵BLE構成と同じ形で利用
 
 P4/C6のfirmware準備と更新手順は
 [ESP32-P4 / ESP-Hosted セットアップ](ESP_HOSTED_SETUP.ja.md)に分離する。
+実機で残った制限と回避策の評価は
+[ESP32-P4 / ESP-Hostedの既知制限](ESP_HOSTED_LIMITATIONS.ja.md)に分離する。
 
 ## 技術方針
 
@@ -149,7 +151,9 @@ C6側Slave 2.3.2は、検証中に2.12.11へ更新した。
      bond保存、暗号化GATTが成功した。このためESP-Hosted経由のSecure Connections
      またはDHKey処理に問題があると判断する。
    - Legacy pairingでbond再接続するとS3側は暗号化成功したが、P4側にSecurity eventが
-     通知されずtimeoutした。暗黙のLegacy downgradeは行わず、初期実装では既知制限とする。
+     通知されずtimeoutした。接続状態のpollも試したが、P4側では`encrypted=1`に対して
+     `bonded=0`、`key_size=0`しか得られず、正しいSecurity状態を復元できなかった。
+     暗黙のLegacy downgradeやbond状態の推測は行わず、既知制限とする。
 2. `end()` / `begin()`の繰り返し
    - 1回目の再初期化は成功したが、2回目にESP-Hosted SDIO driverの
      `sdio_mempool_create`がメモリ確保失敗でassertした。
@@ -157,8 +161,14 @@ C6側Slave 2.3.2は、検証中に2.12.11へ更新した。
      全体では7 passed / 1 failedとなり、同じassertが再現した。解消済みとは扱わない。
    - Arduino coreにもsecond initが未修正である旨のコメントがあり、EspBle外の
      Hosted transport再初期化制限と判断する。
-   - `end()`でHostedを解放しない回避は、電力・SDIO resource・Wi-Fi共有時の意味を
-     変えるため初期実装には入れない。通常の1回だけの`begin()`運用は成功している。
+   - deinit後に250 ms待機してもlifecycle suiteは`7 passed / 1 failed`で同じassertが
+     再現した。非同期cleanup待ちでは回避できない。
+   - `end()`でHostedを解放しない切り分けではlifecycle suiteが`8 passed`となったが、
+     電力・SDIO resource・Wi-Fi共有時の意味を変えるため初期実装には入れない。
+     通常の1回だけの`begin()`運用は成功している。
+   - ESP-Hosted-MCU 2.12.12には、各init/deinit cycleでshared channel mempoolが漏れる
+     問題の修正commit `d0f4646`が含まれる。Arduino Core 3.3.11は2.12.11を同梱するため、
+     Core更新後に実機で再評価する。
 
 ### 現時点の判定
 

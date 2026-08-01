@@ -1,5 +1,8 @@
 # ESP32-P4 / ESP-Hosted セットアップ
 
+実機で確認済みのSecurityと再初期化の制限は
+[ESP32-P4 / ESP-Hostedの既知制限](ESP_HOSTED_LIMITATIONS.ja.md)を参照する。
+
 ## 責務の分担
 
 ESP-Hosted co-processor firmwareの配布、version判定、書き込み、activateは
