@@ -23,6 +23,9 @@ uv sync
 ```dotenv
 TEST_SERIAL_PORT_S3_PEER_HOST=/dev/ttyUSB0
 TEST_SERIAL_PORT_PEER_DEVICE_S3_PEER_DEVICE=/dev/ttyUSB1
+TEST_SERIAL_PORT_P4_PEER_HOST=/dev/ttyUSB2
+TEST_WIFI_SSID=example-test-ssid
+TEST_WIFI_PASSWORD=example-test-password
 ```
 
 `host` and `device` identify the parent side and the second peer on pytest-embedded-cli; they do not describe BLE central/peripheral roles. Sketches are flashed to and run on both boards, and both serial ports are observed from pytest. The initial tests fix the parent side as central and the peer side as peripheral.
@@ -35,3 +38,12 @@ uv run --env-file .env pytest unit/
 uv run --env-file .env pytest peer/
 uv run --env-file .env pytest peer/stack_smoke/
 ```
+
+Run the P4 ESP-Hosted Wi-Fi/BLE coexistence test with:
+
+```sh
+uv run --env-file .env pytest peer/wifi_ble_coexistence/
+```
+
+The Wi-Fi values are passed as compile-time defines and may appear in verbose
+Arduino CLI command output. Use credentials dedicated to a disposable test AP.

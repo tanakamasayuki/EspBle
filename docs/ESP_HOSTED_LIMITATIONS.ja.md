@@ -2,7 +2,21 @@
 
 この文書はArduino-ESP32 3.3.11、ESP-Hosted Host/Slave 2.12.11、
 ESP32-P4 + ESP32-C6（SDIO）で実機確認した制限を記録する。
-compile、scan、接続、GATT read/write、notify/indicate、MTU交換は動作する。
+compile、scan、接続、GATT read/write、notify/indicate、MTU交換に加え、Wi-Fi/BLEの
+同時利用と共有transportの最終所有者までの維持は動作する。
+
+## Wi-Fi/BLE共存で確認済みの範囲
+
+P4でWi-Fiを先に開始してDHCPでIP addressを取得し、その後BLEを開始する順序を
+`wifi_ble_coexistence` Peer testで確認した。Wi-Fi接続中にS3 Peerとのscan、接続、
+GATT read/write、subscribe、notificationが成功する。接続中に`EspBle::end()`を
+呼んでもWi-FiとHosted transportは有効なままであり、最後に`WiFi.STA.end()`を
+呼ぶとHosted transportが解放された。
+
+したがってEspBleの責務は`hostedInitBLE()` / `hostedDeinitBLE()`によるBLE所有分の
+lifecycle管理までとし、Wi-Fi接続・認証情報・Wi-Fi所有分の終了はアプリとArduino Coreの
+Wi-Fi APIの責務とする。この結果は1回の開始・終了についてのもので、後述する完全な
+deinit/initの反復制限を解消するものではない。
 
 ## LE Secure Connectionsとbonding
 

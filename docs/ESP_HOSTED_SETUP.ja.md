@@ -82,5 +82,16 @@ EspBle test logでHost/Slaveがともに2.12.11であることを確認した。
 ## CLI環境での注意
 
 repositoryへWi-Fi認証情報をcommitしない。公式exampleを一時directoryへcopyし、
-認証情報を設定してuploadした後、その一時directoryを破棄する。EspBle本体やtest用の
-`.env`へWi-Fi passwordを追加する必要はない。
+firmware更新用の認証情報を設定してuploadした後、その一時directoryを破棄する。
+
+Wi-Fi/BLE共存Peer testだけは、git管理外の`tests/.env`に次を設定する。
+
+```dotenv
+TEST_SERIAL_PORT_P4_PEER_HOST=/dev/ttyUSB2
+TEST_WIFI_SSID=test-ap-ssid
+TEST_WIFI_PASSWORD=test-ap-password
+```
+
+値は`build_config.toml`からtest sketchのcompile-time defineへ渡される。実行時に
+SerialへSSID/passwordは出力しないが、Arduino CLIのverboseなcompile commandには
+define値が表示され得るため、公開されてもよいテスト専用AP情報を使用する。

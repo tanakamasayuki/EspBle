@@ -191,6 +191,8 @@ pytest-embedded-cliの既存規約に従います。
 
 66. ✅ `gatt_queue_purge`: 接続が終わるときに未処理のGATT操作がどうなるかの検証。どちらも壊れても静かなので、症状が出るまで気づけない経路。**(a) GATT op実行中の`disconnect()`はrejectされず遅延実行される**——rejectしてfalseを返すと、切断を要求した直後のアプリには「まだ繋がっている」と読めてしまう。**(b) queue済みで未開始のopは落とされ、それぞれに失敗完了が届く**——黙って捨てると、アプリは永遠に来ないcallbackを待つことになり、生存接続の前に詰まったままになる。1つの手順で両方を見る: 4件のreadを積み（1件が電波に出て3件がキューに残る）、直後に`disconnect()`を呼ぶ。3件は要求時点で落とされ`InvalidState`＋"connection closed before the queued GATT operation started"が届き、電波に出ていた1件は**打ち切られず正常完了**する。その成功が切断より**先に**届くことが遅延実行の証拠になる（workerの下で接続を壊していたら成立しない）。`droppedEventCount()`が0であること（イベントキュー溢れで見落としていないこと）と、その後の再接続・Discoveryが通ること（ATT slotが握られたままになっていないこと）も確認。
 
+67. ✅ `wifi_ble_coexistence`: P4/C6 ESP-Hosted固有のWi-Fi/BLE共存と共有transport lifecycleを検証。P4でWi-Fiを先に開始してDHCP取得後、同じHosted transportへBLEを追加し、S3 Peerとのscan、接続、GATT read/write、subscribe、notificationがWi-Fi接続を維持したまま成功することを確認する。接続中の`EspBle::end()`はBLE所有分だけを解放してWi-Fiとtransportを維持し、最後の`WiFi.STA.end()`でtransportが解放されることも確認する。資格情報はgit管理外の`.env`からcompile-time defineへ渡す。
+
 ## 合格条件
 
 - test codeがすべての入力を生成し、Serial assertionで結果を判定する。

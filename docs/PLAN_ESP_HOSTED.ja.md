@@ -68,6 +68,7 @@ P4をpytestの親側DUT、S3を`peer_device`側として使用する。既存の
 5. `hid_keyboard_host`または`hid_convenience`: HID profile
 6. `lifecycle_stress`: peer消失、再接続、lifecycle
 7. 問題がなければ残りの`tests/peer/`へP4 profileを展開する
+8. Wi-Fiを先に開始し、BLE併用中とBLE終了後のHosted共有transport所有権を確認する
 
 基本コマンドは`tests/`から実行する。
 
@@ -138,6 +139,7 @@ C6側Slave 2.3.2は、検証中に2.12.11へ更新した。
 | P4/S3 connect/disconnect | 1 passed | scan、接続、切断を確認 |
 | P4/S3 GATT・notify・MTU | 4 passed | read/write、notify/indicate、MTU交換を確認 |
 | P4/S3 Security非依存の追加coverage | 23 passed | GAP/controller 9、advertising 6、GATT state 8 |
+| P4 Wi-Fi + S3 BLE共存 | 1 passed | DHCP、GATT read/write/notify、BLE終了後のWi-Fi維持、最終解放を確認 |
 | P4/S3 Security・HID・lifecycle | 7 passed / 3 failed | 下記既知制限を検出 |
 | S3/S3 Security回帰 | 1 passed | 通常Controller構成ではbond成功 |
 
@@ -178,7 +180,8 @@ C6側Slave 2.3.2は、検証中に2.12.11へ更新した。
 
 ### 現時点の判定
 
-compile、接続、GATT、notify/indicate、MTUまでを初期対応済みとする。Security、HIDの
+compile、接続、GATT、notify/indicate、MTU、Wi-Fi/BLE共有transport lifecycleまでを
+初期対応済みとする。Security、HIDの
 bonding経路と複数回の完全再初期化は未合格であり、ESP-Hosted対応全体を完全合格とは
 しない。SecurityはArduino CoreがESP-IDF修正`9fd7cb7`を取り込むまでの制約とし、
 再初期化問題とは提出先を分けてcoreの修正状況を追跡する。
