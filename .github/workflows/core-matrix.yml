@@ -21,8 +21,8 @@ on:
         default: "auto"
         required: true
       targets:
-        description: "Comma-separated target boards (one core install per job, so keep this small)"
-        default: "esp32s3"
+        description: "Comma-separated supported target boards"
+        default: "esp32s3,esp32c3,esp32c6,esp32h2,esp32p4"
         required: true
 
 permissions:
