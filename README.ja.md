@@ -75,6 +75,10 @@ Host/Slave version、C6更新方法、対応済み範囲は
 同梱IDFのP4 ECC不具合によりLE Secure Connections、bonding、それを前提とするHID、
 および`end()`後の複数回の再`begin()`には
 [既知制限](docs/ESP_HOSTED_LIMITATIONS.ja.md)がある。
+Tab5や独自基板でSDIO pin配置がgeneric P4と異なる場合は、正しいboard variantを
+選ぶか、初期化前にCoreのpin設定を上書きする。手順と実行可能なsketchは
+[SDIO pinの選択と上書き](docs/ESP_HOSTED_SETUP.ja.md#sdio-pinの選択と上書き)と
+[Hosted/CustomPins](examples/Hosted/CustomPins/)を参照する。
 
 開発とPeerテストはarduino-esp32 3.3.11で行っています。対応するcoreバージョンの範囲とボードごとのビルドカバレッジは手動管理ではなくCIで計測します:
 

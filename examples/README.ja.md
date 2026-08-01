@@ -15,6 +15,7 @@ BLEの仕組み——Bluetooth Classicとの違い、GAP（探してつながる
 | UUIDの標準形と独自形 | 5章 | — |
 | キーボード・マウスとして振る舞う／入力を受け取る | 6章 HID編 | [Hid/](Hid/) |
 | BLE MIDI楽器 | 7章 BLE MIDI編 | [Midi/](Midi/) |
+| P4/C6 ESP-HostedのSDIO pinを指定する | ESP-Hostedセットアップ | [Hosted/CustomPins](Hosted/CustomPins/) |
 
 各exampleのREADMEはそれ単体で読めるように書いてあるので、ガイドを読まずに個別のexampleから入っても構いません。
 
@@ -35,6 +36,7 @@ arduino-cli compile --profile esp32s3 examples/<path>
 | Example | Role | 説明 |
 |---|---|---|
 | [CompileSmoke](CompileSmoke/) | — | 最小のビルド確認。ライブラリバージョンを表示 |
+| [Hosted/CustomPins](Hosted/CustomPins/) | P4 Host | board variantと異なるESP-Hosted SDIO pinを`ble.begin()`前に上書き |
 
 ### GAP — advertise / scan / connect
 

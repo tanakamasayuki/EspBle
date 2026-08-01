@@ -15,6 +15,7 @@ How BLE works — the difference from Bluetooth Classic, GAP (finding and connec
 | Standard and custom UUID forms | 5 | — |
 | Acting as a keyboard or mouse, or receiving their input | 6 (HID) | [Hid/](Hid/) |
 | BLE MIDI instruments | 7 (BLE MIDI) | [Midi/](Midi/) |
+| Selecting P4/C6 ESP-Hosted SDIO pins | ESP-Hosted setup | [Hosted/CustomPins](Hosted/CustomPins/) |
 
 Each example's README is written to stand on its own, so starting from an individual example without reading the guide works fine.
 
@@ -36,6 +37,7 @@ Examples are grouped by area. Each standard-service directory holds a matching
 | Example | Role | Description |
 |---|---|---|
 | [CompileSmoke](CompileSmoke/) | — | Minimal build check; prints the library version |
+| [Hosted/CustomPins](Hosted/CustomPins/) | P4 Host | Override ESP-Hosted SDIO pins before `ble.begin()` when they differ from the board variant |
 
 ### GAP — advertise, scan, connect
 

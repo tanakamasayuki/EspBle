@@ -86,6 +86,10 @@ With Core 3.3.11, a P4 ECC defect in the bundled IDF blocks LE Secure
 Connections, bonding, and dependent HID paths; repeated `begin()` after `end()`
 is also limited. These are covered by the
 [known limitations](docs/ESP_HOSTED_LIMITATIONS.ja.md).
+For a Tab5 or custom board whose SDIO wiring differs from generic P4, select the
+matching board variant or override the Core's Hosted pins before initialization.
+See the Japanese [pin setup guide](docs/ESP_HOSTED_SETUP.ja.md#sdio-pinの選択と上書き)
+and the bilingual [Hosted/CustomPins example](examples/Hosted/CustomPins/).
 
 Development and the peer tests run on arduino-esp32 3.3.11. The supported core-version range and per-board build coverage are measured by CI, not maintained by hand:
 

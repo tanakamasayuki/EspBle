@@ -16,6 +16,87 @@ Arduino-ESP32 Coreの責務とする。EspBleは次を担当する。
 EspBleの`begin()`からfirmwareを自動更新しない。更新にはWi-Fi接続が必要で、永続的な
 書き換えと再起動を伴い、通常のBLE初期化より大きな副作用があるためである。
 
+## SDIO pinの選択と上書き
+
+ESP-HostedのSDIO pinはArduino Coreが管理する。EspBleは`begin()`内で
+`hostedInitBLE()`を呼ぶが、pin番号を独自に保持したり変更したりしない。
+
+### 推奨: 実機に合うboardを選ぶ
+
+Coreは選択されたboardの`variants/<board>/pins_arduino.h`に
+`BOARD_HAS_SDIO_ESP_HOSTED`があれば、次のmacroを初期値として使用する。
+
+```cpp
+BOARD_SDIO_ESP_HOSTED_CLK
+BOARD_SDIO_ESP_HOSTED_CMD
+BOARD_SDIO_ESP_HOSTED_D0
+BOARD_SDIO_ESP_HOSTED_D1
+BOARD_SDIO_ESP_HOSTED_D2
+BOARD_SDIO_ESP_HOSTED_D3
+BOARD_SDIO_ESP_HOSTED_RESET
+```
+
+代表的な定義は次のとおり。Tab5をgeneric ESP32-P4としてbuildするとpinが一致しないため、
+Arduino IDEでは`M5Tab5`、CLIでは`esp32:esp32:m5stack_tab5`を選ぶ。
+
+| Signal | generic ESP32-P4 | M5Stack Tab5 |
+| --- | ---: | ---: |
+| CLK | 18 | 12 |
+| CMD | 19 | 13 |
+| D0 | 14 | 11 |
+| D1 | 15 | 10 |
+| D2 | 16 | 9 |
+| D3 | 17 | 8 |
+| RESET | 54 | 15 |
+
+### 回避策: 初期化前に実行時上書きする
+
+独自基板や、installed Coreにboard variantがまだ無い場合は、Arduino Coreの
+`hostedSetPins()`で7本をまとめて上書きできる。必ず`ble.begin()`より前に呼ぶ。
+
+```cpp
+#include <EspBle.h>
+
+#if defined(CONFIG_ESP_HOSTED_ENABLE_BT_NIMBLE)
+#include "esp32-hal-hosted.h"
+#endif
+
+EspBle ble;
+
+void setup()
+{
+  Serial.begin(115200);
+
+#if defined(CONFIG_ESP_HOSTED_ENABLE_BT_NIMBLE)
+  // M5Stack Tab5: CLK, CMD, D0, D1, D2, D3, RESET
+  if (!hostedSetPins(12, 13, 11, 10, 9, 8, 15))
+  {
+    Serial.println("ESP-Hosted SDIO pin configuration failed");
+    return;
+  }
+#endif
+
+  if (!ble.begin())
+  {
+    Serial.println(ble.lastErrorDetail());
+  }
+}
+```
+
+Wi-Fiを先に開始する場合は`WiFi.STA.begin()`より前に設定する。Wi-FiとBLEは同じ
+Hosted transportとpin設定を共有する。Coreは次を拒否する。
+
+- Hosted初期化後の変更
+- 負数を含むpin
+- D0だけのような一部の指定（CLK/CMD/D0〜D3/RESETの全指定が必要）
+
+上書きはRAM上だけに保持され、再起動するとboard variantの値へ戻る。現在値は
+`hostedGetPins()`で取得できる。動作するsketchは
+[Hosted/CustomPins example](../examples/Hosted/CustomPins/)を参照する。
+
+pinはWi-Fi/BLE共有SDIO transportの設定なので、EspBle固有APIとして重複させず、
+Arduino CoreのHosted HALを利用する。
+
 ## 対応version
 
 初期検証環境は次の組み合わせとする。
