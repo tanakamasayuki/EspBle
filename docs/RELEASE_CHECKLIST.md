@@ -19,12 +19,24 @@ Use this checklist before releasing EspBle. The GitHub Actions workflows and `to
 
 ## Automated Tests
 
-Connect two ESP32-S3 boards. After library upgrades or profile changes, use `--clean` to avoid stale build caches.
+First connect two ESP32-S3 boards and run the full baseline regression. After library upgrades or profile changes, use `--clean` to avoid stale build caches.
 
 ```sh
 cd tests
 uv run --env-file .env pytest --clean
 ```
+
+Then connect the P4+C6 fixture and its S3 peer and run the representative ESP-Hosted suite. The fixture need not remain connected between runs, but it is mandatory for a release candidate. Use the generic `esp32p4` variant's standard SDIO wiring as the reference; record the variant or pin override when using custom wiring.
+
+```sh
+uv run --env-file .env pytest --clean \
+  peer/stack_smoke/ peer/connect_disconnect/ peer/gatt_read_write/ \
+  peer/notify_indicate/ peer/mtu/ peer/wifi_ble_coexistence/ \
+  --profile p4_peer_host \
+  --peer-profile device:s3_peer_device
+```
+
+See the [ESP-Hosted setup guide (Japanese)](ESP_HOSTED_SETUP.ja.md) for fixture and pin requirements, the [test policy](../tests/TEST_PLAN.ja.md#p4c6-esp-hosted回帰) for frequency and pass criteria, and the [known limitations (Japanese)](ESP_HOSTED_LIMITATIONS.ja.md) for current exclusions. Security and repeated full initialization/deinitialization cases affected by those limitations are not current release gates; re-run them after any Core or C6 firmware update to check whether the limitation has been resolved.
 
 Compile every example for ESP32-S3:
 
@@ -37,7 +49,7 @@ done
 
 - `compile-examples.yml` passes for every example on ESP32-S3.
 - Run `board-matrix.yml` / `core-matrix.yml` manually and update the generated documents.
-- Run the peer suite repeatedly immediately before release; check for flaky failures, heap loss, and leaked tasks.
+- Run the S3 peer suite repeatedly immediately before release; check for flaky failures, heap loss, and leaked tasks. Pass the P4 representative suite at least once on the final candidate.
 
 ## Manual Interoperability
 

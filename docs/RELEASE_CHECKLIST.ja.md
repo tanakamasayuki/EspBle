@@ -19,12 +19,24 @@ EspBleをリリースする前の確認項目です。GitHub Actionsと`tools/`�
 
 ## 自動テスト
 
-ESP32-S3を2台接続し、ライブラリ更新後やprofile切替後はstale build cacheを避けるため`--clean`を付けます。
+まずESP32-S3を2台接続して標準の全回帰を実行します。ライブラリ更新後やprofile切替後はstale build cacheを避けるため`--clean`を付けます。
 
 ```sh
 cd tests
 uv run --env-file .env pytest --clean
 ```
+
+次にP4+C6 fixtureとPeer側S3を接続し、ESP-Hosted代表suiteを実行します。P4+C6は常時接続不要ですが、リリース候補では必須です。汎用`esp32p4` variantの標準SDIO配線を基準とし、独自配線では使用したvariantまたはpin上書きを記録します。
+
+```sh
+uv run --env-file .env pytest --clean \
+  peer/stack_smoke/ peer/connect_disconnect/ peer/gatt_read_write/ \
+  peer/notify_indicate/ peer/mtu/ peer/wifi_ble_coexistence/ \
+  --profile p4_peer_host \
+  --peer-profile device:s3_peer_device
+```
+
+P4 fixtureの条件とpinは[ESP-Hostedセットアップ](ESP_HOSTED_SETUP.ja.md)、実行頻度と必須合格範囲は[テスト計画](../tests/TEST_PLAN.ja.md#p4c6-esp-hosted回帰)を参照します。[既知制限](ESP_HOSTED_LIMITATIONS.ja.md)に該当するSecurityと完全な初期化・終了反復は現在のrelease gateには含めませんが、CoreまたはC6 firmwareを更新した場合は再実行して解消の有無を確認します。
 
 全exampleのESP32-S3 compile:
 
@@ -37,7 +49,7 @@ done
 
 - `compile-examples.yml`が全exampleをESP32-S3で通過している。
 - `board-matrix.yml` / `core-matrix.yml`を手動実行し、生成文書を更新する。
-- リリース直前にPeer suiteを複数回実行し、flaky failure、heap低下、task残留がないことを確認する。
+- リリース直前にS3 Peer suiteを複数回実行し、flaky failure、heap低下、task残留がないことを確認する。P4代表suiteは最終候補で少なくとも1回通過させる。
 
 ## 手動相互運用
 

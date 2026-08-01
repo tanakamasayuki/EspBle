@@ -6,20 +6,28 @@ BLEは接続、切断、Discovery、購読、Security、Bondingが複数の非�
 
 - unit: keymap変換、HID Report Map parserなどをhost上のg++で検証する（`tests/unit/`）。
 - examples_compile: 公開APIと対象SoCのbuild回帰を検出する。`.github/workflows/compile-examples.yml`が全exampleをesp32s3 profileでコンパイルする（push/PRで自動実行。カバレッジ表のbuild列✅はこの検証を指す）。
-- peer: ESP32-S3 2台で実際のradio、controller、host stackを通した接続を検証する。
+- peer: ESP32-S3 2台を標準fixtureとし、実際のradio、controller、host stackを通した接続を検証する。ESP32-P4 + ESP32-C6はESP-Hosted固有経路の追加fixtureとして使用する。
 - manual: Android/iOS/Windows/Linux/macOSや市販機器との相互運用を検証する。
 
 Peer不要のruntime behaviorを1台で検証する「single」層は現在使用していません。必要になった時点で追加します。
 
 ## Peerハードウェア
 
-EspUsbHost/EspUsbDeviceなどで常時接続されているESP32-S3 2台を共用します。BLE通信のためのボード間配線は不要です。各ボードをPCへ接続するSerial/給電だけを使用します。
+Peerテストは次の2構成を使い分けます。
+
+| fixture | 親側DUT | 2台目Peer | 目的 | 接続方針 |
+|---|---|---|---|---|
+| 標準回帰 | ESP32-S3 | ESP32-S3 | EspBleの全機能と通常のNimBLE経路 | 常時接続を推奨 |
+| ESP-Hosted回帰 | ESP32-P4 + ESP32-C6 | ESP32-S3 | SDIO、ESP-Hosted、C6 controller、Wi-Fi/BLE共存 | 必要時の接続でよい |
+
+標準回帰にはEspUsbHost/EspUsbDeviceなどで常時接続されているESP32-S3 2台を共用します。BLE通信のためのボード間配線は不要です。各ボードをPCへ接続するSerial/給電だけを使用します。
 
 これに加えてmanual test用ESP32-S3が1台あります。BLEはボード間の有線接続を必要としないため、将来3台が必要なscenarioでは追加のPeerディレクトリとprofile/port設定を用意して、この1台を第3Peerとして利用できます。初期テストの必須環境は常設2台のままとし、3台構成は複数接続やBLE-to-BLE bridgeのE2E testを追加するときに使用します。
 
 pytest-embedded-cliの既存規約に従います。
 
-- 親側profile: `s3_peer_host`
+- 通常の親側profile: `s3_peer_host`
+- P4親側profile: `p4_peer_host`
 - 2台目profile: `s3_peer_device`
 - 2台目directory: `peer_device/`
 - Python fixture: `peers["device"]`
@@ -27,6 +35,49 @@ pytest-embedded-cliの既存規約に従います。
 これらの`host` / `device`はUSB roleでもBLE roleでもありません。pytest-embedded-cliは両方へsketchを転送して実行し、`dut`と`peers["device"]`の両Serialを観測・操作できます。
 
 初期scenarioは親側sketchをCentral、2台目sketchをPeripheralに固定します。EspBle Centralを検証するときは親側の結果を主にassertし、EspBle Peripheralを検証するときはPeer側の結果を主にassertします。役割交換やコード配置の交換は前提にしません。
+
+## P4/C6 ESP-Hosted回帰
+
+### P4を実機テストする理由
+
+P4向けのコンパイルだけでは、P4とC6の間にあるSDIO transport、ESP-Hostedの初期化・終了、C6側controller、Wi-Fi/BLEの共有を通りません。S3だけのPeerテストでもこの経路は再現できないため、P4対応を維持するにはP4+C6実機による追加回帰が必要です。P4+C6 fixtureは1組で十分で、常時接続する必要はありません。
+
+### 基準fixtureの条件
+
+- ESP32-P4をhost、ESP32-C6をESP-Hosted slave/controllerとして使用する。2台目のESP32-S3は無線Peerであり、P4との信号配線は不要。
+- P4-C6間は4-bit SDIOの`CLK`、`CMD`、`D0`〜`D3`、`RESET`と安定した電源/GNDを接続する。
+- C6にはArduino-ESP32 Core同梱hostと互換性のあるESP-Hosted Slave firmwareを書き込む。準備とversion条件は[ESP-Hostedセットアップ](../docs/ESP_HOSTED_SETUP.ja.md)を参照する。
+- 基準fixtureには、Arduino-ESP32の汎用`esp32p4` variantが想定する標準SDIO配線（`CLK=18`、`CMD=19`、`D0=14`、`D1=15`、`D2=16`、`D3=17`、`RESET=54`）のP4+C6構成を推奨する。board固有設定なしで再現でき、共通の回帰条件にしやすいためである。
+- M5Stack Tab5など標準配線と異なるboardも使用できる。その場合は正しいboard variantを選ぶか、`ble.begin()`より前に`hostedSetPins()`で上書きする。方法は[SDIO pinの選択と上書き](../docs/ESP_HOSTED_SETUP.ja.md#sdio-pinの選択と上書き)を参照し、結果には使用したboard/profileとpin構成を記録する。
+
+独自配線のfixtureは追加検証には使えますが、それだけを唯一の基準機にするとCoreの標準設定に対する回帰を判定しにくくなります。このため、今後C6を追加するなら上記の標準配線を使う構成を優先します。
+
+### 実行頻度
+
+| タイミング | P4実機テスト |
+|---|---|
+| 通常の変更 | S3の全回帰を基本とし、P4の常時実行は不要 |
+| `begin()`/`end()`、NimBLE lifecycle、ESP-Hosted分岐、P4 profile、Wi-Fi共存の変更 | 変更ごと、またはmerge前に代表suiteを実行 |
+| Arduino-ESP32 CoreまたはC6 firmwareの更新 | 更新直後に代表suiteを実行し、既知制限も再確認 |
+| リリース候補 | 最終候補に対して代表suiteとWi-Fi/BLE共存testを必ず実行 |
+
+Hosted関連を連続開発している期間は、まとまった変更ごとに接続して回すのが有効です。Hostedに関係する変更がなければ週次などの暦ベース実行は必須ではなく、リリース前に接続すれば十分です。
+
+`.env`にP4とPeer S3のportを設定した代表suiteは`tests/`から次のように実行します。
+
+```sh
+uv run --env-file .env pytest \
+  peer/stack_smoke/ \
+  peer/connect_disconnect/ \
+  peer/gatt_read_write/ \
+  peer/notify_indicate/ \
+  peer/mtu/ \
+  peer/wifi_ble_coexistence/ \
+  --profile p4_peer_host \
+  --peer-profile device:s3_peer_device
+```
+
+短時間の疎通確認には`peer/connect_disconnect/`だけを同じprofile指定で実行します。現行Core/ESP-Hostedで既知制限の影響を受けるSecurityおよび完全な初期化・終了反復は、代表suiteの必須合格項目に含めません。CoreまたはC6 firmware更新時には別途再実行し、[ESP-Hostedの既知制限](../docs/ESP_HOSTED_LIMITATIONS.ja.md)が解消したか確認します。
 
 ## Peerテスト原則
 

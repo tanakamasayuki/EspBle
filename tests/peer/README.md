@@ -2,7 +2,7 @@
 
 > 日本語版: [README.ja.md](README.ja.md)
 
-Automated Bluetooth LE tests using two ESP32-S3 boards. The boards only need their independent serial/power connections; no signal wiring is required between them.
+Automated Bluetooth LE tests using two ESP32-S3 boards as the baseline fixture. An ESP32-P4 + ESP32-C6 parent DUT can also use an ESP32-S3 as its wireless peer to exercise the ESP-Hosted path. No signal wiring is required between the BLE peers.
 
 ```sh
 uv run --env-file .env pytest peer/
@@ -12,10 +12,13 @@ The profiles and environment variables reuse the existing EspUsbHost/EspUsbDevic
 
 | pytest side | profile | environment variable |
 |---|---|---|
-| parent | `s3_peer_host` | `TEST_SERIAL_PORT_S3_PEER_HOST` |
+| normal parent | `s3_peer_host` | `TEST_SERIAL_PORT_S3_PEER_HOST` |
+| ESP-Hosted parent | `p4_peer_host` | `TEST_SERIAL_PORT_P4_PEER_HOST` |
 | second peer | `s3_peer_device` | `TEST_SERIAL_PORT_PEER_DEVICE_S3_PEER_DEVICE` |
 
 The profile names do not describe BLE roles. Sketches are flashed to and run on both boards, and both serial ports are observed from pytest. The parent-side sketch is fixed as central and the `peer_device/` sketch as peripheral; the roles are never swapped.
+
+`pytest peer/` defaults to the two-S3 fixture. The P4 fixture may remain disconnected between runs; select it explicitly for Hosted-related changes, Core/C6 firmware updates, and release candidates. See the [tests README](../README.md) and [test policy](../TEST_PLAN.ja.md#p4c6-esp-hosted回帰) for reference wiring, commands, frequency, and known-limit exclusions.
 
 ## Test suites
 

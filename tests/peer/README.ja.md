@@ -2,7 +2,7 @@
 
 > English: [README.md](README.md)
 
-ESP32-S3 2台をBLEで接続する自動テストです。ボード間の信号配線は不要です。
+ESP32-S3 2台を標準fixtureとしてBLEで接続する自動テストです。加えて、ESP32-P4 + ESP32-C6を親側DUT、ESP32-S3を無線PeerとしてESP-Hosted固有経路を回帰できます。S3と無線Peerの間に信号配線は不要です。
 
 ```sh
 uv run --env-file .env pytest peer/
@@ -12,10 +12,13 @@ profileと環境変数はEspUsbHost/EspUsbDeviceの既存環境を再利用し�
 
 | pytest上の位置 | profile | 環境変数 |
 |---|---|---|
-| 親側 | `s3_peer_host` | `TEST_SERIAL_PORT_S3_PEER_HOST` |
+| 通常の親側 | `s3_peer_host` | `TEST_SERIAL_PORT_S3_PEER_HOST` |
+| ESP-Hosted親側 | `p4_peer_host` | `TEST_SERIAL_PORT_P4_PEER_HOST` |
 | 2台目Peer | `s3_peer_device` | `TEST_SERIAL_PORT_PEER_DEVICE_S3_PEER_DEVICE` |
 
 profile名はBLE roleを表しません。両側へsketchを転送・実行でき、両側のSerialをpytestから観測できます。初期テストでは親側sketchをCentral、`peer_device/`側sketchをPeripheralに固定し、役割交換は行いません。
+
+`pytest peer/`の既定はS3 2台です。P4は常時接続せず、Hosted関連変更、Core/C6 firmware更新、リリース候補でprofileを明示して代表suiteを実行します。P4+C6の推奨標準配線、実行コマンド、頻度、既知制限による対象外は[tests README](../README.ja.md)と[テスト計画](../TEST_PLAN.ja.md#p4c6-esp-hosted回帰)を参照してください。
 
 ## 追加済み
 
