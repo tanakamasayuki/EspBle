@@ -63,6 +63,14 @@ P4向けのコンパイルだけでは、P4とC6の間にあるSDIO transport、
 
 Hosted関連を連続開発している期間は、まとまった変更ごとに接続して回すのが有効です。Hostedに関係する変更がなければ週次などの暦ベース実行は必須ではなく、リリース前に接続すれば十分です。
 
+### 通常実行とprofileの扱い
+
+無指定の`pytest`および`pytest peer/`は、常設可能なS3 2台だけで完走できることを原則とします。P4/C6のように常時接続しない追加fixtureを`default_profile`にしてはならず、P4実機を検証するときだけ`--profile p4_peer_host`を明示します。
+
+`wifi_ble_coexistence`はESP-Hosted固有scenarioですが、sketch自体の既定profileは`s3_peer_host`です。S3 buildではHosted専用header/APIをcompile対象から外し、Serialで`ESP_HOSTED_CAPABLE 0`を返します。pytestはこのcapabilityを確認して正常終了するため、通常suiteはP4未接続でも失敗しません。P4 buildは`ESP_HOSTED_CAPABLE 1`を返し、その場合だけWi-Fi接続、BLE通信、共有transportのlifecycleを最後まで検証します。
+
+S3での正常終了は「Wi-Fi/BLE共存を確認済み」という意味ではなく、「このfixtureでは対象外であることを明示的に確認した」という意味です。P4の共存回帰を実施したことにするには、必ずP4 profileを指定した実行結果を使用します。
+
 `.env`にP4とPeer S3のportを設定した代表suiteは`tests/`から次のように実行します。
 
 ```sh

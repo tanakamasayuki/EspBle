@@ -66,10 +66,14 @@ uv run --env-file .env pytest \
   --peer-profile device:s3_peer_device
 ```
 
-The coexistence test can also be run alone:
+Without an explicit profile, `wifi_ble_coexistence` uses the S3 profile, confirms that ESP-Hosted is unavailable, and exits successfully. This capability gate lets the normal suite finish without an attached P4; it does not count as a Wi-Fi/BLE coexistence result.
+
+To exercise coexistence on P4 alone, specify both profiles. The P4 port and Wi-Fi values are read from `.env`:
 
 ```sh
-uv run --env-file .env pytest peer/wifi_ble_coexistence/
+uv run --env-file .env pytest peer/wifi_ble_coexistence/ \
+  --profile p4_peer_host \
+  --peer-profile device:s3_peer_device
 ```
 
 The Wi-Fi values are passed as compile-time defines and may appear in verbose

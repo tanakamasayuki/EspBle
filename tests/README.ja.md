@@ -66,10 +66,14 @@ uv run --env-file .env pytest \
   --peer-profile device:s3_peer_device
 ```
 
-P4のWi-Fi/BLE共存testはP4 portとWi-Fi情報を`.env`から取得するため、単独では次の形でも実行できます。
+無指定で`wifi_ble_coexistence`を実行するとS3 profileを使用し、Hosted非対応であることを確認して正常終了します。これは通常suiteをP4未接続で完走させるためのcapability gateであり、Wi-Fi/BLE共存を検証したことにはなりません。
+
+P4のWi-Fi/BLE共存testを単独で実施する場合は、P4 profileとPeer profileを明示します。P4 portとWi-Fi情報は`.env`から取得します。
 
 ```sh
-uv run --env-file .env pytest peer/wifi_ble_coexistence/
+uv run --env-file .env pytest peer/wifi_ble_coexistence/ \
+  --profile p4_peer_host \
+  --peer-profile device:s3_peer_device
 ```
 
 Wi-Fi情報はcompile-time defineとして渡され、verboseなArduino CLI compile commandには
