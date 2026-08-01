@@ -26,7 +26,7 @@ cd tests
 uv run --env-file .env pytest --clean
 ```
 
-Then connect the P4+C6 fixture and its S3 peer and run the representative ESP-Hosted suite. The fixture need not remain connected between runs, but it is mandatory for a release candidate. Use the generic `esp32p4` variant's standard SDIO wiring as the reference; record the variant or pin override when using custom wiring.
+Then connect the P4+C6 fixture and its S3 peer and run the representative ESP-Hosted suite. The fixture need not remain connected between runs, but it is mandatory for a release candidate. Use an ESP32-P4-Function-EV-Board or a fixture with the generic `esp32p4` variant's standard SDIO wiring as the reference; record the variant or pin override when using custom wiring.
 
 ```sh
 uv run --env-file .env pytest --clean \

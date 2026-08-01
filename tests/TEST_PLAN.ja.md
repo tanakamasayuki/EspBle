@@ -47,10 +47,10 @@ P4向けのコンパイルだけでは、P4とC6の間にあるSDIO transport、
 - ESP32-P4をhost、ESP32-C6をESP-Hosted slave/controllerとして使用する。2台目のESP32-S3は無線Peerであり、P4との信号配線は不要。
 - P4-C6間は4-bit SDIOの`CLK`、`CMD`、`D0`〜`D3`、`RESET`と安定した電源/GNDを接続する。
 - C6にはArduino-ESP32 Core同梱hostと互換性のあるESP-Hosted Slave firmwareを書き込む。準備とversion条件は[ESP-Hostedセットアップ](../docs/ESP_HOSTED_SETUP.ja.md)を参照する。
-- 基準fixtureには、Arduino-ESP32の汎用`esp32p4` variantが想定する標準SDIO配線（`CLK=18`、`CMD=19`、`D0=14`、`D1=15`、`D2=16`、`D3=17`、`RESET=54`）のP4+C6構成を推奨する。board固有設定なしで再現でき、共通の回帰条件にしやすいためである。
+- 基準fixtureには、C6を搭載済みのEspressif ESP32-P4-Function-EV-Board、またはそれと同じ標準SDIO配線（P4側`CLK=18`、`CMD=19`、`D0=14`、`D1=15`、`D2=16`、`D3=17`、`RESET=54`）のP4+C6構成を推奨する。この配線はArduino-ESP32の汎用`esp32p4` variantと一致し、board固有設定なしで共通の回帰条件を再現できる。
 - M5Stack Tab5など標準配線と異なるboardも使用できる。その場合は正しいboard variantを選ぶか、`ble.begin()`より前に`hostedSetPins()`で上書きする。方法は[SDIO pinの選択と上書き](../docs/ESP_HOSTED_SETUP.ja.md#sdio-pinの選択と上書き)を参照し、結果には使用したboard/profileとpin構成を記録する。
 
-独自配線のfixtureは追加検証には使えますが、それだけを唯一の基準機にするとCoreの標準設定に対する回帰を判定しにくくなります。このため、今後C6を追加するなら上記の標準配線を使う構成を優先します。
+独自配線のfixtureは追加検証には使えますが、それだけを唯一の基準機にするとCoreの標準設定に対する回帰を判定しにくくなります。このため、今後C6付きP4を追加するならFunction-EV-Boardまたは上記の標準配線を使う構成を優先します。board出荷時のC6 firmware versionは固定条件にせず、テスト前にCoreとの互換性を確認して必要なら公式Updaterで更新します。
 
 ### 実行頻度
 

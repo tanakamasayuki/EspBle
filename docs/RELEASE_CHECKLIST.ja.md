@@ -26,7 +26,7 @@ cd tests
 uv run --env-file .env pytest --clean
 ```
 
-次にP4+C6 fixtureとPeer側S3を接続し、ESP-Hosted代表suiteを実行します。P4+C6は常時接続不要ですが、リリース候補では必須です。汎用`esp32p4` variantの標準SDIO配線を基準とし、独自配線では使用したvariantまたはpin上書きを記録します。
+次にP4+C6 fixtureとPeer側S3を接続し、ESP-Hosted代表suiteを実行します。P4+C6は常時接続不要ですが、リリース候補では必須です。ESP32-P4-Function-EV-Board、または汎用`esp32p4` variantと同じ標準SDIO配線を基準とし、独自配線では使用したvariantまたはpin上書きを記録します。
 
 ```sh
 uv run --env-file .env pytest --clean \

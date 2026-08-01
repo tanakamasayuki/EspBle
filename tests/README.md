@@ -46,7 +46,7 @@ uv run --env-file .env pytest peer/
 uv run --env-file .env pytest peer/stack_smoke/
 ```
 
-The recommended reference fixture uses the standard SDIO wiring expected by Arduino-ESP32's generic `esp32p4` variant. This gives contributors a shared configuration without a board-specific pin override. Tab5 and custom wiring are also supported, but require the matching board variant or `hostedSetPins()` before `ble.begin()`. See [SDIO pin selection and override (Japanese)](../docs/ESP_HOSTED_SETUP.ja.md#sdio-pinの選択と上書き).
+The recommended reference fixture is an Espressif ESP32-P4-Function-EV-Board with its onboard C6, or a P4+C6 fixture using the same standard SDIO wiring expected by Arduino-ESP32's generic `esp32p4` variant. This gives contributors a shared configuration without a board-specific pin override. Tab5 and custom wiring are also supported, but require the matching board variant or `hostedSetPins()` before `ble.begin()`. See [SDIO pin selection and override (Japanese)](../docs/ESP_HOSTED_SETUP.ja.md#sdio-pinの選択と上書き).
 
 Run a quick P4-to-S3 smoke test using the ports from `.env`:
 

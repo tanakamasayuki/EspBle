@@ -46,7 +46,7 @@ uv run --env-file .env pytest peer/
 uv run --env-file .env pytest peer/stack_smoke/
 ```
 
-P4+C6 fixtureには、Arduino-ESP32の汎用`esp32p4` variantが想定する標準SDIO配線を推奨します。これならboard固有のpin上書きなしで共通条件を再現できます。Tab5や独自配線でも実行できますが、正しいvariantまたは`hostedSetPins()`が必要です。pin条件は[SDIO pinの選択と上書き](../docs/ESP_HOSTED_SETUP.ja.md#sdio-pinの選択と上書き)を参照してください。
+P4+C6 fixtureには、C6搭載済みのEspressif ESP32-P4-Function-EV-Board、またはArduino-ESP32の汎用`esp32p4` variantが想定するものと同じ標準SDIO配線を推奨します。これならboard固有のpin上書きなしで共通条件を再現できます。Tab5や独自配線でも実行できますが、正しいvariantまたは`hostedSetPins()`が必要です。pin条件は[SDIO pinの選択と上書き](../docs/ESP_HOSTED_SETUP.ja.md#sdio-pinの選択と上書き)を参照してください。
 
 P4を`.env`の`TEST_SERIAL_PORT_P4_PEER_HOST`、S3をPeerとして短い疎通testを実行する例:
 
