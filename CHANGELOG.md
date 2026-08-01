@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+## 1.1.0
 - (EN) Added limited ESP32-P4 + ESP32-C6 ESP-Hosted support, including the
   Hosted BLE lifecycle, GAP/GATT peer coverage, and Wi-Fi/BLE shared-transport
   coexistence. LE Secure Connections and repeated full reinitialization remain
