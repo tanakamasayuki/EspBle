@@ -5,7 +5,7 @@
 EspBle is a general-purpose Bluetooth Low Energy library for ESP32 Arduino. **It talks to the NimBLE host bundled with Arduino-ESP32 directly — not through the bundled `BLE` wrapper classes — and does not support Bluetooth Classic.** It provides central and peripheral roles, generic GATT client and server operations, security, and composable profiles on one shared foundation. External NimBLE-Arduino is not a required dependency.
 
 > [!IMPORTANT]
-> **The classic ESP32 is not supported.** EspBle requires the NimBLE backend, which the plain `esp32` build does not ship (it defaults to Bluedroid), so it fails to compile there by design. Supported targets are the NimBLE SoCs: **ESP32-S3 / ESP32-C3 / ESP32-C6 / ESP32-H2**. If you need BLE on the classic ESP32, use [NimBLE-Arduino](https://github.com/h2zero/NimBLE-Arduino) instead — see [Compatibility](#compatibility).
+> **The classic ESP32 is not supported.** EspBle requires the NimBLE backend. Native-controller targets are **ESP32-S3 / ESP32-C3 / ESP32-C6 / ESP32-H2**. **ESP32-P4 + ESP32-C6 through ESP-Hosted has limited support for basic GAP/GATT functionality**; Security/bonding and repeated full reinitialization have upstream limitations. If you need BLE on the classic ESP32, use [NimBLE-Arduino](https://github.com/h2zero/NimBLE-Arduino) instead — see [Compatibility](#compatibility).
 
 The public API is not stable yet: this is the trial stage ahead of the first release, and APIs may still change.
 
@@ -22,11 +22,19 @@ The public API is not stable yet: this is the trial stage ahead of the first rel
 - BLE MIDI Device and Host: timestamp/running-status/SysEx packet codec with `EspBleMidiDevice` / `EspBleMidiHost` helpers following the EspUsbDevice/EspUsbHost MIDI API
 - All user callbacks are delivered from `ble.update()` on the loop task — never from the BLE stack task
 
-Everything above is verified with an automated two-board ESP32-S3 peer test suite plus host-side unit tests; see [tests/TEST_PLAN.ja.md](tests/TEST_PLAN.ja.md).
+The full feature set above is verified with an automated two-board ESP32-S3 peer test suite plus host-side unit tests. Basic P4/C6 Hosted functionality such as connections, GATT, notify/indicate, and MTU is being verified with a P4/S3 pair; see [tests/TEST_PLAN.ja.md](tests/TEST_PLAN.ja.md).
 
 ## Compatibility
 
 EspBle requires the **NimBLE backend bundled with Arduino-ESP32**. Cores built with the Bluedroid default (such as the plain `esp32` board) are rejected at compile time with a clear `#error`. The classic ESP32 is therefore **out of scope** for this library. If you need BLE on the classic ESP32, use [NimBLE-Arduino](https://github.com/h2zero/NimBLE-Arduino): it bundles its own NimBLE host stack and runs on the classic ESP32, with a different API from EspBle.
+
+ESP32-P4 can use the ESP-Hosted NimBLE configuration supplied by Arduino-ESP32.
+The verified host/slave versions, C6 update procedure, and supported subset are
+documented in the Japanese [ESP-Hosted setup guide](docs/ESP_HOSTED_SETUP.ja.md).
+With Core 3.3.11, a P4 ECC defect in the bundled IDF blocks LE Secure
+Connections, bonding, and dependent HID paths; repeated `begin()` after `end()`
+is also limited. These are covered by the
+[known limitations](docs/ESP_HOSTED_LIMITATIONS.ja.md).
 
 Development and the peer tests run on arduino-esp32 3.3.11. The supported core-version range and per-board build coverage are measured by CI, not maintained by hand:
 

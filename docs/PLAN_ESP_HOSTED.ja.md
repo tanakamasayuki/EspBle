@@ -137,6 +137,7 @@ C6側Slave 2.3.2は、検証中に2.12.11へ更新した。
 | host unit test | 7 passed | `uv run --env-file .env pytest unit/` |
 | P4/S3 connect/disconnect | 1 passed | scan、接続、切断を確認 |
 | P4/S3 GATT・notify・MTU | 4 passed | read/write、notify/indicate、MTU交換を確認 |
+| P4/S3 Security非依存の追加coverage | 23 passed | GAP/controller 9、advertising 6、GATT state 8 |
 | P4/S3 Security・HID・lifecycle | 7 passed / 3 failed | 下記既知制限を検出 |
 | S3/S3 Security回帰 | 1 passed | 通常Controller構成ではbond成功 |
 
@@ -148,8 +149,13 @@ C6側Slave 2.3.2は、検証中に2.12.11へ更新した。
    - C6 Slaveを2.3.2から2.12.11へ更新し、Host/Slaveがともに2.12.11であることを
      確認した後も同じDHKey check failureが再現した。firmware version不一致が原因ではない。
    - P4側だけLE Secure Connectionsを無効にする切り分けでは、初回のLegacy pairing、
-     bond保存、暗号化GATTが成功した。このためESP-Hosted経由のSecure Connections
-     またはDHKey処理に問題があると判断する。
+     bond保存、暗号化GATTが成功した。
+   - 追加instrumentationでSMP公開鍵、Random、address、IO capability、DHKey Checkの
+     転送一致を確認した。最初の不一致はP4上のP-256 ECDH共有鍵であり、独立計算では
+     S3側だけが正しかった。Hosted HCI転送ではなくCore 3.3.11同梱IDF 5.5.5の
+     TinyCrypt/ECC hardware経路が原因である。
+   - ESP-IDF `release/v5.5`のcommit `9fd7cb7`で同経路は修正済み。canonical scalarを
+     P4 ECC hardwareへ直接渡す診断backportではSC pairing、bond、暗号化GATTが成功した。
    - Legacy pairingでbond再接続するとS3側は暗号化成功したが、P4側にSecurity eventが
      通知されずtimeoutした。接続状態のpollも試したが、P4側では`encrypted=1`に対して
      `bonded=0`、`key_size=0`しか得られず、正しいSecurity状態を復元できなかった。
@@ -174,8 +180,8 @@ C6側Slave 2.3.2は、検証中に2.12.11へ更新した。
 
 compile、接続、GATT、notify/indicate、MTUまでを初期対応済みとする。Security、HIDの
 bonding経路と複数回の完全再初期化は未合格であり、ESP-Hosted対応全体を完全合格とは
-しない。Securityはversionを揃えても再現するためESP-Hosted/Arduino coreの上流issue
-候補とし、再初期化と合わせてcoreの修正状況を追跡する。
+しない。SecurityはArduino CoreがESP-IDF修正`9fd7cb7`を取り込むまでの制約とし、
+再初期化問題とは提出先を分けてcoreの修正状況を追跡する。
 
 ## 完了時の記録
 

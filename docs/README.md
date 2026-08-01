@@ -29,6 +29,9 @@ The design documents are written in Japanese. This guide lists them and shows th
 | Test strategy and coverage | [../tests/TEST_PLAN.ja.md](../tests/TEST_PLAN.ja.md) |
 | Release checks | [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) |
 | Board / core build matrices (CI-generated) | `BOARDS.<version>.md` / `COMPATIBILITY.<version>.md` |
+| ESP32-P4 / ESP-Hosted setup, versions, and C6 update (Japanese) | [ESP_HOSTED_SETUP.ja.md](ESP_HOSTED_SETUP.ja.md) |
+| Verified ESP32-P4 / ESP-Hosted limitations (Japanese) | [ESP_HOSTED_LIMITATIONS.ja.md](ESP_HOSTED_LIMITATIONS.ja.md) |
+| Arduino Core issue draft for P4 Secure Connections | [ESP_HOSTED_SC_ISSUE.md](ESP_HOSTED_SC_ISSUE.md) |
 | Usage examples | [../examples/README.md](../examples/README.md) |
 
 ## Document roles

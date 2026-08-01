@@ -1,77 +1,88 @@
-# GitHub issue draft: ESP-Hosted Secure Connections
+# GitHub issue draft: ESP32-P4 NimBLE Secure Connections
 
-投稿先: <https://github.com/espressif/esp-hosted-mcu/issues/new>
+投稿先: <https://github.com/espressif/arduino-esp32/issues/new/choose>
 
 Title:
 
 ```text
-ESP32-P4 + ESP32-C6 Hosted BLE Secure Connections fails with DHKey check failure
+ESP32-P4 NimBLE Secure Connections fails because IDF 5.5.5 produces an incorrect P-256 ECDH result
 ```
 
 Body:
 
 ---
 
-### Checklist
+### Board
 
-- [x] Checked the issue tracker for similar issues.
-- [x] Verified that the ESP-Hosted host and slave versions match.
-- [x] Reproduced with a minimal P4/C6 central and S3 peripheral peer test.
-- [ ] Runtime-tested ESP-Hosted 2.12.12 (Arduino-ESP32 3.3.11 currently bundles 2.12.11).
+ESP32-P4 with an ESP32-C6 co-processor (ESP-Hosted)
 
-### Summary
+### Device Description
 
-LE Secure Connections pairing always fails with DHKey check failure when the
-NimBLE host runs on ESP32-P4 and the controller runs on ESP32-C6 through
-ESP-Hosted SDIO/VHCI. The same application and test pass when both peers use
-local ESP32-S3 controllers.
+ESP32-P4 runs the NimBLE host. ESP32-C6 runs the BLE controller through
+ESP-Hosted SDIO/VHCI. An ESP32-S3 is used as the peripheral peer.
 
-### Environment
+### Hardware Configuration
 
-- Host MCU: ESP32-P4
-- Controller/co-processor: ESP32-C6 over 4-bit SDIO/VHCI
-- Peer: ESP32-S3
-- Arduino-ESP32: 3.3.11 (ESP-IDF 5.5.5)
-- ESP-Hosted host: 2.12.11
-- ESP-Hosted slave: 2.12.11
-- esp-hosted-mcu component commit bundled by the Core:
-  `da7412f9b5a31b54bd57acb140247e95d54c7eed`
-- NimBLE Security Manager: bonding enabled, MITM disabled,
-  `ble_hs_cfg.sm_sc = 1`
+- ESP32-P4 serial port: `/dev/ttyUSB2`
+- ESP32-C6 connected through 4-bit SDIO using the board's Hosted configuration
+- ESP32-S3 peer connected separately over USB
 
-The C6 initially had slave 2.3.2. It was updated and activated successfully,
-and the runtime log confirms matching versions:
+### Version
+
+Arduino-ESP32 3.3.11
+
+### IDE Name
+
+arduino-cli 1.3.1
+
+### Operating System
+
+Linux
+
+### Flash frequency
+
+Default
+
+### PSRAM enabled
+
+Default board configuration
+
+### Upload speed
+
+921600
+
+### Description
+
+LE Secure Connections pairing always fails with Security Manager error `0x0b`
+(DHKey check failure) when the NimBLE host runs on ESP32-P4 with
+Arduino-ESP32 3.3.11. This is not caused by corruption in the ESP-Hosted HCI
+path: the first divergent value is the P-256 ECDH shared secret calculated on
+the P4.
+
+Arduino-ESP32 3.3.11 bundles ESP-IDF 5.5.5 libraries built from IDF commit
+`129cd0d2` (`esp32-arduino-libs-idf-release_v5.5-129cd0d2-v4`). That revision
+predates the following fix already present on ESP-IDF `release/v5.5`:
+
+<https://github.com/espressif/esp-idf/commit/9fd7cb7e606a06111e1b14be7f4e00d77d9cf3dd>
+
+The upstream commit is titled:
 
 ```text
-ESP_HOSTED_VERSION host=2.12.11 slave=2.12.11 target=esp32c6
+fix(nimble): Fix ECC HW byte-order and dropped SOC_ESP_NIMBLE_CONTROLLER
 ```
 
-### Expected behavior
-
-The P4/C6 central and S3 peripheral complete LE Secure Connections pairing,
-store a bond, perform encrypted GATT operations, disconnect, and reconnect
-using the bond. This exact test succeeds with an S3 central and S3 peripheral.
-
-### Actual behavior
-
-Initial pairing fails every time:
-
-```text
-P4 central:    backend status 1291 (0x50b)
-S3 peripheral: backend status 1035 (0x40b)
-```
-
-Both statuses contain Security Manager error `0x0b`, DHKey check failure.
-Updating the C6 slave from 2.3.2 to matching 2.12.11 did not change the result.
+In particular, it changes TinyCrypt so that the ECC peripheral receives a
+canonical scalar and keeps the regularized one-bit-longer scalar on the
+software ladder. It also fixes the conversion between TinyCrypt's native word
+representation and the ECC peripheral's little-endian byte representation.
 
 ### Reproduction
 
-The complete reproducible test and both Arduino sketches are here:
+The reproducible central/peripheral sketches and pytest are here:
 
 <https://github.com/tanakamasayuki/EspBle/tree/cceb468/tests/peer/security_bond>
 
-Run from `tests/`, with the P4 on the DUT port and an S3 configured as the
-`device` peer:
+Run from `tests/`:
 
 ```sh
 uv run --env-file .env pytest peer/security_bond/ \
@@ -79,49 +90,84 @@ uv run --env-file .env pytest peer/security_bond/ \
   --peer-profile device:s3_peer_device -vv
 ```
 
-The test performs these steps:
+ESP-Hosted Host and Slave were both updated to 2.12.11 before reproducing:
 
-1. Delete bonds on both devices.
-2. Scan and connect from P4/C6 central to S3 peripheral.
-3. Start pairing on connect with bonding and Secure Connections enabled.
-4. Wait for security, then exercise encrypted GATT read/write.
-5. Disconnect and reconnect to verify the bond.
+```text
+ESP_HOSTED_VERSION host=2.12.11 slave=2.12.11 target=esp32c6
+```
 
-It fails at step 3 before encrypted GATT begins.
+The unmodified build fails every time:
 
-### Isolation and attempted workarounds
+```text
+P4 central:    backend status 1291 (0x50b)
+S3 peripheral: backend status 1035 (0x40b)
+```
 
-| Configuration | Result |
-| --- | --- |
-| S3 central + S3 peripheral, Secure Connections | Pass |
-| P4/C6 central + S3 peripheral, Secure Connections | DHKey check failure |
-| P4/C6 central + S3 peripheral, P4 forced to Legacy pairing | Initial pairing, bond storage, and encrypted GATT pass |
+Both statuses contain SM reason `0x0b`.
 
-Legacy pairing is not an acceptable transparent workaround because it is a
-security downgrade. It also reveals a second Hosted-specific problem on bonded
-reconnect: the S3 reports successful encryption, while the P4 receives no
-security-change event. Polling `ble_gap_conn_find()` on the P4 eventually shows
-`encrypted=1`, but still reports `bonded=0` and `key_size=0`, so the application
-cannot reconstruct a trustworthy security result.
+### Root-cause isolation
 
-### Source check
+I temporarily wrapped the NimBLE Security Manager boundaries on both boards
+and logged the complete SMP Public Key, Random, and DHKey Check values plus the
+inputs and result of `ble_sm_alg_gen_dhkey()`, `f5()`, and `f6()`.
 
-The HCI paths reviewed were:
+The following were identical on both sides:
 
-- `host/drivers/bt/vhci_drv.c`
-- `slave/main/slave_bt.c`
+- pairing request and response;
+- each 64-byte P-256 public key before transmission and after reception;
+- both 16-byte random values;
+- initiator/responder address types and addresses;
+- IO capability bytes;
+- the transmitted and received 16-byte DHKey Check.
 
-There is no change to these files between the Arduino-bundled component commit
-above and current esp-hosted-mcu main / release 2.12.12. Therefore the newer
-release contains no apparent HCI-path change for this failure, although I have
-not runtime-tested 2.12.12 because Arduino-ESP32 3.3.11 provides prebuilt
-2.12.11 P4 libraries.
+However, the ECDH shared secrets differed. One captured run produced:
+
+```text
+S3: 07be553b3786952bc6dae6760dcc172caa999a17866368f4b0112bb86b674231
+P4: 2494d0331e577f4f7971618cedaccb51558c3f0c22b70efab7233d1408f8903e
+```
+
+For a second captured key pair, an independent P-256 calculation showed:
+
+```text
+expected: e7d6179db57f7433c432d2b4a8f7c43664df58637e3de6a3c0a1b6bf6792a53a
+S3:      e7d6179db57f7433c432d2b4a8f7c43664df58637e3de6a3c0a1b6bf6792a53a
+P4:      11797fdfe3c504429b9717e1cd86b7726e85be1b536e0086777c5df9fec10fb3
+```
+
+Both generated public keys matched their private keys and were on P-256, so
+the failure is specifically the P4 shared-secret multiplication, not key
+generation or Hosted packet transport.
+
+As a final confirmation, I used a diagnostic wrapper on P4 that passes the
+original canonical private scalar and aligned little-endian point buffers to
+`esp_tinycrypt_calc_ecc_mult()`, instead of the regularized scalar used by the
+bundled `EccPoint_mult()` hardware path. With that change:
+
+```text
+P4 DHKey == S3 DHKey
+P4 f5 MacKey == S3 f5 MacKey
+both f6 DHKey Checks match
+CENTRAL_SECURITY success=1 encrypted=1 bonded=1 key=16
+PERIPHERAL_SECURITY success=1 encrypted=1 bonded=1 key=16
+encrypted GATT read/write: pass
+```
+
+S3/S3 Secure Connections also passes without any diagnostic change.
+
+### Expected Behavior
+
+ESP32-P4 should calculate the same P-256 ECDH shared secret as the peer and
+complete LE Secure Connections pairing, bonding, and encrypted GATT access.
 
 ### Request
 
-Please investigate the Hosted HCI path for the LE P-256 public-key / DHKey
-commands and events, and the missing encryption-change state on bonded
-reconnect. I can provide additional HCI hex logging or run a proposed patch on
-the P4/C6 hardware if you indicate the preferred logging configuration.
+Please update the prebuilt ESP32-P4 libraries used by Arduino-ESP32 to an
+ESP-IDF `release/v5.5` revision containing
+`9fd7cb7e606a06111e1b14be7f4e00d77d9cf3dd`, or backport that fix to the IDF
+revision used for the next Arduino-ESP32 3.3.x release.
+
+I can retest the original pairing/bond/reconnect pytest on P4/C6 hardware with
+a prerelease library archive.
 
 ---

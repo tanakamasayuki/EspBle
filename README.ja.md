@@ -5,7 +5,7 @@
 ESP32 Arduino向けの汎用Bluetooth Low Energyライブラリです。**Arduino-ESP32に同梱されたNimBLEホストAPIを直接使用し（同梱の`BLE`ラッパクラスには依存しません）、Bluetooth Classicには対応しません。** Central / Peripheral、GATT Client / Server、Security、標準プロファイルと独自GATTサービスを共通基盤上で扱います。外部のNimBLE-Arduinoは必須依存にしません。
 
 > [!IMPORTANT]
-> **無印ESP32（classic）では動作しません。** EspBleはNimBLE backendを必要としますが、無印`esp32`ビルドはNimBLEを同梱せず（Bluedroidが既定）、設計上コンパイルできません。対応ターゲットはNimBLEを同梱するSoC（**ESP32-S3 / ESP32-C3 / ESP32-C6 / ESP32-H2**）です。無印ESP32でBLEを使いたい場合は、代わりに [NimBLE-Arduino](https://github.com/h2zero/NimBLE-Arduino) を利用してください（[対応環境](#対応環境)を参照）。
+> **無印ESP32（classic）では動作しません。** EspBleはNimBLE backendを必要とします。内蔵BLE Controller構成の対象は**ESP32-S3 / ESP32-C3 / ESP32-C6 / ESP32-H2**です。**ESP32-P4 + ESP32-C6のESP-Hosted構成は基本GAP/GATT機能のみ制限付きで対応**し、Security/bondingと複数回の完全再初期化には上流の既知制限があります。無印ESP32でBLEを使いたい場合は[NimBLE-Arduino](https://github.com/h2zero/NimBLE-Arduino)を利用してください（[対応環境](#対応環境)を参照）。
 
 1.0.0リリース前のため公開APIはまだ確定しておらず、破壊的に変更する可能性があります。
 
@@ -22,11 +22,18 @@ ESP32 Arduino向けの汎用Bluetooth Low Energyライブラリです。**Arduin
 - BLE MIDI Device / Host: timestamp・running status・SysEx対応のpacket codecと、EspUsbDevice/EspUsbHostのMIDI APIに揃えた`EspBleMidiDevice` / `EspBleMidiHost` helper
 - ユーザーcallbackはすべてloop task上の`ble.update()`から配送されます（BLE stack taskからは呼ばれません）
 
-上記はすべてESP32-S3 2台の自動Peerテストとhost上のunit testで検証しています。詳細は[テスト計画](tests/TEST_PLAN.ja.md)を参照してください。
+上記の全機能はESP32-S3 2台の自動Peerテストとhost上のunit testで検証しています。P4/C6 Hosted構成は接続、GATT、notify/indicate、MTUなどの基本機能をP4/S3で検証中です。詳細は[テスト計画](tests/TEST_PLAN.ja.md)を参照してください。
 
 ## 対応環境
 
 EspBleは**Arduino-ESP32同梱のNimBLE backend**を必要とします。Bluedroidが既定のcore（無印`esp32`ボードなど）はコンパイル時に`#error`で明示的に拒否します。したがって無印ESP32は本ライブラリの**対象外**です。無印ESP32でBLEを使いたい場合は、NimBLEホストスタックを自前で同梱していて無印ESP32でも動作する [NimBLE-Arduino](https://github.com/h2zero/NimBLE-Arduino) を利用してください（EspBleとはAPIが異なります）。
+
+ESP32-P4はArduino-ESP32が提供するESP-Hosted NimBLE構成で利用できる。検証済みの
+Host/Slave version、C6更新方法、対応済み範囲は
+[ESP-Hostedセットアップ](docs/ESP_HOSTED_SETUP.ja.md)を参照する。Core 3.3.11では
+同梱IDFのP4 ECC不具合によりLE Secure Connections、bonding、それを前提とするHID、
+および`end()`後の複数回の再`begin()`には
+[既知制限](docs/ESP_HOSTED_LIMITATIONS.ja.md)がある。
 
 開発とPeerテストはarduino-esp32 3.3.11で行っています。対応するcoreバージョンの範囲とボードごとのビルドカバレッジは手動管理ではなくCIで計測します:
 
@@ -83,6 +90,8 @@ void loop() {
 - [機能対応マトリクス](docs/FEATURE_MATRIX.ja.md)
 - [テスト計画](tests/TEST_PLAN.ja.md)
 - [リリースチェックリスト](docs/RELEASE_CHECKLIST.ja.md)
+- [ESP32-P4 / ESP-Hostedセットアップ](docs/ESP_HOSTED_SETUP.ja.md)
+- [ESP32-P4 / ESP-Hostedの既知制限](docs/ESP_HOSTED_LIMITATIONS.ja.md)
 
 ## 関連ライブラリ
 

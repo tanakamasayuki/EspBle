@@ -8,11 +8,20 @@ This document tracks only the current implementation status, the known limits, a
 
 Using the NimBLE host API bundled with Arduino-ESP32 3.3.11 directly, central / peripheral, GATT client / server, security, and composite HID device / host all work. **There is no dependency on the bundled `BLE` wrapper classes** (`BLEDevice`, `BLEClient`, `BLEServer`, `BLEScan`, `BLEAdvertising` and the rest); the reasoning is recorded in [DECISIONS.ja.md](DECISIONS.ja.md) under "アーキテクチャで確定" (Japanese, as with the other design documents). There is a peer test environment using two ESP32-S3 boards plus host unit tests, and every published example is compile-verified for the ESP32-S3.
 
+On ESP32-P4 + ESP32-C6 through ESP-Hosted, compilation, scanning, connections,
+GATT read/write, notify/indicate, MTU, and 23 additional non-security peer tests
+have been verified with a P4/S3 pair. Security/bonding is blocked by
+the P4 ECC defect in the bundled IDF, while repeated full reinitialization is
+blocked by the bundled Hosted resource leak; both are tracked in the documented
+[ESP-Hosted limitations](ESP_HOSTED_LIMITATIONS.ja.md).
+
 HID can compose keyboard (6KRO / NKRO), mouse, consumer control, system control, gamepad, and vendor input / output / feature into a single service. The host discovers every supported input report and dispatches it to a per-kind event.
 
 BLE MIDI provides a backend-independent packet codec (timestamps, running status, multi-packet SysEx) plus the `EspBleMidiDevice` / `EspBleMidiHost` profile helpers, whose API matches the sibling USB libraries.
 
 ## Verification status
+
+- P4/C6 Hosted + S3 peer: 23 additional non-security tests pass (9 GAP/controller, 6 advertising, and 8 GATT-state tests)
 
 - Peer tests: 65 suites, 87 tests. Verified on hardware: connections, GATT, per-connection discovery cache, persistent subscriptions (automatic re-subscribe on reconnect, and counting registry overflow), address privacy (random static address), iBeacon broadcast/decode, service data in both directions, Fitness Machine (Indoor Bike Data), security, standard services, composite HID, NKRO, custom HID with an arbitrary report descriptor, non-connectable beacons, BLE MIDI, Health Thermometer, Blood Pressure, Weight Scale, Body Composition, Cycling / Running Speed and Cadence, Cycling Power, Pulse Oximeter, Glucose (the RACP procedure), Location and Navigation, User Data (write → onWritten → notify), Alert Notification (control point → notify), Immediate Alert (write without response), Phone Alert Status (control point → state-change notify), Proximity (Link Loss + Tx Power, two services coexisting), Reference Time Update (control point → state transition), Bond Management (feature read + control point), Continuous Glucose Monitoring (E2E-CRC), disconnect reason codes, connection parameter updates, PHY updates (2M), Service Changed, runtime passkey entry, Numeric Comparison, directed advertising (including channel narrowing), purging queued GATT operations on disconnect and deferring a `disconnect()` issued during one, the NKRO minimum-MTU refusal, multi-listener dispatch / removal / capacity (the generic, connection-event and HID Host sides), primary-then-registration-order delivery of connection listeners, the HID device `ready()` tracking the subscription gate, sending a whole NKRO state as one report, `heldState()` following every send path, `ledState()` returning the LEDs the host wrote (including while no callback is installed and the queue is overflowing), the reports the HID convenience input APIs put on the air (`pressKey()`, `tapKey()`, `write()`, `tapUsage()`, `setLayout()`, mouse `wheel()` / `click()`, consumer / system `sendUsage()`, gamepad `send()`), custom HID feature reports, HID Boot Protocol switching, custom HID report descriptors, non-connectable beacons (interval control), error paths, and reconnection
 - Manual tests (require a third board; skipped automatically when it is absent): `multi_connection` verifies several simultaneous connections, per-connection notify routing, auto-reconnect (`setAutoReconnect`), and persistent subscription restore on reconnect, on hardware
@@ -25,6 +34,13 @@ For how to run them see [tests/TEST_PLAN.ja.md](../tests/TEST_PLAN.ja.md); for t
 ## Known limits
 
 - Before the 1.0.0 release, the public API carries no compatibility guarantee.
+- With Core 3.3.11 on P4/C6 ESP-Hosted, the TinyCrypt/ECC defect in the bundled
+  IDF 5.5.5 makes LE Secure Connections fail with a DHKey check error, so
+  Security, bonding, and dependent HID paths are not supported. ESP-IDF
+  `release/v5.5` fixes this in `9fd7cb7`, but Arduino Core has not bundled it yet. With
+  ESP-Hosted 2.12.11 in Arduino-ESP32 3.3.11, repeated full deinit/init can also
+  fail to allocate the SDIO mempool; call `begin()` once per boot and restart
+  the P4 to start again. See the [ESP-Hosted limitations](ESP_HOSTED_LIMITATIONS.ja.md).
 - BLE MIDI SysEx transmission is limited to 320 bytes per message (split across and reassembled from several BLE packets in both directions). Only one SysEx transmission can be in progress at a time.
 - The gamepad host parses variable input fields but does not interpret the meaning of vendor-specific array inputs.
 - The HID host requires an explicit `discover(connectionId)` per connection. With security enabled, call it after security completes. An integration layer that must not take the application's `onSecurityChanged` slot can call it from `addSecurityChangedListener()`. Reconnects to an already-discovered peer can be automated with `setAutoRediscover(true)` (off by default).

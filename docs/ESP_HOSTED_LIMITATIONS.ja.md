@@ -11,9 +11,26 @@ DHKey check failure (`0x0b`)となる。P4 centralのbackend statusは`0x50b`、
 S3 peripheralは`0x40b`だった。S3/S3では同じtestが成功するため、EspBleの共通
 Security処理やS3 peripheralだけでは再現しない。
 
-C6 Slaveを2.3.2からHostと同じ2.12.11へ更新しても解消しなかった。さらに、
-ESP-Hosted-MCU 2.12.11相当commitから2.12.12までのHosted HCI host/slave実装に
-この経路の変更はない。
+C6 Slaveを2.3.2からHostと同じ2.12.11へ更新しても解消しなかった。SMP境界を
+instrumentした結果、pairing request/response、双方の64 byte公開鍵、Random、address、
+IO capability、DHKey Checkは送信前と受信後で一致した。一方、同じ鍵pairから計算した
+P-256 ECDH共有鍵だけがP4とS3で異なった。採取したprivate/public keyを独立計算すると、
+公開鍵生成は両側とも正しく、S3の共有鍵だけが期待値と一致した。したがってHostedの
+ACL/HCI転送ではなく、Arduino-ESP32 3.3.11同梱ESP-IDF 5.5.5のP4 TinyCrypt/ECC
+hardware経路が原因である。
+
+ESP-IDF `release/v5.5`ではcommit
+[`9fd7cb7`](https://github.com/espressif/esp-idf/commit/9fd7cb7e606a06111e1b14be7f4e00d77d9cf3dd)
+（2026-07-16）で修正済みである。修正はECC hardwareへcanonical scalarを渡し、
+software ladder用に正規化された1 bit長いscalarをhardwareへ渡さないようにするほか、
+TinyCrypt native wordとECC peripheralのlittle-endian byte表現を変換する。
+Core 3.3.11のprebuilt libraryはそれ以前のIDF commit `129cd0d2`から作られている。
+
+診断用にP4のcanonical private scalarとaligned little-endian pointを直接
+`esp_tinycrypt_calc_ecc_mult()`へ渡すと、P4/S3の共有鍵、f5 MacKey、双方のf6 Checkが
+一致し、SC pairing、bond、暗号化GATT read/writeが成功した。これは原因と上流修正の
+有効性を確認するためのinstrumentationであり、内部symbolへの依存と暗号実装の重複を
+持ち込むためEspBleの製品workaroundにはしない。
 
 次の回避も採用できないことを実機で確認した。
 
@@ -24,9 +41,11 @@ ESP-Hosted-MCU 2.12.11相当commitから2.12.12までのHosted HCI host/slave実
   であることは検出できるが、`bonded=0`、`key_size=0`の不完全な状態しか得られない。
   EspBle側でbond状態や鍵長を推測して成功扱いすることはできない。
 
-したがって、P4/C6 Hosted構成では現時点でEspBleのSecurity、bonding、およびそれを
-前提にするHID利用を対応済みと扱わない。Securityを必要とする製品用途では、上流の
-ESP-Hosted修正を待つか、内蔵BLE Controllerを持つS3/C3/C6/H2を使用する。
+したがって、Core 3.3.11のP4/C6 Hosted構成ではEspBleのSecurity、bonding、および
+それを前提にするHID利用を対応済みと扱わない。Securityを必要とする製品用途では、
+Arduino Coreが上記ESP-IDF修正を取り込むのを待つか、内蔵BLE Controllerを持つ
+S3/C3/C6/H2を使用する。Arduino Core向けの手動投稿用issue案は
+[ESP_HOSTED_SC_ISSUE.md](ESP_HOSTED_SC_ISSUE.md)に保存している。
 
 ## `end()`後の再`begin()`
 
@@ -59,7 +78,8 @@ shared channel mempoolが漏れる問題が修正され、2.12.12としてreleas
 
 ## 責務
 
-これらはEspBleの公開GAP/GATT APIではなく、Hosted HCIまたはtransport lifecycleの
-制限である。EspBleは安全で意味を保てる回避だけを実装し、firmware更新、Hosted
-transportの修正、Arduino Coreへのcomponent取り込みは各上流projectの責務とする。
+これらはEspBleの公開GAP/GATT APIではなく、Arduino Core同梱のTinyCrypt/ECC実装または
+Hosted transport lifecycleの制限である。EspBleは安全で意味を保てる回避だけを実装し、
+暗号実装、firmware更新、Hosted transportの修正、Arduino Coreへのcomponent取り込みは
+各上流projectの責務とする。
 EspBle側は再現test、検証version、制約、公式更新手順を維持する。
