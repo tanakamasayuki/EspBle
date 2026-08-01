@@ -2,31 +2,82 @@
 
 > 日本語版: [README.ja.md](README.ja.md)
 
-EspBle is a general-purpose Bluetooth Low Energy library for ESP32 Arduino. **It talks to the NimBLE host bundled with Arduino-ESP32 directly — not through the bundled `BLE` wrapper classes — and does not support Bluetooth Classic.** It provides central and peripheral roles, generic GATT client and server operations, security, and composable profiles on one shared foundation. External NimBLE-Arduino is not a required dependency.
+EspBle is a general-purpose Bluetooth Low Energy library for ESP32 Arduino.
+**It calls the NimBLE Host API integrated into Arduino-ESP32 as an ESP-IDF
+component directly.** It does not go through Arduino-ESP32's `BLEDevice`,
+`BLEClient`, or `BLEServer` wrappers. Central and peripheral roles, GATT client
+and server operations, security, HID, and BLE MIDI share one `EspBle`
+foundation. Bluetooth Classic is not supported.
 
 > [!IMPORTANT]
-> **The classic ESP32 is not supported.** EspBle requires the NimBLE backend. Native-controller targets are **ESP32-S3 / ESP32-C3 / ESP32-C6 / ESP32-H2**. **ESP32-P4 + ESP32-C6 through ESP-Hosted has limited support for basic GAP/GATT functionality**; Security/bonding and repeated full reinitialization have upstream limitations. If you need BLE on the classic ESP32, use [NimBLE-Arduino](https://github.com/h2zero/NimBLE-Arduino) instead — see [Compatibility](#compatibility).
+> **The classic ESP32 is not supported.** EspBle uses the NimBLE backend built
+> into Arduino-ESP32. Native-controller targets are
+> **ESP32-S3 / ESP32-C3 / ESP32-C6 / ESP32-H2**.
+> **ESP32-P4 + ESP32-C6 is supported with limitations through ESP-Hosted**;
+> security/bonding and repeated full reinitialization have upstream limitations.
+> For BLE on the classic ESP32, use
+> [NimBLE-Arduino](https://github.com/h2zero/NimBLE-Arduino); see
+> [Compatibility](#compatibility).
 
-The public API is not stable yet: this is the trial stage ahead of the first release, and APIs may still change.
+## Why use EspBle?
+
+- **Use the Core-integrated NimBLE stack as-is:** EspBle directly uses the
+  ESP-IDF NimBLE Host and controller or ESP-Hosted HCI configuration selected
+  and built by Arduino-ESP32. It does not layer another BLE stack into the
+  library, and follows the Core's SoC support, configuration, and updates.
+- **Expose low-level correctness through an Arduino-oriented API:** GATT
+  attributes can be addressed by handle as well as UUID, so duplicate service
+  and characteristic UUIDs, descriptors, and per-connection discovery snapshots
+  remain distinguishable. Asynchronous GATT operations are serialized through
+  a timeout-aware queue.
+- **Compose central and peripheral roles on one foundation:** scanning,
+  advertising, multiple connections, GATT client/server, and pairing/bonding
+  are configured through the same `EspBle` instance.
+- **Avoid rebuilding HID and BLE MIDI from raw attributes:** keyboard, mouse,
+  consumer/system control, gamepad, and custom HID reports can share one HID
+  service. HID Host and BLE MIDI Device/Host helpers use the same event model.
+- **Know where callbacks run:** asynchronous connection, GATT-completion,
+  notification, and HID events are delivered by `ble.update()` on the loop
+  task. The synchronous GATT Server `onRead()` hook is the explicit exception
+  and runs on the stack task because it must produce the response immediately.
+- **Rely on hardware-tested behavior:** a two-board ESP32 peer suite covers
+  connections, GATT, security, HID, reconnection, and error paths, supplemented
+  by host unit tests and cross-SoC example builds.
 
 ## Features
 
-- Legacy advertising and scanning with value-type scan results, non-connectable beacons, iBeacon (`EspBleIBeacon.h`), and service-data broadcast/receive
-- Central and peripheral connections by scan result or address, with stable library connection IDs; multiple simultaneous connections and auto-reconnect (`setAutoReconnect`, off by default) that recovers unexpected drops
-- Generic GATT server/client: per-connection database and known-UUID discovery, characteristic/descriptor read and write, operation timeouts with auto-queueing, notify/indicate, subscriptions (persistent subscriptions, on by default, auto-restore on reconnect)
-- MTU exchange, connection snapshots, payload-limit validation
-- Security: Just Works and static-passkey pairing (LE Secure Connections), bonding, encrypted/authenticated characteristic permissions
-- Address privacy: public / random static / Resolvable Private Address (RPA) selectable via `EspBleConfig::ownAddressType`
-- Composite HID Device: 6KRO/NKRO keyboard, mouse, consumer/system control, gamepad, and Vendor Input / Output / Feature profiles in one HID / Device Information / Battery service set
-- HID Host: cross-report discovery and events for all supported types; keyboard includes 6KRO/NKRO parsing, 256-bit usage snapshots, 19 layouts, and LED output, while Vendor reports are bidirectional
-- BLE MIDI Device and Host: timestamp/running-status/SysEx packet codec with `EspBleMidiDevice` / `EspBleMidiHost` helpers following the EspUsbDevice/EspUsbHost MIDI API
-- All user callbacks are delivered from `ble.update()` on the loop task — never from the BLE stack task
+| Area | What it provides | Key behavior and APIs |
+| --- | --- | --- |
+| Advertising / Scan | Regular advertising, active/passive scanning, non-connectable beacons, iBeacon, and Service Data | Value-type scan results retain address, name, RSSI, service UUIDs, Manufacturer Data, and more. Advertising and Scan Response payloads are configured separately |
+| Connections | Central connections by scan result/address, peripheral connection acceptance, disconnect, and multiple simultaneous links | Stable application-facing connection IDs, connection snapshots, parameter/PHY updates, and opt-in auto-reconnect after unexpected drops |
+| GATT Server | Custom services, characteristics, and descriptors with read/write and notify/indicate | Targets can be addressed by UUID or attribute handle. Duplicate service/characteristic UUIDs and per-connection subscription state are supported |
+| GATT Client | Full-database or known-UUID discovery, characteristic/descriptor read/write, subscribe/unsubscribe | Per-connection discovery snapshots, handle-based access, long reads, timeouts, and an automatic operation queue. Persistent subscriptions restore on reconnect by default |
+| ATT / Link | MTU exchange, payload-limit validation, connection parameters, and LE PHY | MTU and link state are reflected in connection snapshots and reported through asynchronous completion events |
+| Security / Privacy | LE Secure Connections with Just Works, passkey, and Numeric Comparison; bonding and encrypted/authenticated permissions | Public, random static, and Resolvable Private Address (RPA) modes. Security has documented limitations on P4/C6 Hosted |
+| HID Device | Keyboard (6KRO/NKRO), mouse, consumer/system control, gamepad, vendor, and arbitrary custom reports | Compose several profiles into one HID service; includes report sending, battery, LED output, and Boot Keyboard Protocol |
+| HID Host | Discovery, subscription, and report parsing for BLE keyboards, mice, gamepads, and related devices | Normalizes 6KRO/NKRO into usage snapshots; supports 19 keyboard layouts, LED output, and vendor Input/Output/Feature reports |
+| BLE MIDI | MIDI Device and Host with notes, Control Change, Program Change, Pitch Bend, and SysEx | Helpers/codecs handle timestamps, running status, and SysEx spanning multiple BLE packets |
+| Events / Lifecycle | Asynchronous connection, GATT-completion, notification, security, and HID events plus `begin()` / `end()` | Asynchronous callbacks run from the loop task through `ble.update()`. Only the synchronous GATT Server `onRead()` hook runs on the stack task |
 
-The full feature set above is verified with an automated two-board ESP32-S3 peer test suite plus host-side unit tests. Basic P4/C6 Hosted functionality such as connections, GATT, notify/indicate, and MTU is being verified with a P4/S3 pair; see [tests/TEST_PLAN.ja.md](tests/TEST_PLAN.ja.md).
+See the [feature matrix](docs/FEATURE_MATRIX.md) for API-level support and
+limitations, and the [examples index](examples/README.md) for task-oriented
+examples.
+
+The full feature set above is verified with an automated two-board ESP32-S3 peer
+test suite plus host-side unit tests. On P4/C6 Hosted, connections, GATT,
+notify/indicate, MTU, Wi-Fi/BLE coexistence, and shared-transport lifecycle have
+been verified with a P4/S3 pair. For excluded security paths and other details,
+see [tests/TEST_PLAN.ja.md](tests/TEST_PLAN.ja.md) and the
+[ESP-Hosted limitations](docs/ESP_HOSTED_LIMITATIONS.ja.md).
 
 ## Compatibility
 
-EspBle requires the **NimBLE backend bundled with Arduino-ESP32**. Cores built with the Bluedroid default (such as the plain `esp32` board) are rejected at compile time with a clear `#error`. The classic ESP32 is therefore **out of scope** for this library. If you need BLE on the classic ESP32, use [NimBLE-Arduino](https://github.com/h2zero/NimBLE-Arduino): it bundles its own NimBLE host stack and runs on the classic ESP32, with a different API from EspBle.
+EspBle directly uses the **NimBLE Host API integrated into Arduino-ESP32 as an
+ESP-IDF component**. The Bluedroid-based plain `esp32` board is rejected at
+compile time with a clear `#error`, so the classic ESP32 is **out of scope**.
+For BLE on the classic ESP32, use
+[NimBLE-Arduino](https://github.com/h2zero/NimBLE-Arduino), which provides its
+own NimBLE Host stack and a different API.
 
 ESP32-P4 can use the ESP-Hosted NimBLE configuration supplied by Arduino-ESP32.
 The verified host/slave versions, C6 update procedure, and supported subset are
@@ -38,12 +89,18 @@ is also limited. These are covered by the
 
 Development and the peer tests run on arduino-esp32 3.3.11. The supported core-version range and per-board build coverage are measured by CI, not maintained by hand:
 
-- **Core Compatibility Matrix** workflow → `docs/COMPATIBILITY.<version>.md` (representative examples across arduino-esp32 releases on ESP32-S3)
+- **Core Compatibility Matrix** workflow → `docs/COMPATIBILITY.<version>.md` (representative examples across arduino-esp32 releases on S3 / C3 / C6 / H2 / P4)
 - **Board Build Coverage** workflow → `docs/BOARDS.<version>.md` (every example across ESP32-S3 / ESP32 / C3 / C6 / H2 / P4 at one core version)
 
 Both are manual (`workflow_dispatch`) because a full sweep rewrites and rebuilds every sketch. Consult the generated matrix for the authoritative minimum core version.
 
 ## Getting started
+
+Install EspBle from Arduino Library Manager, or with Arduino CLI:
+
+```sh
+arduino-cli lib install EspBle
+```
 
 Each example ships a `sketch.yaml` pinned to the verified Arduino-ESP32 version:
 
