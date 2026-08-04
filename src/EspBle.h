@@ -1071,13 +1071,18 @@ public:
   EspBleGattService addService(const char *serviceUuid);
   // Register a Characteristic inside a Service and return its handle; every
   // later operation takes that handle. Two characteristics in one service may
-  // not share a UUID: the spec permits it, but the bundled backend reuses the
-  // first entry instead of adding a second, so this is rejected rather than
-  // silently dropped. Two services may share a UUID (see addService).
+  // share a UUID, as the spec allows (the several HID Report characteristics of
+  // a keyboard are the everyday case): the attribute table is built here and
+  // each call returns its own handle, so a shared UUID is never ambiguous. Two
+  // services may share a UUID as well (see addService).
   EspBleGattCharacteristic addCharacteristic(
     EspBleGattService service,
     const char *characteristicUuid,
     const EspBleGattCharacteristicConfig &config);
+  // Register a Descriptor under a Characteristic. Unlike services and
+  // characteristics, one characteristic may not carry the same descriptor UUID
+  // twice: a descriptor is looked up by UUID within its characteristic, so a
+  // duplicate would be unreachable and is rejected with InvalidArgument.
   EspBleGattDescriptor addDescriptor(
     EspBleGattCharacteristic characteristic,
     const char *descriptorUuid,

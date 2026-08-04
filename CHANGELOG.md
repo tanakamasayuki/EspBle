@@ -1,6 +1,18 @@
 # Changelog / 変更履歴
 
 ## Unreleased
+- (EN) Fixed the `EspBleGattServer::addCharacteristic()` comment, which still
+  said two characteristics in one service may not share a UUID. The
+  implementation registers both and each call returns its own handle, which is
+  what `docs/FEATURE_MATRIX.md`, `docs/GUIDE_BLE_BASICS.md` and the
+  `duplicate_uuid` peer test already describe. Also documented the restriction
+  that does exist: one characteristic may not carry the same descriptor UUID
+  twice.
+- (JA) `EspBleGattServer::addCharacteristic()`のコメントを修正。「同一Service内で
+  同一UUIDのCharacteristicは置けない」と書かれたままだったが、実装は両方を登録し
+  それぞれのhandleを返す（`docs/FEATURE_MATRIX.md`・`docs/GUIDE_BLE_BASICS.md`・
+  `duplicate_uuid` peerテストが記述しているとおり）。実際に存在する制約（1つの
+  Characteristic内でDescriptor UUIDは重複できない）も明記した。
 
 ## 1.1.0
 - (EN) Added limited ESP32-P4 + ESP32-C6 ESP-Hosted support, including the
