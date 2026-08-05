@@ -7,7 +7,7 @@
 1. Arduino向け単一ライブラリ`EspBle`として提供する。Arduino-ESP32に同梱されたNimBLEを使い、外部NimBLE-Arduinoを必須依存にしない。
 2. Bluetooth Classicは扱わない。LE Audio、Mesh、Matter provisioning、OTA/DFU方式の統一、ESP-IDF native APIも対象外。
 3. 対象可否はBLE内蔵SoCかどうかではなく、**Arduino-ESP32がNimBLEを提供する構成か**で判断する。ESP32-P4 + ESP32-C6などのHosted BLEも候補に含め、専用build/実機試験後に対応済みとする。
-4. Bluedroidが既定のSoC（無印ESP32など）は対象外。API仕様が安定した後に別ライブラリ（`EspBleBluedroid`等）で対応する可能性を残すが、ソース互換は努力目標にとどめる——Bluedroid/NimBLEの内部差でbonding・MTU・securityの細部挙動は必ずずれる。backend非依存の高レベルロジック（`EspBleKeymap.h`、`EspBleHidReportMap.h`、イベント値型、KeyBridge境界）は共有候補。未着手のため利用者向け文書では紹介せず、無印ESP32でBLEが必要な場合は実在のNimBLE-Arduinoを案内する。
+4. Bluedroidが既定のSoC（無印ESP32など）でも、**NimBLE hostをライブラリ内へ同梱して対応する**（実装は[PLAN_ESP32.ja.md](PLAN_ESP32.ja.md)、未着手）。ただし**推奨は兄弟ライブラリ`EspBleBluedroid`**で、EspBle側は「NimBLEでも動かせる特殊対応」と位置づける——coreのプリビルドはBluedroidなのでhostの保守を自前で負う、Bluetooth Classicと同居できない、という2点が本質的な不利。無印ESP32はBLE 4.2 controllerのため、LE 2M / Coded PHYは使えず、タイミング依存の挙動が他ターゲットと一致する保証もない。**Peerテストで確認できたsuiteだけを対応済みとする。** 公開API差の正本は`EspBleBluedroid`側の`BLE_BACKEND_DIFFERENCES.ja.md`に置く。backend非依存の高レベルロジック（`EspBleKeymap.h`、`EspBleHidReportMap.h`、イベント値型、KeyBridge境界）は両ライブラリで共有する。
 5. 公開APIはSemantic Versioningに従う。1.0.0より前の0.x系は試行段階で互換性を保証しない。
 6. Central / PeripheralとGATT Client / Serverを同じスタック所有者で扱い、APIを単一接続前提に固定しない。標準Profileと独自Serviceは同じGATT Serverへ合成できる。
 
@@ -42,6 +42,15 @@
 10. Descriptor Write eventは`connectionId`を持つ。属性テーブルを自前に組んでいるため、ホストのaccess callbackが`conn_handle`を渡す。
 
 11. 内部worker task（GATT operation、Server送信）は完了イベントをpushしてからbusy flagをクリアする。`end()`はbusy flagのクリアを待ってから共有状態を破棄するため、この順序でuse-after-freeを防ぐ。`end()`は実行中のconnect試行を打ち切り、Scannerの未配送resultをflushして次のsessionへ持ち越さない。
+
+12. **無印ESP32向けに同梱するNimBLE hostは、ガード付きソースとして持ち込む**（詳細と手順は[PLAN_ESP32.ja.md](PLAN_ESP32.ja.md)）。決めたのは次の4点。
+
+    - **ライブラリ内で完結させる。** 別ライブラリへ隔離せず、外部NimBLE-Arduinoへも依存しない。`__has_include`による条件includeはArduinoのライブラリ解決では機能しない（解決器はinclude失敗を検知して初めてライブラリを追加する）ため、隔離案は利用者に追加includeを強いる。
+    - **`.a`（precompiled）ではなくソース＋全ファイルガード。** ガードで空になるtranslation unitのコストは他ターゲットのクリーンビルドで+1.1秒に収まる（実測）。`.a`はtoolchain / IDF版へ固定され、故障が実行時にしか出ず、PlatformIO等が`precompiled=true`を解釈しない。
+    - **同梱ヘッダは`src/nimble_esp32/include/`へ隔離し、EspBle本体からの参照はshim1本に集約する。** `src/`直下へ置くと、coreのNimBLEヘッダ（`-iprefix`経由）よりライブラリの`-I<lib>/src`が優先され、**core同梱hostとリンクしながら別スナップショットのヘッダでコンパイルする**状態になる。
+    - **持ち込むスナップショットは対象coreのesp-idfがpinするesp-nimbleに合わせる。** 他ターゲットで動いているhostと同一にして、挙動差をcontroller由来だけに限定する。
+
+13. **同梱hostの設定値は他ターゲットと同値に固定し、利用者の上書きを`#error`で拒否する。** 上書きを許すとヘッダ側のみが変わって同梱実装と食い違い、`CONFIG_BT_NIMBLE_MAX_BONDS`のように配列サイズへ効くものが黙って壊れる。設定自由度が要るなら全ターゲットを同梱hostへ切り替える別の判断として扱う。
 
 ## GAP（Advertising / Scan / Privacy）
 
@@ -160,7 +169,7 @@
 ## 未確定
 
 - Arduino-ESP32の最小対応版と更新ポリシー（`core-matrix.yml`が生成する`docs/COMPATIBILITY.<version>.md`で計測して確定する。ローカル実行はsketchを書き換えて環境を汚すためCIで回す）
-- ESP32-S3以外のbuild matrix（`board-matrix.yml`が生成する`docs/BOARDS.<version>.md`で計測。NimBLE不在のBluedroid既定coreはコンパイル時`#error`で拒否する）
+- ESP32-S3以外のbuild matrix（`board-matrix.yml`が生成する`docs/BOARDS.<version>.md`で計測。NimBLE不在の構成はコンパイル時`#error`で拒否する。無印ESP32だけは同梱hostで対応する予定で、[PLAN_ESP32.ja.md](PLAN_ESP32.ja.md)の実施後に✅へ変わる）
 - HID Hostで追加対応するReport Mapの優先順位
 - public object handleの表現（値型、index+generation、参照class）
 - Boot Protocolの市販Host（BIOS等）との互換性と、Mouse Boot Report 0x2A33の対応要否（manual interoperabilityで確認する）

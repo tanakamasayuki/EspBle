@@ -30,6 +30,7 @@ EspBleの開発ドキュメント一覧と、初見の人が状況を把握す�
 | 1.0.0までに残っている作業 | [PLAN_RELEASE_1_0_0.ja.md](PLAN_RELEASE_1_0_0.ja.md) |
 | リリース前の確認手順 | [RELEASE_CHECKLIST.ja.md](RELEASE_CHECKLIST.ja.md) |
 | ボード / coreビルド対応表（CI生成） | `BOARDS.<version>.md` / `COMPATIBILITY.<version>.md` |
+| 無印ESP32対応の方針・取得元・検証計画 | [PLAN_ESP32.ja.md](PLAN_ESP32.ja.md) |
 | ESP32-P4 / ESP-Hostedの準備、対応version、C6更新 | [ESP_HOSTED_SETUP.ja.md](ESP_HOSTED_SETUP.ja.md) |
 | ESP32-P4 / ESP-Hostedの実機確認済み制限 | [ESP_HOSTED_LIMITATIONS.ja.md](ESP_HOSTED_LIMITATIONS.ja.md) |
 | P4 Secure ConnectionsのArduino Core向けissue投稿案 | [ESP_HOSTED_SC_ISSUE.md](ESP_HOSTED_SC_ISSUE.md) |
