@@ -1,6 +1,8 @@
 # Changelog / 変更履歴
 
 ## Unreleased
+
+## 1.2.0
 - (EN) Added support for the original ESP32. Its Arduino-ESP32 prebuilt libraries
   are built with Bluedroid, so EspBle now bundles the NimBLE host for that chip
   only (`src/nimble_esp32/`, vendored by `tools/vendor_nimble_esp32.py` from the
