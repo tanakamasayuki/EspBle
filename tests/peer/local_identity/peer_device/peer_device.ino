@@ -68,8 +68,12 @@ void loop()
     }
     else if (command == 'd')
     {
-      // 0x16 = connection terminated by local host.
-      Serial.printf("DISCONNECT %d\n", ble.disconnect(activeConnection, 0x16) ? 1 : 0);
+      // 0x13 = remote user terminated the connection. HCI_Disconnect only accepts
+      // the reasons the Core specification lists for it (0x05, 0x13-0x15, 0x1A,
+      // 0x29, 0x3B); 0x16 "connection terminated by local host" is a code the
+      // controller reports, not one a host may send, and the original ESP32's
+      // controller rejects it (ESP32-S3's accepts it regardless).
+      Serial.printf("DISCONNECT %d\n", ble.disconnect(activeConnection, 0x13) ? 1 : 0);
     }
   }
 

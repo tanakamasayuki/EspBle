@@ -111,9 +111,9 @@ EspUsbHost / EspUsbDeviceで扱っている機能のBLE版、およびBLEで一�
 | Advertisingチャネルマップの選択 | ✅ | `EspBleAdvertising::setChannelMap(mask)`（`EspBleAdvertisingChannel37/38/39`のビットマスク、0で3チャネル全部）。Wi-Fiと重なるチャネルを避けられる代わりに、見つかるまでの時間は延びる。`directed_advertising` Peerでチャネル39のみでの接続を検証済み |
 | Extended Advertising / 複数Advertising Set | ❌ | 同梱NimBLEが`CONFIG_BT_NIMBLE_EXT_ADV`無効でビルドされており、Arduinoライブラリからは有効化不可 |
 | Periodic Advertising | ❌ | Extended Advertising（`CONFIG_BT_NIMBLE_EXT_ADV`）に依存するため同上で対応不可 |
-| 2M PHY / Coded PHY（Long Range） | ✅ | 接続後のPHY更新で対応（下記「PHY更新」）。2Mは実機Peer検証済み、Coded（Long Range）は無線対応依存 |
+| 2M PHY / Coded PHY（Long Range） | ✅ | 接続後のPHY更新で対応（下記「PHY更新」）。2Mは実機Peer検証済み、Coded（Long Range）は無線対応依存。**無印ESP32はBLE 4.2 controllerのため利用不可** |
 | 接続パラメータ更新 | ✅ | `updateConnectionParameters()`要求＋`onConnectionParametersUpdated()`で結果配送。`EspBleConnection`にinterval/latency/timeoutを公開。両役割・両パスをPeerで検証済み |
-| PHY更新（2M / Coded） | ✅ | `updatePhy()`要求＋`onPhyUpdated()`で結果配送。`EspBleConnection`にtx/rx PHYを公開。2M PHYへの更新をPeerで検証済み（Codedは無線対応依存） |
+| PHY更新（2M / Coded） | ✅ | `updatePhy()`要求＋`onPhyUpdated()`で結果配送。`EspBleConnection`にtx/rx PHYを公開。2M PHYへの更新をPeerで検証済み（Codedは無線対応依存）。**無印ESP32はBLE 4.2 controllerのため利用不可** |
 | 切断理由の取得 | ✅ | `EspBleConnection::disconnectReason`（onDisconnectedでbackend/HCI理由コード）。Server/Client両パスをPeerで検証済み |
 | GATT Service Changed | ✅ | Server側`notifyServicesChanged()`で0x1801/0x2A05のindication送出、Client側は購読して受信・range decode。Peer検証済み（受信時の自動再Discoveryはアプリ判断） |
 

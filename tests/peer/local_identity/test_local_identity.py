@@ -49,6 +49,10 @@ def test_local_identity(dut, peers):
     dut.expect("CENTRAL_CONNECTED id=", timeout=20)
     peripheral.expect("PERIPHERAL_CONNECTED id=", timeout=10)
 
+    # The peer disconnects with 0x13 (remote user terminated). Only the reasons
+    # the Core specification lists for HCI_Disconnect may be sent by a host; the
+    # original ESP32's controller rejects anything else, so the peer would fail
+    # the request instead of terminating the link.
     peripheral.write("d")
     peripheral.expect_exact("DISCONNECT 1", timeout=10)
-    dut.expect_exact("reason=0x16", timeout=15)
+    dut.expect_exact("reason=0x13", timeout=15)

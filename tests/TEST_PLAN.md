@@ -89,6 +89,38 @@ uv run --env-file .env pytest \
 
 For a quick connectivity check, run only `peer/connect_disconnect/` with the same profile arguments. Security and repeated full initialization/deinitialization affected by current Core/ESP-Hosted limitations are not mandatory pass criteria for the representative suite. Re-run them after a Core or C6 firmware update and check whether the [known ESP-Hosted limitations (Japanese)](../docs/ESP_HOSTED_LIMITATIONS.ja.md) have been resolved.
 
+## Original-ESP32 Regression
+
+The original ESP32's Arduino-ESP32 prebuilt libraries are built with Bluedroid, so it runs on the
+NimBLE host EspBle bundles (`src/nimble_esp32/`). The policy and the verification record live in the
+Japanese [original-ESP32 plan](../docs/PLAN_ESP32.ja.md).
+
+| Role | profile | suites |
+|---|---|---|
+| parent (central) | `esp32_peer_host` | the 62 suites whose parent sketch uses EspBle |
+| peer (peripheral) | `esp32_peer_device` | the 64 suites whose peer sketch uses EspBle |
+
+```sh
+uv run --env-file .env pytest peer/<suite>/ --profile esp32_peer_host --peer-profile device:s3_peer_device
+uv run --env-file .env pytest peer/<suite>/ --profile s3_peer_host --peer-profile device:esp32_peer_device
+```
+
+Sketches that use the `BLE` wrapper bundled with the core (`stack_smoke`, `advertise_payload`,
+`hid_keyboard_device` and `midi_device` on the parent side; `stack_smoke` and `midi_host` on the peer
+side) cannot run on the original ESP32, where that wrapper is Bluedroid: two hosts cannot share one
+controller. They are rejected by the `#error` that requires `CONFIG_NIMBLE_ENABLED`.
+
+**Structurally unsupported suite**: `phy_update` -- the original ESP32 has a BLE 4.2 controller and
+no LE 2M PHY.
+
+When re-running the same suite with the roles swapped, **flash one of the boards with another suite
+first**. A suite that selects its target by service UUID, such as `local_identity`, otherwise observes
+the board still advertising the previous run's peer firmware.
+
+Frequency follows the P4 rule: S3 runs continuously, and the original ESP32 is swept for changes to
+the bundled host, lifecycle or controller paths, for core updates, and for release candidates. Its two
+boards are permanently wired on `/dev/ttyUSB0` and `/dev/ttyUSB1`.
+
 ## Peer-Test Principles
 
 - Use a dedicated 128-bit Service UUID to exclude unrelated nearby BLE devices.

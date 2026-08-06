@@ -111,9 +111,9 @@ An overview of what EspBle supports: the BLE equivalents of what EspUsbHost / Es
 | Choosing the advertising channel map | ✅ | `EspBleAdvertising::setChannelMap(mask)` (a bit mask of `EspBleAdvertisingChannel37/38/39`; 0 restores all three). It avoids channels that overlap Wi-Fi, at the cost of taking longer to be found. Connecting with channel 39 alone is verified by the `directed_advertising` peer test |
 | Extended advertising / several advertising sets | ❌ | The bundled NimBLE is built with `CONFIG_BT_NIMBLE_EXT_ADV` disabled and an Arduino library cannot enable it |
 | Periodic advertising | ❌ | Depends on extended advertising (`CONFIG_BT_NIMBLE_EXT_ADV`), so unsupportable for the same reason |
-| 2M PHY / coded PHY (long range) | ✅ | Supported through a PHY update after connecting (see "PHY update" below). 2M is peer-verified on hardware; coded (long range) depends on radio support |
+| 2M PHY / coded PHY (long range) | ✅ | Supported through a PHY update after connecting (see "PHY update" below). 2M is peer-verified on hardware; coded (long range) depends on radio support. **Unavailable on the original ESP32, which has a BLE 4.2 controller.** |
 | Connection parameter update | ✅ | `updateConnectionParameters()` requests it and `onConnectionParametersUpdated()` delivers the result. `EspBleConnection` exposes interval / latency / timeout. Both roles and both paths are peer-verified |
-| PHY update (2M / coded) | ✅ | `updatePhy()` requests it and `onPhyUpdated()` delivers the result. `EspBleConnection` exposes the tx/rx PHY. Updating to the 2M PHY is peer-verified (coded depends on radio support) |
+| PHY update (2M / coded) | ✅ | `updatePhy()` requests it and `onPhyUpdated()` delivers the result. `EspBleConnection` exposes the tx/rx PHY. Updating to the 2M PHY is peer-verified (coded depends on radio support). **Unavailable on the original ESP32, which has a BLE 4.2 controller.** |
 | Reading the disconnect reason | ✅ | `EspBleConnection::disconnectReason` (the backend/HCI reason code, in onDisconnected). Both the server and client paths are peer-verified |
 | GATT Service Changed | ✅ | The server sends the 0x1801/0x2A05 indication with `notifyServicesChanged()`; a client can subscribe, receive it and decode the range. Peer-verified (rediscovery on receipt is the application's decision) |
 

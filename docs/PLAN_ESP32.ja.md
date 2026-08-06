@@ -143,7 +143,7 @@ src/
 ### Phase 4: 文書・CI・リリース
 
 - `README` / `STATUS` / `FEATURE_MATRIX`へ、対応と上記「位置づけと利用者向けの注意」を反映する。
-- `library.properties`の`paragraph`へ、無印ESP32はEspBleBluedroid推奨である旨を追記する。
+- `library.properties`の`paragraph`へ、無印ESP32はcontroller差で一部機能が使えない旨を追記する。
 - `board-matrix.yml`のesp32が❌から✅へ変わる。ビルド時間は92例×約+17秒（1実行あたり約+25分）。
 
 ## 試験環境
@@ -174,11 +174,12 @@ EspBleとEspBleBluedroidのテストを同時に実行しても、シリアル�
 
 - 無印ESP32で代表examplesがビルドでき、`board-matrix`のesp32列が✅になる。
 - 既存ターゲットの生成物が変わらない（S3でバイト一致）。
-- ESP32 × S3で`stack_smoke`、`gatt_read_write`、`security_bond`、`hid_keyboard_device`、
-  `hid_keyboard_host`、`midi_device`、`mtu`、`connection_parameters`が通る。
+- ESP32 × S3で、EspBleを使うsuiteを両役割で掃引して通る（`stack_smoke`のようにcore同梱`BLE`
+  ラッパを使うsketchは無印ESP32では実行できないため対象外）。
 - bondがNVSへ永続し、再起動後に復元される。
 - 通らなかったsuiteと理由（controller制約 / タイミング）が文書に記録されている。
-- 文書に「無印ESP32はEspBleBluedroid推奨、EspBleは特殊対応で挙動差の可能性あり」が明記されている。
+- 利用者向け文書に「無印ESP32はcontroller差で一部機能が使えず、実機で確認できた範囲のみ対応」が
+  明記されている。兄弟ライブラリはまだ未リリースのため、TOPの文書では紹介しない。
 
 ## リスク
 
@@ -249,28 +250,47 @@ Phase 0〜2を実装した。Phase 3（実機Peerテスト）は未実施。
 
 ### Phase 3: 実機Peerテストの結果（core 3.3.11、ESP32 × ESP32-S3）
 
-`esp32_peer_host` / `esp32_peer_device` profileを対象suiteへ追加し、pytest経由で実行した。
+`esp32_peer_host` / `esp32_peer_device` profileを全対象suiteへ追加し、pytest経由で両役割の
+全suiteを掃引した（親側62 suite、Peer側64 suite。core同梱`BLE`ラッパを使うsketchは対象外）。
 
-| suite | ESP32 = 親側(Central) | ESP32 = Peer(Peripheral) |
+| 掃引 | 結果 | 所要 |
 |---|---|---|
-| `gatt_read_write`（2 test） | ✅ | ✅ |
-| `mtu` | ✅ | ✅ |
-| `connection_parameters` | ✅ | ✅ |
-| `security_bond` | ✅ | ✅ |
-| `hid_keyboard_host` | ✅ | ❌（下記、ESP32固有ではない） |
-| `hid_keyboard_device` | ·（親側はcore同梱ラッパ） | ✅ |
-| `midi_device` | ·（親側はcore同梱ラッパ） | ✅ |
+| ESP32 = 親側(Central) | 84 test中 **82 passed** / 1 failed(`phy_update`) / 1 error(`ble_keybridge_keyboard`) | 1時間4分 |
+| ESP32 = Peer(Peripheral) | 85 test中 **83 passed** / 2 failed(`phy_update`、`local_identity`) | 1時間7分 |
 
-つまり**無印ESP32はCentral / Peripheralの両役割で、GATT read/write/discovery、MTU交換、
-接続パラメータ更新、pairing・bonding（NVS永続）、HID Device、HID Host、BLE MIDI Deviceが動く。**
+passした範囲にはGAP（advertising / scan / accept list / address privacy / directed /
+service data / beacon / iBeacon）、GATT client / server、標準Service群、security（passkey /
+numeric comparison / bond）、HID Device / Host、BLE MIDI Device / Host、lifecycle stress、
+堅牢性テストが含まれる。**無印ESP32はCentral / Peripheralの両役割で実用範囲が動く。**
 
-`hid_keyboard_host`をESP32 Peerで実行した回は、親側は接続まで進むがPeer側の`DEVICE_CONNECTED`が
-出ずに失敗した（Peer側は接続後も生存し`isAdvertising()`が0＝接続済みを認識していた）。
-同じ失敗が標準のESP32-S3 × ESP32-S3構成でも再現したが、**当時EspBleBluedroid側のpytestが
-同時に走っていた**。あちらの`.env`はinterop用にS3を`/dev/ttyACM0`——EspBle側の親機と同じポート——で
-使うため、試験中にS3を再書き込みされた可能性が高い。`--clean`での全suite実行ではS3構成は全PASSしている。
-**この失敗は機材の取り合いによるものとして扱い、他repositoryのpytestが止まっている状態で再確認する。**
-無印ESP32とS3で機材が独立しているのはESP32側の2台（`/dev/ttyUSB0` / `ttyUSB1`）だけである点に注意する。
+`ble_keybridge_keyboard`のerrorは外部`ESP32KeyBridge`ライブラリを使うsuiteで、この掃引の後に
+EspBleから削除した（ESP32KeyBridge側で検証する）。
+
+### 無印ESP32で通らないsuiteとその理由
+
+1. **`phy_update`（両役割）** — 無印ESP32はBLE 4.2 controllerでLE 2M PHYを持たないため、
+   2M PHYへの更新を要求するこのテストは**構造上通らない**。想定どおりの制約。
+2. **`local_identity`（Peer役）** — 掃引時は最後の手順の`disconnect(connectionId, 0x16)`が失敗した
+   （`DISCONNECT 0`）。単独実行でも再現し、機材の取り合いや連続実行の状態持ち越しではなかった。
+   既定の理由コード`0x13`を使う`disconnect_reason`は両役割でpassしていたことから、切断そのもの
+   ではなく理由コード`0x16`固有の問題と判明。Bluetooth Core仕様がHCI_Disconnectに許可する理由は
+   `0x05` / `0x13` / `0x14` / `0x15` / `0x1A` / `0x29` / `0x3B`で、`0x16`
+   （Connection Terminated By Local Host）はcontrollerが**報告する**値でありコマンドへ指定する値
+   ではない。無印ESP32のcontrollerはこれを拒否し、ESP32-S3のcontrollerは受理してしまうため
+   S3でだけ通っていた。**テスト側を仕様どおりの`0x13`へ修正して解決済み**で、
+   ESP32=親側 / ESP32=Peer / S3×S3の3構成すべてでpassすることを確認した。
+
+   なお`local_identity`のDUTはService UUIDで対象を選ぶため、**同じsuiteのPeer firmwareが載ったまま
+   のボードが近くで広告していると、意図しない側を観測して失敗する。** 役割を入れ替えて再実行する
+   ときは、片方のボードを別suiteのfirmwareで上書きしてから実行する。
+
+### 解消した事象
+
+`hid_keyboard_host`をESP32 Peerで実行して失敗した回があったが、他repositoryのpytestが
+同時に走っていた時間帯だった。あちらの`.env`はinterop用にS3を`/dev/ttyACM0`——EspBle側の
+親機と同じポート——で使うため、試験中にS3を再書き込みされた可能性が高い。
+掃引と単独実行のいずれでも現在はpassする。**無印ESP32とS3で機材が完全に独立しているのは
+ESP32側の2台（`/dev/ttyUSB0` / `/dev/ttyUSB1`）だけである点に注意する。**
 
 `stack_smoke`、`advertise_payload`、`midi_host`の親側などcore同梱`BLE`ラッパを使うsketchは、
 無印ESP32ではラッパがBluedroidになるため**原理的に実行できない**（自前のNimBLE hostと同一

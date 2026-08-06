@@ -89,6 +89,35 @@ uv run --env-file .env pytest \
 
 短時間の疎通確認には`peer/connect_disconnect/`だけを同じprofile指定で実行します。現行Core/ESP-Hostedで既知制限の影響を受けるSecurityおよび完全な初期化・終了反復は、代表suiteの必須合格項目に含めません。CoreまたはC6 firmware更新時には別途再実行し、[ESP-Hostedの既知制限](../docs/ESP_HOSTED_LIMITATIONS.ja.md)が解消したか確認します。
 
+## 無印ESP32回帰
+
+無印ESP32はArduino-ESP32のプリビルドがBluedroidであるため、EspBleが同梱するNimBLE host
+（`src/nimble_esp32/`）で動きます。方針と検証記録は[無印ESP32対応計画](../docs/PLAN_ESP32.ja.md)が正本です。
+
+| 役割 | profile | 対象suite |
+|---|---|---|
+| 親側(Central) | `esp32_peer_host` | EspBleを使う62 suite |
+| Peer(Peripheral) | `esp32_peer_device` | EspBleを使う64 suite |
+
+```sh
+uv run --env-file .env pytest peer/<suite>/ --profile esp32_peer_host --peer-profile device:s3_peer_device
+uv run --env-file .env pytest peer/<suite>/ --profile s3_peer_host --peer-profile device:esp32_peer_device
+```
+
+core同梱`BLE`ラッパを直接使うsketch（親側の`stack_smoke`、`advertise_payload`、
+`hid_keyboard_device`、`midi_device`、Peer側の`stack_smoke`、`midi_host`）は、無印ESP32では
+そのラッパがBluedroidになるため実行できません（同一controllerを2つのhostで共有できない）。
+これらは`CONFIG_NIMBLE_ENABLED`を要求する`#error`で拒否されます。
+
+**構造上通らないsuite**: `phy_update`。無印ESP32はBLE 4.2 controllerでLE 2M PHYを持ちません。
+
+役割を入れ替えて同じsuiteを続けて実行するときは、**片方のボードを別suiteのfirmwareで上書きしてから**
+実行してください。`local_identity`のようにService UUIDで対象を選ぶsuiteは、前の実行のPeer firmwareが
+載ったままのボードが広告していると意図しない側を観測します。
+
+実行頻度はP4と同様に「常時実行はS3、無印ESP32は同梱host・lifecycle・controller関連の変更、
+core更新、リリース候補で掃引」とします。無印ESP32の2台は`/dev/ttyUSB0` / `/dev/ttyUSB1`で常設です。
+
 ## Peerテスト原則
 
 - テスト専用128-bit Service UUIDで周囲のBLE機器を除外する。
