@@ -173,7 +173,7 @@ Future candidates include two Centrals connected to one Peripheral, and BLE HID 
 | Continuous Glucose Monitoring Service | ✅ `unit/cgm_crc` | ✅ | ✅ `continuous_glucose_monitoring` | app / commercial CGM |
 | HID Keyboard Host | ✅ `unit/report_map` | ✅ | ✅ `hid_keyboard_host` / `hid_boot_keyboard` / `hid_robustness` | commercial keyboard |
 | HID keyboard event / layout | ✅ `unit/keymap` | ✅ | ✅ EN-US / JA-JP / en-GB / de-DE / fr-FR | remaining layouts on hardware |
-| ESP32KeyBridge input adapter | bridge core | ✅ | ✅ `ble_keybridge_keyboard` | BLE-to-USB E2E |
+| ESP32KeyBridge input adapter | bridge core | ✅ | · (verified in ESP32KeyBridge) | BLE-to-USB E2E |
 | Simultaneous Central + Peripheral | state | planned | planned | |
 
 ## Implemented Scenarios
@@ -188,63 +188,62 @@ Future candidates include two Centrals connected to one Peripheral, and BLE HID 
 8. ✅ `security_passkey`: static passkey, MITM, and authenticated characteristics.
 9. ✅ `hid_keyboard_device`: HID Keyboard Device, Battery read, Input notification, and Output report.
 10. ✅ `hid_keyboard_host`: HID Host, all six Report Map profiles, Vendor Input/Output/Feature, state, and LED return.
-11. ✅ `ble_keybridge_keyboard`: ESP32KeyBridge input adapter, remap, disconnect release, LED return, and bonded reconnect.
-12. ✅ `lifecycle_stress`: disconnect under event flood, reconnect heap stability, `end()` during GATT/connect, scanner flush, asynchronous timeout, queued GATT operations, and supervision-timeout peer loss.
-13. ✅ `hid_robustness`: CCCD gate, rollover handling, all-release preservation under queue pressure, disconnect rejection during discovery, and incompatible repeated `begin()` rejection.
-14. ✅ `hid_security`: a secured HID Device rejects unencrypted read, discovery, and input delivery.
-15. ✅ `hid_boot_keyboard`: Report-ID-less boot-keyboard discovery/input and invalid-length counting.
-16. ✅ `advertise_payload`: raw advertisement AD structure, single Complete List, and no duplicated AD type.
-17. ✅ host unit tests (`tests/unit/`): keymap conversion and HID Report Map parsing.
-18. ✅ `battery_service`: standalone Battery Level read, subscription, notification, and unsubscribe.
-19. ✅ `device_information`: DIS string reads and 7-byte little-endian PnP ID decoding.
-20. ✅ `current_time`: 10-byte Current Time decoding, subscription, notification, and unsubscribe.
-21. ✅ `heart_rate`: Body Sensor Location and flags-driven variable Measurement decoding.
-22. ✅ `environmental_sensing`: scaled Temperature/Humidity/Pressure reads and Temperature notification.
-23. ✅ `hid_keyboard_nkro`: 29-byte bitmap reports, eight simultaneous keys, high usages, individual release, LEDs, and explicit rejection of `preferredMtu` below 32 without silently changing application configuration.
-24. ✅ `midi_device`: exact BLE MIDI wire format, empty read, independent multi-packet SysEx reassembly, and Central-to-Device decoding.
-25. ✅ `midi_host`: running-status decoding and Host transmission of Note On and multi-packet SysEx.
-26. ✅ `health_thermometer`: IEEE-11073 FLOAT Temperature Measurement indication, Type read, and decoding.
-27. ✅ `blood_pressure`: SFLOAT systolic/diastolic/mean indication, Feature read, and decoding.
-28. ✅ `weight_scale`: 0.005 kg-resolution uint16 Weight Measurement indication and decoding.
-29. ✅ `cycling_speed_cadence`: multi-field wheel/crank Measurement notification and decoding.
-30. ✅ `running_speed_cadence`: mixed-width speed/cadence/stride/distance notification and decoding.
-31. ✅ `cycling_power`: flags plus signed power notification and negative-value decoding.
-32. ✅ `pulse_oximeter`: SFLOAT SpO2/pulse-rate Spot-Check indication and decoding.
-33. ✅ `glucose`: RACP write → Measurement notify → RACP response indicate, including sequence, base time, and SFLOAT concentration.
-34. ✅ `body_composition`: required Body Fat Percentage plus optional Weight indication and full decoding.
-35. ✅ `location_navigation`: flags-driven Location and Speed notification with speed and sint32 latitude/longitude.
-36. ✅ `user_data`: First Name/Age writes, server `onWritten`, Database Change Increment notify, and persisted-value reread.
-37. ✅ `alert_notification`: category bitmask read, Control Point write, and New Alert category/count/text notification.
-38. ✅ `immediate_alert`: High/No Alert Write Without Response and loop-context `onWritten` delivery.
-39. ✅ `phone_alert_status`: status read, ringer subscription, Control Point writes, state change, and notification.
-40. ✅ `proximity`: co-located Link Loss and Tx Power services, signed Tx Power read, and persisted Alert Level write.
-41. ✅ `reference_time_update`: Control Point Get/Cancel and readable Time Update State transitions.
-42. ✅ `bond_management`: uint24 Feature read and Control Point opcode delivery, without performing real bond deletion.
-43. ✅ `continuous_glucose_monitoring`: E2E-CRC Feature and Measurement verification plus SFLOAT/time-offset decoding.
-44. ✅ `disconnect_reason`: distinct non-zero local/remote termination reasons on Peripheral and Central paths.
-45. ✅ `connection_parameters`: exposed interval/latency/timeout and negotiated interval update callbacks on both peers.
-46. ✅ `phy_update`: exposed TX/RX PHY and negotiated 2M PHY callbacks on both peers.
-47. ✅ `service_changed`: Service Changed subscription, indication, and changed-handle-range decoding.
-48. ✅ `runtime_passkey`: dynamic DisplayOnly-to-KeyboardOnly passkey relay and authenticated bonded completion.
-49. ✅ `numeric_comparison`: matching six-digit values, confirmation on both sides, and authenticated bonded completion.
-50. ✅ `hid_boot_protocol`: Protocol Mode switch, eight-byte Boot Input notification, and Boot Output LED write.
-51. ✅ `hid_custom`: vendor Report Descriptor with Input/Output/Feature reports sharing UUID 0x2A4D; handle-based discovery, descriptor/report access, Report Reference type validation, characteristic-flag validation, feature delivery, and invalid/unknown-handle errors.
-52. ✅ `beacon`: non-connectable, non-scannable marker Service UUID and manufacturer-data broadcast.
-53. ✅ `persistent_subscribe`: automatic subscription restoration and notification delivery after reconnect without another `subscribe()` call.
-54. ✅ `address_privacy`: Random Static advertising observed with random address type and the required leading address bits.
-55. ✅ `ibeacon`: non-connectable iBeacon broadcast and complete field decoding.
-56. ✅ `service_data`: multiple AD 0x16 blocks, UUID/payload enumeration, and 16-bit/full-UUID lookup equivalence.
-57. ✅ `fitness_machine`: Feature and Indoor Bike Data decoding, Control Point response, Status notification, unsubscribe, and disconnect.
-58. ✅ `scan_response`: passive-versus-active payload separation and merged Service UUID, Appearance, Tx Power, name, and manufacturer data.
-59. ✅ `accept_list`: connection policy denial/allow, requested-timeout reporting, scan filtering, entry readback, and removal.
-60. ✅ `local_identity`: local/observed address agreement, Tx Power application and advertising, and explicit disconnect-reason normalization.
-61. ✅ `duplicate_uuid`: duplicate services and characteristics receive distinct handles and remain readable/subscribable by handle.
-62. ✅ `directed_advertising`: directed target connection, return to normal advertising, and channel-39-only connection.
-63. ✅ `multi_listener`: primary plus multiple listeners, removal of only the selected listener, unknown-ID failure, and a non-evicting four-listener limit.
-64. ✅ `hid_convenience`: character/usage/layout keyboard helpers, mouse, consumer/system, gamepad helpers, invalid-character rejection, and HID Host multi-listener behavior without using raw `sendReport()`.
-65. ✅ `persistent_subscription_overflow`: two peer identities fill the 16-record registry; the seventeenth successful subscription increments `droppedPersistentSubscriptionCount()` instead of silently losing observability.
-66. ✅ `gatt_queue_purge`: disconnect is deferred behind an in-flight GATT operation, queued operations receive explicit failure completions, the in-flight operation completes first, events are not dropped, and reconnect/discovery still work.
-67. ✅ `wifi_ble_coexistence`: on P4/C6, Wi-Fi obtains DHCP before BLE shares the Hosted transport; scan, connect, GATT read/write, subscribe, and notify work while Wi-Fi remains connected; `EspBle::end()` releases only BLE ownership and final `WiFi.STA.end()` releases the transport. S3 uses the explicit capability gate described above.
+11. ✅ `lifecycle_stress`: disconnect under event flood, reconnect heap stability, `end()` during GATT/connect, scanner flush, asynchronous timeout, queued GATT operations, and supervision-timeout peer loss.
+12. ✅ `hid_robustness`: CCCD gate, rollover handling, all-release preservation under queue pressure, disconnect rejection during discovery, and incompatible repeated `begin()` rejection.
+13. ✅ `hid_security`: a secured HID Device rejects unencrypted read, discovery, and input delivery.
+14. ✅ `hid_boot_keyboard`: Report-ID-less boot-keyboard discovery/input and invalid-length counting.
+15. ✅ `advertise_payload`: raw advertisement AD structure, single Complete List, and no duplicated AD type.
+16. ✅ host unit tests (`tests/unit/`): keymap conversion and HID Report Map parsing.
+17. ✅ `battery_service`: standalone Battery Level read, subscription, notification, and unsubscribe.
+18. ✅ `device_information`: DIS string reads and 7-byte little-endian PnP ID decoding.
+19. ✅ `current_time`: 10-byte Current Time decoding, subscription, notification, and unsubscribe.
+20. ✅ `heart_rate`: Body Sensor Location and flags-driven variable Measurement decoding.
+21. ✅ `environmental_sensing`: scaled Temperature/Humidity/Pressure reads and Temperature notification.
+22. ✅ `hid_keyboard_nkro`: 29-byte bitmap reports, eight simultaneous keys, high usages, individual release, LEDs, and explicit rejection of `preferredMtu` below 32 without silently changing application configuration.
+23. ✅ `midi_device`: exact BLE MIDI wire format, empty read, independent multi-packet SysEx reassembly, and Central-to-Device decoding.
+24. ✅ `midi_host`: running-status decoding and Host transmission of Note On and multi-packet SysEx.
+25. ✅ `health_thermometer`: IEEE-11073 FLOAT Temperature Measurement indication, Type read, and decoding.
+26. ✅ `blood_pressure`: SFLOAT systolic/diastolic/mean indication, Feature read, and decoding.
+27. ✅ `weight_scale`: 0.005 kg-resolution uint16 Weight Measurement indication and decoding.
+28. ✅ `cycling_speed_cadence`: multi-field wheel/crank Measurement notification and decoding.
+29. ✅ `running_speed_cadence`: mixed-width speed/cadence/stride/distance notification and decoding.
+30. ✅ `cycling_power`: flags plus signed power notification and negative-value decoding.
+31. ✅ `pulse_oximeter`: SFLOAT SpO2/pulse-rate Spot-Check indication and decoding.
+32. ✅ `glucose`: RACP write → Measurement notify → RACP response indicate, including sequence, base time, and SFLOAT concentration.
+33. ✅ `body_composition`: required Body Fat Percentage plus optional Weight indication and full decoding.
+34. ✅ `location_navigation`: flags-driven Location and Speed notification with speed and sint32 latitude/longitude.
+35. ✅ `user_data`: First Name/Age writes, server `onWritten`, Database Change Increment notify, and persisted-value reread.
+36. ✅ `alert_notification`: category bitmask read, Control Point write, and New Alert category/count/text notification.
+37. ✅ `immediate_alert`: High/No Alert Write Without Response and loop-context `onWritten` delivery.
+38. ✅ `phone_alert_status`: status read, ringer subscription, Control Point writes, state change, and notification.
+39. ✅ `proximity`: co-located Link Loss and Tx Power services, signed Tx Power read, and persisted Alert Level write.
+40. ✅ `reference_time_update`: Control Point Get/Cancel and readable Time Update State transitions.
+41. ✅ `bond_management`: uint24 Feature read and Control Point opcode delivery, without performing real bond deletion.
+42. ✅ `continuous_glucose_monitoring`: E2E-CRC Feature and Measurement verification plus SFLOAT/time-offset decoding.
+43. ✅ `disconnect_reason`: distinct non-zero local/remote termination reasons on Peripheral and Central paths.
+44. ✅ `connection_parameters`: exposed interval/latency/timeout and negotiated interval update callbacks on both peers.
+45. ✅ `phy_update`: exposed TX/RX PHY and negotiated 2M PHY callbacks on both peers.
+46. ✅ `service_changed`: Service Changed subscription, indication, and changed-handle-range decoding.
+47. ✅ `runtime_passkey`: dynamic DisplayOnly-to-KeyboardOnly passkey relay and authenticated bonded completion.
+48. ✅ `numeric_comparison`: matching six-digit values, confirmation on both sides, and authenticated bonded completion.
+49. ✅ `hid_boot_protocol`: Protocol Mode switch, eight-byte Boot Input notification, and Boot Output LED write.
+50. ✅ `hid_custom`: vendor Report Descriptor with Input/Output/Feature reports sharing UUID 0x2A4D; handle-based discovery, descriptor/report access, Report Reference type validation, characteristic-flag validation, feature delivery, and invalid/unknown-handle errors.
+51. ✅ `beacon`: non-connectable, non-scannable marker Service UUID and manufacturer-data broadcast.
+52. ✅ `persistent_subscribe`: automatic subscription restoration and notification delivery after reconnect without another `subscribe()` call.
+53. ✅ `address_privacy`: Random Static advertising observed with random address type and the required leading address bits.
+54. ✅ `ibeacon`: non-connectable iBeacon broadcast and complete field decoding.
+55. ✅ `service_data`: multiple AD 0x16 blocks, UUID/payload enumeration, and 16-bit/full-UUID lookup equivalence.
+56. ✅ `fitness_machine`: Feature and Indoor Bike Data decoding, Control Point response, Status notification, unsubscribe, and disconnect.
+57. ✅ `scan_response`: passive-versus-active payload separation and merged Service UUID, Appearance, Tx Power, name, and manufacturer data.
+58. ✅ `accept_list`: connection policy denial/allow, requested-timeout reporting, scan filtering, entry readback, and removal.
+59. ✅ `local_identity`: local/observed address agreement, Tx Power application and advertising, and explicit disconnect-reason normalization.
+60. ✅ `duplicate_uuid`: duplicate services and characteristics receive distinct handles and remain readable/subscribable by handle.
+61. ✅ `directed_advertising`: directed target connection, return to normal advertising, and channel-39-only connection.
+62. ✅ `multi_listener`: primary plus multiple listeners, removal of only the selected listener, unknown-ID failure, and a non-evicting four-listener limit.
+63. ✅ `hid_convenience`: character/usage/layout keyboard helpers, mouse, consumer/system, gamepad helpers, invalid-character rejection, and HID Host multi-listener behavior without using raw `sendReport()`.
+64. ✅ `persistent_subscription_overflow`: two peer identities fill the 16-record registry; the seventeenth successful subscription increments `droppedPersistentSubscriptionCount()` instead of silently losing observability.
+65. ✅ `gatt_queue_purge`: disconnect is deferred behind an in-flight GATT operation, queued operations receive explicit failure completions, the in-flight operation completes first, events are not dropped, and reconnect/discovery still work.
+66. ✅ `wifi_ble_coexistence`: on P4/C6, Wi-Fi obtains DHCP before BLE shares the Hosted transport; scan, connect, GATT read/write, subscribe, and notify work while Wi-Fi remains connected; `EspBle::end()` releases only BLE ownership and final `WiFi.STA.end()` releases the transport. S3 uses the explicit capability gate described above.
 
 ## Pass Criteria
 

@@ -29,7 +29,6 @@ BLE MIDI provides a backend-independent packet codec (timestamps, running status
 - Manual tests (require a third board; skipped automatically when it is absent): `multi_connection` verifies several simultaneous connections, per-connection notify routing, auto-reconnect (`setAutoReconnect`), and persistent subscription restore on reconnect, on hardware
 - Unit tests: keymap conversion, HID report map parser, BLE MIDI codec, IEEE-11073 medical float codec, CGM E2E-CRC codec, iBeacon codec
 - Example compilation: 92 examples for the ESP32-S3
-- ESP32KeyBridge prototype adapter: raw usage, remap, modifiers, release on disconnect, LED reporting, and bonded reconnection verified with peer tests
 
 For how to run them see [tests/TEST_PLAN.md](../tests/TEST_PLAN.md); for the release-time checks, [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md).
 
@@ -59,7 +58,7 @@ For how to run them see [tests/TEST_PLAN.md](../tests/TEST_PLAN.md); for the rel
 - Advertising can be connectable (the default) or non-connectable (`setConnectable(false)`, for beacons and broadcasters); `setScanResponseEnabled(false)` makes it non-scannable, and `setInterval(minMs, maxMs)` controls the interval (20–10240 ms; 100 ms or more when non-connectable). Address privacy is selected with `EspBleConfig::ownAddressType` (`Public`, the default, `RandomStatic`, or `ResolvablePrivate`). `RandomStatic` is a fixed random static address that hides the public one; `ResolvablePrivate` is an RPA rotated periodically by the controller (`CONFIG_BT_NIMBLE_RPA_TIMEOUT` = 900 s), and since a peer resolves an RPA with the IRK exchanged at bonding, it is only useful together with security/bonding. Extended and periodic advertising cannot be supported in this configuration, because the bundled NimBLE is built with `CONFIG_BT_NIMBLE_EXT_ADV` disabled.
 - Several simultaneous connections are supported (separated by per-connection cache, subscriptions and GATT routing). The maximum is set by the bundled NimBLE controller (`CONFIG_BT_NIMBLE_MAX_CONNECTIONS`, 3 on the ESP32-S3). Verified together with auto-reconnect (`setAutoReconnect`, off by default) in the three-board manual test `multi_connection`.
 - Automated hardware verification centres on the ESP32-S3. Interoperability with off-the-shelf devices and with Android / Linux / Windows / macOS is not yet complete.
-- The Bluedroid backend, Bluetooth Classic, and the external NimBLE-Arduino library are out of scope. The original ESP32 works because EspBle bundles a NimBLE host for it (`src/nimble_esp32/`); only what the on-hardware peer tests cover counts as supported, and the sibling EspBleBluedroid library is the recommended choice there -- the reasoning and the verification record are in [PLAN_ESP32.ja.md](PLAN_ESP32.ja.md) (Japanese).
+- The Bluedroid backend, Bluetooth Classic, and the external NimBLE-Arduino library are out of scope. The original ESP32 works because EspBle bundles a NimBLE host for it (`src/nimble_esp32/`); only what the on-hardware peer tests cover counts as supported -- the reasoning and the verification record are in [PLAN_ESP32.ja.md](PLAN_ESP32.ja.md) (Japanese).
 
 ## Remaining work before 1.0.0
 

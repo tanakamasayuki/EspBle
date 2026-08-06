@@ -264,10 +264,13 @@ Phase 0〜2を実装した。Phase 3（実機Peerテスト）は未実施。
 つまり**無印ESP32はCentral / Peripheralの両役割で、GATT read/write/discovery、MTU交換、
 接続パラメータ更新、pairing・bonding（NVS永続）、HID Device、HID Host、BLE MIDI Deviceが動く。**
 
-`hid_keyboard_host`をESP32 Peerで実行すると、親側は接続まで進むがPeer側の`DEVICE_CONNECTED`が
-出ずに失敗する。ただし**同じ失敗が標準のESP32-S3 × ESP32-S3構成でも再現する**ため、
-無印ESP32の問題ではない（S3の生成物は変更前とバイト一致）。この環境での既存の失敗として別途調べる。
-Peer側は接続後も生存していて`isAdvertising()`が0を返す（=接続済みを認識している）ことは確認した。
+`hid_keyboard_host`をESP32 Peerで実行した回は、親側は接続まで進むがPeer側の`DEVICE_CONNECTED`が
+出ずに失敗した（Peer側は接続後も生存し`isAdvertising()`が0＝接続済みを認識していた）。
+同じ失敗が標準のESP32-S3 × ESP32-S3構成でも再現したが、**当時EspBleBluedroid側のpytestが
+同時に走っていた**。あちらの`.env`はinterop用にS3を`/dev/ttyACM0`——EspBle側の親機と同じポート——で
+使うため、試験中にS3を再書き込みされた可能性が高い。`--clean`での全suite実行ではS3構成は全PASSしている。
+**この失敗は機材の取り合いによるものとして扱い、他repositoryのpytestが止まっている状態で再確認する。**
+無印ESP32とS3で機材が独立しているのはESP32側の2台（`/dev/ttyUSB0` / `ttyUSB1`）だけである点に注意する。
 
 `stack_smoke`、`advertise_payload`、`midi_host`の親側などcore同梱`BLE`ラッパを使うsketchは、
 無印ESP32ではラッパがBluedroidになるため**原理的に実行できない**（自前のNimBLE hostと同一

@@ -14,10 +14,9 @@ foundation. Bluetooth Classic is not supported.
 > targets are **ESP32-S3 / ESP32-C3 / ESP32-C6 / ESP32-H2**.
 > **ESP32-P4 + ESP32-C6 is supported with limitations through ESP-Hosted**;
 > security/bonding and repeated full reinitialization have upstream limitations.
-> **The classic ESP32 works because EspBle bundles a NimBLE host for it, but the
-> recommended library there is the sibling
-> [EspBleBluedroid](https://github.com/tanakamasayuki/EspBleBluedroid)**; see
-> [Compatibility](#compatibility).
+> **The classic ESP32 works because EspBle bundles a NimBLE host for it, but its
+> BLE 4.2 controller rules out some features and only what is verified on
+> hardware is supported**; see [Compatibility](#compatibility).
 
 ## Why use EspBle?
 
@@ -82,10 +81,9 @@ libraries are built with Bluedroid, so EspBle bundles a NimBLE host for it
 Its configuration is frozen to the values the other targets use, and overriding
 any of it is rejected.
 
-**On the classic ESP32 the recommended library is the sibling
-[EspBleBluedroid](https://github.com/tanakamasayuki/EspBleBluedroid).** EspBle
-support there is the special case: it carries the maintenance of the host itself
-and cannot coexist with Bluetooth Classic (SPP and friends). The classic ESP32
+Support for the classic ESP32 is not on par with the other chips: EspBle carries
+the maintenance of the bundled host itself, and that host **cannot coexist with
+Bluetooth Classic** (SPP and friends). The classic ESP32
 also has a BLE 4.2 controller, so **LE 2M and LE Coded PHY are unavailable**,
 extended and periodic advertising are unavailable, and the connection limit is 3.
 Only what the on-hardware peer tests cover is considered supported (GATT

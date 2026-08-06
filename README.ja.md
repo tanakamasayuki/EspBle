@@ -13,8 +13,8 @@ Central / Peripheral、GATT Client / Server、Security、HID、BLE MIDIを1つ�
 > 対象は**ESP32-S3 / ESP32-C3 / ESP32-C6 / ESP32-H2**です。
 > **ESP32-P4 + ESP32-C6はESP-Hosted経由で制限付き対応**し、Security/bondingと
 > 複数回の完全再初期化には上流の既知制限があります。
-> **無印ESP32（classic）は、EspBleがNimBLE Hostを同梱することで動きますが、
-> 推奨は兄弟ライブラリ[EspBleBluedroid](https://github.com/tanakamasayuki/EspBleBluedroid)です**
+> **無印ESP32（classic）はEspBleがNimBLE Hostを同梱することで動きますが、BLE 4.2
+> controllerのため一部機能が使えず、実機で確認できた範囲のみ対応します**
 >（[対応環境](#対応環境)を参照）。
 
 ## なぜEspBleを使うのか
@@ -69,11 +69,11 @@ EspBleは**Arduino-ESP32 CoreへESP-IDF componentとして組み込まれたNimB
 EspBleがNimBLE Host（`src/nimble_esp32/`、esp-idfがpinするesp-nimbleと同一スナップショット）
 を同梱して動かします。設定値は他ターゲットと同一に固定し、利用者の上書きは拒否します。
 
-**無印ESP32では兄弟ライブラリ[EspBleBluedroid](https://github.com/tanakamasayuki/EspBleBluedroid)の
-利用を推奨します。** EspBle側は「NimBLEでも動かせる特殊対応」で、hostの保守を自前で負う、
-Bluetooth Classic（SPP等）と同居できない、という不利があります。加えて無印ESP32は
-BLE 4.2 controllerのため**LE 2M / Coded PHYが使えず**、Extended / Periodic Advertisingも
-使えません。同時接続数の上限は3です。実機Peerテストで確認できた範囲
+無印ESP32の対応は他のチップと同格ではありません。EspBleがhostを同梱するため
+そのhostの保守をライブラリ側で負い、**Bluetooth Classic（SPP等）とは同居できません**。
+加えて無印ESP32はBLE 4.2 controllerのため**LE 2M / Coded PHYが使えず**、
+Extended / Periodic Advertisingも使えません。同時接続数の上限は3です。
+実機Peerテストで確認できた範囲
 （GATT read/write/discovery、MTU、接続パラメータ更新、pairing・bonding、HID Device、
 HID Host、BLE MIDI Device、Central / Peripheral両役割）のみを対応済みとし、
 タイミング依存の挙動が他ターゲットと一致することは保証しません。詳細と検証記録は
