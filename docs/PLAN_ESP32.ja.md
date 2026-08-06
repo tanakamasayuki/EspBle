@@ -158,7 +158,8 @@ src/
 | 既存の2台目Peer | ESP32-S3 | `s3_peer_device` | `TEST_SERIAL_PORT_PEER_DEVICE_S3_PEER_DEVICE` |
 
 ポート名はEspBleBluedroid側の`tests/.env`と同一にし、1つの配線を両repositoryで共用する。
-**同じ機材を使うため、EspBleとEspBleBluedroidのテストを同時に実行しない。**
+EspBleとEspBleBluedroidのテストを同時に実行しても、シリアルポートは排他制御されるため
+転送が待たされるだけで、実行自体は問題ない。
 
 確認する組み合わせ:
 
@@ -203,6 +204,97 @@ src/
   P4 Hostedのtransport差分実装（hostedは`libespressif__esp_hosted.a`の`vhci_drv.c`が
   `ble_transport_ll_init`を提供する別経路）を伴うため、いまは採らない。
   Extended Advertisingが必要になった時点で独立の判断として実施する。
+
+## 2026-08-06 Phase 0〜2の実装・検証結果
+
+Phase 0〜2を実装した。Phase 3（実機Peerテスト）は未実施。
+
+### 生成物
+
+- `tools/vendor_nimble_esp32.py`: esp-nimble（tarball、sha固定）とesp-idf（rawファイル）から取得し、
+  ヘッダを`src/nimble_esp32/include/`へ隔離、includeを書き換え、全`.c`へガードを挿入し、
+  設定ヘッダと`VERSIONS`を生成する。
+- `src/nimble_esp32/`: ヘッダ95、ソース83（すべてガード付き）、書き換えたinclude 539箇所、
+  固定した設定値102項目。
+- `src/EspBleNimbleHost.h`: NimBLE参照のshim。`EspBle.cpp`は13本のincludeをこの1本へ置き換えただけで、
+  BLEロジックは無変更。
+- `src/EspBle.h`: NimBLE不在時の`#error`に無印ESP32の例外を追加。
+
+### 確認できたこと
+
+- 無印ESP32で代表examples 8本がビルド・リンク成功（`CompileSmoke` 269,768 B、
+  `Gap/Connect` 706,328 B、`Gatt/Basics/NotifyServer` 709,756 B、`Gatt/Basics/Client` 710,284 B、
+  `Security/StaticPasskeyServer` 709,032 B、`Hid/KeyboardDevice` 709,368 B、
+  `Hid/KeyboardHost` 710,920 B、`Midi/MidiDevice` 713,172 B）。静的RAMは33,532 B。
+- **既存5ターゲット（esp32s3 / esp32c3 / esp32c6 / esp32h2 / esp32p4）の生成物が変わらない。**
+  `Hid/KeyboardDevice`のバイナリを変更前と比較し、差分は`app_elf_sha256`（0xb0〜0xcf）と
+  末尾のイメージSHA-256だけ——どちらもELFのパスとビルド時刻から決まる値で、payloadは完全一致。
+- controller初期化が`nimble_port_init()`の中に入っている（ELFに`esp_bt_controller_init` /
+  `esp_bt_controller_enable` / `esp_bt_controller_mem_release`、VHCI経路、
+  `esp_nimble_hci_init`、`ble_transport_ll_init`、`ble_store_config_init`を確認）。
+  upstream esp-nimbleを使ったので`EspBle.cpp`側の追加処理は不要だった。
+- 固定した設定がS3のsdkconfigと**102項目すべて一致**し、`MAX_BONDS` / `MAX_CONNECTIONS` /
+  `ATT_PREFERRED_MTU`はstatic_assertで、`EXT_ADV`無効はコンパイル時に確認済み。
+  `-DCONFIG_BT_NIMBLE_MAX_BONDS=9`のような上書きは`#error`で拒否される。
+- ビルド時間（12スレッド、クリーンビルド、`Hid/KeyboardDevice`）: esp32s3は15.0秒→15.2秒
+  （ガードで空になる83ファイル分）、無印ESP32は17.5秒。`src/nimble_esp32/`は3.9 MB。
+
+### vendorツールで対処が必要だった点
+
+- upstreamは`nimble/host/include`などをinclude pathに置いてビルドするため、
+  `"../src/ble_hs_hci_priv.h"`のようにinclude path経由でprivate headerへ到達するファイルがある
+  （`ble_svc_cte.c`など）。Arduinoは`<lib>/src`しか渡さないので、この形は
+  vendor後の相対パスへ書き換える処理をツールに入れた。
+- `bt_common.h`と`bt_user_config.h`は無印ESP32のプリビルドinclude treeに存在しないため同梱する。
+
+### Phase 3: 実機Peerテストの結果（core 3.3.11、ESP32 × ESP32-S3）
+
+`esp32_peer_host` / `esp32_peer_device` profileを対象suiteへ追加し、pytest経由で実行した。
+
+| suite | ESP32 = 親側(Central) | ESP32 = Peer(Peripheral) |
+|---|---|---|
+| `gatt_read_write`（2 test） | ✅ | ✅ |
+| `mtu` | ✅ | ✅ |
+| `connection_parameters` | ✅ | ✅ |
+| `security_bond` | ✅ | ✅ |
+| `hid_keyboard_host` | ✅ | ❌（下記、ESP32固有ではない） |
+| `hid_keyboard_device` | ·（親側はcore同梱ラッパ） | ✅ |
+| `midi_device` | ·（親側はcore同梱ラッパ） | ✅ |
+
+つまり**無印ESP32はCentral / Peripheralの両役割で、GATT read/write/discovery、MTU交換、
+接続パラメータ更新、pairing・bonding（NVS永続）、HID Device、HID Host、BLE MIDI Deviceが動く。**
+
+`hid_keyboard_host`をESP32 Peerで実行すると、親側は接続まで進むがPeer側の`DEVICE_CONNECTED`が
+出ずに失敗する。ただし**同じ失敗が標準のESP32-S3 × ESP32-S3構成でも再現する**ため、
+無印ESP32の問題ではない（S3の生成物は変更前とバイト一致）。この環境での既存の失敗として別途調べる。
+Peer側は接続後も生存していて`isAdvertising()`が0を返す（=接続済みを認識している）ことは確認した。
+
+`stack_smoke`、`advertise_payload`、`midi_host`の親側などcore同梱`BLE`ラッパを使うsketchは、
+無印ESP32ではラッパがBluedroidになるため**原理的に実行できない**（自前のNimBLE hostと同一
+controllerを共有できない）。これらのsketchの`#error`（`CONFIG_NIMBLE_ENABLED`必須）はそのまま残す。
+
+### 実機で判明した修正点
+
+無印ESP32では`esp_bt_controller_enable(ESP_BT_MODE_BLE)`が失敗し、`begin()`が
+`BACKEND_FAILURE the BLE controller did not start`を返していた
+（controllerログは`E BLE_INIT: controller enable failed`）。
+Arduino-ESP32のプリビルドは`CONFIG_BTDM_CTRL_MODE_BTDM=y`（dual mode）でビルドされているため
+`BT_CONTROLLER_INIT_CONFIG_DEFAULT()`の`mode`がBTDMになり、BLEのみを有効化しようとすると
+初期化時のmodeと一致せず失敗する。ESP-IDFでNimBLEを選ぶとKconfigがBLE-onlyへ切り替わるため
+upstreamには存在しない問題。**vendorツールのパッチとして**`config_opts.mode = ESP_BT_MODE_BLE`と
+`config_opts.ble_max_conn = CONFIG_BT_NIMBLE_MAX_CONNECTIONS`を`nimble_port.c`へ入れて解決した
+（パッチは`old`が見つからなければ失敗するので、version bump時に必ず気づく）。
+
+### 未実施・保留
+
+- **残りのPeer suiteをESP32構成へ展開する。** 今回profileを追加したのは上表の7 suiteだけ。
+  EspBleが両側のsuiteは同じ2行を`sketch.yaml`へ足すだけで対象にできる。
+- **実機作業はpytest経由に限る。** ポートの排他はpytest側で管理されており、
+  `arduino-cli upload`や`esptool`を直接使うと**待機せずに失敗**する。実際に手動uploadを
+  試みてapp書き込み前に中断し（ボードが一時的に起動不能）、EspBleBluedroid側で実行中の
+  pytestを巻き込んだ。EspBleとEspBleBluedroidのpytestを同時に走らせるのは問題ない。
+- `README` / `STATUS` / `FEATURE_MATRIX` / `library.properties`への反映（Phase 4）。
+  実機で確認できたsuiteが決まるまで「対応済み」とは書かない。
 
 ## 参考: 試作で得た実測値（core 3.3.11、`Hid/KeyboardDevice`）
 

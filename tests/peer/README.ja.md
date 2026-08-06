@@ -14,11 +14,33 @@ profileと環境変数はEspUsbHost/EspUsbDeviceの既存環境を再利用し�
 |---|---|---|
 | 通常の親側 | `s3_peer_host` | `TEST_SERIAL_PORT_S3_PEER_HOST` |
 | ESP-Hosted親側 | `p4_peer_host` | `TEST_SERIAL_PORT_P4_PEER_HOST` |
+| 無印ESP32の親側 | `esp32_peer_host` | `TEST_SERIAL_PORT_ESP32_PEER_HOST` |
 | 2台目Peer | `s3_peer_device` | `TEST_SERIAL_PORT_PEER_DEVICE_S3_PEER_DEVICE` |
+| 2台目Peer（無印ESP32） | `esp32_peer_device` | `TEST_SERIAL_PORT_PEER_DEVICE_ESP32_PEER_DEVICE` |
 
 profile名はBLE roleを表しません。両側へsketchを転送・実行でき、両側のSerialをpytestから観測できます。初期テストでは親側sketchをCentral、`peer_device/`側sketchをPeripheralに固定し、役割交換は行いません。
 
 `pytest peer/`の既定はS3 2台です。P4は常時接続せず、Hosted関連変更、Core/C6 firmware更新、リリース候補でprofileを明示して代表suiteを実行します。P4+C6の推奨標準配線、実行コマンド、頻度、既知制限による対象外は[tests README](../README.ja.md)と[テスト計画](../TEST_PLAN.ja.md#p4c6-esp-hosted回帰)を参照してください。
+
+## 無印ESP32
+
+無印ESP32はEspBleが同梱するNimBLE hostで動きます（[PLAN_ESP32.ja.md](../../docs/PLAN_ESP32.ja.md)）。機材はEspBleBluedroidと共用の常設2台で、両repositoryのpytestを同時に走らせても問題ありません（ポートの排他はpytest側が管理します。`arduino-cli upload`や`esptool`を直接使うと待機せずに失敗するので使わないでください）。
+
+```sh
+# 無印ESP32を親側(Central)、S3をPeerに
+uv run --env-file .env pytest peer/gatt_read_write/ \
+  --profile esp32_peer_host \
+  --peer-profile device:s3_peer_device
+
+# 無印ESP32をPeer(Peripheral)、S3を親側に
+uv run --env-file .env pytest peer/hid_keyboard_device/ \
+  --profile s3_peer_host \
+  --peer-profile device:esp32_peer_device
+```
+
+profileを追加済みのsuiteは`gatt_read_write`、`mtu`、`connection_parameters`、`security_bond`、`hid_keyboard_host`（親側・Peer側）と、`hid_keyboard_device`、`midi_device`（Peer側のみ）です。他のsuiteも`sketch.yaml`へ同じprofileを足せば対象になります。
+
+`stack_smoke`、`advertise_payload`、`midi_host`の親側のようにcore同梱`BLE`ラッパを使うsketchは、無印ESP32ではラッパがBluedroidになるため実行できません（同一controllerを2つのhostで共有できない）。これらは`#error`で拒否されます。
 
 ## 追加済み
 

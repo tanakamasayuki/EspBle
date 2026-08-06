@@ -25,22 +25,12 @@ extern "C" bool bleInUse(void)
 }
 #endif
 
-#include <host/ble_gap.h>
-#include <host/ble_hs.h>
-#include <host/util/util.h>
-#include <nimble/nimble_port.h>
-#include <nimble/nimble_port_freertos.h>
+// The NimBLE host API. EspBleNimbleHost.h is the only place that knows whether
+// it comes from the core or from the copy EspBle bundles for the original ESP32.
+#include "EspBleNimbleHost.h"
 // The NVS-backed bond store. Its initialiser has no public header in the
 // ESP-IDF build, so it is declared the way the IDF's own examples do.
 extern "C" void ble_store_config_init(void);
-#include <host/ble_sm.h>
-#include <host/ble_uuid.h>
-#include <host/ble_hs_id.h>
-#include <host/ble_hs_mbuf.h>
-#include <services/gap/ble_svc_gap.h>
-#include <services/gatt/ble_svc_gatt.h>
-#include <host/ble_store.h>
-#include <os/os_mbuf.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <cctype>

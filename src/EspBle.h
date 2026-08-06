@@ -7,7 +7,14 @@
 #include <mutex>
 #include <sdkconfig.h>
 
-#if !defined(CONFIG_NIMBLE_ENABLED) && !defined(CONFIG_ESP_HOSTED_ENABLE_BT_NIMBLE)
+// en: The original ESP32 is the one target whose Arduino-ESP32 prebuilt libraries
+//     are built with Bluedroid, so EspBle bundles its own NimBLE host for it
+//     (src/nimble_esp32/, see docs/PLAN_ESP32.ja.md). Every other target must
+//     provide NimBLE through the core, either locally or over ESP-Hosted.
+// ja: 無印ESP32だけはArduino-ESP32のプリビルドがBluedroidなので、EspBleがNimBLE
+//     ホストを同梱する（src/nimble_esp32/、docs/PLAN_ESP32.ja.md）。それ以外の
+//     ターゲットはcoreがNimBLEを提供する構成（内蔵またはESP-Hosted）に限る。
+#if !defined(CONFIG_NIMBLE_ENABLED) && !defined(CONFIG_ESP_HOSTED_ENABLE_BT_NIMBLE) && !defined(CONFIG_IDF_TARGET_ESP32)
 #error "EspBle requires the NimBLE backend bundled with Arduino-ESP32"
 #endif
 

@@ -14,11 +14,33 @@ The profiles and environment variables reuse the existing EspUsbHost/EspUsbDevic
 |---|---|---|
 | normal parent | `s3_peer_host` | `TEST_SERIAL_PORT_S3_PEER_HOST` |
 | ESP-Hosted parent | `p4_peer_host` | `TEST_SERIAL_PORT_P4_PEER_HOST` |
+| original-ESP32 parent | `esp32_peer_host` | `TEST_SERIAL_PORT_ESP32_PEER_HOST` |
 | second peer | `s3_peer_device` | `TEST_SERIAL_PORT_PEER_DEVICE_S3_PEER_DEVICE` |
+| second peer (original ESP32) | `esp32_peer_device` | `TEST_SERIAL_PORT_PEER_DEVICE_ESP32_PEER_DEVICE` |
 
 The profile names do not describe BLE roles. Sketches are flashed to and run on both boards, and both serial ports are observed from pytest. The parent-side sketch is fixed as central and the `peer_device/` sketch as peripheral; the roles are never swapped.
 
 `pytest peer/` defaults to the two-S3 fixture. The P4 fixture may remain disconnected between runs; select it explicitly for Hosted-related changes, Core/C6 firmware updates, and release candidates. See the [tests README](../README.md) and [test policy](../TEST_PLAN.md#p4c6-esp-hosted-regression) for reference wiring, commands, frequency, and known-limit exclusions.
+
+## Original ESP32
+
+The original ESP32 runs on the NimBLE host EspBle bundles for it (see [PLAN_ESP32.ja.md](../../docs/PLAN_ESP32.ja.md), Japanese). The two boards are permanently wired and shared with EspBleBluedroid; running both repositories' suites at the same time is fine, because pytest manages the port arbitration. Do not use `arduino-cli upload` or `esptool` directly -- they fail instead of waiting.
+
+```sh
+# original ESP32 as the parent (central), S3 as the peer
+uv run --env-file .env pytest peer/gatt_read_write/ \
+  --profile esp32_peer_host \
+  --peer-profile device:s3_peer_device
+
+# original ESP32 as the peer (peripheral), S3 as the parent
+uv run --env-file .env pytest peer/hid_keyboard_device/ \
+  --profile s3_peer_host \
+  --peer-profile device:esp32_peer_device
+```
+
+The profiles are present in `gatt_read_write`, `mtu`, `connection_parameters`, `security_bond` and `hid_keyboard_host` (both sides), plus `hid_keyboard_device` and `midi_device` (peer side only). Any other suite joins by adding the same profile to its `sketch.yaml`.
+
+Sketches that use the `BLE` wrapper bundled with the core -- `stack_smoke`, `advertise_payload`, and the parent side of `midi_host` -- cannot run on the original ESP32, where that wrapper is Bluedroid: two hosts cannot share one controller. They reject the build with `#error`.
 
 ## Test suites
 

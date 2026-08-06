@@ -10,13 +10,13 @@ and server operations, security, HID, and BLE MIDI share one `EspBle`
 foundation. Bluetooth Classic is not supported.
 
 > [!IMPORTANT]
-> **The classic ESP32 is not supported.** EspBle uses the NimBLE backend built
-> into Arduino-ESP32. Native-controller targets are
-> **ESP32-S3 / ESP32-C3 / ESP32-C6 / ESP32-H2**.
+> EspBle uses the NimBLE backend built into Arduino-ESP32. Native-controller
+> targets are **ESP32-S3 / ESP32-C3 / ESP32-C6 / ESP32-H2**.
 > **ESP32-P4 + ESP32-C6 is supported with limitations through ESP-Hosted**;
 > security/bonding and repeated full reinitialization have upstream limitations.
-> For BLE on the classic ESP32, use
-> [NimBLE-Arduino](https://github.com/h2zero/NimBLE-Arduino); see
+> **The classic ESP32 works because EspBle bundles a NimBLE host for it, but the
+> recommended library there is the sibling
+> [EspBleBluedroid](https://github.com/tanakamasayuki/EspBleBluedroid)**; see
 > [Compatibility](#compatibility).
 
 ## Why use EspBle?
@@ -73,11 +73,27 @@ see [tests/TEST_PLAN.md](tests/TEST_PLAN.md) and the
 ## Compatibility
 
 EspBle directly uses the **NimBLE Host API integrated into Arduino-ESP32 as an
-ESP-IDF component**. The Bluedroid-based plain `esp32` board is rejected at
-compile time with a clear `#error`, so the classic ESP32 is **out of scope**.
-For BLE on the classic ESP32, use
-[NimBLE-Arduino](https://github.com/h2zero/NimBLE-Arduino), which provides its
-own NimBLE Host stack and a different API.
+ESP-IDF component**. A configuration that provides no NimBLE is rejected at
+compile time with a clear `#error`.
+
+The plain `esp32` board is the one exception: its Arduino-ESP32 prebuilt
+libraries are built with Bluedroid, so EspBle bundles a NimBLE host for it
+(`src/nimble_esp32/`, the same esp-nimble snapshot the matching esp-idf pins).
+Its configuration is frozen to the values the other targets use, and overriding
+any of it is rejected.
+
+**On the classic ESP32 the recommended library is the sibling
+[EspBleBluedroid](https://github.com/tanakamasayuki/EspBleBluedroid).** EspBle
+support there is the special case: it carries the maintenance of the host itself
+and cannot coexist with Bluetooth Classic (SPP and friends). The classic ESP32
+also has a BLE 4.2 controller, so **LE 2M and LE Coded PHY are unavailable**,
+extended and periodic advertising are unavailable, and the connection limit is 3.
+Only what the on-hardware peer tests cover is considered supported (GATT
+read/write/discovery, MTU, connection-parameter updates, pairing and bonding, HID
+device, HID host, BLE MIDI device, in both central and peripheral roles); timing
+behaviour is not guaranteed to match the other targets. The reasoning and the
+verification record are in the Japanese
+[original-ESP32 plan](docs/PLAN_ESP32.ja.md).
 
 ESP32-P4 can use the ESP-Hosted NimBLE configuration supplied by Arduino-ESP32.
 The verified host/slave versions, C6 update procedure, and supported subset are
