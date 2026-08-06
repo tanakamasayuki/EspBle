@@ -117,9 +117,21 @@ When re-running the same suite with the roles swapped, **flash one of the boards
 first**. A suite that selects its target by service UUID, such as `local_identity`, otherwise observes
 the board still advertising the previous run's peer firmware.
 
-Frequency follows the P4 rule: S3 runs continuously, and the original ESP32 is swept for changes to
-the bundled host, lifecycle or controller paths, for core updates, and for release candidates. Its two
-boards are permanently wired on `/dev/ttyUSB0` and `/dev/ttyUSB1`.
+The two boards are permanently wired on `/dev/ttyUSB0` and `/dev/ttyUSB1`. They are shared with
+EspBleBluedroid, and running both repositories' suites at the same time is fine (pytest arbitrates
+the ports).
+
+| Trigger | Original-ESP32 run |
+|---|---|
+| documentation-only change | none |
+| ordinary `src/` change | representative smoke (`gatt_read_write`, `security_bond`, `hid_keyboard_host`, `mtu`, `connection_parameters`; parent role is enough, ~15 min) |
+| changes to `src/nimble_esp32/`, `EspBleNimbleHost.h`, lifecycle, controller paths or the vendor tool | full sweep in both roles (~1 h each) |
+| Arduino-ESP32 core update | full sweep in both roles, and check that the pins in `tools/vendor_nimble_esp32.py` match that core's esp-idf |
+| release candidate | full sweep in both roles (see the [release checklist](../docs/RELEASE_CHECKLIST.md)) |
+
+The original ESP32 runs the host **EspBle bundles**, not the core's, so a `src/` change can affect it
+in ways the S3 fixture cannot reproduce. The host is the same snapshot as the other targets, though,
+so a full sweep every time is not required -- the table above is the granularity.
 
 ## Peer-Test Principles
 

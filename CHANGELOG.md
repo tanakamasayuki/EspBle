@@ -1,6 +1,34 @@
 # Changelog / 変更履歴
 
 ## Unreleased
+- (EN) Added support for the original ESP32. Its Arduino-ESP32 prebuilt libraries
+  are built with Bluedroid, so EspBle now bundles the NimBLE host for that chip
+  only (`src/nimble_esp32/`, vendored by `tools/vendor_nimble_esp32.py` from the
+  esp-nimble commit the matching esp-idf pins, with the configuration frozen to
+  the values the other targets use). Every bundled source is guarded, so the
+  other targets keep using the NimBLE bundled with the core and their binaries
+  are unchanged. Verified on hardware in both central and peripheral roles: 82 of
+  84 parent-role tests and 83 of 85 peer-role tests pass. The exceptions come
+  from the BLE 4.2 controller -- `phy_update` cannot pass because there is no LE
+  2M PHY, and extended/periodic advertising and LE Coded PHY are unavailable.
+- (JA) 無印ESP32へ対応した。Arduino-ESP32のプリビルドがBluedroidであるため、この
+  チップ向けにだけNimBLE hostを同梱する（`src/nimble_esp32/`。
+  `tools/vendor_nimble_esp32.py`が、対応するesp-idfがpinするesp-nimbleのcommitから
+  取得し、設定値は他ターゲットと同一に固定する）。同梱ソースは全ファイルガード付き
+  なので、他ターゲットはcore同梱NimBLEをそのまま使い、生成物も変わらない。実機で
+  Central / Peripheralの両役割を検証し、親側84 test中82、Peer側85 test中83がpassする。
+  残りはBLE 4.2 controller由来の制約で、LE 2M PHYがないため`phy_update`は通らず、
+  Extended / Periodic AdvertisingとLE Coded PHYも利用できない。
+- (EN) Removed the `ble_keybridge_keyboard` peer suite: the ESP32KeyBridge input
+  adapter is verified in that library's own repository.
+- (JA) `ble_keybridge_keyboard` peer suiteを削除した。ESP32KeyBridge input adapterは
+  当該ライブラリ側で検証する。
+- (EN) Fixed `local_identity` to disconnect with reason `0x13`. Only the reasons
+  the Core specification lists for HCI_Disconnect may be sent by a host; `0x16`
+  is reported by the controller, and the original ESP32's controller rejects it.
+- (JA) `local_identity`の切断理由を`0x13`に修正した。HCI_Disconnectへ指定できるのは
+  仕様が列挙する理由コードだけで、`0x16`はcontrollerが報告する値であり、無印ESP32の
+  controllerはこれを拒否する。
 - (EN) Fixed the `EspBleGattServer::addCharacteristic()` comment, which still
   said two characteristics in one service may not share a UUID. The
   implementation registers both and each call returns its own handle, which is

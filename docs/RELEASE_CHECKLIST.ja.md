@@ -26,6 +26,33 @@ cd tests
 uv run --env-file .env pytest --clean
 ```
 
+次に無印ESP32の2台（`/dev/ttyUSB0` / `/dev/ttyUSB1`）で、同梱NimBLE host（`src/nimble_esp32/`）を役割ごとに掃引します。無印ESP32はhostがcore同梱ではなく**EspBleが持ち込んだもの**なので、`src/`へ変更が入るリリースでは必ず実行します。所要は各1時間程度です。
+
+```sh
+# 無印ESP32を親側(Central)に。core同梱BLEラッパを使うsketchと、2M PHYを要求するsuiteは対象外
+uv run --env-file .env pytest --clean peer/ \
+  --profile esp32_peer_host --peer-profile device:s3_peer_device \
+  --ignore=peer/stack_smoke --ignore=peer/advertise_payload \
+  --ignore=peer/hid_keyboard_device --ignore=peer/midi_device \
+  --ignore=peer/phy_update
+
+# 無印ESP32をPeer(Peripheral)に
+uv run --env-file .env pytest --clean peer/ \
+  --profile s3_peer_host --peer-profile device:esp32_peer_device \
+  --ignore=peer/stack_smoke --ignore=peer/midi_host --ignore=peer/phy_update
+```
+
+`src/`に触れない文書だけの変更では、代表suiteのsmokeで足ります（両役割で15分程度）。
+
+```sh
+uv run --env-file .env pytest --clean \
+  peer/gatt_read_write/ peer/security_bond/ peer/hid_keyboard_host/ \
+  peer/mtu/ peer/connection_parameters/ \
+  --profile esp32_peer_host --peer-profile device:s3_peer_device
+```
+
+除外の理由と実行頻度は[テスト計画](../tests/TEST_PLAN.ja.md#無印esp32回帰)、方針と検証記録は[無印ESP32対応計画](PLAN_ESP32.ja.md)を参照します。無印ESP32の2台はEspBleBluedroidと共用のため、そちらのpytestと同時に走らせても構いません（ポートの調停はpytestが行います。`arduino-cli upload`や`esptool`を直接使うと待たずに失敗するので使わないでください）。
+
 次にP4+C6 fixtureとPeer側S3を接続し、ESP-Hosted代表suiteを実行します。P4+C6は常時接続不要ですが、リリース候補では必須です。ESP32-P4-Function-EV-Board、または汎用`esp32p4` variantと同じ標準SDIO配線を基準とし、独自配線では使用したvariantまたはpin上書きを記録します。
 
 ```sh

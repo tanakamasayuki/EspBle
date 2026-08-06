@@ -115,8 +115,20 @@ core同梱`BLE`ラッパを直接使うsketch（親側の`stack_smoke`、`advert
 実行してください。`local_identity`のようにService UUIDで対象を選ぶsuiteは、前の実行のPeer firmwareが
 載ったままのボードが広告していると意図しない側を観測します。
 
-実行頻度はP4と同様に「常時実行はS3、無印ESP32は同梱host・lifecycle・controller関連の変更、
-core更新、リリース候補で掃引」とします。無印ESP32の2台は`/dev/ttyUSB0` / `/dev/ttyUSB1`で常設です。
+無印ESP32の2台は`/dev/ttyUSB0` / `/dev/ttyUSB1`で常設です。EspBleBluedroidと機材を共用しますが、
+両repositoryのpytestを同時に走らせても構いません（ポートの調停はpytestが行います）。
+
+| タイミング | 無印ESP32の実行 |
+|---|---|
+| 文書だけの変更 | 不要 |
+| 通常の`src/`変更 | 代表smoke（`gatt_read_write` / `security_bond` / `hid_keyboard_host` / `mtu` / `connection_parameters`、親側のみで可。約15分） |
+| `src/nimble_esp32/`、`EspBleNimbleHost.h`、lifecycle・controller・vendorツールの変更 | 両役割の全掃引（各約1時間） |
+| Arduino-ESP32 Coreの更新 | 両役割の全掃引。`tools/vendor_nimble_esp32.py`のpinがそのcoreのesp-idfと一致しているかも確認する |
+| リリース候補 | 両役割の全掃引（[リリースチェックリスト](../docs/RELEASE_CHECKLIST.ja.md)参照） |
+
+無印ESP32はcore同梱ではなく**EspBleが持ち込んだhost**で動くため、`src/`の変更はS3では
+再現しない形で影響し得ます。一方でhostは他ターゲットと同一スナップショットなので、
+毎回の全掃引までは求めず、上表の粒度とします。
 
 ## Peerテスト原則
 
