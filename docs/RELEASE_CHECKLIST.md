@@ -29,19 +29,18 @@ uv run --env-file .env pytest --clean
 Next, sweep the two original-ESP32 boards (`/dev/ttyUSB0` and `/dev/ttyUSB1`) in both roles. That chip runs the NimBLE host **EspBle bundles** (`src/nimble_esp32/`) rather than the core's, so any release that touches `src/` must run it. Each sweep takes about an hour.
 
 ```sh
-# original ESP32 as the parent (central). Sketches that use the core's BLE wrapper
-# and the suite that requires the 2M PHY are excluded.
+# original ESP32 as the parent (central)
 uv run --env-file .env pytest --clean peer/ \
-  --profile esp32_peer_host --peer-profile device:s3_peer_device \
-  --ignore=peer/stack_smoke --ignore=peer/advertise_payload \
-  --ignore=peer/hid_keyboard_device --ignore=peer/midi_device \
-  --ignore=peer/phy_update
+  --profile esp32_peer_host --peer-profile device:s3_peer_device
 
 # original ESP32 as the peer (peripheral)
 uv run --env-file .env pytest --clean peer/ \
-  --profile s3_peer_host --peer-profile device:esp32_peer_device \
-  --ignore=peer/stack_smoke --ignore=peer/midi_host --ignore=peer/phy_update
+  --profile s3_peer_host --peer-profile device:esp32_peer_device
 ```
+
+A suite without an esp32 profile for that role skips itself, so no exclusions are needed. What skips
+is the side written against the core's bundled `BLE` wrapper -- unusable on the original ESP32, where
+that wrapper is Bluedroid -- and `phy_update`, which requires the 2M PHY.
 
 For a documentation-only release that does not touch `src/`, the representative smoke set is enough (about 15 minutes for both roles).
 

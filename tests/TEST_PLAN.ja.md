@@ -104,12 +104,18 @@ uv run --env-file .env pytest peer/<suite>/ --profile esp32_peer_host --peer-pro
 uv run --env-file .env pytest peer/<suite>/ --profile s3_peer_host --peer-profile device:esp32_peer_device
 ```
 
-core同梱`BLE`ラッパを直接使うsketch（親側の`stack_smoke`、`advertise_payload`、
-`hid_keyboard_device`、`midi_device`、Peer側の`stack_smoke`、`midi_host`）は、無印ESP32では
-そのラッパがBluedroidになるため実行できません（同一controllerを2つのhostで共有できない）。
-これらは`CONFIG_NIMBLE_ENABLED`を要求する`#error`で拒否されます。
+**esp32 profileを持たない側は、profile指定時に自動でskipされます**（除外指定は不要）。
+profileを置いていないのは次の2種類だけです。
 
-**構造上通らないsuite**: `phy_update`。無印ESP32はBLE 4.2 controllerでLE 2M PHYを持ちません。
+1. **core同梱`BLE`ラッパで書かれた側** — 各suiteは片側をEspBle、もう片側を独立実装の
+   基準側として同梱ラッパで書いています。無印ESP32ではそのラッパがBluedroidになり、
+   自前のNimBLE hostと同一controllerを共有できないため実行できません（`#error`で拒否）。
+   該当は親側の`stack_smoke`・`advertise_payload`・`hid_keyboard_device`・`midi_device`、
+   Peer側の`stack_smoke`・`midi_host`です。**反対側（EspBleで書かれた側）にはprofileがあり、
+   無印ESP32で実行・pass済み**なので、MIDIもHIDも無印ESP32のカバレッジがあります。
+   両側がラッパの`stack_smoke`だけが無印ESP32では対象外です（同梱ラッパのsmokeであり
+   EspBleのテストではないため）。
+2. **`phy_update`** — 無印ESP32はBLE 4.2 controllerでLE 2M PHYを持たず、構造上通りません。
 
 役割を入れ替えて同じsuiteを続けて実行するときは、**片方のボードを別suiteのfirmwareで上書きしてから**
 実行してください。`local_identity`のようにService UUIDで対象を選ぶsuiteは、前の実行のPeer firmwareが

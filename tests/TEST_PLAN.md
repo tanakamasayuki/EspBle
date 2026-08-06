@@ -105,13 +105,18 @@ uv run --env-file .env pytest peer/<suite>/ --profile esp32_peer_host --peer-pro
 uv run --env-file .env pytest peer/<suite>/ --profile s3_peer_host --peer-profile device:esp32_peer_device
 ```
 
-Sketches that use the `BLE` wrapper bundled with the core (`stack_smoke`, `advertise_payload`,
-`hid_keyboard_device` and `midi_device` on the parent side; `stack_smoke` and `midi_host` on the peer
-side) cannot run on the original ESP32, where that wrapper is Bluedroid: two hosts cannot share one
-controller. They are rejected by the `#error` that requires `CONFIG_NIMBLE_ENABLED`.
+**A side without an esp32 profile skips itself when the profile is selected**, so no exclusions are
+needed. Only two kinds of sketch are left without one:
 
-**Structurally unsupported suite**: `phy_update` -- the original ESP32 has a BLE 4.2 controller and
-no LE 2M PHY.
+1. **The side written against the core's bundled `BLE` wrapper.** Each suite implements one side with
+   EspBle and the other with the bundled wrapper as an independent reference. On the original ESP32
+   that wrapper is Bluedroid, which cannot share the controller with our own NimBLE host, so it is
+   rejected by `#error`. That is the parent side of `stack_smoke`, `advertise_payload`,
+   `hid_keyboard_device` and `midi_device`, and the peer side of `stack_smoke` and `midi_host`.
+   **The opposite side of each suite does have a profile and passes on the original ESP32**, so MIDI
+   and HID are covered there. Only `stack_smoke`, whose two sides are both wrapper-based, has no
+   original-ESP32 coverage -- it is a smoke test of the bundled wrapper, not of EspBle.
+2. **`phy_update`** -- the original ESP32 has a BLE 4.2 controller and no LE 2M PHY, so it cannot pass.
 
 When re-running the same suite with the roles swapped, **flash one of the boards with another suite
 first**. A suite that selects its target by service UUID, such as `local_identity`, otherwise observes

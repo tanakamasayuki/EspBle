@@ -270,6 +270,7 @@ EspBleから削除した（ESP32KeyBridge側で検証する）。
 
 1. **`phy_update`（両役割）** — 無印ESP32はBLE 4.2 controllerでLE 2M PHYを持たないため、
    2M PHYへの更新を要求するこのテストは**構造上通らない**。想定どおりの制約。
+   このsuiteからはesp32 profileを外したので、profile指定時は自動でskipされる。
 2. **`local_identity`（Peer役）** — 掃引時は最後の手順の`disconnect(connectionId, 0x16)`が失敗した
    （`DISCONNECT 0`）。単独実行でも再現し、機材の取り合いや連続実行の状態持ち越しではなかった。
    既定の理由コード`0x13`を使う`disconnect_reason`は両役割でpassしていたことから、切断そのもの
@@ -292,9 +293,12 @@ EspBleから削除した（ESP32KeyBridge側で検証する）。
 掃引と単独実行のいずれでも現在はpassする。**無印ESP32とS3で機材が完全に独立しているのは
 ESP32側の2台（`/dev/ttyUSB0` / `/dev/ttyUSB1`）だけである点に注意する。**
 
-`stack_smoke`、`advertise_payload`、`midi_host`の親側などcore同梱`BLE`ラッパを使うsketchは、
-無印ESP32ではラッパがBluedroidになるため**原理的に実行できない**（自前のNimBLE hostと同一
-controllerを共有できない）。これらのsketchの`#error`（`CONFIG_NIMBLE_ENABLED`必須）はそのまま残す。
+core同梱`BLE`ラッパを使うsketchは、無印ESP32ではラッパがBluedroidになるため**原理的に実行できない**
+（自前のNimBLE hostと同一controllerを共有できない）。これらの`#error`（`CONFIG_NIMBLE_ENABLED`必須）は
+そのまま残し、esp32 profileも置かない——profileが無い側はprofile指定時に自動でskipされる。
+該当は親側の`stack_smoke`・`advertise_payload`・`hid_keyboard_device`・`midi_device`、Peer側の
+`stack_smoke`・`midi_host`で、**いずれも反対側（EspBleで書かれた側）は無印ESP32で実行・pass済み**。
+両側がラッパの`stack_smoke`だけが無印ESP32では対象外になる。
 
 ### 実機で判明した修正点
 

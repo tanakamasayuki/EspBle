@@ -29,18 +29,18 @@ uv run --env-file .env pytest --clean
 次に無印ESP32の2台（`/dev/ttyUSB0` / `/dev/ttyUSB1`）で、同梱NimBLE host（`src/nimble_esp32/`）を役割ごとに掃引します。無印ESP32はhostがcore同梱ではなく**EspBleが持ち込んだもの**なので、`src/`へ変更が入るリリースでは必ず実行します。所要は各1時間程度です。
 
 ```sh
-# 無印ESP32を親側(Central)に。core同梱BLEラッパを使うsketchと、2M PHYを要求するsuiteは対象外
+# 無印ESP32を親側(Central)に
 uv run --env-file .env pytest --clean peer/ \
-  --profile esp32_peer_host --peer-profile device:s3_peer_device \
-  --ignore=peer/stack_smoke --ignore=peer/advertise_payload \
-  --ignore=peer/hid_keyboard_device --ignore=peer/midi_device \
-  --ignore=peer/phy_update
+  --profile esp32_peer_host --peer-profile device:s3_peer_device
 
 # 無印ESP32をPeer(Peripheral)に
 uv run --env-file .env pytest --clean peer/ \
-  --profile s3_peer_host --peer-profile device:esp32_peer_device \
-  --ignore=peer/stack_smoke --ignore=peer/midi_host --ignore=peer/phy_update
+  --profile s3_peer_host --peer-profile device:esp32_peer_device
 ```
+
+その役割のesp32 profileを持たないsuiteは自動的にskipされるので、除外指定は不要です。
+skipされるのは、core同梱`BLE`ラッパで書かれた側（無印ESP32ではラッパがBluedroidになり実行不可）と、
+2M PHYを要求する`phy_update`です。
 
 `src/`に触れない文書だけの変更では、代表suiteのsmokeで足ります（両役割で15分程度）。
 
