@@ -1,3 +1,4 @@
+import os
 import re
 
 
@@ -68,6 +69,10 @@ def test_nimble_and_custom_classic_host_run_together(dut, peers):
         assert command.group(6) == b"0"
         assert command.group(7) == b"0"
         assert command.group(8) == b"0"
+        masks = re.search(rb"masks=(\d+)/(\d+)", diag)
+        assert masks is not None
+        assert int(masks.group(1)) >= 3
+        assert int(masks.group(2)) >= 1
 
     dut.write("?")
     dut.expect_exact("DUAL_STATE adv=0 classic=1 ble=1", timeout=10)
@@ -87,14 +92,42 @@ def test_nimble_and_custom_classic_host_run_together(dut, peers):
         "DUAL_BLE_READ success=1 value=dual-ready classic=0", timeout=10
     )
 
-    # NimBLE is now the final host; its unregister must trigger the broker's
-    # adopted controller-stop callback.  No command may survive the session.
+    # Reattaching Bluedroid sends HCI Reset as part of its normal bootstrap.
+    # The broker must complete it virtually instead of resetting the live LE
+    # controller state.
+    peer.write("y\n")
+    peer.expect_exact(
+        "DUAL_PEER_CLASSIC_REATTACH started=1 resets=1", timeout=30
+    )
+    dut.write("y")
+    dut.expect_exact("DUAL_CLASSIC_REATTACH started=1 resets=1", timeout=30)
+
+    peer.write("r\n")
+    peer.expect_exact("DUAL_BLE_READ_REQUESTED 1", timeout=10)
+    peer.expect_exact(
+        "DUAL_BLE_READ success=1 value=dual-ready classic=0", timeout=10
+    )
+
+    peer.write(b"c" + ready.group(1) + b"\n")
+    peer.expect_exact("DUAL_PEER_CONNECT 1", timeout=10)
+    dut.expect_exact("DUAL_CLASSIC_CONNECTED", timeout=30)
+    peer.expect_exact("DUAL_PEER_CONNECTED", timeout=30)
+    dut.write("i")
+    dut.expect_exact("DUAL_CLASSIC_INPUT 1", timeout=10)
+    peer.expect(re.compile(rb"DUAL_PEER_INPUT hex=(01)?007f80[0-9a-f]{2}"), timeout=20)
+    peer.expect_exact("DUAL_PEER_OUTPUT 1", timeout=10)
+    dut.expect(re.compile(rb"DUAL_CLASSIC_OUTPUT id=2 hex=(a500ff|02a500ff)"), timeout=20)
+
+    # Stop both rejoined hosts. The final unregister must trigger the broker's
+    # adopted controller-stop callback, with no command surviving the session.
     peer.write("e\n")
     peer.expect_exact("DUAL_PEER_ENDED ble=0 classic=0 busy=0", timeout=20)
     dut.write("e")
     dut.expect_exact("DUAL_ENDED ble=0 classic=0 busy=0", timeout=20)
 
-    for _ in range(3):
+    restart_cycles = int(os.getenv("ESPBLE_DUAL_RESTART_CYCLES", "3"))
+    assert 1 <= restart_cycles <= 100
+    for _ in range(restart_cycles):
         peer.write("s\n")
         peer.expect_exact(
             "DUAL_PEER_RESTART started=1 ble=1 classic=1 busy=0", timeout=30

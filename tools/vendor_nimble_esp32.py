@@ -199,6 +199,101 @@ INCLUDE_DIRS = [
 # instead of silently dropping the change. (file inside src/, old, new, why)
 PATCHES = [
     (
+        "porting/nimble/src/nimble_port.c",
+        "    struct ble_npl_sem stop_sem;\n"
+        "    struct ble_npl_event ev_stop;\n",
+        "    struct ble_npl_sem stop_sem;\n"
+        "    struct ble_npl_event ev_stop;\n"
+        "    struct ble_npl_event ev_stop_begin;\n"
+        "    int stop_result;\n",
+        "store the host-task stop request in the restartable NimBLE context",
+    ),
+    (
+        "porting/nimble/src/nimble_port.c",
+        "#define ble_hs_ev_stop  (ble_npl_ctx->ev_stop)\n",
+        "#define ble_hs_ev_stop  (ble_npl_ctx->ev_stop)\n"
+        "#define ble_hs_ev_stop_begin (ble_npl_ctx->ev_stop_begin)\n"
+        "#define ble_hs_stop_result (ble_npl_ctx->stop_result)\n",
+        "expose the restartable host-task stop request",
+    ),
+    (
+        "porting/nimble/src/nimble_port.c",
+        "static struct ble_npl_sem ble_hs_stop_sem;\n"
+        "static struct ble_npl_event ble_hs_ev_stop;\n",
+        "static struct ble_npl_sem ble_hs_stop_sem;\n"
+        "static struct ble_npl_event ble_hs_ev_stop;\n"
+        "static struct ble_npl_event ble_hs_ev_stop_begin;\n"
+        "static int ble_hs_stop_result;\n",
+        "store the host-task stop request in the static NimBLE context",
+    ),
+    (
+        "porting/nimble/src/nimble_port.c",
+        "static void\n"
+        "ble_hs_stop_cb(int status, void *arg)\n"
+        "{\n"
+        "    ble_npl_sem_release(&ble_hs_stop_sem);\n"
+        "}\n\n"
+        "static void\n"
+        "nimble_port_stop_cb(struct ble_npl_event *ev)\n",
+        "static void\n"
+        "ble_hs_stop_cb(int status, void *arg)\n"
+        "{\n"
+        "    ble_hs_stop_result = status;\n"
+        "    ble_npl_sem_release(&ble_hs_stop_sem);\n"
+        "}\n\n"
+        "static void\n"
+        "nimble_port_stop_begin_cb(struct ble_npl_event *ev)\n"
+        "{\n"
+        "    (void)ev;\n"
+        "    int result = ble_hs_stop(&stop_listener, ble_hs_stop_cb, NULL);\n"
+        "    if (result != 0) {\n"
+        "        ble_hs_stop_result = result;\n"
+        "        ble_npl_sem_release(&ble_hs_stop_sem);\n"
+        "    }\n"
+        "}\n\n"
+        "static void\n"
+        "nimble_port_stop_cb(struct ble_npl_event *ev)\n",
+        "start host shutdown on the NimBLE event task to serialize its queue",
+    ),
+    (
+        "porting/nimble/src/nimble_port.c",
+        "    /* Initiate a host stop procedure. */\n"
+        "    err = ble_hs_stop(&stop_listener, ble_hs_stop_cb,\n"
+        "                     NULL);\n"
+        "    if (err != 0) {\n"
+        "        ble_npl_sem_deinit(&ble_hs_stop_sem);\n"
+        "        return err;\n"
+        "    }\n\n"
+        "    /* Wait till the host stop procedure is complete */\n"
+        "    ble_npl_sem_pend(&ble_hs_stop_sem, BLE_NPL_TIME_FOREVER);\n",
+        "    /* Serialize stop with callout events already dequeued by the host. */\n"
+        "    ble_hs_stop_result = 0;\n"
+        "    ble_npl_event_init(&ble_hs_ev_stop_begin,\n"
+        "                       nimble_port_stop_begin_cb, NULL);\n"
+        "    ble_npl_eventq_put(&g_eventq_dflt, &ble_hs_ev_stop_begin);\n\n"
+        "    /* Wait till the host stop procedure is complete. */\n"
+        "    ble_npl_sem_pend(&ble_hs_stop_sem, BLE_NPL_TIME_FOREVER);\n"
+        "    err = ble_hs_stop_result;\n"
+        "    if (err != 0) {\n"
+        "        ble_npl_sem_deinit(&ble_hs_stop_sem);\n"
+        "        return err;\n"
+        "    }\n",
+        "serialize NimBLE stop initiation with event queue consumption",
+    ),
+    (
+        "porting/nimble/src/nimble_port.c",
+        "    ble_npl_sem_pend(&ble_hs_stop_sem, BLE_NPL_TIME_FOREVER);\n\n"
+        "    ble_npl_sem_deinit(&ble_hs_stop_sem);\n\n"
+        "    return ESP_OK;\n",
+        "    ble_npl_sem_pend(&ble_hs_stop_sem, BLE_NPL_TIME_FOREVER);\n\n"
+        "    /* The stop marker ran after stop_begin, so this event is no longer\n"
+        "     * referenced by the host task and can safely return to the pool. */\n"
+        "    ble_npl_event_deinit(&ble_hs_ev_stop_begin);\n"
+        "    ble_npl_sem_deinit(&ble_hs_stop_sem);\n\n"
+        "    return ESP_OK;\n",
+        "release the serialized stop request only after the host task exits",
+    ),
+    (
         "nimble/host/src/ble_hs.c",
         "#include <string.h>\n",
         "#include <string.h>\n#include \"EspBleHciBroker.h\"\n",
@@ -337,18 +432,6 @@ PATCHES = [
         "    }\n"
         "#endif\n",
         "do not reset the controller underneath an initialized Classic host",
-    ),
-    (
-        "nimble/host/src/ble_hs_startup.c",
-        "    cmd.event_mask = htole64(0x2000800002008890);\n",
-        "#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)\n"
-        "    /* Bluedroid's HCI_DUMO_EVENT_MASK_EXT in HCI wire order. This\n"
-        "     * preserves Classic events while enabling LE Meta-Event. */\n"
-        "    cmd.event_mask = htole64(0x3dbfffffffffffff);\n"
-        "#else\n"
-        "    cmd.event_mask = htole64(0x2000800002008890);\n"
-        "#endif\n",
-        "merge NimBLE requirements with the Classic event mask after LE host support",
     ),
     (
         "esp-idf/esp_nimble_hci.c",

@@ -1159,17 +1159,28 @@ bool EspBleClassic::begin(const EspBleClassicConfig &config)
     setError(EspBleError::InvalidState, "another Classic owner is active");
     return false;
   }
-  if (btStarted() || esp_bluedroid_get_status() != ESP_BLUEDROID_STATUS_UNINITIALIZED)
+  const bool controllerStarted = btStarted();
+#if defined(ESPBLE_CLASSIC_CUSTOM_HOST) && \
+    defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
+  const bool attachAdoptedController = controllerStarted &&
+    espble_hci_broker_has_adopted_controller();
+#else
+  const bool attachAdoptedController = false;
+#endif
+  if ((controllerStarted && !attachAdoptedController) ||
+      esp_bluedroid_get_status() != ESP_BLUEDROID_STATUS_UNINITIALIZED)
   {
     activeClassic.store(nullptr, std::memory_order_release);
     setError(EspBleError::InvalidState, "another Bluetooth stack is active");
     return false;
   }
+  if (!attachAdoptedController &&
 #if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
-  if (!btStartMode(BT_MODE_BTDM))
+      !btStartMode(BT_MODE_BTDM)
 #else
-  if (!btStartMode(BT_MODE_CLASSIC_BT))
+      !btStartMode(BT_MODE_CLASSIC_BT)
 #endif
+     )
   {
     activeClassic.store(nullptr, std::memory_order_release);
     setError(
@@ -1179,7 +1190,8 @@ bool EspBleClassic::begin(const EspBleClassicConfig &config)
   }
 #if defined(ESPBLE_CLASSIC_CUSTOM_HOST) && \
     defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
-  if (espble_hci_broker_adopt_controller(stopAdoptedController) != ESP_OK)
+  if (!attachAdoptedController &&
+      espble_hci_broker_adopt_controller(stopAdoptedController) != ESP_OK)
   {
     btStop();
     activeClassic.store(nullptr, std::memory_order_release);

@@ -70,6 +70,8 @@ typedef struct {
     struct ble_npl_eventq eventq;
     struct ble_npl_sem stop_sem;
     struct ble_npl_event ev_stop;
+    struct ble_npl_event ev_stop_begin;
+    int stop_result;
 #if CONFIG_BT_NIMBLE_ENABLED
     struct ble_hs_stop_listener listener;
 #endif
@@ -83,6 +85,8 @@ static struct ble_npl_eventq g_eventq_shutdown_fallback = {0};
 #define g_eventq_dflt   (ble_npl_ctx->eventq)
 #define ble_hs_stop_sem (ble_npl_ctx->stop_sem)
 #define ble_hs_ev_stop  (ble_npl_ctx->ev_stop)
+#define ble_hs_ev_stop_begin (ble_npl_ctx->ev_stop_begin)
+#define ble_hs_stop_result (ble_npl_ctx->stop_result)
 
 #if CONFIG_BT_NIMBLE_ENABLED
 #define stop_listener   (ble_npl_ctx->listener)
@@ -92,6 +96,8 @@ static struct ble_npl_eventq g_eventq_shutdown_fallback = {0};
 static struct ble_npl_eventq g_eventq_dflt;
 static struct ble_npl_sem ble_hs_stop_sem;
 static struct ble_npl_event ble_hs_ev_stop;
+static struct ble_npl_event ble_hs_ev_stop_begin;
+static int ble_hs_stop_result;
 
 #if CONFIG_BT_NIMBLE_ENABLED
 static struct ble_hs_stop_listener stop_listener;
@@ -140,7 +146,19 @@ ble_npl_reset_deinit_flag(void)
 static void
 ble_hs_stop_cb(int status, void *arg)
 {
+    ble_hs_stop_result = status;
     ble_npl_sem_release(&ble_hs_stop_sem);
+}
+
+static void
+nimble_port_stop_begin_cb(struct ble_npl_event *ev)
+{
+    (void)ev;
+    int result = ble_hs_stop(&stop_listener, ble_hs_stop_cb, NULL);
+    if (result != 0) {
+        ble_hs_stop_result = result;
+        ble_npl_sem_release(&ble_hs_stop_sem);
+    }
 }
 
 static void
@@ -415,16 +433,19 @@ nimble_port_stop(void)
 	return rc;
     }
 
-    /* Initiate a host stop procedure. */
-    err = ble_hs_stop(&stop_listener, ble_hs_stop_cb,
-                     NULL);
+    /* Serialize stop with callout events already dequeued by the host. */
+    ble_hs_stop_result = 0;
+    ble_npl_event_init(&ble_hs_ev_stop_begin,
+                       nimble_port_stop_begin_cb, NULL);
+    ble_npl_eventq_put(&g_eventq_dflt, &ble_hs_ev_stop_begin);
+
+    /* Wait till the host stop procedure is complete. */
+    ble_npl_sem_pend(&ble_hs_stop_sem, BLE_NPL_TIME_FOREVER);
+    err = ble_hs_stop_result;
     if (err != 0) {
         ble_npl_sem_deinit(&ble_hs_stop_sem);
         return err;
     }
-
-    /* Wait till the host stop procedure is complete */
-    ble_npl_sem_pend(&ble_hs_stop_sem, BLE_NPL_TIME_FOREVER);
 
     ble_npl_event_init(&ble_hs_ev_stop, nimble_port_stop_cb,
                        NULL);
@@ -433,6 +454,9 @@ nimble_port_stop(void)
     /* Wait till the host task services and releases the stop event. */
     ble_npl_sem_pend(&ble_hs_stop_sem, BLE_NPL_TIME_FOREVER);
 
+    /* The stop marker ran after stop_begin, so this event is no longer
+     * referenced by the host task and can safely return to the pool. */
+    ble_npl_event_deinit(&ble_hs_ev_stop_begin);
     ble_npl_sem_deinit(&ble_hs_stop_sem);
 
     return ESP_OK;

@@ -13,7 +13,7 @@ command応答、connection handle、ACL credit、controller初期化をbrokerが
 single-host pass-throughを基準にした後、opt-inの
 `ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL`としてH4 routerまで実装した。Classic HIDの双方向通信を
 維持したままLE接続、GATT read反復、負荷後のClassic HID双方向通信が成立している。command schedulerは
-broker所有FIFOとcontroller credit管理、最後のhostがcontrollerを停止するlifecycleまで実装した。ただしcontroller-wide commandの統合、
+broker所有FIFOとcontroller credit管理、最後のhostがcontrollerを停止するlifecycle、event maskのunionまで実装した。ただしevent mask以外のcontroller-wide commandの統合、
 security負荷試験は未完了なので、通常buildは引き続き二つ目のhost登録を`ESP_ERR_NOT_SUPPORTED`とする。
 
 ## 実機・ビルド検証結果
@@ -81,10 +81,10 @@ LE tx/rx/completed=36/36/36、Classic tx/rx/completed=25/25/25で、unknown hand
 負荷後は両側ともNimBLE hostを先に、Classic host/controllerを後に停止でき、両hostの
 `initialized()`がfalse、host解除時のin-flight commandは0だった。queueはhost解除時にowner単位で
 破棄し、専用送信taskはsession世代とFIFO先頭を物理送信直前に再照合するため、前sessionからcopyした
-commandを再登録後のcontrollerへ送らない。再登録の長時間反復は未検証である。
+commandを再登録後のcontrollerへ送らない。再登録の長時間soakは未検証である。
 同じ実機試験で、停止後に同一の`EspBle` / `EspBleClassic` instanceとGATT/HID定義を使って
-Classic→NimBLEを再登録し、両hostの初期化成功と正常停止を3サイクル確認した。短時間反復は成立したが、
-長時間反復は未検証である。
+Classic→NimBLEを再登録し、両hostの初期化成功と正常停止を通常3サイクル、拡張実行20サイクルで
+確認した。さらに長時間のheap付きsoakは未検証である。
 Classicは起動直後にcontroller停止callbackをbrokerへ委譲する。Classic先行`end()`ではClassic
 profile/hostだけが停止し、NimBLEとcontrollerは継続する。追加のLE GATT readが成功した後、最後の
 NimBLE解除でbrokerがcontrollerを停止し、その後のClassic→NimBLE再起動と3サイクル停止も成功した。
@@ -92,6 +92,34 @@ NimBLE解除でbrokerがcontrollerを停止し、その後のClassic→NimBLE再
 初期化済みであることと、両object破棄後に長寿命instanceを再起動できることを両側で確認した。
 高速反復でNimBLE hostがOFFの間に遅延eventが届く窓は、`ble_hs_start()` / stop完了に連動する
 broker receive gateで閉じた。修正後の完全再ビルド試験では`Host not enabled`出力は発生していない。
+
+20サイクル化前の高速停止では、3回目に`npl_freertos_eventq_remove()`が別coreのhost taskによる
+dequeueと競合し、FreeRTOS queue receive assertionを1回再現した。backtraceは
+`nimble_port_stop` → `ble_hs_stop` → `ble_hs_timer_resched` → `callout_stop`を示した。
+停止開始をNimBLE event queueへ要求し、host task自身が`ble_hs_stop()`を実行するよう変更した後は、
+完全再ビルドの通常3サイクルと拡張20サイクルの両方が成功した。
+
+## controller-wide event mask
+
+brokerの独立policy層はGeneral Event Mask（`0x0c01`）、Page 2（`0x0c63`）、LE Event Mask
+（`0x2001`）を別々にhost単位でcacheする。物理commandのopcodeと応答ownerは変えず、parameterだけを
+登録host要求のORへ置換するため、command schedulerとCommand Complete routingに特別な応答生成は要らない。
+Classic-only BluedroidのGeneral要求と通常のNimBLE要求から、従来hard-codedしていた
+`ff ff ff ff ff ff bf 3d`が生成される。実機では両側ともmask command 4件、union書換え1件を記録し、
+Classic HID、LE GATT 25回、停止・再起動まで成立した。
+
+## controller継続中のClassic再attach
+
+Classic先行`end()`後もNimBLEが登録中なら、BTDM controllerはbroker所有のまま動作している。
+この状態では`EspBleClassic::begin()`は`btStartMode()`を再実行せず、custom Bluedroid hostだけをattachする。
+Bluedroidのcontroller bootstrapは毎回HCI Reset（`0x0c03`）を要求するため、二つのhostが登録済みなら
+brokerのcommand taskがResetを物理送信せず、Classicへ成功Command Completeを非同期配送する。
+同期callbackでBluedroid送信処理へ再入しないこと、物理controller command creditを消費しないことを
+この境界の条件とした。
+
+両側でClassicを停止し、既存LE接続のGATT read成功後にClassicを再attachした。各brokerはvirtual Reset
+を1件記録し、再attach後も同じLE接続でGATT readが成功した。その後Classic HIDを再接続し、
+Input / Output Reportの双方向通信も成功した。この経路を含む20回のcontroller停止・再起動も成功した。
 
 ## dual-hostでbrokerが持つべき責務
 
@@ -154,7 +182,7 @@ API、メモリ量、ライフサイクルを先に確定できる。
 ### Phase B: Classicを基準にBLEを追加
 
 1. controllerをBTDMで起動し、Classic hostを先に初期化する。
-2. broker管理command、command transaction、event maskのunionを実装する。
+2. event mask / HCI Reset以外のbroker管理commandとcommand transactionを分類・実装する。
 3. NimBLEを登録し、LE eventとLE ACLだけを開放する。
 4. handle routingとACL credit分配を実装する。
 5. SPP traffic中にBLE scan、GATT接続、read/write、notification、SMPを順に追加検証する。

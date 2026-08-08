@@ -27,7 +27,7 @@ void printHex(const String &value)
     Serial.printf("%02x", static_cast<uint8_t>(value[i]));
 }
 
-bool startDualStacks()
+bool startClassicStack()
 {
   EspBleClassicConfig classicConfig;
   classicConfig.deviceName = "EspBle Dual Host";
@@ -37,8 +37,12 @@ bool startDualStacks()
   hidConfig.provider = "EspBle";
   hidConfig.reportDescriptor = ReportDescriptor;
   hidConfig.reportDescriptorLength = sizeof(ReportDescriptor);
-  if (!classic.begin(classicConfig) || !classic.hidDevice().begin(hidConfig))
-    return false;
+  return classic.begin(classicConfig) && classic.hidDevice().begin(hidConfig);
+}
+
+bool startDualStacks()
+{
+  if (!startClassicStack()) return false;
 
   if (!service.valid())
   {
@@ -150,7 +154,8 @@ void loop()
       Serial.printf(
         "DUAL_DIAG tx=%lu,%lu rx=%lu,%lu ncp=%lu,%lu unknown=%lu "
         "txh=%u,%u rxh=%u,%u pb=%u,%u mode=%u modes=%lu "
-        "cmd=%lu,%lu/%lu,%lu qmax=%u qfull=%lu mismatch=%lu busy=%lu\n",
+        "cmd=%lu,%lu/%lu,%lu qmax=%u qfull=%lu mismatch=%lu busy=%lu "
+        "masks=%lu/%lu\n",
         value.tx_acl[0], value.tx_acl[1], value.rx_acl[0], value.rx_acl[1],
         value.completed_acl[0], value.completed_acl[1], value.unknown_acl,
         value.last_tx_handle[0], value.last_tx_handle[1],
@@ -160,7 +165,8 @@ void loop()
         value.command_enqueued[0], value.command_enqueued[1],
         value.command_sent[0], value.command_sent[1],
         value.command_queue_high_water, value.command_queue_full,
-        value.command_response_mismatch, value.command_unregister_busy);
+        value.command_response_mismatch, value.command_unregister_busy,
+        value.event_mask_commands, value.event_mask_unions);
     }
     else if (command == 'e')
     {
@@ -196,6 +202,14 @@ void loop()
       Serial.printf(
         "DUAL_DESTRUCT classic_first=%u ble_first=%u restarted=%u\n",
         classicFirst ? 1 : 0, bleFirst ? 1 : 0, restarted ? 1 : 0);
+    }
+    else if (command == 'y')
+    {
+      const bool started = startClassicStack();
+      espble_hci_broker_diagnostics_t value = {};
+      espble_hci_broker_get_diagnostics(&value);
+      Serial.printf("DUAL_CLASSIC_REATTACH started=%u resets=%lu error=%s\n",
+        started ? 1 : 0, value.virtual_resets, classic.lastErrorDetail().c_str());
     }
   }
   delay(1);

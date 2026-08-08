@@ -42,6 +42,9 @@ typedef struct
   uint32_t command_response_mismatch;
   uint32_t command_unregister_busy;
   uint16_t command_queue_high_water;
+  uint32_t event_mask_commands;
+  uint32_t event_mask_unions;
+  uint32_t virtual_resets;
 } espble_hci_broker_diagnostics_t;
 
 // Register a logical host with the broker. Production builds remain single-host.
@@ -57,6 +60,7 @@ void espble_hci_broker_unregister(espble_hci_host_t host);
 esp_err_t espble_hci_broker_adopt_controller(
   espble_hci_controller_stop_callback_t stop_callback);
 esp_err_t espble_hci_broker_shutdown_controller(void);
+bool espble_hci_broker_has_adopted_controller(void);
 
 bool espble_hci_broker_can_send(espble_hci_host_t host);
 void espble_hci_broker_set_receive_enabled(

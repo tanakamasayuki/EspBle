@@ -468,13 +468,7 @@ ble_hs_startup_set_evmask_tx(void)
      *     0x0000800000000000 Encryption Key Refresh Complete Event
      *     0x2000000000000000 LE Meta-Event
      */
-#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
-    /* Bluedroid's HCI_DUMO_EVENT_MASK_EXT in HCI wire order. This
-     * preserves Classic events while enabling LE Meta-Event. */
-    cmd.event_mask = htole64(0x3dbfffffffffffff);
-#else
     cmd.event_mask = htole64(0x2000800002008890);
-#endif
 
     rc = ble_hs_hci_cmd_tx(BLE_HCI_OP(BLE_HCI_OGF_CTLR_BASEBAND,
                                       BLE_HCI_OCF_CB_SET_EVENT_MASK),

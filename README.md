@@ -91,7 +91,9 @@ traffic together with an LE connection, 25 GATT reads, and bidirectional HID
 traffic afterwards has passed hardware tests. Shared-command scheduling now
 uses a broker-owned FIFO and controller command credits. The broker stops the
 controller after the final host leaves, independent of host destruction order;
-controller-wide command merging, long-duration load, and security stress tests remain.
+event masks are merged from per-host requests, and Classic can reattach without
+resetting an active LE controller. Other controller-wide commands,
+long-duration load, and security stress tests remain.
 See the [Classic implementation plan](docs/PLAN_ESP32_CLASSIC.ja.md). The classic ESP32
 also has a BLE 4.2 controller, so **LE 2M and LE Coded PHY are unavailable**,
 extended and periodic advertising are unavailable, and the connection limit is 3.

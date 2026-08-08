@@ -5,6 +5,7 @@
 
 #include "EspBleHciBroker.h"
 #include "EspBleHciCommandScheduler.h"
+#include "EspBleHciControllerPolicy.h"
 #include "EspBleHciRouter.h"
 
 #include <stddef.h>
@@ -24,10 +25,12 @@ static portMUX_TYPE broker_lock = portMUX_INITIALIZER_UNLOCKED;
 static uint8_t next_send_host;
 #if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
 static espble_hci_command_scheduler_t command_scheduler;
+static espble_hci_controller_policy_t controller_policy;
 static SemaphoreHandle_t physical_send_mutex;
 static TaskHandle_t command_task_handle;
 static uint32_t command_generation;
 static espble_hci_controller_stop_callback_t controller_stop_callback;
+static uint8_t virtual_reset_pending;
 #endif
 
 static espble_hci_route_t host_route(size_t host)
@@ -82,12 +85,33 @@ static void command_task(void *argument)
 {
   (void)argument;
   uint8_t packet[ESPBLE_HCI_COMMAND_MAX_LENGTH];
+  static const uint8_t reset_complete[] = {
+    0x04, 0x0e, 0x04, 0x01, 0x03, 0x0c, 0x00};
 
   for (;;)
   {
     (void)ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
     for (;;)
     {
+      const espble_hci_host_callbacks_t *virtual_callbacks = NULL;
+      portENTER_CRITICAL(&broker_lock);
+      for (size_t i = 0; i < ESPBLE_HCI_HOST_COUNT; ++i)
+      {
+        const uint8_t bit = (uint8_t)(1u << i);
+        if ((virtual_reset_pending & bit) == 0 || hosts[i] == NULL ||
+            !host_receive_enabled[i]) continue;
+        virtual_reset_pending &= (uint8_t)~bit;
+        virtual_callbacks = hosts[i];
+        break;
+      }
+      portEXIT_CRITICAL(&broker_lock);
+      if (virtual_callbacks != NULL)
+      {
+        virtual_callbacks->notify_receive(
+          (uint8_t *)reset_complete, sizeof(reset_complete));
+        continue;
+      }
+
       uint8_t owner = 0;
       const uint8_t *queued_packet = NULL;
       size_t length = 0;
@@ -378,6 +402,8 @@ esp_err_t espble_hci_broker_register(
   memset(&diagnostics, 0, sizeof(diagnostics));
 #if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
   espble_hci_command_scheduler_init(&command_scheduler);
+  espble_hci_controller_policy_init(&controller_policy);
+  virtual_reset_pending = 0;
   ++command_generation;
 #endif
   result = esp_vhci_host_register_callback(&physical_callbacks);
@@ -408,9 +434,17 @@ void espble_hci_broker_unregister(espble_hci_host_t host)
   if (no_hosts)
   {
     espble_hci_command_scheduler_init(&command_scheduler);
+    espble_hci_controller_policy_init(&controller_policy);
     espble_hci_router_init(&router);
     stop_callback = controller_stop_callback;
     controller_stop_callback = NULL;
+    virtual_reset_pending = 0;
+  }
+  else
+  {
+    espble_hci_controller_policy_remove_host(
+      &controller_policy, (uint8_t)host);
+    virtual_reset_pending &= (uint8_t)~(1u << host);
   }
   portEXIT_CRITICAL(&broker_lock);
   wake_command_task();
@@ -468,6 +502,19 @@ esp_err_t espble_hci_broker_shutdown_controller(void)
 #endif
 }
 
+bool espble_hci_broker_has_adopted_controller(void)
+{
+#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
+  portENTER_CRITICAL(&broker_lock);
+  const bool adopted = controller_stop_callback != NULL &&
+    registered_host_count() != 0;
+  portEXIT_CRITICAL(&broker_lock);
+  return adopted;
+#else
+  return false;
+#endif
+}
+
 bool espble_hci_broker_can_send(espble_hci_host_t host)
 {
   return valid_host(host) && hosts[host] != NULL &&
@@ -481,6 +528,9 @@ void espble_hci_broker_set_receive_enabled(
   portENTER_CRITICAL(&broker_lock);
   if (hosts[host] != NULL) host_receive_enabled[host] = enabled;
   portEXIT_CRITICAL(&broker_lock);
+#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
+  if (enabled) wake_command_task();
+#endif
 }
 
 esp_err_t espble_hci_broker_send(
@@ -500,7 +550,48 @@ esp_err_t espble_hci_broker_send(
       (int)host, data[2], data[1]);
 #endif
 #if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
+  if (dual_host_active() &&
+      espble_hci_controller_policy_is_reset(data, length))
+  {
+    portENTER_CRITICAL(&broker_lock);
+    const uint8_t bit = (uint8_t)(1u << host);
+    const bool already_pending = (virtual_reset_pending & bit) != 0;
+    if (!already_pending)
+    {
+      virtual_reset_pending |= bit;
+      ++diagnostics.virtual_resets;
+    }
+    portEXIT_CRITICAL(&broker_lock);
+    if (already_pending) return ESP_ERR_INVALID_STATE;
+    ESP_LOGW(TAG, "virtualized HCI Reset from host %d", (int)host);
+    wake_command_task();
+    return ESP_OK;
+  }
+
   const uint8_t *physical_data = data;
+  uint8_t controller_command[12];
+  if (data[0] == 0x01)
+  {
+    portENTER_CRITICAL(&broker_lock);
+    const espble_hci_controller_policy_result_t policy_result =
+      espble_hci_controller_policy_rewrite_command(
+        &controller_policy, (uint8_t)host, data, length,
+        controller_command, sizeof(controller_command));
+    if (policy_result == ESPBLE_HCI_CONTROLLER_POLICY_REWRITTEN)
+    {
+      ++diagnostics.event_mask_commands;
+      if (memcmp(controller_command, data, length) != 0)
+        ++diagnostics.event_mask_unions;
+      physical_data = controller_command;
+    }
+    portEXIT_CRITICAL(&broker_lock);
+    if (policy_result == ESPBLE_HCI_CONTROLLER_POLICY_INVALID_PACKET)
+    {
+      ESP_LOGE(TAG, "rejected malformed controller-wide command from host %d",
+        (int)host);
+      return ESP_ERR_INVALID_ARG;
+    }
+  }
   uint8_t flow_control_command[5];
   // Bluedroid enables controller-to-host ACL flow control before NimBLE
   // attaches.  It can only return credits for the Classic ACL packets routed
