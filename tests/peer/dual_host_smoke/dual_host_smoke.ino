@@ -146,6 +146,13 @@ void loop()
         ble.initialized() ? 1 : 0, classic.initialized() ? 1 : 0,
         value.command_unregister_busy);
     }
+    else if (command == 'x')
+    {
+      classic.end();
+      Serial.printf("DUAL_REVERSE ble=%u classic=%u error=%s\n",
+        ble.initialized() ? 1 : 0, classic.initialized() ? 1 : 0,
+        classic.lastErrorName());
+    }
     else if (command == 's')
     {
       const bool started = startDualStacks();

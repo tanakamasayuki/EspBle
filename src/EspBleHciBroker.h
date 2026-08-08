@@ -51,6 +51,7 @@ esp_err_t espble_hci_broker_register(
 void espble_hci_broker_unregister(espble_hci_host_t host);
 
 bool espble_hci_broker_can_send(espble_hci_host_t host);
+bool espble_hci_broker_host_registered(espble_hci_host_t host);
 esp_err_t espble_hci_broker_send(
   espble_hci_host_t host, const uint8_t *data, uint16_t length);
 

@@ -1242,6 +1242,20 @@ bool EspBleClassic::begin(const EspBleClassicConfig &config)
 void EspBleClassic::end()
 {
   if (!initialized()) return;
+#if ESPBLE_CLASSIC_BACKEND_AVAILABLE && \
+    defined(ESPBLE_CLASSIC_CUSTOM_HOST) && \
+    defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
+  // Classic started and therefore owns the shared BTDM controller.  Stopping
+  // it while NimBLE is attached would tear the controller out from under the
+  // BLE host.  Keep both stacks intact so the caller can stop BLE first.
+  if (espble_hci_broker_host_registered(ESPBLE_HCI_HOST_NIMBLE))
+  {
+    setError(
+      EspBleError::InvalidState,
+      "stop the NimBLE host before the Classic owner in dual-host mode");
+    return;
+  }
+#endif
   hidHost_.end();
   hidDevice_.end();
   spp_.end();

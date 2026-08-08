@@ -81,10 +81,13 @@ LE tx/rx/completed=36/36/36、Classic tx/rx/completed=25/25/25で、unknown hand
 負荷後は両側ともNimBLE hostを先に、Classic host/controllerを後に停止でき、両hostの
 `initialized()`がfalse、host解除時のin-flight commandは0だった。queueはhost解除時にowner単位で
 破棄し、専用送信taskはsession世代とFIFO先頭を物理送信直前に再照合するため、前sessionからcopyした
-commandを再登録後のcontrollerへ送らない。逆順停止の拒否と再登録の長時間反復は未検証である。
+commandを再登録後のcontrollerへ送らない。再登録の長時間反復は未検証である。
 同じ実機試験で、停止後に同一の`EspBle` / `EspBleClassic` instanceとGATT/HID定義を使って
 Classic→NimBLEを再登録し、両hostの初期化成功と正常停止を3サイクル確認した。短時間反復は成立したが、
-長時間反復と逆順停止の拒否は未検証である。
+長時間反復は未検証である。
+Classic先行`end()`はbrokerのNimBLE登録状態を調べ、profileやcontrollerへ触れる前に
+`InvalidState`で拒否する。両側で拒否後もhostが初期化済みのまま、追加のLE GATT readと
+Classic HID Input/Outputが成功した。その後の正常停止と3サイクル再登録も成功している。
 
 ## dual-hostでbrokerが持つべき責務
 

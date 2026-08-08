@@ -411,6 +411,15 @@ bool espble_hci_broker_can_send(espble_hci_host_t host)
     esp_vhci_host_check_send_available();
 }
 
+bool espble_hci_broker_host_registered(espble_hci_host_t host)
+{
+  if (!valid_host(host)) return false;
+  portENTER_CRITICAL(&broker_lock);
+  const bool registered = hosts[host] != NULL;
+  portEXIT_CRITICAL(&broker_lock);
+  return registered;
+}
+
 esp_err_t espble_hci_broker_send(
   espble_hci_host_t host, const uint8_t *data, uint16_t length)
 {

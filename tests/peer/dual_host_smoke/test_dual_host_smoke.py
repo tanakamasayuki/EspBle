@@ -72,6 +72,29 @@ def test_nimble_and_custom_classic_host_run_together(dut, peers):
     dut.write("?")
     dut.expect_exact("DUAL_STATE adv=0 classic=1 ble=1", timeout=10)
 
+    # Classic owns the BTDM controller.  Reverse shutdown must be rejected
+    # before either host or profile is touched.
+    peer.write("x\n")
+    peer.expect_exact(
+        "DUAL_PEER_REVERSE ble=1 classic=1 error=InvalidState", timeout=10
+    )
+    dut.write("x")
+    dut.expect_exact("DUAL_REVERSE ble=1 classic=1 error=InvalidState", timeout=10)
+
+    peer.write("r\n")
+    peer.expect_exact("DUAL_BLE_READ_REQUESTED 1", timeout=10)
+    peer.expect_exact(
+        "DUAL_BLE_READ success=1 value=dual-ready classic=1", timeout=10
+    )
+    dut.write("i")
+    dut.expect_exact("DUAL_CLASSIC_INPUT 1", timeout=10)
+    peer.expect(re.compile(rb"DUAL_PEER_INPUT hex=(01)?007f80[0-9a-f]{2}"), timeout=10)
+    peer.expect_exact("DUAL_PEER_OUTPUT 1", timeout=10)
+    dut.expect(
+        re.compile(rb"DUAL_CLASSIC_OUTPUT id=2 hex=(a500ff|02a500ff)"),
+        timeout=10,
+    )
+
     # The shared controller belongs to Classic: stop NimBLE first, then the
     # Classic host/controller.  No in-flight command may survive unregister.
     peer.write("e\n")
