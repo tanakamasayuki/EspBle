@@ -62,6 +62,12 @@ espble_hci_command_scheduler_result_t espble_hci_command_scheduler_on_event(
   espble_hci_command_scheduler_t *scheduler, const uint8_t *packet,
   size_t length);
 
+// Removes commands that have not reached the controller.  BLOCKED means an
+// already-sent command for this owner still needs its response; queued entries
+// are removed even in that case.
+espble_hci_command_scheduler_result_t espble_hci_command_scheduler_remove_owner(
+  espble_hci_command_scheduler_t *scheduler, uint8_t owner);
+
 #ifdef __cplusplus
 }
 #endif

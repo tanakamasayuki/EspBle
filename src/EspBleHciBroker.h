@@ -38,6 +38,7 @@ typedef struct
   uint32_t command_sent[ESPBLE_HCI_HOST_COUNT];
   uint32_t command_queue_full;
   uint32_t command_response_mismatch;
+  uint32_t command_unregister_busy;
   uint16_t command_queue_high_water;
 } espble_hci_broker_diagnostics_t;
 

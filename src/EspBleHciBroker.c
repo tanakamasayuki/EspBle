@@ -25,6 +25,7 @@ static uint8_t next_send_host;
 static espble_hci_command_scheduler_t command_scheduler;
 static SemaphoreHandle_t physical_send_mutex;
 static TaskHandle_t command_task_handle;
+static uint32_t command_generation;
 #endif
 
 static espble_hci_route_t host_route(size_t host)
@@ -77,6 +78,7 @@ static void command_task(void *argument)
       uint8_t owner = 0;
       const uint8_t *queued_packet = NULL;
       size_t length = 0;
+      uint32_t generation = 0;
 
       portENTER_CRITICAL(&broker_lock);
       const espble_hci_command_scheduler_result_t ready =
@@ -84,7 +86,10 @@ static void command_task(void *argument)
           &command_scheduler, &owner, &queued_packet, &length) :
           ESPBLE_HCI_COMMAND_SCHEDULER_BLOCKED;
       if (ready == ESPBLE_HCI_COMMAND_SCHEDULER_OK)
+      {
         memcpy(packet, queued_packet, length);
+        generation = command_generation;
+      }
       portEXIT_CRITICAL(&broker_lock);
       if (ready != ESPBLE_HCI_COMMAND_SCHEDULER_OK) break;
 
@@ -96,9 +101,21 @@ static void command_task(void *argument)
       }
 
       portENTER_CRITICAL(&broker_lock);
-      const espble_hci_router_result_t tracked =
+      uint8_t current_owner = 0;
+      const uint8_t *current_packet = NULL;
+      size_t current_length = 0;
+      const bool still_current = generation == command_generation &&
+        dual_host_active() && hosts[owner] != NULL &&
+        router.pending_count == 0 &&
+        espble_hci_command_scheduler_peek(
+          &command_scheduler, &current_owner, &current_packet,
+          &current_length) == ESPBLE_HCI_COMMAND_SCHEDULER_OK &&
+        current_owner == owner && current_length == length &&
+        memcmp(current_packet, packet, length) == 0;
+      const espble_hci_router_result_t tracked = still_current ?
         espble_hci_router_track_outgoing(
-          &router, host_route(owner), packet, length);
+          &router, host_route(owner), packet, length) :
+        ESPBLE_HCI_ROUTER_INVALID_PACKET;
       const espble_hci_command_scheduler_result_t sent =
         tracked == ESPBLE_HCI_ROUTER_OK ?
           espble_hci_command_scheduler_mark_sent(&command_scheduler) :
@@ -109,6 +126,12 @@ static void command_task(void *argument)
         ++diagnostics.command_sent[owner];
       }
       portEXIT_CRITICAL(&broker_lock);
+
+      if (!still_current)
+      {
+        xSemaphoreGive(physical_send_mutex);
+        break;
+      }
 
       if (tracked != ESPBLE_HCI_ROUTER_OK ||
           sent != ESPBLE_HCI_COMMAND_SCHEDULER_OK)
@@ -338,6 +361,7 @@ esp_err_t espble_hci_broker_register(
   memset(&diagnostics, 0, sizeof(diagnostics));
 #if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
   espble_hci_command_scheduler_init(&command_scheduler);
+  ++command_generation;
 #endif
   result = esp_vhci_host_register_callback(&physical_callbacks);
   if (result != ESP_OK)
@@ -352,8 +376,30 @@ esp_err_t espble_hci_broker_register(
 void espble_hci_broker_unregister(espble_hci_host_t host)
 {
   if (!valid_host(host)) return;
+#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
+  portENTER_CRITICAL(&broker_lock);
+  const espble_hci_command_scheduler_result_t removed =
+    espble_hci_command_scheduler_remove_owner(
+      &command_scheduler, (uint8_t)host);
+  if (removed == ESPBLE_HCI_COMMAND_SCHEDULER_BLOCKED)
+    ++diagnostics.command_unregister_busy;
+  ++command_generation;
   hosts[host] = NULL;
-  if (registered_host_count() == 0)
+  const bool no_hosts = registered_host_count() == 0;
+  if (no_hosts)
+  {
+    espble_hci_command_scheduler_init(&command_scheduler);
+    espble_hci_router_init(&router);
+  }
+  portEXIT_CRITICAL(&broker_lock);
+  wake_command_task();
+  if (removed == ESPBLE_HCI_COMMAND_SCHEDULER_BLOCKED)
+    ESP_LOGW(TAG, "unregistered host %d with a command response pending", (int)host);
+#else
+  hosts[host] = NULL;
+  const bool no_hosts = registered_host_count() == 0;
+#endif
+  if (no_hosts)
   {
     esp_vhci_host_register_callback(&dummy_callbacks);
   }

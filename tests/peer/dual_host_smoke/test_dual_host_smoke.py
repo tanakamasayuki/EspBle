@@ -56,7 +56,7 @@ def test_nimble_and_custom_classic_host_run_together(dut, peers):
     for diag in (dut_diag.group(0), peer_diag.group(0)):
         command = re.search(
             rb"cmd=(\d+),(\d+)/(\d+),(\d+) qmax=(\d+) "
-            rb"qfull=(\d+) mismatch=(\d+)",
+            rb"qfull=(\d+) mismatch=(\d+) busy=(\d+)",
             diag,
         )
         assert command is not None
@@ -67,6 +67,14 @@ def test_nimble_and_custom_classic_host_run_together(dut, peers):
         assert int(command.group(5)) >= 1
         assert command.group(6) == b"0"
         assert command.group(7) == b"0"
+        assert command.group(8) == b"0"
 
     dut.write("?")
     dut.expect_exact("DUAL_STATE adv=0 classic=1 ble=1", timeout=10)
+
+    # The shared controller belongs to Classic: stop NimBLE first, then the
+    # Classic host/controller.  No in-flight command may survive unregister.
+    peer.write("e\n")
+    peer.expect_exact("DUAL_PEER_ENDED ble=0 classic=0 busy=0", timeout=20)
+    dut.write("e")
+    dut.expect_exact("DUAL_ENDED ble=0 classic=0 busy=0", timeout=20)

@@ -147,3 +147,36 @@ espble_hci_command_scheduler_result_t espble_hci_command_scheduler_on_event(
   scheduler->in_flight_opcode = 0;
   return ESPBLE_HCI_COMMAND_SCHEDULER_OK;
 }
+
+espble_hci_command_scheduler_result_t espble_hci_command_scheduler_remove_owner(
+  espble_hci_command_scheduler_t *scheduler, uint8_t owner)
+{
+  if (scheduler == NULL) {
+    return ESPBLE_HCI_COMMAND_SCHEDULER_INVALID_PACKET;
+  }
+
+  size_t offset = 0;
+  while (offset < scheduler->count) {
+    const size_t index = (scheduler->head + offset) %
+      ESPBLE_HCI_COMMAND_SCHEDULER_CAPACITY;
+    if (scheduler->entries[index].owner != owner) {
+      ++offset;
+      continue;
+    }
+
+    for (size_t following = offset; following + 1 < scheduler->count;
+         ++following) {
+      const size_t destination = (scheduler->head + following) %
+        ESPBLE_HCI_COMMAND_SCHEDULER_CAPACITY;
+      const size_t source = (destination + 1) %
+        ESPBLE_HCI_COMMAND_SCHEDULER_CAPACITY;
+      scheduler->entries[destination] = scheduler->entries[source];
+    }
+    --scheduler->count;
+  }
+
+  return scheduler->awaiting_response &&
+      scheduler->in_flight_owner == owner ?
+    ESPBLE_HCI_COMMAND_SCHEDULER_BLOCKED :
+    ESPBLE_HCI_COMMAND_SCHEDULER_OK;
+}

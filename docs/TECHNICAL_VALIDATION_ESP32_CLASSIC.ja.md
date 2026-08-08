@@ -78,6 +78,10 @@ command scheduler導入後の完全再ビルド試験では、DUTがNimBLE / Cla
 Peerが16 / 41件送信した。全件でFIFO投入数と物理送信数が一致し、最大queue深度は3 / 1、
 queue overflowと応答opcode不一致は両側0だった。同じ試験中のACLは両側とも
 LE tx/rx/completed=36/36/36、Classic tx/rx/completed=25/25/25で、unknown handleは0だった。
+負荷後は両側ともNimBLE hostを先に、Classic host/controllerを後に停止でき、両hostの
+`initialized()`がfalse、host解除時のin-flight commandは0だった。queueはhost解除時にowner単位で
+破棄し、専用送信taskはsession世代とFIFO先頭を物理送信直前に再照合するため、前sessionからcopyした
+commandを再登録後のcontrollerへ送らない。逆順停止の拒否と再登録反復は未検証である。
 
 ## dual-hostでbrokerが持つべき責務
 

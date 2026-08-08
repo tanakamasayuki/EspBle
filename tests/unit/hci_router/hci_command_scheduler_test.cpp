@@ -110,6 +110,30 @@ int main()
     &scheduler, 2, nimbleFeatures, sizeof(nimbleFeatures)) ==
       ESPBLE_HCI_COMMAND_SCHEDULER_QUEUE_FULL);
 
+  check("remove one owner's queued commands",
+    espble_hci_command_scheduler_remove_owner(&scheduler, 1) ==
+      ESPBLE_HCI_COMMAND_SCHEDULER_OK && scheduler.count == 0);
+  check("enqueue retained owner", espble_hci_command_scheduler_enqueue(
+    &scheduler, 2, nimbleFeatures, sizeof(nimbleFeatures)) ==
+      ESPBLE_HCI_COMMAND_SCHEDULER_OK);
+  check("enqueue removed owner", espble_hci_command_scheduler_enqueue(
+    &scheduler, 1, classicReset, sizeof(classicReset)) ==
+      ESPBLE_HCI_COMMAND_SCHEDULER_OK);
+  check("remove preserves other owner",
+    espble_hci_command_scheduler_remove_owner(&scheduler, 1) ==
+      ESPBLE_HCI_COMMAND_SCHEDULER_OK && scheduler.count == 1);
+  check("preserved owner stays at head", espble_hci_command_scheduler_peek(
+    &scheduler, &owner, &packet, &length) == ESPBLE_HCI_COMMAND_SCHEDULER_OK &&
+    owner == 2);
+  check("send before busy removal", espble_hci_command_scheduler_mark_sent(
+    &scheduler) == ESPBLE_HCI_COMMAND_SCHEDULER_OK);
+  check("in-flight owner cannot be fully removed",
+    espble_hci_command_scheduler_remove_owner(&scheduler, 2) ==
+      ESPBLE_HCI_COMMAND_SCHEDULER_BLOCKED);
+  check("finish retained owner", espble_hci_command_scheduler_on_event(
+    &scheduler, wrongComplete, sizeof(wrongComplete)) ==
+      ESPBLE_HCI_COMMAND_SCHEDULER_OK);
+
   const uint8_t malformed[] = {0x01, 0x03, 0x0c, 0x01};
   espble_hci_command_scheduler_t empty;
   espble_hci_command_scheduler_init(&empty);
