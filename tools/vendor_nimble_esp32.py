@@ -57,10 +57,12 @@ INCLUDE_PREFIX = "nimble_esp32/include/"
 GUARD_OPEN = (
     "/* Vendored by tools/vendor_nimble_esp32.py -- do not edit. */\n"
     "#include <sdkconfig.h>\n"
-    "#if defined(CONFIG_IDF_TARGET_ESP32) && !defined(CONFIG_NIMBLE_ENABLED)\n"
+    "#if defined(CONFIG_IDF_TARGET_ESP32) && !defined(CONFIG_NIMBLE_ENABLED) && \\\n"
+    "    !defined(ESPBLE_CLASSIC_ONLY)\n"
     '#include "' + INCLUDE_PREFIX + 'espble_nimble_config.h"\n'
 )
-GUARD_CLOSE = "\n#endif /* CONFIG_IDF_TARGET_ESP32 && !CONFIG_NIMBLE_ENABLED */\n"
+GUARD_CLOSE = ("\n#endif /* CONFIG_IDF_TARGET_ESP32 && !CONFIG_NIMBLE_ENABLED && "
+               "!ESPBLE_CLASSIC_ONLY */\n")
 
 # --- file lists (transcribed from the esp-idf CMakeLists) ---------------------
 

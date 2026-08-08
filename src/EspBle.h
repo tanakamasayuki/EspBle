@@ -19,18 +19,8 @@
 #endif
 
 #include "EspBleKeymap.h"
+#include "EspBleTypes.h"
 #include "espble_version.h"
-
-enum class EspBleError : uint8_t
-{
-  None = 0,
-  InvalidState,
-  InvalidArgument,
-  BackendFailure,
-  ResourceExhausted,
-  NotFound,
-  Timeout,
-};
 
 enum class EspBleSecurityIoCapability : uint8_t
 {

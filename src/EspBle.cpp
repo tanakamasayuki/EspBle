@@ -1,3 +1,7 @@
+#include <sdkconfig.h>
+
+#if !defined(ESPBLE_CLASSIC_ONLY)
+
 #include "EspBle.h"
 
 #include <soc/soc_caps.h>
@@ -11240,3 +11244,5 @@ void EspBle::setError(EspBleError error, const char *detail)
   lastError_ = error;
   lastErrorDetail_ = detail == nullptr ? "" : detail;
 }
+
+#endif // !ESPBLE_CLASSIC_ONLY

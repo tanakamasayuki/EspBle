@@ -7,7 +7,8 @@ EspBle is a general-purpose Bluetooth Low Energy library for ESP32 Arduino.
 component directly.** It does not go through Arduino-ESP32's `BLEDevice`,
 `BLEClient`, or `BLEServer` wrappers. Central and peripheral roles, GATT client
 and server operations, security, HID, and BLE MIDI share one `EspBle`
-foundation. Bluetooth Classic is not supported.
+foundation. On the original ESP32, experimental Bluetooth Classic support is
+available as a boot-time alternative to BLE.
 
 > [!IMPORTANT]
 > EspBle uses the NimBLE backend built into Arduino-ESP32. Native-controller
@@ -82,8 +83,10 @@ Its configuration is frozen to the values the other targets use, and overriding
 any of it is rejected.
 
 Support for the classic ESP32 is not on par with the other chips: EspBle carries
-the maintenance of the bundled host itself, and that host **cannot coexist with
-Bluetooth Classic** (SPP and friends). The classic ESP32
+the maintenance of the bundled hosts itself. Experimental Classic SPP uses a
+separately built Bluedroid host with Classic HID Device/Host enabled; it is
+currently selected at build time and **cannot run simultaneously with NimBLE**.
+See the [Classic implementation plan](docs/PLAN_ESP32_CLASSIC.ja.md). The classic ESP32
 also has a BLE 4.2 controller, so **LE 2M and LE Coded PHY are unavailable**,
 extended and periodic advertising are unavailable, and the connection limit is 3.
 Only what the on-hardware peer tests cover is considered supported (GATT

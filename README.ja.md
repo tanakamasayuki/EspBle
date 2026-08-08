@@ -6,7 +6,8 @@ ESP32 Arduino向けの汎用Bluetooth Low Energyライブラリです。**Arduin
 CoreへESP-IDF componentとして組み込まれているNimBLE Host APIを直接呼び出します。**
 Arduino-ESP32同梱の`BLEDevice` / `BLEClient` / `BLEServer`などのラッパを経由せず、
 Central / Peripheral、GATT Client / Server、Security、HID、BLE MIDIを1つの
-`EspBle`基盤上で扱います。Bluetooth Classicには対応しません。
+`EspBle`基盤上で扱います。無印ESP32では、BLEと起動時排他の実験的なBluetooth
+Classic対応も利用できます。
 
 > [!IMPORTANT]
 > EspBleはArduino-ESP32 Core内のNimBLE backendを使用します。内蔵BLE Controller構成の
@@ -70,7 +71,10 @@ EspBleがNimBLE Host（`src/nimble_esp32/`、esp-idfがpinするesp-nimbleと同
 を同梱して動かします。設定値は他ターゲットと同一に固定し、利用者の上書きは拒否します。
 
 無印ESP32の対応は他のチップと同格ではありません。EspBleがhostを同梱するため
-そのhostの保守をライブラリ側で負い、**Bluetooth Classic（SPP等）とは同居できません**。
+そのhostの保守をライブラリ側で負います。実験的Classic SPPは、Classic HID
+Device/Hostを有効にして独自ビルドした別のBluedroid hostを使います。現段階では
+build時に選択するため、**NimBLEとは同時実行できません**。詳細は
+[Classic実装計画](docs/PLAN_ESP32_CLASSIC.ja.md)にあります。
 加えて無印ESP32はBLE 4.2 controllerのため**LE 2M / Coded PHYが使えず**、
 Extended / Periodic Advertisingも使えません。同時接続数の上限は3です。
 実機Peerテストで確認できた範囲

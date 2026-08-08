@@ -5,9 +5,9 @@
 ## スコープ
 
 1. Arduino向け単一ライブラリ`EspBle`として提供する。Arduino-ESP32に同梱されたNimBLEを使い、外部NimBLE-Arduinoを必須依存にしない。
-2. Bluetooth Classicは扱わない。LE Audio、Mesh、Matter provisioning、OTA/DFU方式の統一、ESP-IDF native APIも対象外。
+2. 無印ESP32に限りBluetooth Classicを段階的に扱う。最初はBLE / Classicの起動時排他、次に独自ビルドしたClassic-only Bluedroid hostでSPPとHID、最後にHCI brokerを拡張してNimBLEと同時利用する。LE Audio、Mesh、Matter provisioning、OTA/DFU方式の統一、ESP-IDF native APIは対象外。
 3. 対象可否はBLE内蔵SoCかどうかではなく、**Arduino-ESP32がNimBLEを提供する構成か**で判断する。ESP32-P4 + ESP32-C6などのHosted BLEも候補に含め、専用build/実機試験後に対応済みとする。
-4. Bluedroidが既定のSoC（無印ESP32など）でも、**NimBLE hostをライブラリ内へ同梱して対応する**（実装は[PLAN_ESP32.ja.md](PLAN_ESP32.ja.md)、未着手）。ただし**推奨は兄弟ライブラリ`EspBleBluedroid`**で、EspBle側は「NimBLEでも動かせる特殊対応」と位置づける——coreのプリビルドはBluedroidなのでhostの保守を自前で負う、Bluetooth Classicと同居できない、という2点が本質的な不利。無印ESP32はBLE 4.2 controllerのため、LE 2M / Coded PHYは使えず、タイミング依存の挙動が他ターゲットと一致する保証もない。**Peerテストで確認できたsuiteだけを対応済みとする。** 公開API差の正本は`EspBleBluedroid`側の`BLE_BACKEND_DIFFERENCES.ja.md`に置く。backend非依存の高レベルロジック（`EspBleKeymap.h`、`EspBleHidReportMap.h`、イベント値型、KeyBridge境界）は両ライブラリで共有する。
+4. Bluedroidが既定の無印ESP32では、**NimBLE hostとClassic-only Bluedroid hostをライブラリ内へ同梱する**。Classic hostはcoreと同じIDF revisionからcontroller無効・BLE無効・SPP/HID有効で再現可能にbuildし、全defined symbolを名前空間化する。現在は排他、将来はHCI broker経由の同時利用を目標にする（[BLE計画](PLAN_ESP32.ja.md)、[Classic計画](PLAN_ESP32_CLASSIC.ja.md)）。無印ESP32はBLE 4.2 controllerのため、LE 2M / Coded PHYは使えず、タイミング依存の挙動が他ターゲットと一致する保証もない。**Peerテストで確認できたsuiteだけを対応済みとする。** backend非依存の高レベルロジック（`EspBleKeymap.h`、`EspBleHidReportMap.h`、イベント値型、KeyBridge境界）は共有する。
 5. 公開APIはSemantic Versioningに従う。1.0.0より前の0.x系は試行段階で互換性を保証しない。
 6. Central / PeripheralとGATT Client / Serverを同じスタック所有者で扱い、APIを単一接続前提に固定しない。標準Profileと独自Serviceは同じGATT Serverへ合成できる。
 
