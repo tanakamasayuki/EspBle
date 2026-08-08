@@ -22,6 +22,7 @@
 #if CONFIG_BT_CONTROLLER_ENABLED
 #include "esp_bt.h"
 #endif
+#include "EspBleHciBroker.h"
 #include "freertos/semphr.h"
 #include "esp_compiler.h"
 #include "soc/soc_caps.h"
@@ -94,7 +95,7 @@ void esp_vhci_host_send_packet_wrapper(uint8_t *data, uint16_t len)
 #if CONFIG_BLE_LOG_HOST_SIDE_HCI_LOG_ENABLED
     ble_log_write_hci(BLE_LOG_HCI_DOWNSTREAM, data, len);
 #endif /* CONFIG_BLE_LOG_HOST_SIDE_HCI_LOG_ENABLED */
-    esp_vhci_host_send_packet(data, len);
+    espble_hci_broker_send(ESPBLE_HCI_HOST_NIMBLE, data, len);
 }
 
 int ble_hci_trans_hs_cmd_tx(uint8_t *cmd)
@@ -105,7 +106,7 @@ int ble_hci_trans_hs_cmd_tx(uint8_t *cmd)
     assert(cmd != NULL);
     *cmd = BLE_HCI_UART_H4_CMD;
     len = BLE_HCI_CMD_HDR_LEN + cmd[3] + 1;
-    if (!esp_vhci_host_check_send_available()) {
+    if (!espble_hci_broker_can_send(ESPBLE_HCI_HOST_NIMBLE)) {
         ESP_LOGD(TAG, "Controller not ready to receive packets");
     }
 
@@ -144,7 +145,7 @@ int ble_hci_trans_hs_acl_tx(struct os_mbuf *om)
     data[0] = BLE_HCI_UART_H4_ACL;
     len++;
 
-    if (!esp_vhci_host_check_send_available()) {
+    if (!espble_hci_broker_can_send(ESPBLE_HCI_HOST_NIMBLE)) {
         ESP_LOGD(TAG, "Controller not ready to receive packets");
     }
 
@@ -237,11 +238,6 @@ static void controller_rcv_pkt_ready(void)
     }
 }
 
-static void dummy_controller_rcv_pkt_ready(void)
-{
-  /* Dummy function */
-}
-
 void bt_record_hci_data(uint8_t *data, uint16_t len)
 {
 #if (BT_HCI_LOG_INCLUDED == TRUE)
@@ -263,12 +259,6 @@ void bt_record_hci_data(uint8_t *data, uint16_t len)
 #endif
     }
 #endif // (BT_HCI_LOG_INCLUDED == TRUE)
-}
-
-static int dummy_host_rcv_pkt(uint8_t *data, uint16_t len)
-{
-    /* Dummy function */
-    return 0;
 }
 
 /*
@@ -340,14 +330,9 @@ static int host_rcv_pkt(uint8_t *data, uint16_t len)
     return 0;
 }
 
-static const esp_vhci_host_callback_t vhci_host_cb = {
-    .notify_host_send_available = controller_rcv_pkt_ready,
-    .notify_host_recv = host_rcv_pkt,
-};
-
-static const esp_vhci_host_callback_t dummy_vhci_host_cb = {
-    .notify_host_send_available = dummy_controller_rcv_pkt_ready,
-    .notify_host_recv = dummy_host_rcv_pkt,
+static const espble_hci_host_callbacks_t vhci_host_cb = {
+    .notify_send_available = controller_rcv_pkt_ready,
+    .notify_receive = host_rcv_pkt,
 };
 
 
@@ -362,7 +347,7 @@ esp_err_t esp_nimble_hci_init(void)
     if (ret != ESP_OK) {
         goto err;
     }
-    if ((ret = esp_vhci_host_register_callback(&vhci_host_cb)) != ESP_OK) {
+    if ((ret = espble_hci_broker_register(ESPBLE_HCI_HOST_NIMBLE, &vhci_host_cb)) != ESP_OK) {
         goto err;
     }
 
@@ -399,7 +384,7 @@ esp_err_t esp_nimble_hci_deinit(void)
     }
     ble_transport_deinit();
 
-    esp_vhci_host_register_callback(&dummy_vhci_host_cb);
+    espble_hci_broker_unregister(ESPBLE_HCI_HOST_NIMBLE);
 
     ble_buf_free();
 

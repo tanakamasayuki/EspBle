@@ -216,6 +216,77 @@ PATCHES = [
         "    ret = esp_bt_controller_init(&config_opts);\n",
         "the prebuilt controller is configured for dual mode, but the host runs BLE only",
     ),
+    (
+        "esp-idf/esp_nimble_hci.c",
+        '#include "esp_bt.h"\n#endif\n',
+        '#include "esp_bt.h"\n#endif\n#include "EspBleHciBroker.h"\n',
+        "route the vendored NimBLE host through EspBle's injectable HCI broker",
+    ),
+    (
+        "esp-idf/esp_nimble_hci.c",
+        "    esp_vhci_host_send_packet(data, len);\n",
+        "    espble_hci_broker_send(ESPBLE_HCI_HOST_NIMBLE, data, len);\n",
+        "route NimBLE HCI transmission through the broker",
+    ),
+    (
+        "esp-idf/esp_nimble_hci.c",
+        "esp_vhci_host_check_send_available()",
+        "espble_hci_broker_can_send(ESPBLE_HCI_HOST_NIMBLE)",
+        "route the first NimBLE VHCI availability check through the broker",
+    ),
+    (
+        "esp-idf/esp_nimble_hci.c",
+        "esp_vhci_host_check_send_available()",
+        "espble_hci_broker_can_send(ESPBLE_HCI_HOST_NIMBLE)",
+        "route the second NimBLE VHCI availability check through the broker",
+    ),
+    (
+        "esp-idf/esp_nimble_hci.c",
+        "static void dummy_controller_rcv_pkt_ready(void)\n"
+        "{\n"
+        "  /* Dummy function */\n"
+        "}\n\n",
+        "",
+        "let the broker own the physical VHCI dummy callback",
+    ),
+    (
+        "esp-idf/esp_nimble_hci.c",
+        "static int dummy_host_rcv_pkt(uint8_t *data, uint16_t len)\n"
+        "{\n"
+        "    /* Dummy function */\n"
+        "    return 0;\n"
+        "}\n\n",
+        "",
+        "let the broker own the physical VHCI dummy receiver",
+    ),
+    (
+        "esp-idf/esp_nimble_hci.c",
+        "static const esp_vhci_host_callback_t vhci_host_cb = {\n"
+        "    .notify_host_send_available = controller_rcv_pkt_ready,\n"
+        "    .notify_host_recv = host_rcv_pkt,\n"
+        "};\n\n"
+        "static const esp_vhci_host_callback_t dummy_vhci_host_cb = {\n"
+        "    .notify_host_send_available = dummy_controller_rcv_pkt_ready,\n"
+        "    .notify_host_recv = dummy_host_rcv_pkt,\n"
+        "};\n",
+        "static const espble_hci_host_callbacks_t vhci_host_cb = {\n"
+        "    .notify_send_available = controller_rcv_pkt_ready,\n"
+        "    .notify_receive = host_rcv_pkt,\n"
+        "};\n",
+        "register NimBLE as a logical broker host instead of a physical VHCI host",
+    ),
+    (
+        "esp-idf/esp_nimble_hci.c",
+        "esp_vhci_host_register_callback(&vhci_host_cb)",
+        "espble_hci_broker_register(ESPBLE_HCI_HOST_NIMBLE, &vhci_host_cb)",
+        "attach the NimBLE callback to the broker",
+    ),
+    (
+        "esp-idf/esp_nimble_hci.c",
+        "    esp_vhci_host_register_callback(&dummy_vhci_host_cb);\n",
+        "    espble_hci_broker_unregister(ESPBLE_HCI_HOST_NIMBLE);\n",
+        "detach NimBLE from the broker during shutdown",
+    ),
 ]
 
 # esp-idf files, relative to the repository root of esp-idf.
