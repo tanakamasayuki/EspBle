@@ -72,6 +72,26 @@ int main()
   const uint8_t reset[] = {0x01, 0x03, 0x0c, 0x00};
   check("recognize HCI Reset",
     espble_hci_controller_policy_is_reset(reset, sizeof(reset)));
+  check("virtualize reset while dual host active",
+    espble_hci_controller_policy_virtual_action(reset, sizeof(reset)) ==
+      ESPBLE_HCI_CONTROLLER_POLICY_VIRTUAL_COMPLETE);
+  const uint8_t flowControl[] = {0x01, 0x31, 0x0c, 0x01, 0x01};
+  const uint8_t hostBufferSize[] = {
+    0x01, 0x33, 0x0c, 0x07, 0xff, 0x03, 0xff, 0x10, 0x00, 0x0a, 0x00};
+  const uint8_t completedPackets[] = {
+    0x01, 0x35, 0x0c, 0x05, 0x01, 0x80, 0x00, 0x01, 0x00};
+  check("virtualize flow control setting",
+    espble_hci_controller_policy_virtual_action(
+      flowControl, sizeof(flowControl)) ==
+        ESPBLE_HCI_CONTROLLER_POLICY_VIRTUAL_COMPLETE);
+  check("virtualize host buffer size",
+    espble_hci_controller_policy_virtual_action(
+      hostBufferSize, sizeof(hostBufferSize)) ==
+        ESPBLE_HCI_CONTROLLER_POLICY_VIRTUAL_COMPLETE);
+  check("consume host completed packets without response",
+    espble_hci_controller_policy_virtual_action(
+      completedPackets, sizeof(completedPackets)) ==
+        ESPBLE_HCI_CONTROLLER_POLICY_VIRTUAL_NO_RESPONSE);
   check("other command passthrough", espble_hci_controller_policy_rewrite_command(
     &policy, 0, reset, sizeof(reset), output, sizeof(output)) ==
       ESPBLE_HCI_CONTROLLER_POLICY_PASSTHROUGH);
@@ -80,6 +100,16 @@ int main()
   check("reject malformed HCI Reset classification",
     !espble_hci_controller_policy_is_reset(
       malformedReset, sizeof(malformedReset)));
+  check("reject malformed virtual command",
+    espble_hci_controller_policy_virtual_action(
+      malformedReset, sizeof(malformedReset)) ==
+        ESPBLE_HCI_CONTROLLER_POLICY_VIRTUAL_INVALID_PACKET);
+  const uint8_t overflowingCompletedPackets[] = {
+    0x01, 0x35, 0x0c, 0x01, 0x40};
+  check("reject completed-packet count whose encoded length overflows",
+    espble_hci_controller_policy_virtual_action(
+      overflowingCompletedPackets, sizeof(overflowingCompletedPackets)) ==
+        ESPBLE_HCI_CONTROLLER_POLICY_VIRTUAL_INVALID_PACKET);
   check("malformed mask rejected", espble_hci_controller_policy_rewrite_command(
     &policy, 0, malformedMask, sizeof(malformedMask), output, sizeof(output)) ==
       ESPBLE_HCI_CONTROLLER_POLICY_INVALID_PACKET);

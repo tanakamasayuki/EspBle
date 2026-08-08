@@ -74,6 +74,9 @@ broker taskから成功Command CompleteをClassicだけへ返す。
 | NimBLE＋独自Classic host同時利用 | 1 passed（Classic HID双方向→LE接続・GATT readのsmoke） |
 | dual-host ACL反復負荷 | 1 passed（GATT read 25回後もClassic HID双方向、両側LE ACL tx/rx/completed=36/36/36） |
 | dual-host command scheduler負荷 | 1 passed（両hostから送信、投入＝物理送信、最大queue深度3、overflow / opcode不一致0） |
+| dual-host command inventory / flow-control仮想化 | 1 passed（NimBLE 19種、Classic 32〜34種、再attach時Reset 1件＋flow設定2件を仮想完了） |
+| dual-host security / bonding | 1 passed（Classic HID接続中にpairing・bond保存、BLE bond再接続、暗号化必須GATT read、両側`encrypted=1 bonded=1`） |
+| dual-host LE / BR-EDR連続切断 | 1 passed（両handleの切断を正しいhostへ配送後、正常停止・再起動・両destructor順成功） |
 | dual-host正常停止 | 1 passed（両側ともNimBLE→Classic、解除時in-flight command 0） |
 | dual-host再登録 | 1 passed（同一instance・GATT/HID定義でClassic→NimBLE再起動→正常停止を20サイクル） |
 | dual-host event mask union | 1 passed（両側ともmask command 4、host要求からのunion書換え1） |
@@ -90,10 +93,10 @@ Arduino coreの設定はSPP有効・Classic HID無効であり、core `libbt.a`�
 
 ## 次の実装
 
-1. dual-hostでcommand同時発行、同時切断、実機queue overflowを反復する。
+1. dual-hostのcommand同時発行と実機queue overflowを長時間反復する。
 2. controller / hostの任意順停止・再登録を20サイクルより長いsoakで反復し、heapも記録する。
-3. event mask / HCI Reset以外のcontroller-wide設定を列挙し、host別virtualizationが必要なcommandを分類する。
-4. HID接続失敗、異常長Report、security / bondingを両transport同時状態で試験する。
+3. 取得済みcommand inventoryを基に、未処理のcontroller-wide設定と接続単位commandを仕様表へ分類する。
+4. HID接続失敗と異常長Reportを両transport同時状態で試験する。
 
 ## 将来の配布形式統一
 
@@ -137,3 +140,13 @@ Classic→NimBLE再起動を両側で実機確認したため、明示`end()`と
 NimBLE hostがOFFの初期化・停止境界ではreceive gateを閉じ、遅延eventを配送しない。
 NimBLE停止開始はapp taskから直接`ble_hs_stop()`を呼ばず、NimBLE自身のevent taskへ投入する。
 これによりtimer eventのdequeueとcallout停止時のqueue removeが別coreで競合する窓をなくす。
+
+実機command inventoryではNimBLEが19 opcode、Classicが32〜34 opcodeを使用した。Classic再attachで
+再発行されるHCI Reset、Set Controller To Host Flow Control、Host Buffer SizeはbrokerがClassic向けに
+仮想完了し、物理flow controlを無効化したdual-host構成のHost Number Of Completed Packetsは消費する。
+これにより再attach時のCommand Disallowedを除き、25回のLE GATT read後もcommand queue overflowと
+opcode不一致は0だった。
+
+Classic HID接続中のBLE pairing、bond保存、BLEだけの切断・再接続、暗号化必須GATT readも両側で成功した。
+この過程で見つかったvendored NimBLEの「SM procedureなしEncryption Changeをcallbackしない」問題は、
+鍵ストアからbond属性を復元してGAPへ通知する生成patchとして`tools/vendor_nimble_esp32.py`へ記録した。

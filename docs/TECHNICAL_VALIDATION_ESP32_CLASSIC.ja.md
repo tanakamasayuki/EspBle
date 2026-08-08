@@ -1,6 +1,6 @@
 # 無印ESP32 NimBLE / Classic共存 技術検証
 
-検証日: 2026-08-08
+検証日: 2026-08-09
 
 ## 結論
 
@@ -13,8 +13,10 @@ command応答、connection handle、ACL credit、controller初期化をbrokerが
 single-host pass-throughを基準にした後、opt-inの
 `ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL`としてH4 routerまで実装した。Classic HIDの双方向通信を
 維持したままLE接続、GATT read反復、負荷後のClassic HID双方向通信が成立している。command schedulerは
-broker所有FIFOとcontroller credit管理、最後のhostがcontrollerを停止するlifecycle、event maskのunionまで実装した。ただしevent mask以外のcontroller-wide commandの統合、
-security負荷試験は未完了なので、通常buildは引き続き二つ目のhost登録を`ESP_ERR_NOT_SUPPORTED`とする。
+broker所有FIFOとcontroller credit管理、最後のhostがcontrollerを停止するlifecycle、event maskのunion、
+Classic再attach時のflow-control command仮想化まで実装した。Classic HID接続中のBLE pairing、bond保存、
+bond再接続、暗号化必須GATT readも成立した。ただし未分類のcontroller-wide commandと長時間負荷は残るため、
+通常buildは引き続き二つ目のhost登録を`ESP_ERR_NOT_SUPPORTED`とする。
 
 ## 実機・ビルド検証結果
 
@@ -28,6 +30,9 @@ security負荷試験は未完了なので、通常buildは引き続き二つ目�
 | ESP32 / ESP32-S3 compile smoke | 成功 | target guardが両構成で成立 |
 | 独自Classic HID + NimBLE GATT同時Peer | 1 passed | 同じBTDM controllerでBR/EDR ACLとLE ACL、単発GATT readが共存 |
 | dual-host ACL反復 | 1 passed | GATT read 25回後もClassic HID双方向が継続。両側LE ACL tx/rx/completed=36/36/36、unknown handle 0 |
+| dual-host security / bond再接続 | 1 passed / 66.93秒 | Classic HID接続中に両側pairing・bond保存、再接続後の暗号化必須read、`encrypted=1 bonded=1 key=16`を確認 |
+| dual-host controller command inventory | 1 passed | NimBLE 19種、Classic 32〜34種を実機記録。再attach時Reset / flow-control設定を仮想化し、overflow・opcode不一致0 |
+| dual-host同時切断 | 1 passed / 106.05秒（clean） | LE / BR-EDR Disconnectを連続発行し、両handleの完了を正しいhostへ配送後、停止・再起動・destructor成功 |
 | HCI router unit | 1 passed | opcode応答、handle所有、ACL、切断、mixed completed eventの分割 |
 | ESP-IDF Classic-only host spike | build/link成功 | controllerなし、BLEなし、SPPありのBluedroid hostを外部HCIへattach可能 |
 | EspBle unit test | 7 passed / 1.92秒 | 既存host非依存ロジックの回帰なし |
@@ -108,6 +113,30 @@ Classic-only BluedroidのGeneral要求と通常のNimBLE要求から、従来har
 `ff ff ff ff ff ff bf 3d`が生成される。実機では両側ともmask command 4件、union書換え1件を記録し、
 Classic HID、LE GATT 25回、停止・再起動まで成立した。
 
+## 実機command inventoryの分類
+
+両側brokerはlogical hostごとに初出opcodeを64件まで記録する。pairing、bond再接続、GATT read、
+Classic HID接続、Classic再attachまでの通常試験で、NimBLEは各側19種、Classicは32〜34種だった。
+ESP-IDF / esp-nimbleのHCI定義と照合した分類は次の通り。ここで「専有」は該当radioまたは
+connectionのownerだけが発行するため物理送信できるもの、「共有read」は状態を変えないためschedulerで
+直列化すればよいものを表す。
+
+| 分類 | opcode（command） | 現在の扱い / 次の条件 |
+|---|---|---|
+| 共有read | `1001` Local Version、`1002` Supported Commands、`1003` Local Features、`1004` Extended Features、`1005` Buffer Size、`1009` BD_ADDR | 物理送信し、opcode transaction ownerへ応答 |
+| broker統合mask | `0c01` Event Mask、`0c63` Event Mask Page 2、`2001` LE Event Mask | host別cacheのORを物理送信 |
+| 再attach仮想完了 | `0c03` Reset、`0c31` Controller→Host Flow Control、`0c33` Host Buffer Size | dual-host時は物理状態を変えず要求hostだけへ成功応答 |
+| broker消費 | `0c35` Host Number Of Completed Packets | 現在のflow-control無効構成では応答せず消費 |
+| NimBLE専有・LE controller設定 | `2002` LE Buffer Size、`2003` LE Features、`2006` Advertising Parameters、`2008` Advertising Data、`2009` Scan Response、`200a` Advertising Enable、`200b` Scan Parameters、`200c` Scan Enable、`2018` LE Rand | Classic hostは発行しない。scheduler経由で物理送信 |
+| NimBLE専有・LE procedure / handle | `200d` LE Create Connection、`2016` LE Remote Features、`2019` LE Start Encryption、`201a` LTK Reply、`2022` Set Data Length、`2030` Read PHY、`0406` Disconnect、`041d` Remote Version | 接続前procedureはNimBLE専有、接続後はLE handle所有を検証して物理送信 |
+| Classic専有・local BR/EDR設定 | `0c13` Local Name、`0c14` Read Local Name、`0c18` Page Timeout、`0c1a` Scan Enable、`0c1e` Authentication Enable、`0c24` Class of Device、`0c3a` Current IAC LAP、`0c43` Inquiry Scan Type、`0c45` Inquiry Mode、`0c47` Page Scan Type、`0c52` Extended Inquiry Response、`0c56` Simple Pairing Mode、`080f` Default Link Policy | LE状態を変更しないClassic専有設定として物理送信 |
+| Classic専有・address / handle procedure | `0405` Create Connection、`0409` Accept Connection、`040b` Link Key Reply、`040f` PIN Reply、`0411` Authentication Requested、`0413` Set Connection Encryption、`0419` Remote Name、`041b` Remote Features、`041c` Remote Extended Features、`041d` Remote Version、`041f` IO Capability Reply、`0803` Sniff Mode、`080d` Link Policy、`0c37` Link Supervision Timeout | BD_ADDR段階はClassic専有、接続後はBR/EDR handle所有を検証して物理送信 |
+
+現時点で追加virtualizationが必要と判明したのはbootstrapの3 commandとhost flow-control creditである。
+未観測commandを無条件に安全とは扱わない。今後profileを増やしてinventoryに新opcodeが現れた場合は、
+この表へ分類してからdual-host対応済みにする。特にHardware Error、controller test mode、vendor command、
+共有data path設定はhost専有にできないため、明示policyなしでは拒否する設計が必要になる。
+
 ## controller継続中のClassic再attach
 
 Classic先行`end()`後もNimBLEが登録中なら、BTDM controllerはbroker所有のまま動作している。
@@ -120,6 +149,30 @@ brokerのcommand taskがResetを物理送信せず、Classicへ成功Command Com
 両側でClassicを停止し、既存LE接続のGATT read成功後にClassicを再attachした。各brokerはvirtual Reset
 を1件記録し、再attach後も同じLE接続でGATT readが成功した。その後Classic HIDを再接続し、
 Input / Output Reportの双方向通信も成功した。この経路を含む20回のcontroller停止・再起動も成功した。
+
+再attachするBluedroidはResetに続いて`Set Controller To Host Flow Control`（`0x0c31`）と
+`Host Buffer Size`（`0x0c33`）も再発行する。既存NimBLE linkのcontroller状態を変えないよう、dual-host時は
+これらをClassicだけへ非同期Command Completeとして返す。`Host Number Of Completed Packets`
+（`0x0c35`）も、物理flow controlを無効化した構成ではcontrollerへ送らず消費する。実機では両側の
+Classic再attachが`resets=1 flow=2`で成功し、従来発生した`0x0c31 Command Disallowed`は消えた。
+
+## security / bondingとNimBLE host修正
+
+両ESP32でClassic HID ACLを接続したままNimBLE同士をpairingし、bond数1を確認してからBLEだけを切断した。
+再広告・scan・接続後、両側のEncryption Change（event `0x08`、status 0、enabled 1）、
+`encrypted=1 bonded=1 key_size=16`、暗号化必須characteristicのread成功を確認した。
+
+この試験で、中央側のbond再接続だけNimBLE内部状態とGAP callbackが更新されない問題を検出した。
+controller eventはbrokerから正しくNimBLEへ届いていたが、`ble_sm_process_result()`が対応するSM procedureなしで
+早期終了し、`ble_sm_enc_event_rx()`が要求した暗号化callbackを捨てていた。Apache NimBLEとEspressif
+esp-nimbleの現行masterにも同じ制御構造がある。同梱生成patchでは、procedureなしのEncryption Changeも
+applicationへ通知し、成功した暗号化が既存bondに対応する場合はpeer security storeからauthenticated、
+bonded、key sizeを復元する。変更は`tools/vendor_nimble_esp32.py`に固定し、二回の再生成で同一生成物になることを
+確認した。この修正後に短縮clean試験（102.88秒）と通常25 read試験（66.93秒）がともに成功した。
+
+bond再接続とClassic再attach後、中央側からLEとBR/EDRのDisconnectを連続発行する試験も追加した。
+controllerからの完了順に依存せず、NimBLE client/serverとClassic HID Host/Deviceの4切断callbackが
+すべて対応する側へ届き、直後の両host停止（in-flight command 0）、3回再起動、両destructor順も成功した。
 
 ## dual-hostでbrokerが持つべき責務
 

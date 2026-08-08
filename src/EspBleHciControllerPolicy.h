@@ -19,6 +19,14 @@ typedef enum
   ESPBLE_HCI_CONTROLLER_POLICY_INVALID_PACKET,
 } espble_hci_controller_policy_result_t;
 
+typedef enum
+{
+  ESPBLE_HCI_CONTROLLER_POLICY_PHYSICAL = 0,
+  ESPBLE_HCI_CONTROLLER_POLICY_VIRTUAL_COMPLETE,
+  ESPBLE_HCI_CONTROLLER_POLICY_VIRTUAL_NO_RESPONSE,
+  ESPBLE_HCI_CONTROLLER_POLICY_VIRTUAL_INVALID_PACKET,
+} espble_hci_controller_policy_virtual_action_t;
+
 typedef struct
 {
   uint8_t masks[ESPBLE_HCI_CONTROLLER_POLICY_MASK_COUNT]
@@ -32,6 +40,9 @@ void espble_hci_controller_policy_init(
 void espble_hci_controller_policy_remove_host(
   espble_hci_controller_policy_t *policy, uint8_t host);
 bool espble_hci_controller_policy_is_reset(
+  const uint8_t *packet, size_t length);
+espble_hci_controller_policy_virtual_action_t
+espble_hci_controller_policy_virtual_action(
   const uint8_t *packet, size_t length);
 
 // Caches each host's Set Event Mask request and writes the union required by

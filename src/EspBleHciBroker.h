@@ -25,6 +25,8 @@ typedef struct
 
 typedef bool (*espble_hci_controller_stop_callback_t)(void);
 
+#define ESPBLE_HCI_DIAGNOSTIC_OPCODE_CAPACITY 64
+
 typedef struct
 {
   uint32_t tx_acl[ESPBLE_HCI_HOST_COUNT];
@@ -45,6 +47,16 @@ typedef struct
   uint32_t event_mask_commands;
   uint32_t event_mask_unions;
   uint32_t virtual_resets;
+  uint32_t virtual_flow_control_commands;
+  uint32_t virtual_completed_packets;
+  uint32_t security_events[ESPBLE_HCI_HOST_COUNT];
+  uint8_t last_security_event[ESPBLE_HCI_HOST_COUNT];
+  uint8_t last_security_status[ESPBLE_HCI_HOST_COUNT];
+  uint8_t last_encryption_enabled[ESPBLE_HCI_HOST_COUNT];
+  uint16_t command_opcodes[ESPBLE_HCI_HOST_COUNT]
+    [ESPBLE_HCI_DIAGNOSTIC_OPCODE_CAPACITY];
+  uint8_t command_opcode_count[ESPBLE_HCI_HOST_COUNT];
+  uint32_t command_opcode_overflow[ESPBLE_HCI_HOST_COUNT];
 } espble_hci_broker_diagnostics_t;
 
 // Register a logical host with the broker. Production builds remain single-host.

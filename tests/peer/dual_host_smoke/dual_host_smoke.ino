@@ -48,6 +48,7 @@ bool startDualStacks()
   {
     EspBleGattCharacteristicConfig characteristicConfig;
     characteristicConfig.readable = true;
+    characteristicConfig.encryptedRead = true;
     service = ble.gattServer().addService(ServiceUuid);
     characteristic = ble.gattServer().addCharacteristic(
       service, CharacteristicUuid, characteristicConfig);
@@ -55,6 +56,9 @@ bool startDualStacks()
   ble.gattServer().setValue(characteristic, String("dual-ready"));
   EspBleConfig bleConfig;
   bleConfig.deviceName = "EspBle Dual Host";
+  bleConfig.security.enabled = true;
+  bleConfig.security.bonding = true;
+  bleConfig.security.pairOnConnect = true;
   if (!service.valid() || !characteristic.valid() || !ble.begin(bleConfig))
     return false;
   if (!advertisingConfigured)
@@ -100,6 +104,9 @@ void setup()
   classic.hidDevice().onConnected([](const EspBleClassicHidConnection &) {
     Serial.println("DUAL_CLASSIC_CONNECTED");
   });
+  classic.hidDevice().onDisconnected([](const EspBleClassicHidConnection &) {
+    Serial.println("DUAL_CLASSIC_DISCONNECTED");
+  });
   classic.hidDevice().onOutputReport([](const EspBleClassicHidReport &report) {
     Serial.printf("DUAL_CLASSIC_OUTPUT id=%u hex=", report.reportId);
     printHex(report.value);
@@ -111,6 +118,14 @@ void setup()
   });
   ble.onDisconnected([](const EspBleConnection &) {
     bleConnected = false;
+    Serial.println("DUAL_BLE_SERVER_DISCONNECTED");
+  });
+  ble.onSecurityChanged([](const EspBleSecurityChanged &event) {
+    Serial.printf(
+      "DUAL_BLE_SERVER_SECURITY success=%u encrypted=%u bonded=%u key=%u classic=%u\n",
+      event.success ? 1 : 0, event.connection.encrypted ? 1 : 0,
+      event.connection.bonded ? 1 : 0, event.connection.encryptionKeySize,
+      classic.hidDevice().connected() ? 1 : 0);
   });
 
   if (!startDualStacks())
@@ -119,6 +134,7 @@ void setup()
       classic.lastErrorDetail().c_str(), ble.lastErrorDetail().c_str());
     return;
   }
+  (void)ble.deleteAllBonds();
 
   uint8_t address[6] = {};
   esp_read_mac(address, ESP_MAC_BT);
@@ -142,6 +158,12 @@ void loop()
   {
     const char command = Serial.read();
     if (command == 'i') inputSent = false;
+    else if (command == 'a')
+      Serial.printf("DUAL_BLE_ADVERTISING %u\n",
+        ble.advertising().start() ? 1 : 0);
+    else if (command == 'n')
+      Serial.printf("DUAL_BLE_BONDS %u\n",
+        static_cast<unsigned>(ble.bondCount()));
     else if (command == '?')
       Serial.printf("DUAL_STATE adv=%u classic=%u ble=%u\n",
         ble.advertising().isAdvertising() ? 1 : 0,
@@ -167,6 +189,21 @@ void loop()
         value.command_queue_high_water, value.command_queue_full,
         value.command_response_mismatch, value.command_unregister_busy,
         value.event_mask_commands, value.event_mask_unions);
+    }
+    else if (command == 'v')
+    {
+      espble_hci_broker_diagnostics_t value = {};
+      espble_hci_broker_get_diagnostics(&value);
+      for (size_t host = 0; host < ESPBLE_HCI_HOST_COUNT; ++host)
+      {
+        Serial.printf("DUAL_OPCODES host=%u count=%u overflow=%lu values=",
+          static_cast<unsigned>(host), value.command_opcode_count[host],
+          value.command_opcode_overflow[host]);
+        for (size_t i = 0; i < value.command_opcode_count[host]; ++i)
+          Serial.printf("%s%04x", i == 0 ? "" : ",",
+            value.command_opcodes[host][i]);
+        Serial.println();
+      }
     }
     else if (command == 'e')
     {
@@ -208,8 +245,10 @@ void loop()
       const bool started = startClassicStack();
       espble_hci_broker_diagnostics_t value = {};
       espble_hci_broker_get_diagnostics(&value);
-      Serial.printf("DUAL_CLASSIC_REATTACH started=%u resets=%lu error=%s\n",
-        started ? 1 : 0, value.virtual_resets, classic.lastErrorDetail().c_str());
+      Serial.printf(
+        "DUAL_CLASSIC_REATTACH started=%u resets=%lu flow=%lu error=%s\n",
+        started ? 1 : 0, value.virtual_resets,
+        value.virtual_flow_control_commands, classic.lastErrorDetail().c_str());
     }
   }
   delay(1);

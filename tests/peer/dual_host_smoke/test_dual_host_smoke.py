@@ -23,15 +23,28 @@ def test_nimble_and_custom_classic_host_run_together(dut, peers):
     peer.expect_exact("DUAL_PEER_OUTPUT 1", timeout=10)
     dut.expect(re.compile(rb"DUAL_CLASSIC_OUTPUT id=2 hex=(a500ff|02a500ff)"), timeout=20)
 
-    peer.write(b"b" + ready.group(2) + b"\n")
+    peer.write("g\n")
+    peer.expect_exact("DUAL_BLE_SCAN 1", timeout=10)
     peer.expect_exact("DUAL_BLE_CONNECT 1", timeout=20)
+    peer.expect_exact("DUAL_BLE_CLIENT_CONNECTED", timeout=20)
+    dut.expect_exact("DUAL_BLE_SERVER_CONNECTED", timeout=20)
     peer.expect_exact("DUAL_BLE_READ_REQUESTED 1", timeout=20)
+    peer.expect_exact(
+        "DUAL_BLE_CLIENT_SECURITY success=1 encrypted=1 bonded=1 key=16 classic=1",
+        timeout=30,
+    )
+    dut.expect_exact(
+        "DUAL_BLE_SERVER_SECURITY success=1 encrypted=1 bonded=1 key=16 classic=1",
+        timeout=30,
+    )
     peer.expect_exact("DUAL_BLE_READ success=1 value=dual-ready classic=1", timeout=20)
 
     # Cross the controller's former 20-packet host-buffer limit by a wide
     # margin.  One initial read plus these repeats generates over 50 LE ACL
     # packets across the two directions.
-    for _ in range(24):
+    gatt_read_repeats = int(os.getenv("ESPBLE_DUAL_GATT_READ_REPEATS", "24"))
+    assert 0 <= gatt_read_repeats <= 1000
+    for _ in range(gatt_read_repeats):
         peer.write("r\n")
         peer.expect_exact("DUAL_BLE_READ_REQUESTED 1", timeout=10)
         peer.expect_exact(
@@ -47,6 +60,44 @@ def test_nimble_and_custom_classic_host_run_together(dut, peers):
     peer.expect(re.compile(rb"DUAL_PEER_INPUT hex=(01)?007f80[0-9a-f]{2}"), timeout=10)
     peer.expect_exact("DUAL_PEER_OUTPUT 1", timeout=10)
     dut.expect(re.compile(rb"DUAL_CLASSIC_OUTPUT id=2 hex=(a500ff|02a500ff)"), timeout=10)
+
+    dut.write("n")
+    peer.write("n\n")
+    dut.expect_exact("DUAL_BLE_BONDS 1", timeout=10)
+    peer.expect_exact("DUAL_BLE_BONDS 1", timeout=10)
+
+    # Reconnect LE from its bond while the Classic HID ACL link remains live.
+    peer.write("k\n")
+    peer.expect_exact("DUAL_BLE_DISCONNECT 1", timeout=10)
+    peer.expect_exact("DUAL_BLE_CLIENT_DISCONNECTED", timeout=20)
+    dut.expect_exact("DUAL_BLE_SERVER_DISCONNECTED", timeout=20)
+    dut.write("a")
+    dut.expect_exact("DUAL_BLE_ADVERTISING 1", timeout=10)
+    peer.write("g\n")
+    peer.expect_exact("DUAL_BLE_SCAN 1", timeout=10)
+    peer.expect_exact("DUAL_BLE_CONNECT 1", timeout=20)
+    peer.expect_exact("DUAL_BLE_CLIENT_CONNECTED", timeout=20)
+    dut.expect_exact("DUAL_BLE_SERVER_CONNECTED", timeout=20)
+    peer.expect_exact("DUAL_BLE_READ_REQUESTED 1", timeout=20)
+    dut.expect_exact(
+        "DUAL_BLE_SERVER_SECURITY success=1 encrypted=1 bonded=1 key=16 classic=1",
+        timeout=30,
+    )
+    peer.expect_exact(
+        "DUAL_BLE_CLIENT_SECURITY success=1 encrypted=1 bonded=1 key=16 classic=1",
+        timeout=30,
+    )
+    peer.expect_exact(
+        "DUAL_BLE_READ success=1 value=dual-ready classic=1", timeout=20
+    )
+    peer.write("u\n")
+    link = peer.expect(re.compile(rb"DUAL_BLE_LINK .*"), timeout=10)
+    print(link.group(0).decode())
+    assert re.fullmatch(
+        rb"DUAL_BLE_LINK found=1 encrypted=1 bonded=1 "
+        rb"security_events=2 event=08 status=0 enabled=1",
+        link.group(0),
+    )
 
     dut.write("d")
     peer.write("d\n")
@@ -74,6 +125,25 @@ def test_nimble_and_custom_classic_host_run_together(dut, peers):
         assert int(masks.group(1)) >= 3
         assert int(masks.group(2)) >= 1
 
+    dut.write("v")
+    peer.write("v\n")
+    opcode_lines = []
+    for prefix, device in ((rb"DUAL_OPCODES", dut), (rb"DUAL_PEER_OPCODES", peer)):
+        for host in range(2):
+            match = device.expect(
+                re.compile(
+                    prefix
+                    + rb" host="
+                    + str(host).encode()
+                    + rb" count=(\d+) overflow=(\d+) values=([0-9a-f,]*)"
+                ),
+                timeout=10,
+            )
+            assert int(match.group(1)) > 0
+            assert match.group(2) == b"0"
+            opcode_lines.append(match.group(0).decode())
+    print("\n".join(opcode_lines))
+
     dut.write("?")
     dut.expect_exact("DUAL_STATE adv=0 classic=1 ble=1", timeout=10)
 
@@ -97,10 +167,12 @@ def test_nimble_and_custom_classic_host_run_together(dut, peers):
     # controller state.
     peer.write("y\n")
     peer.expect_exact(
-        "DUAL_PEER_CLASSIC_REATTACH started=1 resets=1", timeout=30
+        "DUAL_PEER_CLASSIC_REATTACH started=1 resets=1 flow=2", timeout=30
     )
     dut.write("y")
-    dut.expect_exact("DUAL_CLASSIC_REATTACH started=1 resets=1", timeout=30)
+    dut.expect_exact(
+        "DUAL_CLASSIC_REATTACH started=1 resets=1 flow=2", timeout=30
+    )
 
     peer.write("r\n")
     peer.expect_exact("DUAL_BLE_READ_REQUESTED 1", timeout=10)
@@ -117,6 +189,39 @@ def test_nimble_and_custom_classic_host_run_together(dut, peers):
     peer.expect(re.compile(rb"DUAL_PEER_INPUT hex=(01)?007f80[0-9a-f]{2}"), timeout=20)
     peer.expect_exact("DUAL_PEER_OUTPUT 1", timeout=10)
     dut.expect(re.compile(rb"DUAL_CLASSIC_OUTPUT id=2 hex=(a500ff|02a500ff)"), timeout=20)
+
+    # Issue LE and BR/EDR Disconnect commands back-to-back from different
+    # logical hosts.  Both handle-owned completions must survive either order.
+    peer.write("q\n")
+    peer.expect_exact(
+        "DUAL_PEER_DUAL_DISCONNECT ble=1 classic=1", timeout=10
+    )
+    peer_disconnects = {
+        peer.expect(
+            re.compile(
+                rb"DUAL_(?:BLE_CLIENT_DISCONNECTED|PEER_DISCONNECTED)"
+            ),
+            timeout=20,
+        ).group(0)
+        for _ in range(2)
+    }
+    dut_disconnects = {
+        dut.expect(
+            re.compile(
+                rb"DUAL_(?:BLE_SERVER_DISCONNECTED|CLASSIC_DISCONNECTED)"
+            ),
+            timeout=20,
+        ).group(0)
+        for _ in range(2)
+    }
+    assert peer_disconnects == {
+        b"DUAL_BLE_CLIENT_DISCONNECTED",
+        b"DUAL_PEER_DISCONNECTED",
+    }
+    assert dut_disconnects == {
+        b"DUAL_BLE_SERVER_DISCONNECTED",
+        b"DUAL_CLASSIC_DISCONNECTED",
+    }
 
     # Stop both rejoined hosts. The final unregister must trigger the broker's
     # adopted controller-stop callback, with no command surviving the session.

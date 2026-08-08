@@ -27,6 +27,9 @@ bool startDualStacks()
   if (!startClassicStack()) return false;
   EspBleConfig bleConfig;
   bleConfig.deviceName = "EspBle Dual Peer";
+  bleConfig.security.enabled = true;
+  bleConfig.security.bonding = true;
+  bleConfig.security.pairOnConnect = true;
   return ble.begin(bleConfig);
 }
 
@@ -63,6 +66,9 @@ void setup()
   classic.hidHost().onConnected([](const EspBleClassicHidConnection &) {
     Serial.println("DUAL_PEER_CONNECTED");
   });
+  classic.hidHost().onDisconnected([](const EspBleClassicHidConnection &) {
+    Serial.println("DUAL_PEER_DISCONNECTED");
+  });
   classic.hidHost().onInputReport([](const EspBleClassicHidReport &report) {
     Serial.printf("DUAL_PEER_INPUT hex=");
     printHex(report.value);
@@ -85,17 +91,29 @@ void setup()
   });
   ble.onConnected([](const EspBleConnection &connection) {
     bleConnectionId = connection.id;
+    Serial.println("DUAL_BLE_CLIENT_CONNECTED");
     Serial.printf("DUAL_BLE_READ_REQUESTED %u\n",
-      ble.readCharacteristic(connection.id, ServiceUuid, CharacteristicUuid) ? 1 : 0);
+      ble.readCharacteristic(
+        connection.id, ServiceUuid, CharacteristicUuid) ? 1 : 0);
+  });
+  ble.onSecurityChanged([](const EspBleSecurityChanged &event) {
+    Serial.printf(
+      "DUAL_BLE_CLIENT_SECURITY success=%u encrypted=%u bonded=%u key=%u classic=%u\n",
+      event.success ? 1 : 0, event.connection.encrypted ? 1 : 0,
+      event.connection.bonded ? 1 : 0, event.connection.encryptionKeySize,
+      classic.hidHost().connected() ? 1 : 0);
   });
   ble.onDisconnected([](const EspBleConnection &) {
     bleConnectionId = 0;
+    bleConnectionRequested = false;
+    Serial.println("DUAL_BLE_CLIENT_DISCONNECTED");
   });
   ble.onCharacteristicRead([](const EspBleGattResult &result) {
     Serial.printf("DUAL_BLE_READ success=%u value=%s classic=%u\n",
       result.success ? 1 : 0, result.value.c_str(),
       classic.hidHost().connected() ? 1 : 0);
   });
+  (void)ble.deleteAllBonds();
   Serial.println("DUAL_PEER_READY");
 }
 
@@ -121,6 +139,42 @@ void loop()
         bleConnectionId != 0 &&
         ble.readCharacteristic(bleConnectionId, ServiceUuid, CharacteristicUuid)
           ? 1 : 0);
+    else if (command == "g")
+    {
+      EspBleScanConfig scanConfig;
+      scanConfig.active = true;
+      Serial.printf("DUAL_BLE_SCAN %u\n",
+        ble.scanner().start(scanConfig) ? 1 : 0);
+    }
+    else if (command == "k")
+      Serial.printf("DUAL_BLE_DISCONNECT %u\n",
+        bleConnectionId != 0 && ble.disconnect(bleConnectionId) ? 1 : 0);
+    else if (command == "q")
+    {
+      const bool bleRequested = bleConnectionId != 0 &&
+        ble.disconnect(bleConnectionId);
+      const bool classicRequested = classic.hidHost().disconnect();
+      Serial.printf("DUAL_PEER_DUAL_DISCONNECT ble=%u classic=%u\n",
+        bleRequested ? 1 : 0, classicRequested ? 1 : 0);
+    }
+    else if (command == "n")
+      Serial.printf("DUAL_BLE_BONDS %u\n",
+        static_cast<unsigned>(ble.bondCount()));
+    else if (command == "u")
+    {
+      EspBleConnection connection;
+      const bool found = bleConnectionId != 0 &&
+        ble.connection(bleConnectionId, connection);
+      espble_hci_broker_diagnostics_t value = {};
+      espble_hci_broker_get_diagnostics(&value);
+      Serial.printf(
+        "DUAL_BLE_LINK found=%u encrypted=%u bonded=%u security_events=%lu "
+        "event=%02x status=%u enabled=%u\n",
+        found ? 1 : 0, found && connection.encrypted ? 1 : 0,
+        found && connection.bonded ? 1 : 0, value.security_events[0],
+        value.last_security_event[0], value.last_security_status[0],
+        value.last_encryption_enabled[0]);
+    }
     else if (command == "o")
     {
       const uint8_t output[] = {0x02, 0xa5, 0x00, 0xff};
@@ -147,6 +201,21 @@ void loop()
         value.command_queue_high_water, value.command_queue_full,
         value.command_response_mismatch, value.command_unregister_busy,
         value.event_mask_commands, value.event_mask_unions);
+    }
+    else if (command == "v")
+    {
+      espble_hci_broker_diagnostics_t value = {};
+      espble_hci_broker_get_diagnostics(&value);
+      for (size_t host = 0; host < ESPBLE_HCI_HOST_COUNT; ++host)
+      {
+        Serial.printf("DUAL_PEER_OPCODES host=%u count=%u overflow=%lu values=",
+          static_cast<unsigned>(host), value.command_opcode_count[host],
+          value.command_opcode_overflow[host]);
+        for (size_t i = 0; i < value.command_opcode_count[host]; ++i)
+          Serial.printf("%s%04x", i == 0 ? "" : ",",
+            value.command_opcodes[host][i]);
+        Serial.println();
+      }
     }
     else if (command == "e")
     {
@@ -190,8 +259,9 @@ void loop()
       espble_hci_broker_diagnostics_t value = {};
       espble_hci_broker_get_diagnostics(&value);
       Serial.printf(
-        "DUAL_PEER_CLASSIC_REATTACH started=%u resets=%lu error=%s\n",
-        started ? 1 : 0, value.virtual_resets, classic.lastErrorDetail().c_str());
+        "DUAL_PEER_CLASSIC_REATTACH started=%u resets=%lu flow=%lu error=%s\n",
+        started ? 1 : 0, value.virtual_resets,
+        value.virtual_flow_control_commands, classic.lastErrorDetail().c_str());
     }
   }
   delay(1);

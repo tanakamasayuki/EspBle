@@ -80,6 +80,19 @@ int main()
     ESPBLE_HCI_ROUTE_NIMBLE, classicAcl, sizeof(classicAcl)) ==
       ESPBLE_HCI_ROUTER_UNKNOWN_HANDLE);
 
+  const uint8_t encryptionChange[] = {
+    0x04, 0x08, 0x04, 0x00, 0x40, 0x00, 0x01};
+  const uint8_t encryptionKeyRefresh[] = {
+    0x04, 0x30, 0x03, 0x00, 0x40, 0x00};
+  check("encryption change follows handle owner",
+    espble_hci_router_route_incoming(
+      &router, encryptionChange, sizeof(encryptionChange)) ==
+        ESPBLE_HCI_ROUTE_NIMBLE);
+  check("encryption key refresh follows handle owner",
+    espble_hci_router_route_incoming(
+      &router, encryptionKeyRefresh, sizeof(encryptionKeyRefresh)) ==
+        ESPBLE_HCI_ROUTE_NIMBLE);
+
   // One controller event reports credits for both transports.  Each logical
   // host must see only its own record and a corrected parameter length/count.
   const uint8_t completed[] = {

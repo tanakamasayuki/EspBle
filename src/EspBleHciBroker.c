@@ -30,7 +30,8 @@ static SemaphoreHandle_t physical_send_mutex;
 static TaskHandle_t command_task_handle;
 static uint32_t command_generation;
 static espble_hci_controller_stop_callback_t controller_stop_callback;
-static uint8_t virtual_reset_pending;
+static uint8_t virtual_command_pending;
+static uint16_t virtual_command_opcode[ESPBLE_HCI_HOST_COUNT];
 #endif
 
 static espble_hci_route_t host_route(size_t host)
@@ -48,6 +49,27 @@ static bool valid_host(espble_hci_host_t host)
 {
   return host >= ESPBLE_HCI_HOST_NIMBLE && host < ESPBLE_HCI_HOST_COUNT;
 }
+
+#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
+static void record_command_opcode(
+  espble_hci_host_t host, const uint8_t *data, uint16_t length)
+{
+  if (length < 4 || data[0] != 0x01) return;
+  const uint16_t opcode = (uint16_t)data[1] | ((uint16_t)data[2] << 8);
+  for (size_t i = 0; i < diagnostics.command_opcode_count[host]; ++i)
+  {
+    if (diagnostics.command_opcodes[host][i] == opcode) return;
+  }
+  if (diagnostics.command_opcode_count[host] >=
+      ESPBLE_HCI_DIAGNOSTIC_OPCODE_CAPACITY)
+  {
+    ++diagnostics.command_opcode_overflow[host];
+    return;
+  }
+  diagnostics.command_opcodes[host]
+    [diagnostics.command_opcode_count[host]++] = opcode;
+}
+#endif
 
 static bool receive_enabled_on_register(espble_hci_host_t host)
 {
@@ -85,8 +107,7 @@ static void command_task(void *argument)
 {
   (void)argument;
   uint8_t packet[ESPBLE_HCI_COMMAND_MAX_LENGTH];
-  static const uint8_t reset_complete[] = {
-    0x04, 0x0e, 0x04, 0x01, 0x03, 0x0c, 0x00};
+  uint8_t virtual_complete[] = {0x04, 0x0e, 0x04, 0x01, 0x00, 0x00, 0x00};
 
   for (;;)
   {
@@ -98,9 +119,12 @@ static void command_task(void *argument)
       for (size_t i = 0; i < ESPBLE_HCI_HOST_COUNT; ++i)
       {
         const uint8_t bit = (uint8_t)(1u << i);
-        if ((virtual_reset_pending & bit) == 0 || hosts[i] == NULL ||
+        if ((virtual_command_pending & bit) == 0 || hosts[i] == NULL ||
             !host_receive_enabled[i]) continue;
-        virtual_reset_pending &= (uint8_t)~bit;
+        virtual_command_pending &= (uint8_t)~bit;
+        virtual_complete[4] = virtual_command_opcode[i] & 0xff;
+        virtual_complete[5] = virtual_command_opcode[i] >> 8;
+        virtual_command_opcode[i] = 0;
         virtual_callbacks = hosts[i];
         break;
       }
@@ -108,7 +132,7 @@ static void command_task(void *argument)
       if (virtual_callbacks != NULL)
       {
         virtual_callbacks->notify_receive(
-          (uint8_t *)reset_complete, sizeof(reset_complete));
+          virtual_complete, sizeof(virtual_complete));
         continue;
       }
 
@@ -244,6 +268,13 @@ static int physical_receive(uint8_t *data, uint16_t length)
     else if (data[1] == 0x3e && length >= 5)
       ESP_LOGE(TAG, "TRACE RX LE meta subevent=0x%02x status=0x%02x",
         data[3], data[4]);
+    else if ((data[1] == 0x08 && length >= 7) ||
+             (data[1] == 0x30 && length >= 6))
+      ESP_LOGE(TAG,
+        "TRACE RX security event=0x%02x status=0x%02x handle=%u enabled=%u",
+        data[1], data[3], (unsigned)((uint16_t)data[4] |
+          ((uint16_t)data[5] << 8)),
+        data[1] == 0x08 ? data[6] : 0xff);
   }
 #endif
 #if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
@@ -257,6 +288,20 @@ static int physical_receive(uint8_t *data, uint16_t length)
     portENTER_CRITICAL(&broker_lock);
     const espble_hci_route_t route =
       espble_hci_router_route_incoming(&router, data, length);
+    if (length >= 2 && data[0] == 0x04 &&
+        ((data[1] == 0x08 && length >= 7) ||
+         (data[1] == 0x30 && length >= 6)))
+    {
+      for (size_t i = 0; i < ESPBLE_HCI_HOST_COUNT; ++i)
+      {
+        if ((route & host_route(i)) == 0) continue;
+        ++diagnostics.security_events[i];
+        diagnostics.last_security_event[i] = data[1];
+        diagnostics.last_security_status[i] = data[3];
+        diagnostics.last_encryption_enabled[i] =
+          data[1] == 0x08 ? data[6] : 0xff;
+      }
+    }
     const espble_hci_command_scheduler_result_t command_event =
       espble_hci_command_scheduler_on_event(&command_scheduler, data, length);
     if (command_event == ESPBLE_HCI_COMMAND_SCHEDULER_RESPONSE_MISMATCH)
@@ -403,7 +448,8 @@ esp_err_t espble_hci_broker_register(
 #if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
   espble_hci_command_scheduler_init(&command_scheduler);
   espble_hci_controller_policy_init(&controller_policy);
-  virtual_reset_pending = 0;
+  virtual_command_pending = 0;
+  memset(virtual_command_opcode, 0, sizeof(virtual_command_opcode));
   ++command_generation;
 #endif
   result = esp_vhci_host_register_callback(&physical_callbacks);
@@ -438,13 +484,15 @@ void espble_hci_broker_unregister(espble_hci_host_t host)
     espble_hci_router_init(&router);
     stop_callback = controller_stop_callback;
     controller_stop_callback = NULL;
-    virtual_reset_pending = 0;
+    virtual_command_pending = 0;
+    memset(virtual_command_opcode, 0, sizeof(virtual_command_opcode));
   }
   else
   {
     espble_hci_controller_policy_remove_host(
       &controller_policy, (uint8_t)host);
-    virtual_reset_pending &= (uint8_t)~(1u << host);
+    virtual_command_pending &= (uint8_t)~(1u << host);
+    virtual_command_opcode[host] = 0;
   }
   portEXIT_CRITICAL(&broker_lock);
   wake_command_task();
@@ -550,22 +598,45 @@ esp_err_t espble_hci_broker_send(
       (int)host, data[2], data[1]);
 #endif
 #if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
-  if (dual_host_active() &&
-      espble_hci_controller_policy_is_reset(data, length))
+  portENTER_CRITICAL(&broker_lock);
+  record_command_opcode(host, data, length);
+  portEXIT_CRITICAL(&broker_lock);
+  if (dual_host_active() && data[0] == 0x01)
   {
-    portENTER_CRITICAL(&broker_lock);
-    const uint8_t bit = (uint8_t)(1u << host);
-    const bool already_pending = (virtual_reset_pending & bit) != 0;
-    if (!already_pending)
+    const espble_hci_controller_policy_virtual_action_t action =
+      espble_hci_controller_policy_virtual_action(data, length);
+    if (action == ESPBLE_HCI_CONTROLLER_POLICY_VIRTUAL_INVALID_PACKET)
+      return ESP_ERR_INVALID_ARG;
+    if (action == ESPBLE_HCI_CONTROLLER_POLICY_VIRTUAL_NO_RESPONSE)
     {
-      virtual_reset_pending |= bit;
-      ++diagnostics.virtual_resets;
+      portENTER_CRITICAL(&broker_lock);
+      ++diagnostics.virtual_completed_packets;
+      portEXIT_CRITICAL(&broker_lock);
+      return ESP_OK;
     }
-    portEXIT_CRITICAL(&broker_lock);
-    if (already_pending) return ESP_ERR_INVALID_STATE;
-    ESP_LOGW(TAG, "virtualized HCI Reset from host %d", (int)host);
-    wake_command_task();
-    return ESP_OK;
+    if (action == ESPBLE_HCI_CONTROLLER_POLICY_VIRTUAL_COMPLETE)
+    {
+      const uint16_t opcode = (uint16_t)data[1] | ((uint16_t)data[2] << 8);
+      const bool reset = opcode == 0x0c03;
+      const bool flow_control = opcode == 0x0c31 || opcode == 0x0c33;
+      if (!reset && !flow_control) return ESP_ERR_NOT_SUPPORTED;
+      portENTER_CRITICAL(&broker_lock);
+      const uint8_t bit = (uint8_t)(1u << host);
+      const bool already_pending = (virtual_command_pending & bit) != 0;
+      if (!already_pending)
+      {
+        virtual_command_pending |= bit;
+        virtual_command_opcode[host] = opcode;
+        if (reset) ++diagnostics.virtual_resets;
+        else ++diagnostics.virtual_flow_control_commands;
+      }
+      portEXIT_CRITICAL(&broker_lock);
+      if (already_pending) return ESP_ERR_INVALID_STATE;
+      ESP_LOGW(TAG, "virtualized controller-wide opcode 0x%04x from host %d",
+        opcode, (int)host);
+      wake_command_task();
+      return ESP_OK;
+    }
   }
 
   const uint8_t *physical_data = data;

@@ -434,6 +434,76 @@ PATCHES = [
         "do not reset the controller underneath an initialized Classic host",
     ),
     (
+        "nimble/host/src/ble_sm.c",
+        "        ble_hs_unlock();\n\n"
+        "        if (proc == NULL) {\n"
+        "            break;\n"
+        "        }\n",
+        "        ble_hs_unlock();\n\n"
+        "        if (proc == NULL) {\n"
+        "            /* An unsolicited controller encryption event has no SM\n"
+        "             * procedure to retire, but it still changes GAP security\n"
+        "             * state and must be reported to the application. */\n"
+        "            if (res && res->enc_cb) {\n"
+        "                if (res->app_status != BLE_HS_ENOTCONN) {\n"
+        "                    ble_gap_pairing_complete_event(conn_handle, res->sm_err);\n"
+        "                }\n"
+        "                ble_gap_enc_event(conn_handle, res->app_status,\n"
+        "                                  res->restore, res->bonded);\n"
+        "            }\n"
+        "            break;\n"
+        "        }\n",
+        "deliver successful controller encryption changes without an SM procedure",
+    ),
+    (
+        "nimble/host/src/ble_sm.c",
+        "    struct ble_sm_proc *proc;\n"
+        "    int authenticated;\n"
+        "    int bonded;\n"
+        "    int key_size;\n\n"
+        "    memset(&res, 0, sizeof res);\n\n"
+        "    /* Assume no change in authenticated and bonded statuses. */\n"
+        "    authenticated = 0;\n"
+        "    bonded = 0;\n"
+        "    key_size = 0;\n\n"
+        "    ble_hs_lock();\n",
+        "    struct ble_sm_proc *proc;\n"
+        "    struct ble_store_value_sec stored_bond;\n"
+        "    int authenticated;\n"
+        "    int bonded;\n"
+        "    int key_size;\n"
+        "    int stored_bond_valid;\n\n"
+        "    memset(&res, 0, sizeof res);\n\n"
+        "    /* If no local procedure survives until Encryption Change, recover\n"
+        "     * the established security properties from the peer's bond.  The\n"
+        "     * lookup must run without the host mutex held. */\n"
+        "    stored_bond_valid = evt_status == 0 && encrypted &&\n"
+        "        ble_sm_read_bond(conn_handle, &stored_bond) == 0;\n\n"
+        "    /* Assume no change in authenticated and bonded statuses. */\n"
+        "    authenticated = 0;\n"
+        "    bonded = 0;\n"
+        "    key_size = 0;\n\n"
+        "    ble_hs_lock();\n",
+        "prepare stored bond metadata for an unsolicited encryption change",
+    ),
+    (
+        "nimble/host/src/ble_sm.c",
+        "            break;\n"
+        "        }\n"
+        "    }\n\n"
+        "    if (evt_status == 0) {\n",
+        "            break;\n"
+        "        }\n"
+        "    } else if (stored_bond_valid) {\n"
+        "        authenticated = stored_bond.authenticated;\n"
+        "        bonded = 1;\n"
+        "        key_size = stored_bond.key_size;\n"
+        "        res.restore = 1;\n"
+        "    }\n\n"
+        "    if (evt_status == 0) {\n",
+        "restore bond flags when Encryption Change arrives without an SM procedure",
+    ),
+    (
         "esp-idf/esp_nimble_hci.c",
         '#include "esp_bt.h"\n#endif\n',
         '#include "esp_bt.h"\n#endif\n#include "EspBleHciBroker.h"\n',
