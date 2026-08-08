@@ -34,6 +34,11 @@ typedef struct
   uint8_t last_tx_pb[ESPBLE_HCI_HOST_COUNT];
   uint8_t classic_mode;
   uint32_t classic_mode_changes;
+  uint32_t command_enqueued[ESPBLE_HCI_HOST_COUNT];
+  uint32_t command_sent[ESPBLE_HCI_HOST_COUNT];
+  uint32_t command_queue_full;
+  uint32_t command_response_mismatch;
+  uint16_t command_queue_high_water;
 } espble_hci_broker_diagnostics_t;
 
 // Register a logical host with the broker. Production builds remain single-host.

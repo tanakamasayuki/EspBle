@@ -12,8 +12,9 @@ NimBLEとClassic-only BluedroidをHCI brokerへ接続する構成とする。
 command応答、connection handle、ACL credit、controller初期化をbrokerが一元管理する必要がある。
 single-host pass-throughを基準にした後、opt-inの
 `ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL`としてH4 routerまで実装した。Classic HIDの双方向通信を
-維持したままLE接続、GATT read反復、負荷後のClassic HID双方向通信が成立している。ただしcommand scheduler、停止順、security負荷試験は
-未完了なので、通常buildは引き続き二つ目のhost登録を`ESP_ERR_NOT_SUPPORTED`とする。
+維持したままLE接続、GATT read反復、負荷後のClassic HID双方向通信が成立している。command schedulerは
+broker所有FIFOとcontroller credit管理まで実装した。ただし停止順、controller-wide commandの統合、
+security負荷試験は未完了なので、通常buildは引き続き二つ目のhost登録を`ESP_ERR_NOT_SUPPORTED`とする。
 
 ## 実機・ビルド検証結果
 
@@ -62,8 +63,9 @@ EspBleが現在基準にするESP-IDF v5.5.5にも存在するが、今回の完
 ESP32-S3などcore内蔵NimBLEを使うtargetでは既存transportを変更せず、brokerもリンクされない。
 vendored NimBLEの再生成で変更を失わないよう、書き換えは`tools/vendor_nimble_esp32.py`へ記録した。
 
-dual-host parser stateはcritical sectionで保護する。callback登録解除とcallback実行の完全な
-lifecycle同期、broker自身の送信queueは今後の作業である。`can_send()`時点のslot予約は
+dual-host parserとcommand scheduler stateはcritical sectionで保護する。callback登録解除とcallback実行の完全な
+lifecycle同期は今後の作業である。commandは`send()`で16 packetのbroker所有FIFOへcopyし、専用taskが
+controller creditを見て1 transactionずつ送る。`can_send()`時点のslot予約は
 Bluedroidの先読み確認と両立しないことを実機で確認したため、送信queueは`send()`でpacketを
 broker所有メモリへcopyする境界として実装する。FIFOだけでは反復負荷時のClassic ACL停滞を
 解消できなかった。HCI traceとbroker counterにより、Classic Bluedroidが有効化した
@@ -71,6 +73,11 @@ controller→host flow controlに対し、NimBLEへroutingしたLE ACLのhost cr
 共有bufferが枯渇することを特定した。現在のdual-host実験buildは
 `Set Controller To Host Flow Control`を無効へ正規化する。一般対応ではbroker自身が両hostの
 incoming ACL処理完了を数え、`Host Number Of Completed Packets`を一元生成する。
+
+command scheduler導入後の完全再ビルド試験では、DUTがNimBLE / Classic commandを20 / 44件、
+Peerが16 / 41件送信した。全件でFIFO投入数と物理送信数が一致し、最大queue深度は3 / 1、
+queue overflowと応答opcode不一致は両側0だった。同じ試験中のACLは両側とも
+LE tx/rx/completed=36/36/36、Classic tx/rx/completed=25/25/25で、unknown handleは0だった。
 
 ## dual-hostでbrokerが持つべき責務
 

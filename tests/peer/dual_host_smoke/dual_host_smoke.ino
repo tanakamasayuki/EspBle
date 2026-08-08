@@ -116,13 +116,18 @@ void loop()
       espble_hci_broker_get_diagnostics(&value);
       Serial.printf(
         "DUAL_DIAG tx=%lu,%lu rx=%lu,%lu ncp=%lu,%lu unknown=%lu "
-        "txh=%u,%u rxh=%u,%u pb=%u,%u mode=%u modes=%lu\n",
+        "txh=%u,%u rxh=%u,%u pb=%u,%u mode=%u modes=%lu "
+        "cmd=%lu,%lu/%lu,%lu qmax=%u qfull=%lu mismatch=%lu\n",
         value.tx_acl[0], value.tx_acl[1], value.rx_acl[0], value.rx_acl[1],
         value.completed_acl[0], value.completed_acl[1], value.unknown_acl,
         value.last_tx_handle[0], value.last_tx_handle[1],
         value.last_rx_handle[0], value.last_rx_handle[1],
         value.last_tx_pb[0], value.last_tx_pb[1], value.classic_mode,
-        value.classic_mode_changes);
+        value.classic_mode_changes,
+        value.command_enqueued[0], value.command_enqueued[1],
+        value.command_sent[0], value.command_sent[1],
+        value.command_queue_high_water, value.command_queue_full,
+        value.command_response_mismatch);
     }
   }
   delay(1);

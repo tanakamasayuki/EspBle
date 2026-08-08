@@ -4,6 +4,7 @@
   (!defined(ESPBLE_CLASSIC_ONLY) || defined(ESPBLE_CLASSIC_CUSTOM_HOST))
 
 #include "EspBleHciBroker.h"
+#include "EspBleHciCommandScheduler.h"
 #include "EspBleHciRouter.h"
 
 #include <stddef.h>
@@ -11,6 +12,8 @@
 #include <esp_bt.h>
 #include <esp_log.h>
 #include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
+#include <freertos/task.h>
 
 static const char *TAG = "EspBleHciBroker";
 static const espble_hci_host_callbacks_t *hosts[ESPBLE_HCI_HOST_COUNT];
@@ -18,6 +21,11 @@ static espble_hci_router_t router;
 static espble_hci_broker_diagnostics_t diagnostics;
 static portMUX_TYPE broker_lock = portMUX_INITIALIZER_UNLOCKED;
 static uint8_t next_send_host;
+#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
+static espble_hci_command_scheduler_t command_scheduler;
+static SemaphoreHandle_t physical_send_mutex;
+static TaskHandle_t command_task_handle;
+#endif
 
 static espble_hci_route_t host_route(size_t host)
 {
@@ -45,8 +53,108 @@ static size_t registered_host_count(void)
   return count;
 }
 
+#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
+static bool dual_host_active(void)
+{
+  return registered_host_count() > 1;
+}
+
+static void wake_command_task(void)
+{
+  if (command_task_handle != NULL) xTaskNotifyGive(command_task_handle);
+}
+
+static void command_task(void *argument)
+{
+  (void)argument;
+  uint8_t packet[ESPBLE_HCI_COMMAND_MAX_LENGTH];
+
+  for (;;)
+  {
+    (void)ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    for (;;)
+    {
+      uint8_t owner = 0;
+      const uint8_t *queued_packet = NULL;
+      size_t length = 0;
+
+      portENTER_CRITICAL(&broker_lock);
+      const espble_hci_command_scheduler_result_t ready =
+        router.pending_count == 0 ? espble_hci_command_scheduler_peek(
+          &command_scheduler, &owner, &queued_packet, &length) :
+          ESPBLE_HCI_COMMAND_SCHEDULER_BLOCKED;
+      if (ready == ESPBLE_HCI_COMMAND_SCHEDULER_OK)
+        memcpy(packet, queued_packet, length);
+      portEXIT_CRITICAL(&broker_lock);
+      if (ready != ESPBLE_HCI_COMMAND_SCHEDULER_OK) break;
+
+      if (xSemaphoreTake(physical_send_mutex, portMAX_DELAY) != pdTRUE) break;
+      if (!esp_vhci_host_check_send_available())
+      {
+        xSemaphoreGive(physical_send_mutex);
+        break;
+      }
+
+      portENTER_CRITICAL(&broker_lock);
+      const espble_hci_router_result_t tracked =
+        espble_hci_router_track_outgoing(
+          &router, host_route(owner), packet, length);
+      const espble_hci_command_scheduler_result_t sent =
+        tracked == ESPBLE_HCI_ROUTER_OK ?
+          espble_hci_command_scheduler_mark_sent(&command_scheduler) :
+          ESPBLE_HCI_COMMAND_SCHEDULER_BLOCKED;
+      if (tracked == ESPBLE_HCI_ROUTER_OK &&
+          sent == ESPBLE_HCI_COMMAND_SCHEDULER_OK)
+      {
+        ++diagnostics.command_sent[owner];
+      }
+      portEXIT_CRITICAL(&broker_lock);
+
+      if (tracked != ESPBLE_HCI_ROUTER_OK ||
+          sent != ESPBLE_HCI_COMMAND_SCHEDULER_OK)
+      {
+        ESP_LOGE(TAG, "command scheduler/router divergence: %d/%d",
+          (int)sent, (int)tracked);
+        xSemaphoreGive(physical_send_mutex);
+        break;
+      }
+
+#if defined(ESPBLE_HCI_TRACE)
+      ESP_LOGE(TAG, "TRACE TX scheduled host=%u command opcode=0x%02x%02x",
+        (unsigned)owner, packet[2], packet[1]);
+#endif
+      esp_vhci_host_send_packet(packet, (uint16_t)length);
+      xSemaphoreGive(physical_send_mutex);
+      /* A no-response command may leave command credit available, but VHCI
+       * still has only one physical TX slot.  Re-check it before continuing. */
+    }
+  }
+}
+
+static esp_err_t ensure_command_transport(void)
+{
+  if (physical_send_mutex == NULL)
+  {
+    physical_send_mutex = xSemaphoreCreateMutex();
+    if (physical_send_mutex == NULL) return ESP_ERR_NO_MEM;
+  }
+  if (command_task_handle == NULL)
+  {
+    if (xTaskCreate(command_task, "espble_hci_cmd", 3072, NULL,
+          configMAX_PRIORITIES - 2, &command_task_handle) != pdPASS)
+    {
+      return ESP_ERR_NO_MEM;
+    }
+  }
+  return ESP_OK;
+}
+#endif
+
 static void physical_send_available(void)
 {
+#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
+  wake_command_task();
+#endif
   // Rotate the first notification. A busy logical host must not permanently
   // win every newly available physical VHCI slot.
   const uint8_t first = next_send_host;
@@ -89,6 +197,10 @@ static int physical_receive(uint8_t *data, uint16_t length)
     portENTER_CRITICAL(&broker_lock);
     const espble_hci_route_t route =
       espble_hci_router_route_incoming(&router, data, length);
+    const espble_hci_command_scheduler_result_t command_event =
+      espble_hci_command_scheduler_on_event(&command_scheduler, data, length);
+    if (command_event == ESPBLE_HCI_COMMAND_SCHEDULER_RESPONSE_MISMATCH)
+      ++diagnostics.command_response_mismatch;
     if (length >= 5 && data[0] == 0x02)
     {
       bool known = false;
@@ -137,6 +249,9 @@ static int physical_receive(uint8_t *data, uint16_t length)
         result |= callbacks[i]->notify_receive(
           (uint8_t *)delivery[i], (uint16_t)filtered_length[i]);
     }
+    if (length >= 2 && data[0] == 0x04 &&
+        (data[1] == 0x0e || data[1] == 0x0f))
+      wake_command_task();
     return result;
   }
 #endif
@@ -146,7 +261,12 @@ static int physical_receive(uint8_t *data, uint16_t length)
   // legitimately arrive after registration transitions from one host to two.
   portENTER_CRITICAL(&broker_lock);
   (void)espble_hci_router_route_incoming(&router, data, length);
+  (void)espble_hci_command_scheduler_on_event(
+    &command_scheduler, data, length);
   portEXIT_CRITICAL(&broker_lock);
+  if (length >= 2 && data[0] == 0x04 &&
+      (data[1] == 0x0e || data[1] == 0x0f))
+    wake_command_task();
 #endif
   for (size_t i = 0; i < ESPBLE_HCI_HOST_COUNT; ++i)
   {
@@ -200,16 +320,26 @@ esp_err_t espble_hci_broker_register(
 #if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
     hosts[host] = callbacks;
     ESP_LOGW(TAG, "registered second host %d in experimental routed mode", (int)host);
+    wake_command_task();
     return ESP_OK;
 #else
     return ESP_ERR_NOT_SUPPORTED;
 #endif
   }
 
+  esp_err_t result;
+#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
+  result = ensure_command_transport();
+  if (result != ESP_OK) return result;
+#endif
+
   hosts[host] = callbacks;
   espble_hci_router_init(&router);
   memset(&diagnostics, 0, sizeof(diagnostics));
-  esp_err_t result = esp_vhci_host_register_callback(&physical_callbacks);
+#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
+  espble_hci_command_scheduler_init(&command_scheduler);
+#endif
+  result = esp_vhci_host_register_callback(&physical_callbacks);
   if (result != ESP_OK)
   {
     hosts[host] = NULL;
@@ -246,12 +376,69 @@ esp_err_t espble_hci_broker_send(
   {
     return ESP_ERR_INVALID_ARG;
   }
-  if (!esp_vhci_host_check_send_available()) return ESP_ERR_INVALID_STATE;
 #if defined(ESPBLE_HCI_TRACE)
   if (length >= 4 && data[0] == 0x01)
     ESP_LOGE(TAG, "TRACE TX host=%d command opcode=0x%02x%02x",
       (int)host, data[2], data[1]);
 #endif
+#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
+  const uint8_t *physical_data = data;
+  uint8_t flow_control_command[5];
+  // Bluedroid enables controller-to-host ACL flow control before NimBLE
+  // attaches.  It can only return credits for the Classic ACL packets routed
+  // to it, so LE traffic would exhaust the controller's shared host buffers.
+  // Keep physical VHCI flow control disabled until the broker owns credit
+  // accounting for both logical hosts.
+  if (host == ESPBLE_HCI_HOST_CLASSIC && length == sizeof(flow_control_command) &&
+      data[0] == 0x01 && data[1] == 0x31 && data[2] == 0x0c &&
+      data[3] == 0x01 && data[4] != 0x00)
+  {
+    memcpy(flow_control_command, data, sizeof(flow_control_command));
+    flow_control_command[4] = 0x00;
+    physical_data = flow_control_command;
+    ESP_LOGW(TAG, "disabled controller-to-host flow control for dual host");
+  }
+
+  if (dual_host_active() && length >= 1 && data[0] == 0x01)
+  {
+    portENTER_CRITICAL(&broker_lock);
+    const espble_hci_command_scheduler_result_t queued =
+      espble_hci_command_scheduler_enqueue(
+        &command_scheduler, (uint8_t)host, physical_data, length);
+    if (queued == ESPBLE_HCI_COMMAND_SCHEDULER_OK)
+    {
+      ++diagnostics.command_enqueued[host];
+      if (command_scheduler.count > diagnostics.command_queue_high_water)
+        diagnostics.command_queue_high_water = command_scheduler.count;
+    }
+    else if (queued == ESPBLE_HCI_COMMAND_SCHEDULER_QUEUE_FULL)
+    {
+      ++diagnostics.command_queue_full;
+    }
+    portEXIT_CRITICAL(&broker_lock);
+    if (queued != ESPBLE_HCI_COMMAND_SCHEDULER_OK)
+    {
+      ESP_LOGE(TAG, "rejected host %d HCI command: scheduler error %d",
+        (int)host, (int)queued);
+      return queued == ESPBLE_HCI_COMMAND_SCHEDULER_QUEUE_FULL ?
+        ESP_ERR_NO_MEM : ESP_ERR_INVALID_ARG;
+    }
+    wake_command_task();
+    return ESP_OK;
+  }
+#endif
+
+#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
+  if (xSemaphoreTake(physical_send_mutex, portMAX_DELAY) != pdTRUE)
+    return ESP_ERR_INVALID_STATE;
+#endif
+  if (!esp_vhci_host_check_send_available())
+  {
+#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
+    xSemaphoreGive(physical_send_mutex);
+#endif
+    return ESP_ERR_INVALID_STATE;
+  }
 #if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
   if (registered_host_count() > 0)
   {
@@ -270,31 +457,21 @@ esp_err_t espble_hci_broker_send(
             (unsigned)i, (unsigned)router.pending[i].owner,
             (unsigned)router.pending[i].opcode);
       }
+      xSemaphoreGive(physical_send_mutex);
       return tracked == ESPBLE_HCI_ROUTER_QUEUE_FULL ? ESP_ERR_NO_MEM :
         ESP_ERR_INVALID_ARG;
     }
   }
 #endif
-  const uint8_t *physical_data = data;
+  esp_vhci_host_send_packet(
 #if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
-  uint8_t flow_control_command[5];
-  // Bluedroid enables controller-to-host ACL flow control before NimBLE
-  // attaches.  It can only return credits for the Classic ACL packets routed
-  // to it, so LE traffic would exhaust the controller's shared host buffers.
-  // Keep physical VHCI flow control disabled until the broker owns credit
-  // accounting for both logical hosts.
-  if (host == ESPBLE_HCI_HOST_CLASSIC && length == sizeof(flow_control_command) &&
-      data[0] == 0x01 && data[1] == 0x31 && data[2] == 0x0c &&
-      data[3] == 0x01 && data[4] != 0x00)
-  {
-    memcpy(flow_control_command, data, sizeof(flow_control_command));
-    flow_control_command[4] = 0x00;
-    physical_data = flow_control_command;
-    ESP_LOGW(TAG, "disabled controller-to-host flow control for dual host");
-  }
+    (uint8_t *)physical_data,
+#else
+    (uint8_t *)data,
 #endif
-  esp_vhci_host_send_packet((uint8_t *)physical_data, length);
+    length);
 #if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
+  xSemaphoreGive(physical_send_mutex);
   if (length >= 5 && data[0] == 0x02)
   {
     portENTER_CRITICAL(&broker_lock);

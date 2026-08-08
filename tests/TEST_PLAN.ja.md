@@ -240,7 +240,7 @@ profileを置いていないのは次の2種類だけです。
 13. ✅ `hid_security`: security有効HID Deviceが未暗号化linkのRead/Discovery/Inputを拒否。
 14. ✅ `hid_boot_keyboard`: Report IDなしboot keyboardのDiscoveryと入力、長さ異常reportのカウント。
 15. ✅ `advertise_payload`: raw advertisementのAD構造検証（単一Complete List、type重複なし）。
-16. ✅ host unit test（`tests/unit/`）: keymap変換（Unicode 4-plane、AltGr、文字ペアCapsLock）とHID Report Map parser。
+16. ✅ host unit test（`tests/unit/`）: keymap変換（Unicode 4-plane、AltGr、文字ペアCapsLock）、HID Report Map parser、各codec、HCI router、HCI command scheduler。
 17. ✅ `battery_service`: standalone Battery LevelのRead、CCCD購読、Notification、解除。
 18. ✅ `device_information`: standalone DISの文字列Readと7-byte little-endian PnP ID decode。
 19. ✅ `current_time`: standalone Current Timeの10-byte decode、CCCD購読、Notification、解除。

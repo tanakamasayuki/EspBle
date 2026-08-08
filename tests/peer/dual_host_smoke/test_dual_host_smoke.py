@@ -53,6 +53,20 @@ def test_nimble_and_custom_classic_host_run_together(dut, peers):
     peer_diag = peer.expect(re.compile(rb"DUAL_PEER_DIAG .*"), timeout=10)
     print(dut_diag.group(0).decode())
     print(peer_diag.group(0).decode())
+    for diag in (dut_diag.group(0), peer_diag.group(0)):
+        command = re.search(
+            rb"cmd=(\d+),(\d+)/(\d+),(\d+) qmax=(\d+) "
+            rb"qfull=(\d+) mismatch=(\d+)",
+            diag,
+        )
+        assert command is not None
+        assert int(command.group(1)) > 0
+        assert int(command.group(2)) > 0
+        assert command.group(1) == command.group(3)
+        assert command.group(2) == command.group(4)
+        assert int(command.group(5)) >= 1
+        assert command.group(6) == b"0"
+        assert command.group(7) == b"0"
 
     dut.write("?")
     dut.expect_exact("DUAL_STATE adv=0 classic=1 ble=1", timeout=10)

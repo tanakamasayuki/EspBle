@@ -67,10 +67,12 @@ LE Metaを有効化する。
 | 公開HID APIの切断・host全体再初期化・再登録・再接続 | 1 passed（同じPeer test内） |
 | 同一Classic host・同一ACL上のHID＋SPP同時利用 | 1 passed（SPP echo後もHID双方向継続） |
 | HCI router host unit test | 1 passed（command、handle、ACL、切断、mixed completed packet） |
+| HCI command scheduler host unit test | 1 passed（FIFO、credit 0、no-response command、copy所有権、overflow、opcode不一致） |
 | NimBLE＋独自Classic host同時利用 | 1 passed（Classic HID双方向→LE接続・GATT readのsmoke） |
 | dual-host ACL反復負荷 | 1 passed（GATT read 25回後もClassic HID双方向、両側LE ACL tx/rx/completed=36/36/36） |
+| dual-host command scheduler負荷 | 1 passed（両hostから送信、投入＝物理送信、最大queue深度3、overflow / opcode不一致0） |
 | 通常NimBLE BLEのESP32 Peer regression | 2 passed（GATT read/write、反復discovery） |
-| host unit test | 8 passed |
+| host unit test | 9 passed |
 | ESP32-S3 CompileSmoke | 成功、274,253 B。Classic archiveは非リンク |
 
 core内蔵hostを使った先行SPP試験も同じPeer testで成功したが、最終構成には使わない。
@@ -79,24 +81,26 @@ Arduino coreの設定はSPP有効・Classic HID無効であり、core `libbt.a`�
 
 ## 次の実装
 
-1. dual-hostでcommand同時発行、ACL負荷、同時切断、queue overflowを反復する。
+1. dual-hostでcommand同時発行、同時切断、実機queue overflowを反復する。
 2. controller / hostの停止順を共有lifecycleとしてAPI化し、BLE→Classicの順以外を安全に拒否する。
 3. hard-coded union event maskをhost要求maskのbroker側union / cacheへ置き換える。
 4. HID接続失敗、異常長Report、security / bondingを両transport同時状態で試験する。
 
 実験実装はCommand Complete / Statusをopcode所有者へ戻し、connection handleでACLを分離する。
-ただしcontroller command creditをbroker自身のpacket queueで厳密にscheduleする段階には達しておらず、
-現状は各hostのcredit管理と物理VHCI send-availableの公平通知に依存する。
+HCI commandは`send()`時にbroker所有の16 packet FIFOへcopyし、専用taskだけが物理VHCIへ送る。
+Command Complete / Statusの`Num_HCI_Command_Packets`とopcodeを照合し、応答を要するcommandは
+保守的に1件だけin-flightとする。`Host Number Of Completed Packets`は応答なしcommandとして
+creditを消費しない。物理VHCIの`available`確認と送信はmutexでACL送信とも直列化する。
 `can_send()`でlogical hostへslotを予約する試作は、Bluedroidが送信直前以外にも可否を確認するため
 NimBLEを飢餓させ、実機でHCI ACK timeoutになることを確認した。この方式は採用しない。
-次段階では`send()`がpacketをcopyしてhost別FIFOへ受理し、brokerだけが物理VHCIへ送る。
 FIFOだけの試作ではpacketが物理VHCIへ出た後もClassic ACLが停滞した。HCI traceとbroker counterで、
 Classic Bluedroidが有効化したcontroller→host ACL flow controlに対し、NimBLEへroutingしたLE ACLの
 creditが返らず、両側ともLE RX 20 packetで共有bufferが枯渇することを特定した。dual-host実験buildは
 Bluedroidの設定commandをflow control無効へ正規化し、同じ負荷でHID双方向とLE接続の継続を確認した。
 長期的にはbrokerが全incoming ACLを数え、host別配送完了後にcontrollerへcreditを一元返却する。
-現在の実装でも物理VHCIの送信可否を確認してからrouterへcommand所有権を記録するため、送信されなかった
-packetがpending command表へ残る問題は防いでいる。
+command所有権は専用taskが物理slotを確保した直後に記録するため、送信されなかったpacketがpending
+command表へ残る問題を防いでいる。完全再ビルドのdual-host負荷試験では両ESP32ともFIFO投入数と
+物理送信数が一致し、queue overflowとopcode不一致は0だった。
 ACLはconnection handleでroutingできるが、接続確立前event、advertising、inquiry、security、
 controller-wide commandは単純なpacket type分岐では扱えない。排他構成のbrokerをそのまま
 「BLE eventはNimBLE、Classic eventはBluedroid」と拡張してはならない。

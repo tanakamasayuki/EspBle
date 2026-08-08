@@ -88,8 +88,10 @@ generic HID Device/Host use a separately built Bluedroid host. Exclusive
 selection remains the default. `ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL` starts
 Classic first on a BTDM controller and then attaches bundled NimBLE. Classic HID
 traffic together with an LE connection, 25 GATT reads, and bidirectional HID
-traffic afterwards has passed hardware tests, but shared-command scheduling,
-shutdown ordering, long-duration load, and security stress tests remain.
+traffic afterwards has passed hardware tests. Shared-command scheduling now
+uses a broker-owned FIFO and controller command credits; shutdown ordering,
+controller-wide command merging, long-duration load, and security stress tests
+remain.
 See the [Classic implementation plan](docs/PLAN_ESP32_CLASSIC.ja.md). The classic ESP32
 also has a BLE 4.2 controller, so **LE 2M and LE Coded PHY are unavailable**,
 extended and periodic advertising are unavailable, and the connection limit is 3.

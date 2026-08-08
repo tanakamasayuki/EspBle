@@ -242,7 +242,7 @@ Future candidates include two Centrals connected to one Peripheral, and BLE HID 
 13. ✅ `hid_security`: a secured HID Device rejects unencrypted read, discovery, and input delivery.
 14. ✅ `hid_boot_keyboard`: Report-ID-less boot-keyboard discovery/input and invalid-length counting.
 15. ✅ `advertise_payload`: raw advertisement AD structure, single Complete List, and no duplicated AD type.
-16. ✅ host unit tests (`tests/unit/`): keymap conversion and HID Report Map parsing.
+16. ✅ host unit tests (`tests/unit/`): keymap conversion, HID Report Map parsing, codecs, the HCI router, and the HCI command scheduler.
 17. ✅ `battery_service`: standalone Battery Level read, subscription, notification, and unsubscribe.
 18. ✅ `device_information`: DIS string reads and 7-byte little-endian PnP ID decoding.
 19. ✅ `current_time`: 10-byte Current Time decoding, subscription, notification, and unsubscribe.
