@@ -72,6 +72,7 @@ LE Metaを有効化する。
 | dual-host ACL反復負荷 | 1 passed（GATT read 25回後もClassic HID双方向、両側LE ACL tx/rx/completed=36/36/36） |
 | dual-host command scheduler負荷 | 1 passed（両hostから送信、投入＝物理送信、最大queue深度3、overflow / opcode不一致0） |
 | dual-host正常停止 | 1 passed（両側ともNimBLE→Classic、解除時in-flight command 0） |
+| dual-host再登録 | 1 passed（同一instance・GATT/HID定義でClassic→NimBLE再起動→正常停止を3サイクル） |
 | 通常NimBLE BLEのESP32 Peer regression | 2 passed（GATT read/write、反復discovery） |
 | host unit test | 9 passed |
 | ESP32-S3 CompileSmoke | 成功、274,253 B。Classic archiveは非リンク |
@@ -83,7 +84,7 @@ Arduino coreの設定はSPP有効・Classic HID無効であり、core `libbt.a`�
 ## 次の実装
 
 1. dual-hostでcommand同時発行、同時切断、実機queue overflowを反復する。
-2. controller / hostの停止順を共有lifecycleとしてAPI化し、正常順の再登録を反復し、BLE→Classicの順以外を安全に拒否する。
+2. controller / hostの停止順を共有lifecycleとしてAPI化し、正常順の再登録を長時間反復し、BLE→Classicの順以外を安全に拒否する。
 3. hard-coded union event maskをhost要求maskのbroker側union / cacheへ置き換える。
 4. HID接続失敗、異常長Report、security / bondingを両transport同時状態で試験する。
 

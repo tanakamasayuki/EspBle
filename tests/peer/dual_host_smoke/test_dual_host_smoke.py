@@ -78,3 +78,18 @@ def test_nimble_and_custom_classic_host_run_together(dut, peers):
     peer.expect_exact("DUAL_PEER_ENDED ble=0 classic=0 busy=0", timeout=20)
     dut.write("e")
     dut.expect_exact("DUAL_ENDED ble=0 classic=0 busy=0", timeout=20)
+
+    for _ in range(3):
+        peer.write("s\n")
+        peer.expect_exact(
+            "DUAL_PEER_RESTART started=1 ble=1 classic=1 busy=0", timeout=30
+        )
+        dut.write("s")
+        dut.expect_exact(
+            "DUAL_RESTART started=1 ble=1 classic=1 busy=0", timeout=30
+        )
+
+        peer.write("e\n")
+        peer.expect_exact("DUAL_PEER_ENDED ble=0 classic=0 busy=0", timeout=20)
+        dut.write("e")
+        dut.expect_exact("DUAL_ENDED ble=0 classic=0 busy=0", timeout=20)

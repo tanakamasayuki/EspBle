@@ -15,6 +15,16 @@ void printHex(const String &value)
     Serial.printf("%02x", static_cast<uint8_t>(value[i]));
 }
 
+bool startDualStacks()
+{
+  EspBleClassicConfig config;
+  config.deviceName = "EspBle Dual Peer";
+  if (!classic.begin(config) || !classic.hidHost().begin()) return false;
+  EspBleConfig bleConfig;
+  bleConfig.deviceName = "EspBle Dual Peer";
+  return ble.begin(bleConfig);
+}
+
 void setup()
 {
   Serial.begin(115200);
@@ -30,18 +40,10 @@ void setup()
     Serial.printf("DUAL_PEER_OUTPUT %u\n",
       classic.hidHost().sendOutputReport(output, sizeof(output)) ? 1 : 0);
   });
-  EspBleClassicConfig config;
-  config.deviceName = "EspBle Dual Peer";
-  if (!classic.begin(config) || !classic.hidHost().begin())
+  if (!startDualStacks())
   {
-    Serial.printf("DUAL_PEER_FAILED %s\n", classic.lastErrorDetail().c_str());
-    return;
-  }
-  EspBleConfig bleConfig;
-  bleConfig.deviceName = "EspBle Dual Peer";
-  if (!ble.begin(bleConfig))
-  {
-    Serial.printf("DUAL_PEER_BLE_FAILED %s\n", ble.lastErrorDetail().c_str());
+    Serial.printf("DUAL_PEER_START_FAILED classic=%s ble=%s\n",
+      classic.lastErrorDetail().c_str(), ble.lastErrorDetail().c_str());
     return;
   }
   ble.scanner().onResult([](const EspBleScanResult &result) {
@@ -122,6 +124,16 @@ void loop()
       Serial.printf("DUAL_PEER_ENDED ble=%u classic=%u busy=%lu\n",
         ble.initialized() ? 1 : 0, classic.initialized() ? 1 : 0,
         value.command_unregister_busy);
+    }
+    else if (command == "s")
+    {
+      const bool started = startDualStacks();
+      espble_hci_broker_diagnostics_t value = {};
+      espble_hci_broker_get_diagnostics(&value);
+      Serial.printf(
+        "DUAL_PEER_RESTART started=%u ble=%u classic=%u busy=%lu\n",
+        started ? 1 : 0, ble.initialized() ? 1 : 0,
+        classic.initialized() ? 1 : 0, value.command_unregister_busy);
     }
   }
   delay(1);

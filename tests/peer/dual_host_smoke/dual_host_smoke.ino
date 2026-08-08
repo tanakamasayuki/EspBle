@@ -19,11 +19,47 @@ EspBleGattCharacteristic characteristic;
 bool inputSent;
 bool bleConnected;
 uint8_t inputSequence;
+bool advertisingConfigured;
 
 void printHex(const String &value)
 {
   for (size_t i = 0; i < value.length(); ++i)
     Serial.printf("%02x", static_cast<uint8_t>(value[i]));
+}
+
+bool startDualStacks()
+{
+  EspBleClassicConfig classicConfig;
+  classicConfig.deviceName = "EspBle Dual Host";
+  EspBleClassicHidDeviceConfig hidConfig;
+  hidConfig.name = "EspBle Dual HID";
+  hidConfig.description = "EspBle dual-host smoke";
+  hidConfig.provider = "EspBle";
+  hidConfig.reportDescriptor = ReportDescriptor;
+  hidConfig.reportDescriptorLength = sizeof(ReportDescriptor);
+  if (!classic.begin(classicConfig) || !classic.hidDevice().begin(hidConfig))
+    return false;
+
+  if (!service.valid())
+  {
+    EspBleGattCharacteristicConfig characteristicConfig;
+    characteristicConfig.readable = true;
+    service = ble.gattServer().addService(ServiceUuid);
+    characteristic = ble.gattServer().addCharacteristic(
+      service, CharacteristicUuid, characteristicConfig);
+  }
+  ble.gattServer().setValue(characteristic, String("dual-ready"));
+  EspBleConfig bleConfig;
+  bleConfig.deviceName = "EspBle Dual Host";
+  if (!service.valid() || !characteristic.valid() || !ble.begin(bleConfig))
+    return false;
+  if (!advertisingConfigured)
+  {
+    ble.advertising().setName("EspBle Dual Host");
+    ble.advertising().addServiceUuid(ServiceUuid);
+    advertisingConfigured = true;
+  }
+  return ble.advertising().start();
 }
 
 void setup()
@@ -47,39 +83,10 @@ void setup()
     bleConnected = false;
   });
 
-  EspBleClassicConfig classicConfig;
-  classicConfig.deviceName = "EspBle Dual Host";
-  EspBleClassicHidDeviceConfig hidConfig;
-  hidConfig.name = "EspBle Dual HID";
-  hidConfig.description = "EspBle dual-host smoke";
-  hidConfig.provider = "EspBle";
-  hidConfig.reportDescriptor = ReportDescriptor;
-  hidConfig.reportDescriptorLength = sizeof(ReportDescriptor);
-  if (!classic.begin(classicConfig) || !classic.hidDevice().begin(hidConfig))
+  if (!startDualStacks())
   {
-    Serial.printf("DUAL_CLASSIC_FAILED %s\n", classic.lastErrorDetail().c_str());
-    return;
-  }
-
-  EspBleGattCharacteristicConfig characteristicConfig;
-  characteristicConfig.readable = true;
-  service = ble.gattServer().addService(ServiceUuid);
-  characteristic = ble.gattServer().addCharacteristic(
-    service, CharacteristicUuid, characteristicConfig);
-  ble.gattServer().setValue(characteristic, String("dual-ready"));
-  EspBleConfig bleConfig;
-  bleConfig.deviceName = "EspBle Dual Host";
-  if (!service.valid() || !characteristic.valid() || !ble.begin(bleConfig))
-  {
-    Serial.printf("DUAL_BLE_FAILED %s %s\n",
-      ble.lastErrorName(), ble.lastErrorDetail().c_str());
-    return;
-  }
-  ble.advertising().setName("EspBle Dual Host");
-  ble.advertising().addServiceUuid(ServiceUuid);
-  if (!ble.advertising().start())
-  {
-    Serial.printf("DUAL_ADV_FAILED %s\n", ble.lastErrorDetail().c_str());
+    Serial.printf("DUAL_START_FAILED classic=%s ble=%s\n",
+      classic.lastErrorDetail().c_str(), ble.lastErrorDetail().c_str());
     return;
   }
 
@@ -138,6 +145,15 @@ void loop()
       Serial.printf("DUAL_ENDED ble=%u classic=%u busy=%lu\n",
         ble.initialized() ? 1 : 0, classic.initialized() ? 1 : 0,
         value.command_unregister_busy);
+    }
+    else if (command == 's')
+    {
+      const bool started = startDualStacks();
+      espble_hci_broker_diagnostics_t value = {};
+      espble_hci_broker_get_diagnostics(&value);
+      Serial.printf("DUAL_RESTART started=%u ble=%u classic=%u busy=%lu\n",
+        started ? 1 : 0, ble.initialized() ? 1 : 0,
+        classic.initialized() ? 1 : 0, value.command_unregister_busy);
     }
   }
   delay(1);
