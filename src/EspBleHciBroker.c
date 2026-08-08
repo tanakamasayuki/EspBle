@@ -17,6 +17,7 @@
 
 static const char *TAG = "EspBleHciBroker";
 static const espble_hci_host_callbacks_t *hosts[ESPBLE_HCI_HOST_COUNT];
+static bool host_receive_enabled[ESPBLE_HCI_HOST_COUNT];
 static espble_hci_router_t router;
 static espble_hci_broker_diagnostics_t diagnostics;
 static portMUX_TYPE broker_lock = portMUX_INITIALIZER_UNLOCKED;
@@ -26,6 +27,7 @@ static espble_hci_command_scheduler_t command_scheduler;
 static SemaphoreHandle_t physical_send_mutex;
 static TaskHandle_t command_task_handle;
 static uint32_t command_generation;
+static espble_hci_controller_stop_callback_t controller_stop_callback;
 #endif
 
 static espble_hci_route_t host_route(size_t host)
@@ -42,6 +44,17 @@ static uint16_t h4_acl_handle(const uint8_t *data)
 static bool valid_host(espble_hci_host_t host)
 {
   return host >= ESPBLE_HCI_HOST_NIMBLE && host < ESPBLE_HCI_HOST_COUNT;
+}
+
+static bool receive_enabled_on_register(espble_hci_host_t host)
+{
+#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
+  /* NimBLE cannot consume controller events until ble_hs_start() completes. */
+  return host != ESPBLE_HCI_HOST_NIMBLE;
+#else
+  (void)host;
+  return true;
+#endif
 }
 
 static size_t registered_host_count(void)
@@ -244,7 +257,8 @@ static int physical_receive(uint8_t *data, uint16_t length)
     }
     for (size_t i = 0; i < ESPBLE_HCI_HOST_COUNT; ++i)
     {
-      if ((route & host_route(i)) == 0 || hosts[i] == NULL) continue;
+      if ((route & host_route(i)) == 0 || hosts[i] == NULL ||
+          !host_receive_enabled[i]) continue;
       callbacks[i] = hosts[i];
       if (length >= 2 && data[0] == 0x04 && data[1] == 0x13)
       {
@@ -294,7 +308,8 @@ static int physical_receive(uint8_t *data, uint16_t length)
   for (size_t i = 0; i < ESPBLE_HCI_HOST_COUNT; ++i)
   {
     const espble_hci_host_callbacks_t *callbacks = hosts[i];
-    if (callbacks != NULL && callbacks->notify_receive != NULL)
+    if (callbacks != NULL && host_receive_enabled[i] &&
+        callbacks->notify_receive != NULL)
     {
       return callbacks->notify_receive(data, length);
     }
@@ -342,6 +357,7 @@ esp_err_t espble_hci_broker_register(
   {
 #if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
     hosts[host] = callbacks;
+    host_receive_enabled[host] = receive_enabled_on_register(host);
     ESP_LOGW(TAG, "registered second host %d in experimental routed mode", (int)host);
     wake_command_task();
     return ESP_OK;
@@ -357,6 +373,7 @@ esp_err_t espble_hci_broker_register(
 #endif
 
   hosts[host] = callbacks;
+  host_receive_enabled[host] = receive_enabled_on_register(host);
   espble_hci_router_init(&router);
   memset(&diagnostics, 0, sizeof(diagnostics));
 #if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
@@ -377,6 +394,7 @@ void espble_hci_broker_unregister(espble_hci_host_t host)
 {
   if (!valid_host(host)) return;
 #if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
+  espble_hci_controller_stop_callback_t stop_callback = NULL;
   portENTER_CRITICAL(&broker_lock);
   const espble_hci_command_scheduler_result_t removed =
     espble_hci_command_scheduler_remove_owner(
@@ -385,11 +403,14 @@ void espble_hci_broker_unregister(espble_hci_host_t host)
     ++diagnostics.command_unregister_busy;
   ++command_generation;
   hosts[host] = NULL;
+  host_receive_enabled[host] = false;
   const bool no_hosts = registered_host_count() == 0;
   if (no_hosts)
   {
     espble_hci_command_scheduler_init(&command_scheduler);
     espble_hci_router_init(&router);
+    stop_callback = controller_stop_callback;
+    controller_stop_callback = NULL;
   }
   portEXIT_CRITICAL(&broker_lock);
   wake_command_task();
@@ -397,12 +418,54 @@ void espble_hci_broker_unregister(espble_hci_host_t host)
     ESP_LOGW(TAG, "unregistered host %d with a command response pending", (int)host);
 #else
   hosts[host] = NULL;
+  host_receive_enabled[host] = false;
   const bool no_hosts = registered_host_count() == 0;
 #endif
   if (no_hosts)
   {
     esp_vhci_host_register_callback(&dummy_callbacks);
   }
+#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
+  if (stop_callback != NULL && !stop_callback())
+    ESP_LOGE(TAG, "failed to stop the adopted controller");
+#endif
+}
+
+esp_err_t espble_hci_broker_adopt_controller(
+  espble_hci_controller_stop_callback_t stop_callback)
+{
+#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
+  if (stop_callback == NULL) return ESP_ERR_INVALID_ARG;
+  portENTER_CRITICAL(&broker_lock);
+  const bool conflict = controller_stop_callback != NULL &&
+    controller_stop_callback != stop_callback;
+  if (!conflict) controller_stop_callback = stop_callback;
+  portEXIT_CRITICAL(&broker_lock);
+  return conflict ? ESP_ERR_INVALID_STATE : ESP_OK;
+#else
+  (void)stop_callback;
+  return ESP_ERR_NOT_SUPPORTED;
+#endif
+}
+
+esp_err_t espble_hci_broker_shutdown_controller(void)
+{
+#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
+  espble_hci_controller_stop_callback_t stop_callback = NULL;
+  portENTER_CRITICAL(&broker_lock);
+  const bool hosts_active = registered_host_count() != 0;
+  if (!hosts_active)
+  {
+    stop_callback = controller_stop_callback;
+    controller_stop_callback = NULL;
+  }
+  portEXIT_CRITICAL(&broker_lock);
+  if (hosts_active) return ESP_ERR_INVALID_STATE;
+  if (stop_callback == NULL) return ESP_OK;
+  return stop_callback() ? ESP_OK : ESP_FAIL;
+#else
+  return ESP_ERR_NOT_SUPPORTED;
+#endif
 }
 
 bool espble_hci_broker_can_send(espble_hci_host_t host)
@@ -411,13 +474,13 @@ bool espble_hci_broker_can_send(espble_hci_host_t host)
     esp_vhci_host_check_send_available();
 }
 
-bool espble_hci_broker_host_registered(espble_hci_host_t host)
+void espble_hci_broker_set_receive_enabled(
+  espble_hci_host_t host, bool enabled)
 {
-  if (!valid_host(host)) return false;
+  if (!valid_host(host)) return;
   portENTER_CRITICAL(&broker_lock);
-  const bool registered = hosts[host] != NULL;
+  if (hosts[host] != NULL) host_receive_enabled[host] = enabled;
   portEXIT_CRITICAL(&broker_lock);
-  return registered;
 }
 
 esp_err_t espble_hci_broker_send(

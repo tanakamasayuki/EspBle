@@ -47,8 +47,9 @@ core内蔵Bluedroidとリンク時に衝突せず、独自hostの公開APIが誤
 connection handle、ACL、切断、Number Of Completed Packetsを振り分ける。実験flagを付けない
 無印ESP32と他SoCの経路は変更しない。
 
-共存時はClassicを先にBTDMで起動してcontroller lifecycleを所有させる。NimBLEはcontrollerを
-再初期化せずhostだけをattachし、Resetを省略する。NimBLE起動後にBluedroid DUMO相当のunion
+共存時はClassicがBTDM controllerを起動した直後に停止責任をbrokerへ委譲する。NimBLEはcontrollerを
+再初期化せずhostだけをattachし、Resetを省略する。最後のlogical hostを解除したbrokerだけが
+controllerを停止する。NimBLE起動後にBluedroid DUMO相当のunion
 event mask（HCI wire順`ff ff ff ff ff ff bf 3d`）を設定し、Classic eventを維持したまま
 LE Metaを有効化する。
 
@@ -73,7 +74,8 @@ LE Metaを有効化する。
 | dual-host command scheduler負荷 | 1 passed（両hostから送信、投入＝物理送信、最大queue深度3、overflow / opcode不一致0） |
 | dual-host正常停止 | 1 passed（両側ともNimBLE→Classic、解除時in-flight command 0） |
 | dual-host再登録 | 1 passed（同一instance・GATT/HID定義でClassic→NimBLE再起動→正常停止を3サイクル） |
-| dual-host逆順停止拒否 | 1 passed（両側でClassic先行`end()`を`InvalidState`、拒否後もGATT/HID双方向継続） |
+| dual-host任意順停止 | 1 passed（Classic先行停止後もNimBLE GATT継続、最後のhost解除でcontroller停止・再起動成功） |
+| dual-host任意順destructor | 1 passed（Classic先行／NimBLE先行の両方で残存host継続、controller停止後の再起動成功） |
 | 通常NimBLE BLEのESP32 Peer regression | 2 passed（GATT read/write、反復discovery） |
 | host unit test | 9 passed |
 | ESP32-S3 CompileSmoke | 成功、274,253 B。Classic archiveは非リンク |
@@ -85,7 +87,7 @@ Arduino coreの設定はSPP有効・Classic HID無効であり、core `libbt.a`�
 ## 次の実装
 
 1. dual-hostでcommand同時発行、同時切断、実機queue overflowを反復する。
-2. controller / hostの正常停止・再登録を長時間反復し、明示`end()`だけでなくdestructor順も安全に扱える共有lifecycleへ移行する。
+2. controller / hostの任意順停止・再登録を長時間反復する。
 3. hard-coded union event maskをhost要求maskのbroker側union / cacheへ置き換える。
 4. HID接続失敗、異常長Report、security / bondingを両transport同時状態で試験する。
 
@@ -123,8 +125,9 @@ ACLはconnection handleでroutingできるが、接続確立前event、advertisi
 controller-wide commandは単純なpacket type分岐では扱えない。排他構成のbrokerをそのまま
 「BLE eventはNimBLE、Classic eventはBluedroid」と拡張してはならない。
 
-現在はClassicがBTDM controllerを所有するため、dual-host中のClassic先行`end()`はprofileへ触れる前に
-`InvalidState`で拒否する。拒否後もLE GATT readとClassic HID双方向通信が継続することを実機確認した。
-正常停止はNimBLE→Classicの順で行う。自動destructorにも同じ順序を適用するため、scope上は
-`EspBleClassic`を`EspBle`より先に構築し、逆順破棄で`EspBle`が先に終了するようにする。
-最終的にはcontroller所有権をbrokerへ移し、C++ objectの構築順に依存しない形にする。
+ClassicはBTDM controllerを起動した直後に`btStop()` callbackをbrokerへ委譲する。Classic先行
+`end()`ではClassic profile/hostだけを停止し、NimBLEとcontrollerを維持する。最後にNimBLEを
+解除したbrokerがcallbackを一度だけ実行する。Classic停止後のLE GATT read、controller停止後の
+Classic→NimBLE再起動を両側で実機確認したため、明示`end()`とC++ objectの破棄順はtransport間で
+制約しない。実際のdestructorもClassic先行／NimBLE先行の両順序で実行し、その後の再起動まで確認した。
+NimBLE hostがOFFの初期化・停止境界ではreceive gateを閉じ、遅延eventを配送しない。

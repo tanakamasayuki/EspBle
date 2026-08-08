@@ -25,6 +25,32 @@ bool startDualStacks()
   return ble.begin(bleConfig);
 }
 
+bool runDestructorCycle(bool classicFirst)
+{
+  EspBleClassic *temporaryClassic = new EspBleClassic();
+  EspBle *temporaryBle = new EspBle();
+  EspBleClassicConfig classicConfig;
+  classicConfig.deviceName = "EspBle Peer Destructor";
+  EspBleConfig bleConfig;
+  bleConfig.deviceName = "EspBle Peer Destructor";
+  const bool started = temporaryClassic->begin(classicConfig) &&
+    temporaryBle->begin(bleConfig);
+  bool survivor = false;
+  if (classicFirst)
+  {
+    delete temporaryClassic;
+    survivor = temporaryBle->initialized();
+    delete temporaryBle;
+  }
+  else
+  {
+    delete temporaryBle;
+    survivor = temporaryClassic->initialized();
+    delete temporaryClassic;
+  }
+  return started && survivor;
+}
+
 void setup()
 {
   Serial.begin(115200);
@@ -141,6 +167,15 @@ void loop()
         "DUAL_PEER_RESTART started=%u ble=%u classic=%u busy=%lu\n",
         started ? 1 : 0, ble.initialized() ? 1 : 0,
         classic.initialized() ? 1 : 0, value.command_unregister_busy);
+    }
+    else if (command == "z")
+    {
+      const bool classicFirst = runDestructorCycle(true);
+      const bool bleFirst = runDestructorCycle(false);
+      const bool restarted = startDualStacks();
+      Serial.printf(
+        "DUAL_PEER_DESTRUCT classic_first=%u ble_first=%u restarted=%u\n",
+        classicFirst ? 1 : 0, bleFirst ? 1 : 0, restarted ? 1 : 0);
     }
   }
   delay(1);

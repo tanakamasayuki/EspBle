@@ -72,31 +72,23 @@ def test_nimble_and_custom_classic_host_run_together(dut, peers):
     dut.write("?")
     dut.expect_exact("DUAL_STATE adv=0 classic=1 ble=1", timeout=10)
 
-    # Classic owns the BTDM controller.  Reverse shutdown must be rejected
-    # before either host or profile is touched.
+    # The broker owns controller shutdown.  Classic may leave first while the
+    # physical controller remains available to NimBLE.
     peer.write("x\n")
     peer.expect_exact(
-        "DUAL_PEER_REVERSE ble=1 classic=1 error=InvalidState", timeout=10
+        "DUAL_PEER_REVERSE ble=1 classic=0 error=None", timeout=20
     )
     dut.write("x")
-    dut.expect_exact("DUAL_REVERSE ble=1 classic=1 error=InvalidState", timeout=10)
+    dut.expect_exact("DUAL_REVERSE ble=1 classic=0 error=None", timeout=20)
 
     peer.write("r\n")
     peer.expect_exact("DUAL_BLE_READ_REQUESTED 1", timeout=10)
     peer.expect_exact(
-        "DUAL_BLE_READ success=1 value=dual-ready classic=1", timeout=10
-    )
-    dut.write("i")
-    dut.expect_exact("DUAL_CLASSIC_INPUT 1", timeout=10)
-    peer.expect(re.compile(rb"DUAL_PEER_INPUT hex=(01)?007f80[0-9a-f]{2}"), timeout=10)
-    peer.expect_exact("DUAL_PEER_OUTPUT 1", timeout=10)
-    dut.expect(
-        re.compile(rb"DUAL_CLASSIC_OUTPUT id=2 hex=(a500ff|02a500ff)"),
-        timeout=10,
+        "DUAL_BLE_READ success=1 value=dual-ready classic=0", timeout=10
     )
 
-    # The shared controller belongs to Classic: stop NimBLE first, then the
-    # Classic host/controller.  No in-flight command may survive unregister.
+    # NimBLE is now the final host; its unregister must trigger the broker's
+    # adopted controller-stop callback.  No command may survive the session.
     peer.write("e\n")
     peer.expect_exact("DUAL_PEER_ENDED ble=0 classic=0 busy=0", timeout=20)
     dut.write("e")
@@ -116,3 +108,19 @@ def test_nimble_and_custom_classic_host_run_together(dut, peers):
         peer.expect_exact("DUAL_PEER_ENDED ble=0 classic=0 busy=0", timeout=20)
         dut.write("e")
         dut.expect_exact("DUAL_ENDED ble=0 classic=0 busy=0", timeout=20)
+
+    # Exercise the actual C++ destructors in both object orders, then prove the
+    # controller was fully released by starting the long-lived instances again.
+    peer.write("z\n")
+    peer.expect_exact(
+        "DUAL_PEER_DESTRUCT classic_first=1 ble_first=1 restarted=1", timeout=40
+    )
+    dut.write("z")
+    dut.expect_exact(
+        "DUAL_DESTRUCT classic_first=1 ble_first=1 restarted=1", timeout=40
+    )
+
+    peer.write("e\n")
+    peer.expect_exact("DUAL_PEER_ENDED ble=0 classic=0 busy=0", timeout=20)
+    dut.write("e")
+    dut.expect_exact("DUAL_ENDED ble=0 classic=0 busy=0", timeout=20)

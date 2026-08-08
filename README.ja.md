@@ -75,7 +75,7 @@ EspBleがNimBLE Host（`src/nimble_esp32/`、esp-idfがpinするesp-nimbleと同
 Device/Hostは、Classic HIDを有効にして独自ビルドした別のBluedroid hostを使います。既定は
 build時の排他選択です。`ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL`ではClassicを先にBTDMで起動し、
 同梱NimBLEを後からattachする同時構成を選べます。Classic HID通信中のLE接続、GATT read 25回、
-その後のHID双方向通信まで実機検証済みです。共有command schedulerもbroker所有FIFOとcontroller credit管理まで実装済みですが、停止順、controller-wide commandの統合、長時間・security負荷試験は未完了です。詳細は
+その後のHID双方向通信まで実機検証済みです。共有command schedulerと最後のhostがcontrollerを停止するlifecycleも実装済みですが、controller-wide commandの統合、長時間・security負荷試験は未完了です。詳細は
 [Classic実装計画](docs/PLAN_ESP32_CLASSIC.ja.md)にあります。
 加えて無印ESP32はBLE 4.2 controllerのため**LE 2M / Coded PHYが使えず**、
 Extended / Periodic Advertisingも使えません。同時接続数の上限は3です。

@@ -23,6 +23,7 @@
  */
 
 #include <assert.h>
+#include "EspBleHciBroker.h"
 #include "nimble_esp32/include/sysinit/sysinit.h"
 #include "nimble_esp32/include/syscfg/syscfg.h"
 #include "ble_hs_priv.h"
@@ -98,6 +99,11 @@ ble_hs_stop_done(int status)
     ble_hs_enabled_state = BLE_HS_ENABLED_STATE_OFF;
 
     ble_hs_unlock();
+
+#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
+    espble_hci_broker_set_receive_enabled(
+        ESPBLE_HCI_HOST_NIMBLE, false);
+#endif
 
     SLIST_FOREACH(listener, &slist, link) {
         listener->fn(status, listener->arg);

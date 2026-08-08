@@ -13,7 +13,7 @@ command応答、connection handle、ACL credit、controller初期化をbrokerが
 single-host pass-throughを基準にした後、opt-inの
 `ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL`としてH4 routerまで実装した。Classic HIDの双方向通信を
 維持したままLE接続、GATT read反復、負荷後のClassic HID双方向通信が成立している。command schedulerは
-broker所有FIFOとcontroller credit管理まで実装した。ただし停止順、controller-wide commandの統合、
+broker所有FIFOとcontroller credit管理、最後のhostがcontrollerを停止するlifecycleまで実装した。ただしcontroller-wide commandの統合、
 security負荷試験は未完了なので、通常buildは引き続き二つ目のhost登録を`ESP_ERR_NOT_SUPPORTED`とする。
 
 ## 実機・ビルド検証結果
@@ -85,9 +85,13 @@ commandを再登録後のcontrollerへ送らない。再登録の長時間反復
 同じ実機試験で、停止後に同一の`EspBle` / `EspBleClassic` instanceとGATT/HID定義を使って
 Classic→NimBLEを再登録し、両hostの初期化成功と正常停止を3サイクル確認した。短時間反復は成立したが、
 長時間反復は未検証である。
-Classic先行`end()`はbrokerのNimBLE登録状態を調べ、profileやcontrollerへ触れる前に
-`InvalidState`で拒否する。両側で拒否後もhostが初期化済みのまま、追加のLE GATT readと
-Classic HID Input/Outputが成功した。その後の正常停止と3サイクル再登録も成功している。
+Classicは起動直後にcontroller停止callbackをbrokerへ委譲する。Classic先行`end()`ではClassic
+profile/hostだけが停止し、NimBLEとcontrollerは継続する。追加のLE GATT readが成功した後、最後の
+NimBLE解除でbrokerがcontrollerを停止し、その後のClassic→NimBLE再起動と3サイクル停止も成功した。
+さらに一時objectを使って実際のdestructorをClassic先行／NimBLE先行の両順序で実行し、残ったhostが
+初期化済みであることと、両object破棄後に長寿命instanceを再起動できることを両側で確認した。
+高速反復でNimBLE hostがOFFの間に遅延eventが届く窓は、`ble_hs_start()` / stop完了に連動する
+broker receive gateで閉じた。修正後の完全再ビルド試験では`Host not enabled`出力は発生していない。
 
 ## dual-hostでbrokerが持つべき責務
 

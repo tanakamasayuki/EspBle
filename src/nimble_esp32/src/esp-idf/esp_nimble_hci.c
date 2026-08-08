@@ -383,9 +383,9 @@ esp_err_t esp_nimble_hci_deinit(void)
         vSemaphoreDelete(vhci_send_sem);
         vhci_send_sem = NULL;
     }
-    ble_transport_deinit();
-
     espble_hci_broker_unregister(ESPBLE_HCI_HOST_NIMBLE);
+
+    ble_transport_deinit();
 
     ble_buf_free();
 

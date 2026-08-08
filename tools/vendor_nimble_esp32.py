@@ -199,6 +199,46 @@ INCLUDE_DIRS = [
 # instead of silently dropping the change. (file inside src/, old, new, why)
 PATCHES = [
     (
+        "nimble/host/src/ble_hs.c",
+        "#include <string.h>\n",
+        "#include <string.h>\n#include \"EspBleHciBroker.h\"\n",
+        "expose NimBLE receive readiness to the dual-host broker",
+    ),
+    (
+        "nimble/host/src/ble_hs.c",
+        "    if (rc != 0) {\n"
+        "        return rc;\n"
+        "    }\n\n"
+        "    ble_hs_parent_task = ble_npl_get_current_task_id();\n",
+        "    if (rc != 0) {\n"
+        "        return rc;\n"
+        "    }\n\n"
+        "#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)\n"
+        "    espble_hci_broker_set_receive_enabled(\n"
+        "        ESPBLE_HCI_HOST_NIMBLE, true);\n"
+        "#endif\n\n"
+        "    ble_hs_parent_task = ble_npl_get_current_task_id();\n",
+        "open NimBLE receive delivery only after the host enters ON state",
+    ),
+    (
+        "nimble/host/src/ble_hs_stop.c",
+        "#include <assert.h>\n",
+        "#include <assert.h>\n#include \"EspBleHciBroker.h\"\n",
+        "expose NimBLE stop completion to the dual-host broker",
+    ),
+    (
+        "nimble/host/src/ble_hs_stop.c",
+        "    ble_hs_unlock();\n\n"
+        "    SLIST_FOREACH(listener, &slist, link) {\n",
+        "    ble_hs_unlock();\n\n"
+        "#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)\n"
+        "    espble_hci_broker_set_receive_enabled(\n"
+        "        ESPBLE_HCI_HOST_NIMBLE, false);\n"
+        "#endif\n\n"
+        "    SLIST_FOREACH(listener, &slist, link) {\n",
+        "close NimBLE receive delivery as soon as the host reaches OFF state",
+    ),
+    (
         "esp-idf/esp_nimble_hci.c",
         "void bt_record_hci_data(uint8_t *data, uint16_t len)\n",
         "static void bt_record_hci_data(uint8_t *data, uint16_t len)\n",
@@ -241,6 +281,8 @@ PATCHES = [
         "    esp_bt_controller_config_t config_opts = BT_CONTROLLER_INIT_CONFIG_DEFAULT();\n",
         "#if CONFIG_BT_CONTROLLER_ENABLED\n"
         "#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)\n"
+        "    /* Classic starts BTDM, then delegates its shutdown to the broker.\n"
+        "     * NimBLE attaches only its host and HCI transport. */\n"
         "    if (esp_bt_controller_get_status() != ESP_BT_CONTROLLER_STATUS_ENABLED) {\n"
         "        ESP_LOGE(NIMBLE_PORT_LOG_TAG, \"dual-host controller is not running\\n\");\n"
         "        return ESP_ERR_INVALID_STATE;\n"
@@ -300,6 +342,8 @@ PATCHES = [
         "nimble/host/src/ble_hs_startup.c",
         "    cmd.event_mask = htole64(0x2000800002008890);\n",
         "#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)\n"
+        "    /* Bluedroid's HCI_DUMO_EVENT_MASK_EXT in HCI wire order. This\n"
+        "     * preserves Classic events while enabling LE Meta-Event. */\n"
         "    cmd.event_mask = htole64(0x3dbfffffffffffff);\n"
         "#else\n"
         "    cmd.event_mask = htole64(0x2000800002008890);\n"
@@ -373,9 +417,11 @@ PATCHES = [
     ),
     (
         "esp-idf/esp_nimble_hci.c",
+        "    ble_transport_deinit();\n\n"
         "    esp_vhci_host_register_callback(&dummy_vhci_host_cb);\n",
-        "    espble_hci_broker_unregister(ESPBLE_HCI_HOST_NIMBLE);\n",
-        "detach NimBLE from the broker during shutdown",
+        "    espble_hci_broker_unregister(ESPBLE_HCI_HOST_NIMBLE);\n\n"
+        "    ble_transport_deinit();\n",
+        "detach NimBLE from the broker before disabling its receive transport",
     ),
 ]
 

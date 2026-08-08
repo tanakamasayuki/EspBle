@@ -23,6 +23,8 @@ typedef struct
   int (*notify_receive)(uint8_t *data, uint16_t length);
 } espble_hci_host_callbacks_t;
 
+typedef bool (*espble_hci_controller_stop_callback_t)(void);
+
 typedef struct
 {
   uint32_t tx_acl[ESPBLE_HCI_HOST_COUNT];
@@ -50,8 +52,15 @@ esp_err_t espble_hci_broker_register(
   espble_hci_host_t host, const espble_hci_host_callbacks_t *callbacks);
 void espble_hci_broker_unregister(espble_hci_host_t host);
 
+// Transfers shutdown responsibility for an already-running controller to the
+// broker.  The callback is invoked once, after the final logical host leaves.
+esp_err_t espble_hci_broker_adopt_controller(
+  espble_hci_controller_stop_callback_t stop_callback);
+esp_err_t espble_hci_broker_shutdown_controller(void);
+
 bool espble_hci_broker_can_send(espble_hci_host_t host);
-bool espble_hci_broker_host_registered(espble_hci_host_t host);
+void espble_hci_broker_set_receive_enabled(
+  espble_hci_host_t host, bool enabled);
 esp_err_t espble_hci_broker_send(
   espble_hci_host_t host, const uint8_t *data, uint16_t length);
 

@@ -306,8 +306,8 @@ nimble_port_init(void)
 #endif
 #if CONFIG_BT_CONTROLLER_ENABLED
 #if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
-    /* Classic owns the dual-mode controller lifecycle in the experimental
-     * composition. NimBLE attaches only its host and HCI transport. */
+    /* Classic starts BTDM, then delegates its shutdown to the broker.
+     * NimBLE attaches only its host and HCI transport. */
     if (esp_bt_controller_get_status() != ESP_BT_CONTROLLER_STATUS_ENABLED) {
         ESP_LOGE(NIMBLE_PORT_LOG_TAG, "dual-host controller is not running\n");
         return ESP_ERR_INVALID_STATE;
