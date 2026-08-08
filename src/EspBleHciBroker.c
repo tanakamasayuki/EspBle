@@ -7,6 +7,7 @@
 #include "EspBleHciRouter.h"
 
 #include <stddef.h>
+#include <string.h>
 #include <esp_bt.h>
 #include <esp_log.h>
 #include <freertos/FreeRTOS.h>
@@ -14,6 +15,7 @@
 static const char *TAG = "EspBleHciBroker";
 static const espble_hci_host_callbacks_t *hosts[ESPBLE_HCI_HOST_COUNT];
 static espble_hci_router_t router;
+static espble_hci_broker_diagnostics_t diagnostics;
 static portMUX_TYPE broker_lock = portMUX_INITIALIZER_UNLOCKED;
 static uint8_t next_send_host;
 
@@ -21,6 +23,11 @@ static espble_hci_route_t host_route(size_t host)
 {
   return host == ESPBLE_HCI_HOST_NIMBLE ? ESPBLE_HCI_ROUTE_NIMBLE :
     ESPBLE_HCI_ROUTE_CLASSIC;
+}
+
+static uint16_t h4_acl_handle(const uint8_t *data)
+{
+  return ((uint16_t)data[1] | ((uint16_t)data[2] << 8)) & 0x0fff;
 }
 
 static bool valid_host(espble_hci_host_t host)
@@ -82,6 +89,24 @@ static int physical_receive(uint8_t *data, uint16_t length)
     portENTER_CRITICAL(&broker_lock);
     const espble_hci_route_t route =
       espble_hci_router_route_incoming(&router, data, length);
+    if (length >= 5 && data[0] == 0x02)
+    {
+      bool known = false;
+      for (size_t i = 0; i < ESPBLE_HCI_HOST_COUNT; ++i)
+      {
+        if ((route & host_route(i)) == 0) continue;
+        ++diagnostics.rx_acl[i];
+        diagnostics.last_rx_handle[i] = h4_acl_handle(data);
+        known = true;
+      }
+      if (!known) ++diagnostics.unknown_acl;
+    }
+    if (length >= 9 && data[0] == 0x04 && data[1] == 0x14 &&
+        data[3] == 0x00)
+    {
+      diagnostics.classic_mode = data[6];
+      ++diagnostics.classic_mode_changes;
+    }
     for (size_t i = 0; i < ESPBLE_HCI_HOST_COUNT; ++i)
     {
       if ((route & host_route(i)) == 0 || hosts[i] == NULL) continue;
@@ -96,6 +121,7 @@ static int physical_receive(uint8_t *data, uint16_t length)
           continue;
         }
         delivery[i] = filtered[i];
+        diagnostics.completed_acl[i] += filtered[i][3];
       }
       else
       {
@@ -182,6 +208,7 @@ esp_err_t espble_hci_broker_register(
 
   hosts[host] = callbacks;
   espble_hci_router_init(&router);
+  memset(&diagnostics, 0, sizeof(diagnostics));
   esp_err_t result = esp_vhci_host_register_callback(&physical_callbacks);
   if (result != ESP_OK)
   {
@@ -248,8 +275,45 @@ esp_err_t espble_hci_broker_send(
     }
   }
 #endif
-  esp_vhci_host_send_packet((uint8_t *)data, length);
+  const uint8_t *physical_data = data;
+#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
+  uint8_t flow_control_command[5];
+  // Bluedroid enables controller-to-host ACL flow control before NimBLE
+  // attaches.  It can only return credits for the Classic ACL packets routed
+  // to it, so LE traffic would exhaust the controller's shared host buffers.
+  // Keep physical VHCI flow control disabled until the broker owns credit
+  // accounting for both logical hosts.
+  if (host == ESPBLE_HCI_HOST_CLASSIC && length == sizeof(flow_control_command) &&
+      data[0] == 0x01 && data[1] == 0x31 && data[2] == 0x0c &&
+      data[3] == 0x01 && data[4] != 0x00)
+  {
+    memcpy(flow_control_command, data, sizeof(flow_control_command));
+    flow_control_command[4] = 0x00;
+    physical_data = flow_control_command;
+    ESP_LOGW(TAG, "disabled controller-to-host flow control for dual host");
+  }
+#endif
+  esp_vhci_host_send_packet((uint8_t *)physical_data, length);
+#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
+  if (length >= 5 && data[0] == 0x02)
+  {
+    portENTER_CRITICAL(&broker_lock);
+    ++diagnostics.tx_acl[host];
+    diagnostics.last_tx_handle[host] = h4_acl_handle(data);
+    diagnostics.last_tx_pb[host] = (data[2] >> 4) & 0x03;
+    portEXIT_CRITICAL(&broker_lock);
+  }
+#endif
   return ESP_OK;
+}
+
+void espble_hci_broker_get_diagnostics(
+  espble_hci_broker_diagnostics_t *output)
+{
+  if (output == NULL) return;
+  portENTER_CRITICAL(&broker_lock);
+  *output = diagnostics;
+  portEXIT_CRITICAL(&broker_lock);
 }
 
 #endif

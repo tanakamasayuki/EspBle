@@ -1,5 +1,6 @@
 #include <EspBle.h>
 #include <EspBleClassic.h>
+#include <EspBleHciBroker.h>
 #include <esp_mac.h>
 
 static const char *ServiceUuid = "c8a53600-98f4-4f2c-a231-522b5c4d9001";
@@ -17,6 +18,7 @@ EspBleGattService service;
 EspBleGattCharacteristic characteristic;
 bool inputSent;
 bool bleConnected;
+uint8_t inputSequence;
 
 void printHex(const String &value)
 {
@@ -95,7 +97,7 @@ void loop()
   ble.update();
   if (classic.hidDevice().connected() && !inputSent)
   {
-    const uint8_t report[] = {0x00, 0x7f, 0x80, 0xff};
+    const uint8_t report[] = {0x00, 0x7f, 0x80, inputSequence++};
     inputSent = classic.hidDevice().sendInputReport(1, report, sizeof(report));
     Serial.printf("DUAL_CLASSIC_INPUT %u\n", inputSent ? 1 : 0);
   }
@@ -108,6 +110,20 @@ void loop()
         ble.advertising().isAdvertising() ? 1 : 0,
         classic.hidDevice().connected() ? 1 : 0,
         bleConnected ? 1 : 0);
+    else if (command == 'd')
+    {
+      espble_hci_broker_diagnostics_t value = {};
+      espble_hci_broker_get_diagnostics(&value);
+      Serial.printf(
+        "DUAL_DIAG tx=%lu,%lu rx=%lu,%lu ncp=%lu,%lu unknown=%lu "
+        "txh=%u,%u rxh=%u,%u pb=%u,%u mode=%u modes=%lu\n",
+        value.tx_acl[0], value.tx_acl[1], value.rx_acl[0], value.rx_acl[1],
+        value.completed_acl[0], value.completed_acl[1], value.unknown_acl,
+        value.last_tx_handle[0], value.last_tx_handle[1],
+        value.last_rx_handle[0], value.last_rx_handle[1],
+        value.last_tx_pb[0], value.last_tx_pb[1], value.classic_mode,
+        value.classic_mode_changes);
+    }
   }
   delay(1);
 }

@@ -68,7 +68,7 @@ LE Metaを有効化する。
 | 同一Classic host・同一ACL上のHID＋SPP同時利用 | 1 passed（SPP echo後もHID双方向継続） |
 | HCI router host unit test | 1 passed（command、handle、ACL、切断、mixed completed packet） |
 | NimBLE＋独自Classic host同時利用 | 1 passed（Classic HID双方向→LE接続・GATT readのsmoke） |
-| dual-host ACL反復負荷 | 制限を再現（GATT read 9回後、Classic HID送信が停滞） |
+| dual-host ACL反復負荷 | 1 passed（GATT read 25回後もClassic HID双方向、両側LE ACL tx/rx/completed=36/36/36） |
 | 通常NimBLE BLEのESP32 Peer regression | 2 passed（GATT read/write、反復discovery） |
 | host unit test | 8 passed |
 | ESP32-S3 CompileSmoke | 成功、274,253 B。Classic archiveは非リンク |
@@ -90,8 +90,11 @@ Arduino coreの設定はSPP有効・Classic HID無効であり、core `libbt.a`�
 `can_send()`でlogical hostへslotを予約する試作は、Bluedroidが送信直前以外にも可否を確認するため
 NimBLEを飢餓させ、実機でHCI ACK timeoutになることを確認した。この方式は採用しない。
 次段階では`send()`がpacketをcopyしてhost別FIFOへ受理し、brokerだけが物理VHCIへ送る。
-ただしFIFOだけの試作ではpacketが物理VHCIへ出た後もClassic ACLが停滞した。ACL buffer creditと
-Number Of Completed Packetsをscheduler側で一体管理しない限り負荷問題は解消しない。
+FIFOだけの試作ではpacketが物理VHCIへ出た後もClassic ACLが停滞した。HCI traceとbroker counterで、
+Classic Bluedroidが有効化したcontroller→host ACL flow controlに対し、NimBLEへroutingしたLE ACLの
+creditが返らず、両側ともLE RX 20 packetで共有bufferが枯渇することを特定した。dual-host実験buildは
+Bluedroidの設定commandをflow control無効へ正規化し、同じ負荷でHID双方向とLE接続の継続を確認した。
+長期的にはbrokerが全incoming ACLを数え、host別配送完了後にcontrollerへcreditを一元返却する。
 現在の実装でも物理VHCIの送信可否を確認してからrouterへcommand所有権を記録するため、送信されなかった
 packetがpending command表へ残る問題は防いでいる。
 ACLはconnection handleでroutingできるが、接続確立前event、advertising、inquiry、security、

@@ -1,9 +1,11 @@
 #include <EspBleClassic.h>
 #include <EspBle.h>
+#include <EspBleHciBroker.h>
 
 EspBleClassic classic;
 EspBle ble;
 bool bleConnectionRequested;
+EspBleConnectionId bleConnectionId;
 static const char *ServiceUuid = "c8a53600-98f4-4f2c-a231-522b5c4d9001";
 static const char *CharacteristicUuid = "c8a53601-98f4-4f2c-a231-522b5c4d9001";
 
@@ -49,8 +51,12 @@ void setup()
     Serial.printf("DUAL_BLE_CONNECT %u\n", bleConnectionRequested ? 1 : 0);
   });
   ble.onConnected([](const EspBleConnection &connection) {
+    bleConnectionId = connection.id;
     Serial.printf("DUAL_BLE_READ_REQUESTED %u\n",
       ble.readCharacteristic(connection.id, ServiceUuid, CharacteristicUuid) ? 1 : 0);
+  });
+  ble.onDisconnected([](const EspBleConnection &) {
+    bleConnectionId = 0;
   });
   ble.onCharacteristicRead([](const EspBleGattResult &result) {
     Serial.printf("DUAL_BLE_READ success=%u value=%s classic=%u\n",
@@ -76,6 +82,31 @@ void loop()
       bleConnectionRequested = ble.connect(
         command.c_str() + 1, EspBleAddressType::Public);
       Serial.printf("DUAL_BLE_CONNECT %u\n", bleConnectionRequested ? 1 : 0);
+    }
+    else if (command == "r")
+      Serial.printf("DUAL_BLE_READ_REQUESTED %u\n",
+        bleConnectionId != 0 &&
+        ble.readCharacteristic(bleConnectionId, ServiceUuid, CharacteristicUuid)
+          ? 1 : 0);
+    else if (command == "o")
+    {
+      const uint8_t output[] = {0x02, 0xa5, 0x00, 0xff};
+      Serial.printf("DUAL_PEER_OUTPUT %u\n",
+        classic.hidHost().sendOutputReport(output, sizeof(output)) ? 1 : 0);
+    }
+    else if (command == "d")
+    {
+      espble_hci_broker_diagnostics_t value = {};
+      espble_hci_broker_get_diagnostics(&value);
+      Serial.printf(
+        "DUAL_PEER_DIAG tx=%lu,%lu rx=%lu,%lu ncp=%lu,%lu unknown=%lu "
+        "txh=%u,%u rxh=%u,%u pb=%u,%u mode=%u modes=%lu\n",
+        value.tx_acl[0], value.tx_acl[1], value.rx_acl[0], value.rx_acl[1],
+        value.completed_acl[0], value.completed_acl[1], value.unknown_acl,
+        value.last_tx_handle[0], value.last_tx_handle[1],
+        value.last_rx_handle[0], value.last_rx_handle[1],
+        value.last_tx_pb[0], value.last_tx_pb[1], value.classic_mode,
+        value.classic_mode_changes);
     }
   }
   delay(1);
