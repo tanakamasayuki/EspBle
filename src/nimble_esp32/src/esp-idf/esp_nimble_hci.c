@@ -239,7 +239,7 @@ static void controller_rcv_pkt_ready(void)
     }
 }
 
-void bt_record_hci_data(uint8_t *data, uint16_t len)
+static void bt_record_hci_data(uint8_t *data, uint16_t len)
 {
 #if (BT_HCI_LOG_INCLUDED == TRUE)
     if (len < 2) {

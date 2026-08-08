@@ -42,9 +42,15 @@ core内蔵Bluedroidとリンク時に衝突せず、独自hostの公開APIが誤
   Bluedroidへの未解決参照を一切生成しない。
 - 共通の`EspBleError`だけを`EspBleTypes.h`へ置き、Classic公開headerはBLE公開headerへ依存しない。
 
-現在のbrokerはhostを1つだけ受け付ける。独自BluedroidのHCI driver operationsをbrokerへ接続し、
-brokerがArduino core controllerのVHCIへ転送する。2つ目のhost登録は意図的に
-`ESP_ERR_NOT_SUPPORTED`とする。
+通常buildのbrokerはhostを1つだけ受け付ける。`ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL`を定義した
+無印ESP32だけは2 hostを受け付け、純粋Cの`EspBleHciRouter`でH4 command応答、LE / BR-EDR
+connection handle、ACL、切断、Number Of Completed Packetsを振り分ける。実験flagを付けない
+無印ESP32と他SoCの経路は変更しない。
+
+共存時はClassicを先にBTDMで起動してcontroller lifecycleを所有させる。NimBLEはcontrollerを
+再初期化せずhostだけをattachし、Resetを省略する。NimBLE起動後にBluedroid DUMO相当のunion
+event mask（HCI wire順`ff ff ff ff ff ff bf 3d`）を設定し、Classic eventを維持したまま
+LE Metaを有効化する。
 
 ## 2026-08-08 技術検証結果
 
@@ -57,8 +63,14 @@ brokerがArduino core controllerのVHCIへ転送する。2つ目のhost登録は
 | Arduino-ESP32 3.3.11への独自host link | 成功、SPP例827,172 B |
 | ESP32 2台の独自host SPP Peer test | 1 passed（接続、binary echo、切断、再初期化、再接続） |
 | 独自hostのHID Device / HID Host profile実機init/deinit | 1 passed（両profile同時） |
+| 公開HID APIのDevice→Host Input / Host→Device Output | 1 passed |
+| 公開HID APIの切断・host全体再初期化・再登録・再接続 | 1 passed（同じPeer test内） |
+| 同一Classic host・同一ACL上のHID＋SPP同時利用 | 1 passed（SPP echo後もHID双方向継続） |
+| HCI router host unit test | 1 passed（command、handle、ACL、切断、mixed completed packet） |
+| NimBLE＋独自Classic host同時利用 | 1 passed（Classic HID双方向→LE接続・GATT readのsmoke） |
+| dual-host ACL反復負荷 | 制限を再現（GATT read 9回後、Classic HID送信が停滞） |
 | 通常NimBLE BLEのESP32 Peer regression | 2 passed（GATT read/write、反復discovery） |
-| host unit test | 7 passed |
+| host unit test | 8 passed |
 | ESP32-S3 CompileSmoke | 成功、274,253 B。Classic archiveは非リンク |
 
 core内蔵hostを使った先行SPP試験も同じPeer testで成功したが、最終構成には使わない。
@@ -67,13 +79,21 @@ Arduino coreの設定はSPP有効・Classic HID無効であり、core `libbt.a`�
 
 ## 次の実装
 
-1. Classic HID Device / Hostのbackend adapterと、callback contextから`update()`へ渡すevent queue。
-2. ESP32 2台をHID Device / Hostにしたreport送受信Peer test。
-3. SPPとHIDを同じClassic host上で同時に使うprofile lifecycle test。
-4. brokerのHCI opcode所有権、connection handle routing、Number Of Completed Packetsの配分を設計。
-5. controllerをBTDMで起動し、NimBLE＋Classicの同時利用へ進む。
+1. dual-hostでcommand同時発行、ACL負荷、同時切断、queue overflowを反復する。
+2. controller / hostの停止順を共有lifecycleとしてAPI化し、BLE→Classicの順以外を安全に拒否する。
+3. hard-coded union event maskをhost要求maskのbroker側union / cacheへ置き換える。
+4. HID接続失敗、異常長Report、security / bondingを両transport同時状態で試験する。
 
-同時host段階ではHCI command creditを共有し、Command Complete / Statusを発行元へ戻す必要がある。
+実験実装はCommand Complete / Statusをopcode所有者へ戻し、connection handleでACLを分離する。
+ただしcontroller command creditをbroker自身のpacket queueで厳密にscheduleする段階には達しておらず、
+現状は各hostのcredit管理と物理VHCI send-availableの公平通知に依存する。
+`can_send()`でlogical hostへslotを予約する試作は、Bluedroidが送信直前以外にも可否を確認するため
+NimBLEを飢餓させ、実機でHCI ACK timeoutになることを確認した。この方式は採用しない。
+次段階では`send()`がpacketをcopyしてhost別FIFOへ受理し、brokerだけが物理VHCIへ送る。
+ただしFIFOだけの試作ではpacketが物理VHCIへ出た後もClassic ACLが停滞した。ACL buffer creditと
+Number Of Completed Packetsをscheduler側で一体管理しない限り負荷問題は解消しない。
+現在の実装でも物理VHCIの送信可否を確認してからrouterへcommand所有権を記録するため、送信されなかった
+packetがpending command表へ残る問題は防いでいる。
 ACLはconnection handleでroutingできるが、接続確立前event、advertising、inquiry、security、
 controller-wide commandは単純なpacket type分岐では扱えない。排他構成のbrokerをそのまま
 「BLE eventはNimBLE、Classic eventはBluedroid」と拡張してはならない。

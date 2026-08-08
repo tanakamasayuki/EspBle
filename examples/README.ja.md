@@ -38,6 +38,14 @@ arduino-cli compile --profile esp32s3 examples/<path>
 | [CompileSmoke](CompileSmoke/) | — | 最小のビルド確認。ライブラリバージョンを表示 |
 | [Hosted/CustomPins](Hosted/CustomPins/) | P4 Host | board variantと異なるESP-Hosted SDIO pinを`ble.begin()`前に上書き |
 
+### Bluetooth Classic（無印ESP32・実験対応）
+
+| Example | Role | 説明 |
+|---|---|---|
+| [Classic/SppServer](Classic/SppServer/) | SPP Server | binary-safeなSPP echo server |
+| [Classic/HidVendorDevice](Classic/HidVendorDevice/) | HID Device | 任意Report DescriptorのClassic HID Device |
+| [Classic/HidVendorHost](Classic/HidVendorHost/) | HID Host | アドレス指定で接続しraw Input Reportを受信 |
+
 ### GAP — advertise / scan / connect
 
 | Example | Role | 説明 |

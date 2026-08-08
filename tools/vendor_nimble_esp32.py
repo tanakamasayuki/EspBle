@@ -199,6 +199,23 @@ INCLUDE_DIRS = [
 # instead of silently dropping the change. (file inside src/, old, new, why)
 PATCHES = [
     (
+        "esp-idf/esp_nimble_hci.c",
+        "void bt_record_hci_data(uint8_t *data, uint16_t len)\n",
+        "static void bt_record_hci_data(uint8_t *data, uint16_t len)\n",
+        "keep NimBLE's HCI logging helper private when Bluedroid is linked too",
+    ),
+    (
+        "porting/nimble/src/nimble_port.c",
+        "#if CONFIG_IDF_TARGET_ESP32 && CONFIG_BT_CONTROLLER_ENABLED\n"
+        "    esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);\n"
+        "#endif\n",
+        "#if CONFIG_IDF_TARGET_ESP32 && CONFIG_BT_CONTROLLER_ENABLED && \\\n"
+        "    !defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)\n"
+        "    esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);\n"
+        "#endif\n",
+        "retain Classic controller memory in the opt-in dual-host experiment",
+    ),
+    (
         "porting/nimble/src/nimble_port.c",
         "    esp_bt_controller_config_t config_opts = BT_CONTROLLER_INIT_CONFIG_DEFAULT();\n"
         "\n"
@@ -217,6 +234,77 @@ PATCHES = [
         "\n"
         "    ret = esp_bt_controller_init(&config_opts);\n",
         "the prebuilt controller is configured for dual mode, but the host runs BLE only",
+    ),
+    (
+        "porting/nimble/src/nimble_port.c",
+        "#if CONFIG_BT_CONTROLLER_ENABLED\n"
+        "    esp_bt_controller_config_t config_opts = BT_CONTROLLER_INIT_CONFIG_DEFAULT();\n",
+        "#if CONFIG_BT_CONTROLLER_ENABLED\n"
+        "#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)\n"
+        "    if (esp_bt_controller_get_status() != ESP_BT_CONTROLLER_STATUS_ENABLED) {\n"
+        "        ESP_LOGE(NIMBLE_PORT_LOG_TAG, \"dual-host controller is not running\\n\");\n"
+        "        return ESP_ERR_INVALID_STATE;\n"
+        "    }\n"
+        "#else\n"
+        "    esp_bt_controller_config_t config_opts = BT_CONTROLLER_INIT_CONFIG_DEFAULT();\n",
+        "attach NimBLE to the Classic-owned BTDM controller in dual-host mode",
+    ),
+    (
+        "porting/nimble/src/nimble_port.c",
+        "        return ret;\n"
+        "    }\n"
+        "#endif\n"
+        "\n"
+        "    ret = esp_nimble_init();\n",
+        "        return ret;\n"
+        "    }\n"
+        "#endif\n"
+        "#endif\n"
+        "\n"
+        "    ret = esp_nimble_init();\n",
+        "close the dual-host controller-lifecycle branch",
+    ),
+    (
+        "porting/nimble/src/nimble_port.c",
+        "#if CONFIG_BT_CONTROLLER_ENABLED\n"
+        "\t// Disable and deinit controller to free memory\n",
+        "#if CONFIG_BT_CONTROLLER_ENABLED && \\\n"
+        "    !defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)\n"
+        "\t// Disable and deinit controller to free memory\n",
+        "do not tear down a Classic-owned controller after NimBLE init failure",
+    ),
+    (
+        "porting/nimble/src/nimble_port.c",
+        "#if CONFIG_BT_CONTROLLER_ENABLED\n"
+        "    ret = esp_bt_controller_disable();\n",
+        "#if CONFIG_BT_CONTROLLER_ENABLED && \\\n"
+        "    !defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)\n"
+        "    ret = esp_bt_controller_disable();\n",
+        "leave the shared controller running when the NimBLE host stops",
+    ),
+    (
+        "nimble/host/src/ble_hs_startup.c",
+        "    rc = ble_hs_startup_reset_tx();\n"
+        "    if (rc != 0) {\n"
+        "        return rc;\n"
+        "    }\n",
+        "#if !defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)\n"
+        "    rc = ble_hs_startup_reset_tx();\n"
+        "    if (rc != 0) {\n"
+        "        return rc;\n"
+        "    }\n"
+        "#endif\n",
+        "do not reset the controller underneath an initialized Classic host",
+    ),
+    (
+        "nimble/host/src/ble_hs_startup.c",
+        "    cmd.event_mask = htole64(0x2000800002008890);\n",
+        "#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)\n"
+        "    cmd.event_mask = htole64(0x3dbfffffffffffff);\n"
+        "#else\n"
+        "    cmd.event_mask = htole64(0x2000800002008890);\n"
+        "#endif\n",
+        "merge NimBLE requirements with the Classic event mask after LE host support",
     ),
     (
         "esp-idf/esp_nimble_hci.c",

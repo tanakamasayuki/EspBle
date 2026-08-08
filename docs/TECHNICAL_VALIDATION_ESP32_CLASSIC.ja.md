@@ -10,8 +10,10 @@ NimBLEとClassic-only BluedroidをHCI brokerへ接続する構成とする。
 
 ただし、VHCIのH4 byte streamをパケット種別だけで二分することはできない。command credit、
 command応答、connection handle、ACL credit、controller初期化をbrokerが一元管理する必要がある。
-今回追加したbrokerは、この境界を先に導入したsingle-host pass-throughであり、二つ目のhost登録は
-意図的に`ESP_ERR_NOT_SUPPORTED`とする。dual-host対応済みではない。
+single-host pass-throughを基準にした後、opt-inの
+`ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL`としてH4 routerまで実装した。Classic HIDの双方向通信を
+維持したままLE接続とGATT readが成立している。ただしcommand scheduler、停止順、負荷試験は
+未完了なので、通常buildは引き続き二つ目のhost登録を`ESP_ERR_NOT_SUPPORTED`とする。
 
 ## 実機・ビルド検証結果
 
@@ -23,6 +25,9 @@ command応答、connection handle、ACL credit、controller初期化をbrokerが
 | broker経由 ESP32 × ESP32-S3 `security_bond` | 1 passed / 68.66秒 | SMP、暗号化、bond保存経路 |
 | EspBleBluedroid ESP32 dual-mode `dual_mode_scan_spp` | 1 passed / 73.26秒 | active SPPとBLE scan/GATT/notificationの同時動作 |
 | ESP32 / ESP32-S3 compile smoke | 成功 | target guardが両構成で成立 |
+| 独自Classic HID + NimBLE GATT同時Peer | 1 passed | 同じBTDM controllerでBR/EDR ACLとLE ACL、単発GATT readが共存 |
+| dual-host ACL反復 | 制限を再現 | GATT read 9回後のClassic HID ACLが停滞。一般対応にはcredit仮想化が必要 |
+| HCI router unit | 1 passed | opcode応答、handle所有、ACL、切断、mixed completed eventの分割 |
 | ESP-IDF Classic-only host spike | build/link成功 | controllerなし、BLEなし、SPPありのBluedroid hostを外部HCIへattach可能 |
 | EspBle unit test | 7 passed / 1.92秒 | 既存host非依存ロジックの回帰なし |
 
@@ -57,8 +62,11 @@ EspBleが現在基準にするESP-IDF v5.5.5にも存在するが、今回の完
 ESP32-S3などcore内蔵NimBLEを使うtargetでは既存transportを変更せず、brokerもリンクされない。
 vendored NimBLEの再生成で変更を失わないよう、書き換えは`tools/vendor_nimble_esp32.py`へ記録した。
 
-現在はcallback pointerの切替をcontroller停止中に行う前提である。dual-host化の前に、登録解除と
-RX callbackの並行実行を保護し、broker自身のtask/queueへ受信を移す。
+dual-host parser stateはcritical sectionで保護する。callback登録解除とcallback実行の完全な
+lifecycle同期、broker自身の送信queueは今後の作業である。`can_send()`時点のslot予約は
+Bluedroidの先読み確認と両立しないことを実機で確認したため、送信queueは`send()`でpacketを
+broker所有メモリへcopyする境界として実装する。FIFOだけでは反復負荷時のClassic ACL停滞を
+解消できなかったため、ACL creditとNumber Of Completed Packetsの仮想化までを同じ変更単位とする。
 
 ## dual-hostでbrokerが持つべき責務
 

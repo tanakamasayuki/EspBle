@@ -23,10 +23,10 @@ typedef struct
   int (*notify_receive)(uint8_t *data, uint16_t length);
 } espble_hci_host_callbacks_t;
 
-// Register a logical host with the broker. The first implementation deliberately
-// permits one host only; returning ESP_ERR_NOT_SUPPORTED for a second host makes
-// the future dual-host boundary explicit without pretending that packet routing
-// and command/ACL flow control are already safe.
+// Register a logical host with the broker. Production builds remain single-host.
+// Defining ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL admits both hosts through the H4
+// ownership router; this switch remains explicit until lifecycle, queued send
+// arbitration, and sustained-load tests have passed.
 esp_err_t espble_hci_broker_register(
   espble_hci_host_t host, const espble_hci_host_callbacks_t *callbacks);
 void espble_hci_broker_unregister(espble_hci_host_t host);

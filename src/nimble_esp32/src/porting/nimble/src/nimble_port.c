@@ -300,10 +300,19 @@ nimble_port_init(void)
     ble_npl_reset_deinit_flag();
 #endif
 
-#if CONFIG_IDF_TARGET_ESP32 && CONFIG_BT_CONTROLLER_ENABLED
+#if CONFIG_IDF_TARGET_ESP32 && CONFIG_BT_CONTROLLER_ENABLED && \
+    !defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
     esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);
 #endif
 #if CONFIG_BT_CONTROLLER_ENABLED
+#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
+    /* Classic owns the dual-mode controller lifecycle in the experimental
+     * composition. NimBLE attaches only its host and HCI transport. */
+    if (esp_bt_controller_get_status() != ESP_BT_CONTROLLER_STATUS_ENABLED) {
+        ESP_LOGE(NIMBLE_PORT_LOG_TAG, "dual-host controller is not running\n");
+        return ESP_ERR_INVALID_STATE;
+    }
+#else
     esp_bt_controller_config_t config_opts = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
 #if CONFIG_IDF_TARGET_ESP32
     /* EspBle: Arduino-ESP32 builds the prebuilt libraries with Bluedroid, so
@@ -333,11 +342,13 @@ nimble_port_init(void)
         return ret;
     }
 #endif
+#endif
 
     ret = esp_nimble_init();
     if (ret != ESP_OK) {
 
-#if CONFIG_BT_CONTROLLER_ENABLED
+#if CONFIG_BT_CONTROLLER_ENABLED && \
+    !defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
 	// Disable and deinit controller to free memory
         if(esp_bt_controller_disable() != ESP_OK) {
             ESP_LOGE(NIMBLE_PORT_LOG_TAG, "controller disable failed\n");
@@ -372,7 +383,8 @@ nimble_port_deinit(void)
         return ret;
     }
 
-#if CONFIG_BT_CONTROLLER_ENABLED
+#if CONFIG_BT_CONTROLLER_ENABLED && \
+    !defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
     ret = esp_bt_controller_disable();
     if(ret != ESP_OK) {
         ESP_LOGE(NIMBLE_PORT_LOG_TAG, "controller disable failed\n");

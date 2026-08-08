@@ -468,7 +468,15 @@ ble_hs_startup_set_evmask_tx(void)
      *     0x0000800000000000 Encryption Key Refresh Complete Event
      *     0x2000000000000000 LE Meta-Event
      */
+#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
+    /* IDF Bluedroid's HCI_DUMO_EVENT_MASK_EXT in HCI wire order. Bluedroid's
+     * ARRAY8_TO_STREAM reverses its internal "3d bf ff ..." byte array; the
+     * numeric NimBLE representation must therefore serialize as
+     * ff ff ff ff ff ff bf 3d. This preserves Classic events and adds LE Meta. */
+    cmd.event_mask = htole64(0x3dbfffffffffffff);
+#else
     cmd.event_mask = htole64(0x2000800002008890);
+#endif
 
     rc = ble_hs_hci_cmd_tx(BLE_HCI_OP(BLE_HCI_OGF_CTLR_BASEBAND,
                                       BLE_HCI_OCF_CB_SET_EVENT_MASK),
@@ -509,10 +517,12 @@ ble_hs_startup_go(void)
     int key_rc;
     int rc;
 
+#if !defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
     rc = ble_hs_startup_reset_tx();
     if (rc != 0) {
         return rc;
     }
+#endif
 
     rc = ble_hs_startup_read_local_ver_tx();
     if (rc != 0) {

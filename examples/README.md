@@ -39,6 +39,14 @@ Examples are grouped by area. Each standard-service directory holds a matching
 | [CompileSmoke](CompileSmoke/) | — | Minimal build check; prints the library version |
 | [Hosted/CustomPins](Hosted/CustomPins/) | P4 Host | Override ESP-Hosted SDIO pins before `ble.begin()` when they differ from the board variant |
 
+### Bluetooth Classic (original ESP32, experimental)
+
+| Example | Role | Description |
+|---|---|---|
+| [Classic/SppServer](Classic/SppServer/) | SPP Server | Binary-safe SPP echo server |
+| [Classic/HidVendorDevice](Classic/HidVendorDevice/) | HID Device | Classic HID Device with an arbitrary Report Descriptor |
+| [Classic/HidVendorHost](Classic/HidVendorHost/) | HID Host | Connect by address and receive raw Input Reports |
+
 ### GAP — advertise, scan, connect
 
 | Example | Role | Description |

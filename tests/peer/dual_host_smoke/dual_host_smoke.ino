@@ -1,0 +1,113 @@
+#include <EspBle.h>
+#include <EspBleClassic.h>
+#include <esp_mac.h>
+
+static const char *ServiceUuid = "c8a53600-98f4-4f2c-a231-522b5c4d9001";
+static const char *CharacteristicUuid = "c8a53601-98f4-4f2c-a231-522b5c4d9001";
+static const uint8_t ReportDescriptor[] = {
+  0x06, 0x00, 0xff, 0x09, 0x01, 0xa1, 0x01,
+  0x85, 0x01, 0x15, 0x00, 0x26, 0xff, 0x00,
+  0x75, 0x08, 0x95, 0x04, 0x09, 0x01, 0x81, 0x02,
+  0x85, 0x02, 0x95, 0x03, 0x09, 0x02, 0x91, 0x02, 0xc0,
+};
+
+EspBleClassic classic;
+EspBle ble;
+EspBleGattService service;
+EspBleGattCharacteristic characteristic;
+bool inputSent;
+bool bleConnected;
+
+void printHex(const String &value)
+{
+  for (size_t i = 0; i < value.length(); ++i)
+    Serial.printf("%02x", static_cast<uint8_t>(value[i]));
+}
+
+void setup()
+{
+  Serial.begin(115200);
+  delay(500);
+
+  classic.hidDevice().onConnected([](const EspBleClassicHidConnection &) {
+    Serial.println("DUAL_CLASSIC_CONNECTED");
+  });
+  classic.hidDevice().onOutputReport([](const EspBleClassicHidReport &report) {
+    Serial.printf("DUAL_CLASSIC_OUTPUT id=%u hex=", report.reportId);
+    printHex(report.value);
+    Serial.println();
+  });
+  ble.onConnected([](const EspBleConnection &) {
+    bleConnected = true;
+    Serial.println("DUAL_BLE_SERVER_CONNECTED");
+  });
+  ble.onDisconnected([](const EspBleConnection &) {
+    bleConnected = false;
+  });
+
+  EspBleClassicConfig classicConfig;
+  classicConfig.deviceName = "EspBle Dual Host";
+  EspBleClassicHidDeviceConfig hidConfig;
+  hidConfig.name = "EspBle Dual HID";
+  hidConfig.description = "EspBle dual-host smoke";
+  hidConfig.provider = "EspBle";
+  hidConfig.reportDescriptor = ReportDescriptor;
+  hidConfig.reportDescriptorLength = sizeof(ReportDescriptor);
+  if (!classic.begin(classicConfig) || !classic.hidDevice().begin(hidConfig))
+  {
+    Serial.printf("DUAL_CLASSIC_FAILED %s\n", classic.lastErrorDetail().c_str());
+    return;
+  }
+
+  EspBleGattCharacteristicConfig characteristicConfig;
+  characteristicConfig.readable = true;
+  service = ble.gattServer().addService(ServiceUuid);
+  characteristic = ble.gattServer().addCharacteristic(
+    service, CharacteristicUuid, characteristicConfig);
+  ble.gattServer().setValue(characteristic, String("dual-ready"));
+  EspBleConfig bleConfig;
+  bleConfig.deviceName = "EspBle Dual Host";
+  if (!service.valid() || !characteristic.valid() || !ble.begin(bleConfig))
+  {
+    Serial.printf("DUAL_BLE_FAILED %s %s\n",
+      ble.lastErrorName(), ble.lastErrorDetail().c_str());
+    return;
+  }
+  ble.advertising().setName("EspBle Dual Host");
+  ble.advertising().addServiceUuid(ServiceUuid);
+  if (!ble.advertising().start())
+  {
+    Serial.printf("DUAL_ADV_FAILED %s\n", ble.lastErrorDetail().c_str());
+    return;
+  }
+
+  uint8_t address[6] = {};
+  esp_read_mac(address, ESP_MAC_BT);
+  Serial.printf(
+    "DUAL_READY classic=%02x:%02x:%02x:%02x:%02x:%02x ble=%s type=%u\n",
+    address[0], address[1], address[2], address[3], address[4], address[5],
+    ble.localAddress().c_str(), static_cast<unsigned>(ble.localAddressType()));
+}
+
+void loop()
+{
+  classic.update();
+  ble.update();
+  if (classic.hidDevice().connected() && !inputSent)
+  {
+    const uint8_t report[] = {0x00, 0x7f, 0x80, 0xff};
+    inputSent = classic.hidDevice().sendInputReport(1, report, sizeof(report));
+    Serial.printf("DUAL_CLASSIC_INPUT %u\n", inputSent ? 1 : 0);
+  }
+  if (Serial.available())
+  {
+    const char command = Serial.read();
+    if (command == 'i') inputSent = false;
+    else if (command == '?')
+      Serial.printf("DUAL_STATE adv=%u classic=%u ble=%u\n",
+        ble.advertising().isAdvertising() ? 1 : 0,
+        classic.hidDevice().connected() ? 1 : 0,
+        bleConnected ? 1 : 0);
+  }
+  delay(1);
+}

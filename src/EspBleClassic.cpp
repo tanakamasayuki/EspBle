@@ -32,7 +32,12 @@
 #define esp_bt_gap_pin_reply espble_bd_esp_bt_gap_pin_reply
 #define esp_bt_gap_register_callback espble_bd_esp_bt_gap_register_callback
 #define esp_bt_gap_set_device_name espble_bd_esp_bt_gap_set_device_name
+#define esp_bt_gap_set_pin espble_bd_esp_bt_gap_set_pin
 #define esp_bt_gap_set_scan_mode espble_bd_esp_bt_gap_set_scan_mode
+#define esp_bt_gap_set_security_param \
+  espble_bd_esp_bt_gap_set_security_param
+#define esp_bt_gap_ssp_confirm_reply \
+  espble_bd_esp_bt_gap_ssp_confirm_reply
 #define esp_spp_connect espble_bd_esp_spp_connect
 #define esp_spp_deinit espble_bd_esp_spp_deinit
 #define esp_spp_disconnect espble_bd_esp_spp_disconnect
@@ -319,9 +324,16 @@ void startPendingServer(EspBleClassicSppImpl *impl)
 void classicGapCallback(
   esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *parameter)
 {
-  if (event != ESP_BT_GAP_PIN_REQ_EVT || parameter == nullptr) return;
-  esp_bt_pin_code_t pin = {};
-  esp_bt_gap_pin_reply(parameter->pin_req.bda, false, 0, pin);
+  if (parameter == nullptr) return;
+  if (event == ESP_BT_GAP_CFM_REQ_EVT)
+  {
+    esp_bt_gap_ssp_confirm_reply(parameter->cfm_req.bda, true);
+  }
+  else if (event == ESP_BT_GAP_PIN_REQ_EVT)
+  {
+    esp_bt_pin_code_t pin = {'1', '2', '3', '4'};
+    esp_bt_gap_pin_reply(parameter->pin_req.bda, true, 4, pin);
+  }
 }
 
 void sppCallback(esp_spp_cb_event_t event, esp_spp_cb_param_t *parameter)
@@ -585,6 +597,15 @@ bool EspBleClassicSpp::begin()
       return false;
     }
   }
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    if (impl_->initialized)
+    {
+      owner_->clearError();
+      return true;
+    }
+    impl_->initializationCompleted = false;
+  }
   activeSpp.store(impl_, std::memory_order_release);
   if (esp_spp_register_callback(sppCallback) != ESP_OK)
   {
@@ -738,6 +759,7 @@ bool EspBleClassicSpp::startServer(
   owner_->setError(EspBleError::BackendFailure, "Classic SPP is unavailable");
   return false;
 #else
+  if (!begin()) return false;
   {
     std::lock_guard<std::mutex> lock(impl_->mutex);
     if (impl_->serverStartPending || impl_->serverRunning)
@@ -766,6 +788,11 @@ bool EspBleClassicSpp::stopServer()
   owner_->setError(EspBleError::BackendFailure, "Classic SPP is unavailable");
   return false;
 #else
+  if (impl_ == nullptr)
+  {
+    owner_->clearError();
+    return true;
+  }
   bool running = false;
   {
     std::lock_guard<std::mutex> lock(impl_->mutex);
@@ -812,6 +839,7 @@ bool EspBleClassicSpp::connect(
   owner_->setError(EspBleError::BackendFailure, "Classic SPP is unavailable");
   return false;
 #else
+  if (!begin()) return false;
   esp_bd_addr_t backendAddress = {};
   if (!parseAddress(address, backendAddress))
   {
@@ -851,6 +879,11 @@ bool EspBleClassicSpp::disconnect(EspBleClassicSppSessionId sessionId)
   owner_->setError(EspBleError::BackendFailure, "Classic SPP is unavailable");
   return false;
 #else
+  if (impl_ == nullptr)
+  {
+    owner_->setError(EspBleError::NotFound, "SPP session was not found");
+    return false;
+  }
   uint32_t handle = 0;
   {
     std::lock_guard<std::mutex> lock(impl_->mutex);
@@ -903,6 +936,11 @@ bool EspBleClassicSpp::write(
   owner_->setError(EspBleError::BackendFailure, "Classic SPP is unavailable");
   return false;
 #else
+  if (impl_ == nullptr)
+  {
+    owner_->setError(EspBleError::NotFound, "SPP session was not found");
+    return false;
+  }
   {
     std::lock_guard<std::mutex> lock(impl_->mutex);
     if (impl_->backendHandle == 0 || impl_->activeSession.id != sessionId)
@@ -1070,7 +1108,8 @@ void EspBleClassicSpp::update()
   }
 }
 
-EspBleClassic::EspBleClassic() : spp_(this) {}
+EspBleClassic::EspBleClassic() :
+  spp_(this), hidDevice_(this), hidHost_(this) {}
 
 EspBleClassic::~EspBleClassic()
 {
@@ -1114,7 +1153,11 @@ bool EspBleClassic::begin(const EspBleClassicConfig &config)
     setError(EspBleError::InvalidState, "another Bluetooth stack is active");
     return false;
   }
+#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
+  if (!btStartMode(BT_MODE_BTDM))
+#else
   if (!btStartMode(BT_MODE_CLASSIC_BT))
+#endif
   {
     activeClassic.store(nullptr, std::memory_order_release);
     setError(
@@ -1159,7 +1202,10 @@ bool EspBleClassic::begin(const EspBleClassicConfig &config)
     setError(EspBleError::BackendFailure, "failed to initialize Classic GAP");
     return false;
   }
-  if (!spp_.begin())
+  esp_bt_io_cap_t ioCapability = ESP_BT_IO_CAP_NONE;
+  if (
+    esp_bt_gap_set_security_param(
+      ESP_BT_SP_IOCAP_MODE, &ioCapability, sizeof(ioCapability)) != ESP_OK)
   {
     esp_bluedroid_disable();
     esp_bluedroid_deinit();
@@ -1168,12 +1214,14 @@ bool EspBleClassic::begin(const EspBleClassicConfig &config)
 #endif
     btStop();
     activeClassic.store(nullptr, std::memory_order_release);
+    setError(EspBleError::BackendFailure, "failed to configure Classic security");
     return false;
   }
+  esp_bt_pin_code_t pin = {};
+  (void)esp_bt_gap_set_pin(ESP_BT_PIN_TYPE_VARIABLE, 0, pin);
   if (impl_ == nullptr) impl_ = new (std::nothrow) EspBleClassicImpl();
   if (impl_ == nullptr)
   {
-    spp_.end();
     esp_bluedroid_disable();
     esp_bluedroid_deinit();
 #if defined(ESPBLE_CLASSIC_CUSTOM_HOST)
@@ -1194,6 +1242,8 @@ bool EspBleClassic::begin(const EspBleClassicConfig &config)
 void EspBleClassic::end()
 {
   if (!initialized()) return;
+  hidHost_.end();
+  hidDevice_.end();
   spp_.end();
 #if ESPBLE_CLASSIC_BACKEND_AVAILABLE
   if (esp_bluedroid_get_status() == ESP_BLUEDROID_STATUS_ENABLED)
@@ -1213,6 +1263,8 @@ void EspBleClassic::end()
 void EspBleClassic::update()
 {
   spp_.update();
+  hidDevice_.update();
+  hidHost_.update();
 }
 
 bool EspBleClassic::initialized() const
@@ -1223,6 +1275,16 @@ bool EspBleClassic::initialized() const
 EspBleClassicSpp &EspBleClassic::spp()
 {
   return spp_;
+}
+
+EspBleClassicHidDevice &EspBleClassic::hidDevice()
+{
+  return hidDevice_;
+}
+
+EspBleClassicHidHost &EspBleClassic::hidHost()
+{
+  return hidHost_;
 }
 
 EspBleError EspBleClassic::lastError() const

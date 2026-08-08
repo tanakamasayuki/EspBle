@@ -49,8 +49,41 @@ struct EspBleClassicSppConnectionFailure
   String detail;
 };
 
+enum class EspBleClassicHidReportType : uint8_t
+{
+  Input = 1,
+  Output = 2,
+  Feature = 3,
+};
+
+struct EspBleClassicHidDeviceConfig
+{
+  const char *name = "EspBle HID";
+  const char *description = "EspBle Classic HID Device";
+  const char *provider = "EspBle";
+  uint8_t subclass = 0;
+  const uint8_t *reportDescriptor = nullptr;
+  size_t reportDescriptorLength = 0;
+};
+
+struct EspBleClassicHidConnection
+{
+  String peerAddress;
+  bool incoming = false;
+};
+
+struct EspBleClassicHidReport
+{
+  String peerAddress;
+  EspBleClassicHidReportType type = EspBleClassicHidReportType::Input;
+  uint8_t reportId = 0;
+  String value;
+};
+
 struct EspBleClassicImpl;
 struct EspBleClassicSppImpl;
+struct EspBleClassicHidDeviceImpl;
+struct EspBleClassicHidHostImpl;
 class EspBleClassic;
 
 class EspBleClassicSpp
@@ -123,6 +156,80 @@ private:
   ConnectionFailureCallback connectionFailureCallback_;
 };
 
+class EspBleClassicHidDevice
+{
+public:
+  using ConnectionCallback =
+    std::function<void(const EspBleClassicHidConnection &)>;
+  using ReportCallback = std::function<void(const EspBleClassicHidReport &)>;
+
+  bool begin(const EspBleClassicHidDeviceConfig &config);
+  void end();
+  bool initialized() const;
+  bool registered() const;
+  bool connected() const;
+  String peerAddress() const;
+
+  bool sendReport(
+    EspBleClassicHidReportType type, uint8_t reportId,
+    const uint8_t *data, size_t length);
+  bool sendInputReport(
+    uint8_t reportId, const uint8_t *data, size_t length);
+  bool disconnect();
+
+  void onConnected(ConnectionCallback callback);
+  void onDisconnected(ConnectionCallback callback);
+  void onOutputReport(ReportCallback callback);
+  size_t droppedEventCount() const;
+
+private:
+  friend class EspBleClassic;
+  explicit EspBleClassicHidDevice(EspBleClassic *owner);
+  ~EspBleClassicHidDevice();
+  void update();
+
+  EspBleClassic *owner_;
+  EspBleClassicHidDeviceImpl *impl_ = nullptr;
+  ConnectionCallback connectedCallback_;
+  ConnectionCallback disconnectedCallback_;
+  ReportCallback outputReportCallback_;
+};
+
+class EspBleClassicHidHost
+{
+public:
+  using ConnectionCallback =
+    std::function<void(const EspBleClassicHidConnection &)>;
+  using ReportCallback = std::function<void(const EspBleClassicHidReport &)>;
+
+  bool begin();
+  void end();
+  bool initialized() const;
+  bool connect(const char *address);
+  bool disconnect();
+  bool connected() const;
+  String peerAddress() const;
+
+  bool sendOutputReport(const uint8_t *data, size_t length);
+
+  void onConnected(ConnectionCallback callback);
+  void onDisconnected(ConnectionCallback callback);
+  void onInputReport(ReportCallback callback);
+  size_t droppedEventCount() const;
+
+private:
+  friend class EspBleClassic;
+  explicit EspBleClassicHidHost(EspBleClassic *owner);
+  ~EspBleClassicHidHost();
+  void update();
+
+  EspBleClassic *owner_;
+  EspBleClassicHidHostImpl *impl_ = nullptr;
+  ConnectionCallback connectedCallback_;
+  ConnectionCallback disconnectedCallback_;
+  ReportCallback inputReportCallback_;
+};
+
 class EspBleClassic
 {
 public:
@@ -137,6 +244,8 @@ public:
   bool initialized() const;
 
   EspBleClassicSpp &spp();
+  EspBleClassicHidDevice &hidDevice();
+  EspBleClassicHidHost &hidHost();
 
   EspBleError lastError() const;
   const char *lastErrorName() const;
@@ -144,12 +253,16 @@ public:
 
 private:
   friend class EspBleClassicSpp;
+  friend class EspBleClassicHidDevice;
+  friend class EspBleClassicHidHost;
 
   void clearError();
   void setError(EspBleError error, const char *detail);
 
   EspBleClassicImpl *impl_ = nullptr;
   EspBleClassicSpp spp_;
+  EspBleClassicHidDevice hidDevice_;
+  EspBleClassicHidHost hidHost_;
   EspBleError lastError_ = EspBleError::None;
   String lastErrorDetail_;
 };
