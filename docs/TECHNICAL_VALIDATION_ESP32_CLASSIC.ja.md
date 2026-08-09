@@ -32,6 +32,7 @@ bond再接続、暗号化必須GATT readも成立した。ただし未分類のc
 | dual-host ACL反復 | 1 passed | GATT read 25回後もClassic HID双方向が継続。両側LE ACL tx/rx/completed=36/36/36、unknown handle 0 |
 | dual-host security / bond再接続 | 1 passed / 66.93秒 | Classic HID接続中に両側pairing・bond保存、再接続後の暗号化必須read、`encrypted=1 bonded=1 key=16`を確認 |
 | dual-host controller command inventory | 1 passed | NimBLE 19種、Classic 32〜34種を実機記録。再attach時Reset / flow-control設定を仮想化し、overflow・opcode不一致0 |
+| dual-host FIFO backpressure | 1 passed / 82.76秒（通常回帰全体） | 両hostから24件同時投入、16件受理・8件超過拒否、high-water 16。未送信分破棄後にGATT/HID/lifecycle復帰 |
 | dual-host同時切断 | 1 passed / 106.05秒（clean） | LE / BR-EDR Disconnectを連続発行し、両handleの完了を正しいhostへ配送後、停止・再起動・destructor成功 |
 | HCI router unit | 1 passed | opcode応答、handle所有、ACL、切断、mixed completed eventの分割 |
 | ESP-IDF Classic-only host spike | build/link成功 | controllerなし、BLEなし、SPPありのBluedroid hostを外部HCIへattach可能 |
@@ -87,6 +88,34 @@ LE tx/rx/completed=36/36/36、Classic tx/rx/completed=25/25/25で、unknown hand
 `initialized()`がfalse、host解除時のin-flight commandは0だった。queueはhost解除時にowner単位で
 破棄し、専用送信taskはsession世代とFIFO先頭を物理送信直前に再照合するため、前sessionからcopyした
 commandを再登録後のcontrollerへ送らない。再登録の長時間soakは未検証である。
+
+commandを両hostから意図的に同時発行する実機試験も追加した。Arduino main taskからNimBLEの
+`Read RSSI`を20回発行する間、別FreeRTOS taskからClassic-only Bluedroidのscan modeを20回
+切り替える。Classic APIがBTC taskへ非同期postした処理の収束を待ち、最後の同期`Read RSSI`で
+broker FIFOがdrainしたことを確認する。10サイクル連続試験では各基板でNimBLE約210件、Classic
+約500件のHCI commandを競合区間だけで物理送信し、全件でFIFO投入数と物理送信数が一致した。
+最大queue深度はDUT 4、Peer 5で、queue overflow、応答opcode不一致、host解除busy、未知ACLは
+すべて0だった。各サイクル直後の暗号化GATT readとClassic HID Input / Output Report、続くbond
+再接続、Classic再attach、任意順停止、再起動、destructorも成功し、3点のheap測定値は両基板とも
+完全に同一だった。
+
+正常なNimBLE / Bluedroidはhost内部でもHCI transactionを直列化するため、実APIの同時呼び出しだけで
+16 packet FIFOを満杯にすることはできない。そこでdual-host実機test sketchだけに
+`ESPBLE_HCI_BACKPRESSURE_TEST`を定義し、schedulerがidleであることを確認して物理dispatchを一時停止する
+検証フックを追加した。二つのFreeRTOS taskから通常の`espble_hci_broker_send()`経路へ各12件を同時投入し、
+両基板とも16件を受理、残り8件を`ESP_ERR_NO_MEM`で拒否し、queue high-water 16を記録した。試験commandは
+controllerへ送らず、logical hostへ偽のCommand Completeも返さずに破棄し、元のschedulerとdiagnosticsを復元する。
+直後の暗号化GATT readとClassic HID双方向通信、bond再接続、Classic再attach、任意順停止、再起動、
+destructorが成功したため、満杯・超過拒否後のlive session復帰も確認できた。検証フックは通常buildには
+コンパイルされない。残る負荷課題は数時間級soakである。
+
+当初はClassic側の負荷に`Write Local Name`を使ったが、5〜10サイクルでcontrollerが
+`ASSERT_ERR(0), in nvds.c at line 400`となった。ELFでdecodeしたbacktraceは
+`hci_wr_local_name_cmd_handler` → `ke_task_schedule` → `btdm_controller_task`であり、その直前まで
+brokerの投入数と送信数は一致し、overflow、opcode不一致、未知eventも0だった。これはNVDSへ触れる
+永続設定commandをsoak刺激として反復したcontroller側の制約であり、brokerの競合不良とは扱わない。
+以降は永続領域へ書かないscan mode切替を刺激に使い、10サイクルでassertが再現しないことを確認した。
+
 同じ実機試験で、停止後に同一の`EspBle` / `EspBleClassic` instanceとGATT/HID定義を使って
 Classic→NimBLEを再登録し、両hostの初期化成功と正常停止を通常3サイクル、拡張実行20サイクルで
 確認した。20サイクル実行ではbaseline、各サイクル、destructor後の計22点でheapを計測し、DUTは

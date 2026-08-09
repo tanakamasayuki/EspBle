@@ -11,6 +11,7 @@ NIMBLE_OPCODES = {
     0x1002,
     0x1003,
     0x1009,
+    0x1405,
     0x2001,
     0x2002,
     0x2003,
@@ -138,6 +139,74 @@ def test_nimble_and_custom_classic_host_run_together(dut, peers):
     peer.expect_exact("DUAL_PEER_OUTPUT 1", timeout=10)
     dut.expect(re.compile(rb"DUAL_CLASSIC_OUTPUT id=2 hex=(a500ff|02a500ff)"), timeout=10)
 
+    contention_pattern = re.compile(
+        rb"(?:DUAL|DUAL_PEER)_CONTENTION task=1 classic=20 rssi=21 "
+        rb"tx=(\d+),(\d+)/(\d+),(\d+) qmax=(\d+) qfull=0 "
+        rb"mismatch=0 busy=0 unknown=0 last_rssi=-?\d+"
+    )
+    contention_cycles = int(os.getenv("ESPBLE_DUAL_CONTENTION_CYCLES", "1"))
+    assert 1 <= contention_cycles <= 100
+    for _ in range(contention_cycles):
+        dut.write("j")
+        dut_contention = dut.expect(contention_pattern, timeout=30)
+        peer.write("j\n")
+        peer_contention = peer.expect(contention_pattern, timeout=30)
+        for result in (dut_contention, peer_contention):
+            assert result.group(1) == result.group(3) == b"21"
+            assert result.group(2) == result.group(4)
+            # The upper host may expand one scan-mode request into more than
+            # one physical command. At least one per request must reach HCI.
+            assert int(result.group(2)) >= 20
+            assert int(result.group(5)) >= 2
+
+        # A clean command response is insufficient if either ACL data path was
+        # starved. Exercise encrypted LE GATT and both Classic HID directions
+        # immediately after every contention cycle.
+        peer.write("r\n")
+        peer.expect_exact("DUAL_BLE_READ_REQUESTED 1", timeout=10)
+        peer.expect_exact(
+            "DUAL_BLE_READ success=1 value=dual-ready classic=1", timeout=10
+        )
+        dut.write("i")
+        dut.expect_exact("DUAL_CLASSIC_INPUT 1", timeout=10)
+        peer.expect(
+            re.compile(rb"DUAL_PEER_INPUT hex=(01)?007f80[0-9a-f]{2}"), timeout=10
+        )
+        peer.expect_exact("DUAL_PEER_OUTPUT 1", timeout=10)
+        dut.expect(
+            re.compile(rb"DUAL_CLASSIC_OUTPUT id=2 hex=(a500ff|02a500ff)"), timeout=10
+        )
+
+    # Conforming hosts normally serialize their own HCI transactions, so a
+    # test-only broker hold is needed to drive the physical FIFO to capacity.
+    # The 24 deliberately unsent commands are discarded before dispatch; no
+    # synthetic completion is delivered to either host.
+    backpressure_pattern = re.compile(
+        rb"(?:DUAL|DUAL_PEER)_BACKPRESSURE tasks=2 accepted=16 full=8 "
+        rb"other=0 queued=16 qmax=16 qfull=8 restored=1"
+    )
+    dut.write("K")
+    dut.expect(backpressure_pattern, timeout=10)
+    peer.write("K\n")
+    peer.expect(backpressure_pattern, timeout=10)
+
+    # Prove that restoring the live scheduler did not perturb either host or
+    # either ACL path.
+    peer.write("r\n")
+    peer.expect_exact("DUAL_BLE_READ_REQUESTED 1", timeout=10)
+    peer.expect_exact(
+        "DUAL_BLE_READ success=1 value=dual-ready classic=1", timeout=10
+    )
+    dut.write("i")
+    dut.expect_exact("DUAL_CLASSIC_INPUT 1", timeout=10)
+    peer.expect(
+        re.compile(rb"DUAL_PEER_INPUT hex=(01)?007f80[0-9a-f]{2}"), timeout=10
+    )
+    peer.expect_exact("DUAL_PEER_OUTPUT 1", timeout=10)
+    dut.expect(
+        re.compile(rb"DUAL_CLASSIC_OUTPUT id=2 hex=(a500ff|02a500ff)"), timeout=10
+    )
+
     dut.write("n")
     peer.write("n\n")
     dut.expect_exact("DUAL_BLE_BONDS 1", timeout=10)
@@ -218,17 +287,19 @@ def test_nimble_and_custom_classic_host_run_together(dut, peers):
                     prefix
                     + rb" host="
                     + str(host).encode()
-                    + rb" count=(\d+) overflow=(\d+) values=([0-9a-f,]*)"
+                    + rb" count=(\d+) overflow=(\d+) values=([0-9a-f,]*)\r?\n"
                 ),
                 timeout=10,
             )
             assert int(match.group(1)) > 0
             assert match.group(2) == b"0"
-            values = {
+            value_list = [
                 int(value, 16)
                 for value in match.group(3).decode().split(",")
                 if value
-            }
+            ]
+            assert len(value_list) == int(match.group(1))
+            values = set(value_list)
             allowed = NIMBLE_OPCODES if host == 0 else CLASSIC_OPCODES
             assert values <= allowed
             if host == 1:

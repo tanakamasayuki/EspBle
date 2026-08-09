@@ -303,6 +303,8 @@ profileを置いていないのは次の2種類だけです。
 67. ✅ `rpa_bond`: 無印ESP32のhost-based privacyを両側で有効化し、scan・接続でOTA RPA（random型、上位bit `01`）を確認する。初回pairingと暗号化GATT read/write後に両端を再起動し、NVSから復元したIRK/LTKで再暗号化する。続いて復元済みbondを削除し、stale resolving-list entryを残さず新規pairingできることまで確認する。
 68. ✅ `dual_host_rpa`: 無印ESP32 2台で同梱NimBLE hostと独自Classic hostを同時起動する。Classic HID ACLを維持したままhost生成RPAでpairingし、scanと双方connectionのOTA RPA型を検査する。LE切断後もClassic接続を残し、保存bondから暗号化GATTを再確立する。両roleのhost timeoutを2秒へ短縮し、3周期連続のRPA rotationごとにClassic HID reportを双方向送信しながら、preemptされたadvertising/scanが毎回再開することを確認する。有限8秒のadvertising/scanは3秒後に稼働、元deadlineを越えた9秒後に停止すること、HCI `LE Set Random Address`がNimBLEへ配送されbrokerの未知event・queue overflow・応答不一致が0であることも検査する。変化後のRPAからbond済みLEへ再接続し、最後に両dual-host stackを再起動してClassic再接続、新しいRPAの観測、永続IRK/LTKからのLE暗号化復元を行い、両transportが同時接続中であることを確認する。
 
+実験用 `dual_host_smoke` は、Classic HIDと暗号化LE GATTを接続した両基板で、別taskのClassic scan mode切替とNimBLE `Read RSSI`を同時発行する。FIFO投入数＝物理送信数、最終RSSI成功、broker error 0を確認し、各競合サイクル直後に暗号化GATT readとHID双方向通信を再検証する。`ESPBLE_DUAL_CONTENTION_CYCLES`で反復数を1〜100に変更でき、10サイクル実機試験に合格済み。さらにtest-onlyのdispatch hold中に両hostから各12件を同時投入し、16 packet FIFOの満杯、8件の`ESP_ERR_NO_MEM`、未送信command破棄後のGATT/HID/lifecycle復帰を確認する。偽commandはcontrollerへ送らず、hostへ偽応答も返さない。永続NVDSへ触れる`Write Local Name`はcontroller assertionを起こすため、負荷刺激には使わない。
+
 ## 合格条件
 
 - test codeがすべての入力を生成し、Serial assertionで結果を判定する。

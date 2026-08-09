@@ -85,6 +85,16 @@ esp_err_t espble_hci_broker_send(
 void espble_hci_broker_get_diagnostics(
   espble_hci_broker_diagnostics_t *diagnostics);
 
+#if defined(ESPBLE_HCI_BACKPRESSURE_TEST)
+// Hardware-validation hook. It is compiled only by the dual-host test sketch:
+// hold physical command dispatch, exercise the normal enqueue path, then
+// discard the deliberately unsent commands without exposing responses to a
+// logical host. begin() requires an idle scheduler.
+esp_err_t espble_hci_broker_test_begin_backpressure(void);
+esp_err_t espble_hci_broker_test_end_backpressure(
+  uint16_t *queued, uint16_t *high_water, uint32_t *queue_full);
+#endif
+
 #ifdef __cplusplus
 }
 #endif

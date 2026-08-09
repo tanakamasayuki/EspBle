@@ -32,6 +32,10 @@ static uint32_t command_generation;
 static espble_hci_controller_stop_callback_t controller_stop_callback;
 static uint8_t virtual_command_pending;
 static uint16_t virtual_command_opcode[ESPBLE_HCI_HOST_COUNT];
+#if defined(ESPBLE_HCI_BACKPRESSURE_TEST)
+static bool command_backpressure_hold;
+static espble_hci_broker_diagnostics_t backpressure_diagnostics;
+#endif
 #endif
 
 static espble_hci_route_t host_route(size_t host)
@@ -114,6 +118,12 @@ static void command_task(void *argument)
     (void)ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
     for (;;)
     {
+#if defined(ESPBLE_HCI_BACKPRESSURE_TEST)
+      portENTER_CRITICAL(&broker_lock);
+      const bool held_for_backpressure = command_backpressure_hold;
+      portEXIT_CRITICAL(&broker_lock);
+      if (held_for_backpressure) break;
+#endif
       const espble_hci_host_callbacks_t *virtual_callbacks = NULL;
       portENTER_CRITICAL(&broker_lock);
       for (size_t i = 0; i < ESPBLE_HCI_HOST_COUNT; ++i)
@@ -450,6 +460,9 @@ esp_err_t espble_hci_broker_register(
   espble_hci_controller_policy_init(&controller_policy);
   virtual_command_pending = 0;
   memset(virtual_command_opcode, 0, sizeof(virtual_command_opcode));
+#if defined(ESPBLE_HCI_BACKPRESSURE_TEST)
+  command_backpressure_hold = false;
+#endif
   ++command_generation;
 #endif
   result = esp_vhci_host_register_callback(&physical_callbacks);
@@ -486,6 +499,9 @@ void espble_hci_broker_unregister(espble_hci_host_t host)
     controller_stop_callback = NULL;
     virtual_command_pending = 0;
     memset(virtual_command_opcode, 0, sizeof(virtual_command_opcode));
+#if defined(ESPBLE_HCI_BACKPRESSURE_TEST)
+    command_backpressure_hold = false;
+#endif
   }
   else
   {
@@ -772,5 +788,48 @@ void espble_hci_broker_get_diagnostics(
   *output = diagnostics;
   portEXIT_CRITICAL(&broker_lock);
 }
+
+#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL) && \
+    defined(ESPBLE_HCI_BACKPRESSURE_TEST)
+esp_err_t espble_hci_broker_test_begin_backpressure(void)
+{
+  portENTER_CRITICAL(&broker_lock);
+  const bool idle = dual_host_active() && !command_backpressure_hold &&
+    command_scheduler.count == 0 && !command_scheduler.awaiting_response &&
+    router.pending_count == 0 && virtual_command_pending == 0;
+  if (idle)
+  {
+    backpressure_diagnostics = diagnostics;
+    command_backpressure_hold = true;
+  }
+  portEXIT_CRITICAL(&broker_lock);
+  return idle ? ESP_OK : ESP_ERR_INVALID_STATE;
+}
+
+esp_err_t espble_hci_broker_test_end_backpressure(
+  uint16_t *queued, uint16_t *high_water, uint32_t *queue_full)
+{
+  if (queued == NULL || high_water == NULL || queue_full == NULL)
+    return ESP_ERR_INVALID_ARG;
+
+  portENTER_CRITICAL(&broker_lock);
+  const bool active = command_backpressure_hold && dual_host_active() &&
+    !command_scheduler.awaiting_response && router.pending_count == 0;
+  if (active)
+  {
+    *queued = command_scheduler.count;
+    *high_water = diagnostics.command_queue_high_water;
+    *queue_full = diagnostics.command_queue_full -
+      backpressure_diagnostics.command_queue_full;
+    espble_hci_command_scheduler_init(&command_scheduler);
+    diagnostics = backpressure_diagnostics;
+    command_backpressure_hold = false;
+    ++command_generation;
+  }
+  portEXIT_CRITICAL(&broker_lock);
+  if (active) wake_command_task();
+  return active ? ESP_OK : ESP_ERR_INVALID_STATE;
+}
+#endif
 
 #endif

@@ -96,7 +96,7 @@ Arduino coreの設定はSPP有効・Classic HID無効であり、core `libbt.a`�
 
 ## 次の実装
 
-1. dual-hostのcommand同時発行と実機queue overflowを長時間反復する。
+1. dual-hostのcommand同時発行10サイクルと、test-only dispatch holdによる16 packet FIFO満杯・超過拒否・復帰を実機確認済み。次は同時発行とlifecycleを数時間級soakで反復する。
 2. controller / hostの任意順停止・再登録を数時間級のsoakで反復する。100サイクルのheap記録では減少0 byteを確認済み。
 3. 取得済みcommand inventoryを基に、未処理のcontroller-wide設定と接続単位commandを仕様表へ分類する。
 4. HID接続失敗と異常長Reportを両transport同時状態で試験する。

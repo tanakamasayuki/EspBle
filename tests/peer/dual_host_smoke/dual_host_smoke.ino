@@ -2,6 +2,13 @@
 #include <EspBleClassic.h>
 #include <EspBleHciBroker.h>
 #include <esp_mac.h>
+#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL) && defined(CONFIG_IDF_TARGET_ESP32)
+#include <nimble_esp32/include/host/ble_gap.h>
+#include <esp_gap_bt_api.h>
+extern "C" esp_err_t espble_bd_esp_bt_gap_set_scan_mode(
+  esp_bt_connection_mode_t connectionMode,
+  esp_bt_discovery_mode_t discoveryMode);
+#endif
 #if defined(ESPBLE_TEST_DUAL_RPA)
 #include <nimble_esp32/include/host/ble_hs_pvcy.h>
 #endif
@@ -21,8 +28,177 @@ EspBleGattService service;
 EspBleGattCharacteristic characteristic;
 bool inputSent;
 bool bleConnected;
+EspBleConnectionId bleConnectionId;
 uint8_t inputSequence;
 bool advertisingConfigured;
+
+#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL) && defined(CONFIG_IDF_TARGET_ESP32)
+struct CommandContentionContext
+{
+  volatile uint32_t accepted = 0;
+  volatile bool done = false;
+};
+
+void classicCommandContentionTask(void *argument)
+{
+  CommandContentionContext *context =
+    static_cast<CommandContentionContext *>(argument);
+  for (uint32_t index = 0; index < 20; ++index)
+  {
+    const esp_bt_discovery_mode_t discoveryMode = (index & 1) != 0
+      ? ESP_BT_GENERAL_DISCOVERABLE
+      : ESP_BT_NON_DISCOVERABLE;
+    if (espble_bd_esp_bt_gap_set_scan_mode(
+          ESP_BT_CONNECTABLE, discoveryMode) == ESP_OK)
+      ++context->accepted;
+    vTaskDelay(1);
+  }
+  context->done = true;
+  vTaskDelete(nullptr);
+}
+
+void runCommandContention(const char *prefix)
+{
+  EspBleConnection connection;
+  if (bleConnectionId == 0 || !ble.connection(bleConnectionId, connection))
+  {
+    Serial.printf("%s_CONTENTION connection=0\n", prefix);
+    return;
+  }
+  espble_hci_broker_diagnostics_t before = {};
+  espble_hci_broker_get_diagnostics(&before);
+  CommandContentionContext context;
+  const BaseType_t taskStarted = xTaskCreate(
+    classicCommandContentionTask, "classic_cmd_stress", 3072, &context, 2, nullptr);
+  uint32_t rssiSuccess = 0;
+  int8_t rssi = 0;
+  if (taskStarted == pdPASS)
+  {
+    for (uint32_t index = 0; index < 20; ++index)
+    {
+      if (ble_gap_conn_rssi(connection.handle, &rssi) == 0) ++rssiSuccess;
+      vTaskDelay(1);
+    }
+    // The task owns a pointer to this stack context, so do not return until it
+    // has stopped using it. The pytest serial timeout still catches a hung DUT.
+    while (!context.done)
+      vTaskDelay(1);
+    // The Classic API posts work to Bluedroid's BTC task. Wait until the
+    // broker-visible command count settles.
+    uint32_t previousClassicCommands = UINT32_MAX;
+    uint32_t stableSince = millis();
+    const uint32_t settleDeadline = millis() + 5000;
+    while (static_cast<int32_t>(settleDeadline - millis()) > 0)
+    {
+      espble_hci_broker_diagnostics_t current = {};
+      espble_hci_broker_get_diagnostics(&current);
+      const uint32_t classicCommands =
+        current.command_enqueued[1] - before.command_enqueued[1];
+      if (classicCommands != previousClassicCommands)
+      {
+        previousClassicCommands = classicCommands;
+        stableSince = millis();
+      }
+      if (millis() - stableSince >= 250) break;
+      vTaskDelay(1);
+    }
+    // This command enters after every command accepted above. Its synchronous
+    // completion proves the broker FIFO drained all earlier transactions.
+    if (context.done && ble_gap_conn_rssi(connection.handle, &rssi) == 0)
+      ++rssiSuccess;
+  }
+  espble_hci_broker_diagnostics_t after = {};
+  espble_hci_broker_get_diagnostics(&after);
+  Serial.printf(
+    "%s_CONTENTION task=%u classic=%lu rssi=%lu tx=%lu,%lu/%lu,%lu "
+    "qmax=%u qfull=%lu mismatch=%lu busy=%lu unknown=%lu last_rssi=%d\n",
+    prefix, taskStarted == pdPASS ? 1 : 0,
+    static_cast<unsigned long>(context.accepted),
+    static_cast<unsigned long>(rssiSuccess),
+    static_cast<unsigned long>(
+      after.command_enqueued[0] - before.command_enqueued[0]),
+    static_cast<unsigned long>(
+      after.command_enqueued[1] - before.command_enqueued[1]),
+    static_cast<unsigned long>(
+      after.command_sent[0] - before.command_sent[0]),
+    static_cast<unsigned long>(
+      after.command_sent[1] - before.command_sent[1]),
+    after.command_queue_high_water,
+    static_cast<unsigned long>(after.command_queue_full),
+    static_cast<unsigned long>(after.command_response_mismatch),
+    static_cast<unsigned long>(after.command_unregister_busy),
+    static_cast<unsigned long>(after.unknown_acl), rssi);
+}
+
+#if defined(ESPBLE_HCI_BACKPRESSURE_TEST)
+struct BackpressureContext
+{
+  espble_hci_host_t host;
+  volatile bool *start;
+  volatile bool done = false;
+  uint32_t accepted = 0;
+  uint32_t full = 0;
+  uint32_t other = 0;
+};
+
+void backpressureTask(void *argument)
+{
+  BackpressureContext *context = static_cast<BackpressureContext *>(argument);
+  static const uint8_t ReadBdAddr[] = {0x01, 0x09, 0x10, 0x00};
+  while (!*context->start) vTaskDelay(1);
+  for (uint32_t index = 0; index < 12; ++index)
+  {
+    const esp_err_t result = espble_hci_broker_send(
+      context->host, ReadBdAddr, sizeof(ReadBdAddr));
+    if (result == ESP_OK) ++context->accepted;
+    else if (result == ESP_ERR_NO_MEM) ++context->full;
+    else ++context->other;
+  }
+  context->done = true;
+  vTaskDelete(nullptr);
+}
+
+void runBackpressure(const char *prefix)
+{
+  if (espble_hci_broker_test_begin_backpressure() != ESP_OK)
+  {
+    Serial.printf("%s_BACKPRESSURE begin=0\n", prefix);
+    return;
+  }
+  volatile bool start = false;
+  BackpressureContext contexts[2] = {
+    {ESPBLE_HCI_HOST_NIMBLE, &start},
+    {ESPBLE_HCI_HOST_CLASSIC, &start},
+  };
+  uint32_t tasks = 0;
+  for (size_t index = 0; index < 2; ++index)
+  {
+    if (xTaskCreate(backpressureTask, "hci_queue_fill", 4096,
+          &contexts[index], 2, nullptr) == pdPASS)
+      ++tasks;
+    else
+      contexts[index].done = true;
+  }
+  start = true;
+  while (!contexts[0].done || !contexts[1].done) vTaskDelay(1);
+
+  uint16_t queued = 0;
+  uint16_t highWater = 0;
+  uint32_t brokerFull = 0;
+  const bool restored = espble_hci_broker_test_end_backpressure(
+    &queued, &highWater, &brokerFull) == ESP_OK;
+  Serial.printf(
+    "%s_BACKPRESSURE tasks=%lu accepted=%lu full=%lu other=%lu "
+    "queued=%u qmax=%u qfull=%lu restored=%u\n",
+    prefix, static_cast<unsigned long>(tasks),
+    static_cast<unsigned long>(contexts[0].accepted + contexts[1].accepted),
+    static_cast<unsigned long>(contexts[0].full + contexts[1].full),
+    static_cast<unsigned long>(contexts[0].other + contexts[1].other),
+    queued, highWater, static_cast<unsigned long>(brokerFull),
+    restored ? 1 : 0);
+}
+#endif
+#endif
 
 void printHex(const String &value)
 {
@@ -126,6 +302,7 @@ void setup()
   });
   ble.onConnected([](const EspBleConnection &connection) {
     bleConnected = true;
+    bleConnectionId = connection.id;
     Serial.println("DUAL_BLE_SERVER_CONNECTED");
 #if defined(ESPBLE_TEST_DUAL_RPA)
     Serial.printf("RPA_DUAL_SERVER_PEER addr=%s type=%u\n",
@@ -135,6 +312,7 @@ void setup()
   });
   ble.onDisconnected([](const EspBleConnection &) {
     bleConnected = false;
+    bleConnectionId = 0;
     Serial.println("DUAL_BLE_SERVER_DISCONNECTED");
   });
   ble.onSecurityChanged([](const EspBleSecurityChanged &event) {
@@ -185,6 +363,14 @@ void loop()
         static_cast<unsigned>(ble.bondCount()));
     else if (command == 'h')
       printHeap("DUAL_HEAP");
+#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL) && defined(CONFIG_IDF_TARGET_ESP32)
+    else if (command == 'j')
+      runCommandContention("DUAL");
+#if defined(ESPBLE_HCI_BACKPRESSURE_TEST)
+    else if (command == 'K')
+      runBackpressure("DUAL");
+#endif
+#endif
 #if defined(ESPBLE_TEST_DUAL_RPA)
     else if (command == 'X')
     {
