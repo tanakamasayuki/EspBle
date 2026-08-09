@@ -363,6 +363,19 @@ void loop()
         static_cast<unsigned>(ble.bondCount()));
     else if (command == 'h')
       printHeap("DUAL_HEAP");
+    else if (command == 'L')
+    {
+      static uint8_t oversized[
+        EspBleClassicHidDevice::MaximumReportLength + 1] = {};
+      const bool nullRejected = !classic.hidDevice().sendInputReport(
+        1, nullptr, 1);
+      const bool oversizedRejected = !classic.hidDevice().sendInputReport(
+        1, oversized, sizeof(oversized));
+      Serial.printf(
+        "DUAL_INVALID_REPORT null=%u oversized=%u error=%s connected=%u\n",
+        nullRejected ? 1 : 0, oversizedRejected ? 1 : 0,
+        classic.lastErrorName(), classic.hidDevice().connected() ? 1 : 0);
+    }
 #if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL) && defined(CONFIG_IDF_TARGET_ESP32)
     else if (command == 'j')
       runCommandContention("DUAL");

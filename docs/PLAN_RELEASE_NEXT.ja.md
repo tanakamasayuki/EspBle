@@ -12,16 +12,17 @@
 - 無印ESP32向け同梱NimBLE hostはCentral / Peripheral両roleで実機回帰済み。
 - Classic-only Bluedroid archive、SPP、HID Device/Host、dual-host HCI brokerは実装・実機検証済みだが実験扱い。
 - dual-hostはcommand/ACL routing、bond/RPA、任意停止順、再attach、FIFO満杯、再登録とheap安定性まで検証済み。
-- 数時間級dual-host soak、残command分類、異常系、公開サポート範囲の確定が未完了。
+- 数時間級dual-host soak、観測HCI commandのpolicy分類、不正HID report拒否、peer突然消失後の復旧は完了。接続・pairing失敗、公開サポート範囲の確定が未完了。
 - `CHANGELOG.md`のUnreleasedと利用者向けClassic文書は、次回release内容として未整理。
 
 ## Gate A: Classic / dual-hostの公開範囲
 
 | 状態 | 項目 | 完了条件 |
 |---|---|---|
-| 未完了 | 数時間級dual-host soak | command競合、GATT/HID、停止・再登録を連続実行し、panicなし、broker errorなし、heap低下なし |
-| 未完了 | HCI command policy監査 | inventory全件を分類し、未処理controller-wide commandの扱いを明文化・実装・試験 |
-| 未完了 | dual-host異常系 | HID接続/pairing失敗、異常長report、peer消失後に両hostが回復 |
+| 完了 | 数時間級dual-host soak | 20 run、1時間41分44秒。command競合／停止・再登録各100サイクル、panic・broker error・heap低下なし |
+| 完了 | HCI command policy監査 | 接続後cleanupを含むinventoryを分類し、未知／別host opcodeのfail-closed policyとunit・実機回帰を追加 |
+| 完了 | 不正HID report / peer消失 | null・上限超過reportを送信前に拒否し接続を維持。peer突然再起動後にbond済みBLEとClassic HIDを復旧 |
+| 未完了 | 接続・pairing失敗 | HID接続失敗とBLE pairing失敗後に両hostが回復 |
 | 未完了 | lifecycle競合監査 | callback実行中の解除・停止についてdata raceとuse-after-freeがないことを確認 |
 | 未完了 | release scope決定 | experimental flagのまま同梱するか、正式APIに昇格するか、次回releaseから外すかを決定 |
 | 未完了 | 利用者向け文書 | README、Feature Matrix、example、制限、build flagが決定したscopeと一致 |

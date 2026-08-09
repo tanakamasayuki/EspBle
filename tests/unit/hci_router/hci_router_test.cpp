@@ -69,6 +69,12 @@ int main()
     &router, classicConnection, sizeof(classicConnection)) == ESPBLE_HCI_ROUTE_CLASSIC);
   check("LE connection route", espble_hci_router_route_incoming(
     &router, leConnection, sizeof(leConnection)) == ESPBLE_HCI_ROUTE_NIMBLE);
+  check("Classic owns Classic handle", espble_hci_router_owns_handle(
+    &router, ESPBLE_HCI_ROUTE_CLASSIC, 0x000b));
+  check("NimBLE owns LE handle", espble_hci_router_owns_handle(
+    &router, ESPBLE_HCI_ROUTE_NIMBLE, 0x2040));
+  check("cross-host handle ownership rejected", !espble_hci_router_owns_handle(
+    &router, ESPBLE_HCI_ROUTE_CLASSIC, 0x0040));
 
   const uint8_t classicAcl[] = {0x02, 0x0b, 0x20, 0x01, 0x00, 0xaa};
   const uint8_t leAcl[] = {0x02, 0x40, 0x20, 0x01, 0x00, 0xbb};
@@ -124,6 +130,8 @@ int main()
     &router, disconnect, sizeof(disconnect)) == ESPBLE_HCI_ROUTE_NIMBLE);
   check("disconnected handle removed", espble_hci_router_route_incoming(
     &router, leAcl, sizeof(leAcl)) == ESPBLE_HCI_ROUTE_NONE);
+  check("disconnected ownership removed", !espble_hci_router_owns_handle(
+    &router, ESPBLE_HCI_ROUTE_NIMBLE, 0x0040));
 
   const uint8_t malformed[] = {0x04, 0x3e, 0xff};
   check("malformed event dropped", espble_hci_router_route_incoming(

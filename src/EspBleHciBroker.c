@@ -619,6 +619,40 @@ esp_err_t espble_hci_broker_send(
   portEXIT_CRITICAL(&broker_lock);
   if (dual_host_active() && data[0] == 0x01)
   {
+    const uint16_t opcode = length >= 3 ?
+      (uint16_t)data[1] | ((uint16_t)data[2] << 8) : 0;
+    const espble_hci_command_scope_t scope =
+      espble_hci_controller_policy_classify_opcode(opcode);
+    const espble_hci_command_authorization_t authorization =
+      espble_hci_controller_policy_authorize((uint8_t)host, data, length);
+    if (authorization == ESPBLE_HCI_COMMAND_INVALID_PACKET)
+      return ESP_ERR_INVALID_ARG;
+    if (authorization != ESPBLE_HCI_COMMAND_AUTHORIZED)
+    {
+      ESP_LOGE(TAG, "rejected dual-host HCI opcode 0x%04x from host %d: %s",
+        opcode, (int)host,
+        authorization == ESPBLE_HCI_COMMAND_UNCLASSIFIED ?
+          "unclassified" : "wrong host");
+      return ESP_ERR_NOT_SUPPORTED;
+    }
+    if (scope == ESPBLE_HCI_COMMAND_SCOPE_NIMBLE_CONNECTION ||
+        scope == ESPBLE_HCI_COMMAND_SCOPE_CLASSIC_CONNECTION ||
+        scope == ESPBLE_HCI_COMMAND_SCOPE_SHARED_CONNECTION)
+    {
+      if (length < 6) return ESP_ERR_INVALID_ARG;
+      const uint16_t handle = (uint16_t)data[4] | ((uint16_t)data[5] << 8);
+      portENTER_CRITICAL(&broker_lock);
+      const bool owns_handle = espble_hci_router_owns_handle(
+        &router, host_route(host), handle);
+      portEXIT_CRITICAL(&broker_lock);
+      if (!owns_handle)
+      {
+        ESP_LOGE(TAG,
+          "rejected dual-host HCI opcode 0x%04x from host %d: wrong handle",
+          opcode, (int)host);
+        return ESP_ERR_NOT_FOUND;
+      }
+    }
     const espble_hci_controller_policy_virtual_action_t action =
       espble_hci_controller_policy_virtual_action(data, length);
     if (action == ESPBLE_HCI_CONTROLLER_POLICY_VIRTUAL_INVALID_PACKET)

@@ -41,7 +41,8 @@
 namespace
 {
 constexpr size_t HidEventQueueCapacity = 12;
-constexpr size_t MaximumHidReportLength = 1024;
+constexpr size_t MaximumHidReportLength =
+  EspBleClassicHidDevice::MaximumReportLength;
 
 #if ESPBLE_CLASSIC_HID_BACKEND_AVAILABLE
 String hidAddress(const esp_bd_addr_t address)
@@ -545,7 +546,7 @@ bool EspBleClassicHidDevice::sendReport(
 {
   if (
     !connected() || data == nullptr || length == 0 ||
-    length > UINT16_MAX)
+    length > MaximumReportLength)
   {
     owner_->setError(EspBleError::InvalidArgument, "invalid HID device report");
     return false;
@@ -810,7 +811,8 @@ String EspBleClassicHidHost::peerAddress() const
 bool EspBleClassicHidHost::sendOutputReport(
   const uint8_t *data, size_t length)
 {
-  if (!connected() || data == nullptr || length == 0)
+  if (!connected() || data == nullptr || length == 0 ||
+      length > MaximumReportLength)
   {
     owner_->setError(EspBleError::InvalidArgument, "invalid HID host report");
     return false;

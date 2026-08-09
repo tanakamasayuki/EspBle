@@ -1,6 +1,7 @@
 #include <EspBleClassic.h>
 #include <EspBle.h>
 #include <EspBleHciBroker.h>
+#include <esp_system.h>
 #if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL) && defined(CONFIG_IDF_TARGET_ESP32)
 #include <nimble_esp32/include/host/ble_gap.h>
 #include <esp_gap_bt_api.h>
@@ -317,7 +318,11 @@ void setup()
       classic.hidHost().connected() ? 1 : 0);
   });
 #if !defined(ESPBLE_TEST_DUAL_RPA)
-  (void)ble.deleteAllBonds();
+  // Keep the saved LTK when the peer-disappearance test deliberately performs
+  // a software reset. A normal power-on/upload still starts from a clean bond
+  // store, preserving the original test isolation.
+  if (esp_reset_reason() != ESP_RST_SW)
+    (void)ble.deleteAllBonds();
 #endif
   Serial.println("DUAL_PEER_READY");
 }
@@ -367,6 +372,26 @@ void loop()
         static_cast<unsigned>(ble.bondCount()));
     else if (command == "h")
       printHeap("DUAL_PEER_HEAP");
+    else if (command == "L")
+    {
+      static uint8_t oversized[
+        EspBleClassicHidHost::MaximumReportLength + 1] = {};
+      const bool nullRejected = !classic.hidHost().sendOutputReport(nullptr, 1);
+      const bool oversizedRejected = !classic.hidHost().sendOutputReport(
+        oversized, sizeof(oversized));
+      Serial.printf(
+        "DUAL_PEER_INVALID_REPORT null=%u oversized=%u error=%s connected=%u\n",
+        nullRejected ? 1 : 0, oversizedRejected ? 1 : 0,
+        classic.lastErrorName(), classic.hidHost().connected() ? 1 : 0);
+    }
+#if !defined(ESPBLE_TEST_DUAL_RPA)
+    else if (command == "P")
+    {
+      Serial.println("DUAL_PEER_RESTARTING");
+      Serial.flush();
+      ESP.restart();
+    }
+#endif
 #if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL) && defined(CONFIG_IDF_TARGET_ESP32)
     else if (command == "j")
       runCommandContention("DUAL_PEER");

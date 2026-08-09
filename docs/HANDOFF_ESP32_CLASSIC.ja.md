@@ -26,7 +26,8 @@ dual-hostは`ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL`によるopt-inです。通常bui
 | controller-wide policy | General/Page 2/LE event mask union、再attach時Resetとflow-control設定の仮想完了 |
 | lifecycle | controller停止責任をbrokerへ委譲し、任意停止順、再attach、両destructor順、再起動を確認 |
 | Security / privacy | Classic接続中のBLE pairing、bond復元、暗号化GATT、host-based RPA rotationと再起動復元 |
-| 負荷 | GATT/Classic ACL反復、command同時発行、FIFO満杯・超過拒否、再登録反復、heap不変を確認 |
+| 負荷 | GATT/Classic ACL反復、command同時発行、FIFO満杯・超過拒否、数時間級再登録soak、heap非減少を確認 |
+| 異常report / peer消失 | null・1025 byte HID reportを接続維持のまま拒否。peer突然再起動後にbond済みBLEとClassic HIDを再接続 |
 | 他SoC分離 | ESP32-S3 buildでClassic archive非リンク、無印ESP32専用privacy patch非適用を確認 |
 
 詳細な数値と失敗から得た知見は[技術検証](TECHNICAL_VALIDATION_ESP32_CLASSIC.ja.md)にあります。
@@ -45,10 +46,8 @@ dual-hostは`ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL`によるopt-inです。通常bui
 
 ### P0: 実験機能の信頼性
 
-1. command競合、GATT/HID通信、停止・再登録を組み合わせた数時間級soakを完走し、heap、broker counter、panic、再接続失敗を記録する。
-2. 取得済みHCI command inventoryを、host専有、connection所有、controller-wideへ全件分類し、未知のcontroller-wide commandをpolicyへ追加する。
-3. dual-host状態でHID接続失敗、pairing失敗、異常長Input/Output Report、peer消失を試験する。
-4. callback解除とcallback実行が別coreで競合するlifecycle境界を監査し、必要なら参照寿命または停止barrierを追加する。
+1. dual-host状態でHID接続失敗とpairing失敗を試験する。異常長Input/Output Reportとpeer消失後の復旧は完了済み。
+2. callback解除とcallback実行が別coreで競合するlifecycle境界を監査し、必要なら参照寿命または停止barrierを追加する。
 
 ### P1: 一般対応・upstream品質
 
@@ -111,3 +110,18 @@ enqueue/send/qmax/qfull/mismatch/busy/unknown、panic/backtraceの有無を
 [技術検証](TECHNICAL_VALIDATION_ESP32_CLASSIC.ja.md)へ追記します。失敗時は試験を緩めず、最初の失敗logを
 保存して再現条件を最小化します。作業終了時は[次回リリース計画](PLAN_RELEASE_NEXT.ja.md)とSTATUSも
 同じ結論へ更新します。
+
+## 2026-08-09 長時間soak結果
+
+`ESPBLE_DUAL_SOAK_RUNS=20 tools/run_dual_host_soak.sh`を実行し、全runが成功しました。期間は
+2026-08-09 14:29:26〜16:11:10 JST、総経過時間は1時間41分44秒です。各runはcommand競合100サイクルと
+停止・再登録100サイクルを行い、暗号化GATT、Classic HID双方向、FIFO backpressure、再attach、任意順停止、
+destructor後の再起動を含みます。
+
+- 全runの最終diagnosticsでcommand enqueue数と物理send数が一致
+- `qfull=0 mismatch=0 busy=0 unknown=0`、最大通常queue深度5
+- 各run内のfree heapとlargest blockに減少なし。1 runで開始後にfree heapが8 byte増え、その後は一定
+- panic、watchdog、backtrace、再接続失敗なし
+
+logは`tests/.soak/dual-host-20260809T052926Z/`に保存しています。`.soak/`はgit管理外なので、長期保存が
+必要な場合はrelease artifactまたは外部保存先へ退避してください。

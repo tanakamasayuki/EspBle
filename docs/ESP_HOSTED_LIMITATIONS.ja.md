@@ -71,9 +71,9 @@ HS_MP: mempool create failed: no mem
 assert failed: sdio_mempool_create sdio_drv.c:255 (buf_mp_g)
 ```
 
-250 msの待機を追加してもlifecycle suiteは`7 passed / 1 failed`で同じassertを再現した。
+250 msの待機を追加してもlifecycle suiteで同じassertを再現した。
 一方、Hosted transportとC6 Controllerを`end()`後も保持する切り分けではsuiteが
-`8 passed`となり、問題が完全なHosted deinit/init経路にあることを確認した。
+成功し、問題が完全なHosted deinit/init経路にあることを確認した。
 
 保持方式はC6、SDIO、heap、電力resourceを解放せず、`EspBle::end()`の契約と
 Wi-Fi共有時の所有権を変える。そのためEspBleへ暗黙の回避として実装しない。

@@ -159,6 +159,7 @@ private:
 class EspBleClassicHidDevice
 {
 public:
+  static constexpr size_t MaximumReportLength = 1024;
   using ConnectionCallback =
     std::function<void(const EspBleClassicHidConnection &)>;
   using ReportCallback = std::function<void(const EspBleClassicHidReport &)>;
@@ -198,6 +199,7 @@ private:
 class EspBleClassicHidHost
 {
 public:
+  static constexpr size_t MaximumReportLength = 1024;
   using ConnectionCallback =
     std::function<void(const EspBleClassicHidConnection &)>;
   using ReportCallback = std::function<void(const EspBleClassicHidReport &)>;

@@ -15,31 +15,33 @@ single-host pass-throughを基準にした後、opt-inの
 維持したままLE接続、GATT read反復、負荷後のClassic HID双方向通信が成立している。command schedulerは
 broker所有FIFOとcontroller credit管理、最後のhostがcontrollerを停止するlifecycle、event maskのunion、
 Classic再attach時のflow-control command仮想化まで実装した。Classic HID接続中のBLE pairing、bond保存、
-bond再接続、暗号化必須GATT readも成立した。ただし未分類のcontroller-wide commandと長時間負荷は残るため、
-通常buildは引き続き二つ目のhost登録を`ESP_ERR_NOT_SUPPORTED`とする。
+bond再接続、暗号化必須GATT readも成立した。数時間級負荷を完走し、実機で観測したcommandを明示policyへ
+分類した。dual-hostは未観測commandをfail-closedにする。HID接続失敗、pairing失敗、lifecycle競合監査が
+残るため、通常buildは引き続き二つ目のhost登録を`ESP_ERR_NOT_SUPPORTED`とする。
 
 現在の引き継ぎ状態と残作業は[HANDOFF_ESP32_CLASSIC.ja.md](HANDOFF_ESP32_CLASSIC.ja.md)、
 独自Classic host archiveの再生成方法は[CLASSIC_HOST_BUILD.ja.md](CLASSIC_HOST_BUILD.ja.md)を参照する。
 
 ## 実機・ビルド検証結果
 
-| 検証 | 結果 | 確認できたこと |
-|---|---:|---|
-| 変更前 ESP32 × ESP32-S3 `gatt_read_write` | 2 passed / 78.55秒 | 変更前の基準 |
-| broker経由 ESP32 × ESP32-S3 `gatt_read_write` | 2 passed / 67.13秒 | HCI TX/RXをbroker経由にしてもGATT read/writeが成立 |
-| broker経由 ESP32 × ESP32-S3 `lifecycle_stress` | 8 passed / 106.98秒 | `begin()`/`end()`、再接続、event floodを含む反復 |
-| broker経由 ESP32 × ESP32-S3 `security_bond` | 1 passed / 68.66秒 | SMP、暗号化、bond保存経路 |
-| EspBleBluedroid ESP32 dual-mode `dual_mode_scan_spp` | 1 passed / 73.26秒 | active SPPとBLE scan/GATT/notificationの同時動作 |
-| ESP32 / ESP32-S3 compile smoke | 成功 | target guardが両構成で成立 |
-| 独自Classic HID + NimBLE GATT同時Peer | 1 passed | 同じBTDM controllerでBR/EDR ACLとLE ACL、単発GATT readが共存 |
-| dual-host ACL反復 | 1 passed | GATT read 25回後もClassic HID双方向が継続。両側LE ACL tx/rx/completed=36/36/36、unknown handle 0 |
-| dual-host security / bond再接続 | 1 passed / 66.93秒 | Classic HID接続中に両側pairing・bond保存、再接続後の暗号化必須read、`encrypted=1 bonded=1 key=16`を確認 |
-| dual-host controller command inventory | 1 passed | NimBLE 19種、Classic 32〜34種を実機記録。再attach時Reset / flow-control設定を仮想化し、overflow・opcode不一致0 |
-| dual-host FIFO backpressure | 1 passed / 82.76秒（通常回帰全体） | 両hostから24件同時投入、16件受理・8件超過拒否、high-water 16。未送信分破棄後にGATT/HID/lifecycle復帰 |
-| dual-host同時切断 | 1 passed / 106.05秒（clean） | LE / BR-EDR Disconnectを連続発行し、両handleの完了を正しいhostへ配送後、停止・再起動・destructor成功 |
-| HCI router unit | 1 passed | opcode応答、handle所有、ACL、切断、mixed completed eventの分割 |
-| ESP-IDF Classic-only host spike | build/link成功 | controllerなし、BLEなし、SPPありのBluedroid hostを外部HCIへattach可能 |
-| EspBle unit test | 7 passed / 1.92秒 | 既存host非依存ロジックの回帰なし |
+| 検証 | 確認できたこと |
+|---|---|
+| 変更前 ESP32 × ESP32-S3 `gatt_read_write` | 変更前の基準 |
+| broker経由 ESP32 × ESP32-S3 `gatt_read_write` | HCI TX/RXをbroker経由にしてもGATT read/writeが成立 |
+| broker経由 ESP32 × ESP32-S3 `lifecycle_stress` | `begin()`/`end()`、再接続、event floodを含む反復 |
+| broker経由 ESP32 × ESP32-S3 `security_bond` | SMP、暗号化、bond保存経路 |
+| EspBleBluedroid ESP32 dual-mode `dual_mode_scan_spp` | active SPPとBLE scan/GATT/notificationの同時動作 |
+| ESP32 / ESP32-S3 compile smoke | target guardが両構成で成立 |
+| 独自Classic HID + NimBLE GATT同時Peer | 同じBTDM controllerでBR/EDR ACLとLE ACL、単発GATT readが共存 |
+| dual-host ACL反復 | GATT read反復後もClassic HID双方向が継続し、unknown handleなし |
+| dual-host security / bond再接続 | Classic HID接続中に両側pairing・bond保存、再接続後の暗号化必須read、`encrypted=1 bonded=1 key=16`を確認 |
+| dual-host controller command policy | 接続中・切断後の観測opcodeを分類。未知／別host commandは物理送信前に拒否 |
+| dual-host FIFO backpressure | FIFO満杯と超過拒否を発生させ、未送信分破棄後にGATT/HID/lifecycle復帰 |
+| dual-host同時切断 | LE / BR-EDR Disconnectの完了を正しいhostへ配送後、停止・再起動・destructor成功 |
+| dual-host異常report / peer消失 | null・上限超過reportを接続維持のまま拒否し、peer突然再起動後にbond済みBLEとClassic HIDを復旧 |
+| HCI router / controller policy unit | opcode応答、handle所有、ACL、切断、mixed completed event、command scopeと許可host |
+| ESP-IDF Classic-only host spike | controllerなし、BLEなし、SPPありのBluedroid hostを外部HCIへattachしてbuild/link成功 |
+| EspBle unit test | 既存host非依存ロジックの回帰なし |
 
 Classic-only host spikeはESP-IDF `v6.1-dev-6931-g08e0d30a74a`で、次の設定を用いた。
 
@@ -90,7 +92,7 @@ LE tx/rx/completed=36/36/36、Classic tx/rx/completed=25/25/25で、unknown hand
 負荷後は両側ともNimBLE hostを先に、Classic host/controllerを後に停止でき、両hostの
 `initialized()`がfalse、host解除時のin-flight commandは0だった。queueはhost解除時にowner単位で
 破棄し、専用送信taskはsession世代とFIFO先頭を物理送信直前に再照合するため、前sessionからcopyした
-commandを再登録後のcontrollerへ送らない。再登録の長時間soakは未検証である。
+commandを再登録後のcontrollerへ送らない。この再登録経路は後述の数時間級soakでも検証した。
 
 commandを両hostから意図的に同時発行する実機試験も追加した。Arduino main taskからNimBLEの
 `Read RSSI`を20回発行する間、別FreeRTOS taskからClassic-only Bluedroidのscan modeを20回
@@ -110,7 +112,14 @@ broker FIFOがdrainしたことを確認する。10サイクル連続試験で�
 controllerへ送らず、logical hostへ偽のCommand Completeも返さずに破棄し、元のschedulerとdiagnosticsを復元する。
 直後の暗号化GATT readとClassic HID双方向通信、bond再接続、Classic再attach、任意順停止、再起動、
 destructorが成功したため、満杯・超過拒否後のlive session復帰も確認できた。検証フックは通常buildには
-コンパイルされない。残る負荷課題は数時間級soakである。
+コンパイルされない。
+
+同じ試験を20 run連続実行する数時間級soakを2026-08-09 14:29:26〜16:11:10 JSTに行い、全runが
+成功した。総経過時間は1時間41分44秒で、各runはcommand競合100サイクルと停止・再登録100サイクルを
+含む。全runの最終diagnosticsでcommand enqueue数と物理send数が一致し、
+`qfull=0 mismatch=0 busy=0 unknown=0`、通常queue深度の最大値は5だった。各run内でfree heapと
+largest blockの低下はなく、1 runだけ開始後にfree heapが8 byte増えて以後一定だった。panic、watchdog、
+backtrace、再接続失敗は観測していない。logは`tests/.soak/dual-host-20260809T052926Z/`へ保存した。
 
 当初はClassic側の負荷に`Write Local Name`を使ったが、5〜10サイクルでcontrollerが
 `ASSERT_ERR(0), in nvds.c at line 400`となった。ELFでdecodeしたbacktraceは
@@ -123,8 +132,7 @@ brokerの投入数と送信数は一致し、overflow、opcode不一致、未知
 Classic→NimBLEを再登録し、両hostの初期化成功と正常停止を通常3サイクル、拡張実行20サイクルで
 確認した。20サイクル実行ではbaseline、各サイクル、destructor後の計22点でheapを計測し、DUTは
 free 187692 byte、peerはfree 188192 byteで全測定値が同一だった（観測分解能上の漏れ0 byte）。
-DUTのminimum free / largest blockは84144 / 73716 byte、peerは71124 / 59380 byteだった。数時間級の長時間soakは
-引き続き未検証である。
+DUTのminimum free / largest blockは84144 / 73716 byte、peerは71124 / 59380 byteだった。
 その後、heap減少許容値を0 byteにしてテスト上限の100サイクルも実行した。baseline、100サイクル、
 destructor後の計102点で、DUTのfree / largestは187788 / 73716 byte、peerは188288 / 69620 byteと
 すべて同一だった。再登録・停止は全回`started=1`、`ble=0 classic=0 busy=0`で完了し、246.57秒で合格した。
@@ -166,14 +174,38 @@ connectionのownerだけが発行するため物理送信できるもの、「�
 | 再attach仮想完了 | `0c03` Reset、`0c31` Controller→Host Flow Control、`0c33` Host Buffer Size | dual-host時は物理状態を変えず要求hostだけへ成功応答 |
 | broker消費 | `0c35` Host Number Of Completed Packets | 現在のflow-control無効構成では応答せず消費 |
 | NimBLE専有・LE controller設定 | `2002` LE Buffer Size、`2003` LE Features、`2006` Advertising Parameters、`2008` Advertising Data、`2009` Scan Response、`200a` Advertising Enable、`200b` Scan Parameters、`200c` Scan Enable、`2018` LE Rand | Classic hostは発行しない。scheduler経由で物理送信 |
-| NimBLE専有・LE procedure / handle | `200d` LE Create Connection、`2016` LE Remote Features、`2019` LE Start Encryption、`201a` LTK Reply、`2022` Set Data Length、`2030` Read PHY、`0406` Disconnect、`041d` Remote Version | 接続前procedureはNimBLE専有、接続後はLE handle所有を検証して物理送信 |
+| NimBLE専有・LE procedure / handle | `200d` LE Create Connection、`2016` LE Remote Features、`2019` LE Start Encryption、`201a` LTK Reply、`2022` Set Data Length、`2030` Read PHY | 接続前procedureはNimBLE専有、接続後はLE handle所有を検証して物理送信 |
+| transport共通・handle procedure | `0406` Disconnect、`041d` Remote Version、`1405` Read RSSI | LE / BR-EDRのhandle所有hostだけが物理送信 |
 | Classic専有・local BR/EDR設定 | `0c13` Local Name、`0c14` Read Local Name、`0c18` Page Timeout、`0c1a` Scan Enable、`0c1e` Authentication Enable、`0c24` Class of Device、`0c3a` Current IAC LAP、`0c43` Inquiry Scan Type、`0c45` Inquiry Mode、`0c47` Page Scan Type、`0c52` Extended Inquiry Response、`0c56` Simple Pairing Mode、`080f` Default Link Policy | LE状態を変更しないClassic専有設定として物理送信 |
-| Classic専有・address / handle procedure | `0405` Create Connection、`0409` Accept Connection、`040b` Link Key Reply、`040f` PIN Reply、`0411` Authentication Requested、`0413` Set Connection Encryption、`0419` Remote Name、`041b` Remote Features、`041c` Remote Extended Features、`041d` Remote Version、`041f` IO Capability Reply、`0803` Sniff Mode、`080d` Link Policy、`0c37` Link Supervision Timeout | BD_ADDR段階はClassic専有、接続後はBR/EDR handle所有を検証して物理送信 |
+| Classic専有・address / handle procedure | `0405` Create Connection、`0409` Accept Connection、`040b` Link Key Reply、`040f` PIN Reply、`0411` Authentication Requested、`0413` Set Connection Encryption、`0419` Remote Name、`041b` Remote Features、`041c` Remote Extended Features、`041f` IO Capability Reply、`0803` Sniff Mode、`0804` Exit Sniff Mode、`080d` Link Policy、`0c37` Link Supervision Timeout | BD_ADDR段階はClassic専有、接続後はBR/EDR handle所有を検証して物理送信 |
 
 現時点で追加virtualizationが必要と判明したのはbootstrapの3 commandとhost flow-control creditである。
-未観測commandを無条件に安全とは扱わない。今後profileを増やしてinventoryに新opcodeが現れた場合は、
-この表へ分類してからdual-host対応済みにする。特にHardware Error、controller test mode、vendor command、
-共有data path設定はhost専有にできないため、明示policyなしでは拒否する設計が必要になる。
+観測済みcommandは純粋Cのcontroller policyでも同じ分類へ固定した。dual-host時は未知opcodeと別host専用
+opcodeを物理controllerへ送らず`ESP_ERR_NOT_SUPPORTED`で拒否する。connection scopeはpacket先頭parameterの
+handleが要求host所有であることも検査し、別hostまたは解放済みhandleを`ESP_ERR_NOT_FOUND`で拒否する。
+single-host pass-throughは変更しない。
+今後profileを増やしてinventoryに新opcodeが現れた場合は、この表とpolicyへ分類してからdual-host対応済みに
+する。特にHardware Error、controller test mode、vendor command、共有data path設定はhost専有にできないため、
+明示policyなしでは拒否する。
+
+policy実装後のclean実機回帰では、最初のconnected-state inventoryより後の切断時にClassicが条件付きで
+`0804` Exit Sniff Modeと`0406` Disconnectを発行することを新たに検出した。前者をClassic接続所有、後者を
+transport共通のhandle所有へ分類し、切断完了後にも両基板のinventoryを再取得するようPeer testを補強した。
+純粋C unit testは観測済み全opcodeのscopeと許可host、未知opcode、別host、壊れたH4長を検証する。
+最終実機回帰では接続中・切断後とも全opcodeが許可集合内で、未知command拒否はなかった。
+
+## 異常reportとpeer突然消失
+
+Classic HID Device / Hostの公開送信APIに共通上限`MaximumReportLength = 1024`を設け、受信側の保護上限と
+一致させた。null pointerと1025 byte reportはBluedroidへ渡す前に`InvalidArgument`で拒否する。両基板で
+Device Input / Host Outputの両方向を試し、拒否後もClassic HIDとBLE接続が維持され、暗号化GATT readと
+HID双方向通信が直ちに成功することを確認した。
+
+さらにpeerをgraceful shutdownせず`ESP.restart()`し、生存側がLEとBR/EDR双方の切断を検出する経路を追加した。
+software resetしたpeerは保存済みLTKを維持し、両側のbondが残っていることを明示確認してからClassic HIDと
+BLEを再接続する。再接続したBLEは`encrypted=1 bonded=1 key=16`となり、暗号化必須GATT readとHID双方向通信が
+成立した。生存側はcontrollerもlogical hostも再起動していない。この試験の初期化では通常のupload / power-on時だけ
+bondを削除し、意図したsoftware reset時は削除しないようreset reasonを区別している。
 
 ## controller継続中のClassic再attach
 

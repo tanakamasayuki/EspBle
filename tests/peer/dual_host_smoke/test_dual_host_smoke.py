@@ -32,6 +32,7 @@ NIMBLE_OPCODES = {
 
 CLASSIC_OPCODES = {
     0x0405,
+    0x0406,
     0x0409,
     0x040B,
     0x040F,
@@ -43,6 +44,7 @@ CLASSIC_OPCODES = {
     0x041D,
     0x041F,
     0x0803,
+    0x0804,
     0x080D,
     0x080F,
     0x0C01,
@@ -190,6 +192,21 @@ def test_nimble_and_custom_classic_host_run_together(dut, peers):
     peer.write("K\n")
     peer.expect(backpressure_pattern, timeout=10)
 
+    # Reject invalid API input before it reaches Bluedroid. Both transports
+    # must remain connected so the normal traffic below proves recovery.
+    dut.write("L")
+    dut.expect_exact(
+        "DUAL_INVALID_REPORT null=1 oversized=1 "
+        "error=InvalidArgument connected=1",
+        timeout=10,
+    )
+    peer.write("L\n")
+    peer.expect_exact(
+        "DUAL_PEER_INVALID_REPORT null=1 oversized=1 "
+        "error=InvalidArgument connected=1",
+        timeout=10,
+    )
+
     # Prove that restoring the live scheduler did not perturb either host or
     # either ACL path.
     peer.write("r\n")
@@ -280,7 +297,10 @@ def test_nimble_and_custom_classic_host_run_together(dut, peers):
     dut.write("v")
     peer.write("v\n")
     opcode_lines = []
-    for prefix, device in ((rb"DUAL_OPCODES", dut), (rb"DUAL_PEER_OPCODES", peer)):
+    for prefix, device in (
+        (rb"DUAL_OPCODES", dut),
+        (rb"DUAL_PEER_OPCODES", peer),
+    ):
         for host in range(2):
             match = device.expect(
                 re.compile(
@@ -306,6 +326,64 @@ def test_nimble_and_custom_classic_host_run_together(dut, peers):
                 assert {0x0C03, 0x0C31, 0x0C33, 0x0C35} <= values
             opcode_lines.append(match.group(0).decode())
     print("\n".join(opcode_lines))
+
+    # Simulate an ungraceful peer disappearance. The surviving board must
+    # release both handles, then accept Classic HID and bonded LE again without
+    # restarting its controller or either host.
+    peer.write("P\n")
+    peer.expect_exact("DUAL_PEER_RESTARTING", timeout=10)
+    peer.expect_exact("DUAL_PEER_READY", timeout=30)
+    peer.write("n\n")
+    peer.expect_exact("DUAL_BLE_BONDS 1", timeout=10)
+    dut.write("n")
+    dut.expect_exact("DUAL_BLE_BONDS 1", timeout=10)
+    dut_disconnects = {
+        dut.expect(
+            re.compile(rb"DUAL_(?:BLE_SERVER|CLASSIC)_DISCONNECTED"),
+            timeout=40,
+        ).group(0)
+        for _ in range(2)
+    }
+    assert dut_disconnects == {
+        b"DUAL_BLE_SERVER_DISCONNECTED",
+        b"DUAL_CLASSIC_DISCONNECTED",
+    }
+
+    peer.write(b"c" + ready.group(1) + b"\n")
+    peer.expect_exact("DUAL_PEER_CONNECT 1", timeout=10)
+    dut.expect_exact("DUAL_CLASSIC_CONNECTED", timeout=30)
+    peer.expect_exact("DUAL_PEER_CONNECTED", timeout=30)
+    dut.write("a")
+    dut.expect_exact("DUAL_BLE_ADVERTISING 1", timeout=10)
+    peer.write("g\n")
+    peer.expect_exact("DUAL_BLE_SCAN 1", timeout=10)
+    peer.expect_exact("DUAL_BLE_CONNECT 1", timeout=20)
+    peer.expect_exact("DUAL_BLE_CLIENT_CONNECTED", timeout=20)
+    dut.expect_exact("DUAL_BLE_SERVER_CONNECTED", timeout=20)
+    peer.expect_exact("DUAL_BLE_READ_REQUESTED 1", timeout=20)
+    peer.expect_exact(
+        "DUAL_BLE_CLIENT_SECURITY success=1 encrypted=1 bonded=1 "
+        "key=16 classic=1",
+        timeout=30,
+    )
+    dut.expect_exact(
+        "DUAL_BLE_SERVER_SECURITY success=1 encrypted=1 bonded=1 "
+        "key=16 classic=1",
+        timeout=30,
+    )
+    peer.expect_exact(
+        "DUAL_BLE_READ success=1 value=dual-ready classic=1", timeout=20
+    )
+    dut.write("i")
+    dut.expect_exact("DUAL_CLASSIC_INPUT 1", timeout=10)
+    peer.expect(
+        re.compile(rb"DUAL_PEER_INPUT hex=(01)?007f80[0-9a-f]{2}"), timeout=20
+    )
+    peer.expect_exact("DUAL_PEER_OUTPUT 1", timeout=10)
+    dut.expect(
+        re.compile(rb"DUAL_CLASSIC_OUTPUT id=2 hex=(a500ff|02a500ff)"),
+        timeout=20,
+    )
 
     dut.write("?")
     dut.expect_exact("DUAL_STATE adv=0 classic=1 ble=1", timeout=10)
@@ -385,6 +463,40 @@ def test_nimble_and_custom_classic_host_run_together(dut, peers):
         b"DUAL_BLE_SERVER_DISCONNECTED",
         b"DUAL_CLASSIC_DISCONNECTED",
     }
+
+    # Some link-policy cleanup commands are emitted only after disconnect, so
+    # audit the inventory again after both transports have torn down their
+    # links. This catches commands missed by the earlier connected-state dump.
+    dut.write("v")
+    peer.write("v\n")
+    post_disconnect_classic = set()
+    for prefix, device in (
+        (rb"DUAL_OPCODES", dut),
+        (rb"DUAL_PEER_OPCODES", peer),
+    ):
+        for host in range(2):
+            match = device.expect(
+                re.compile(
+                    prefix
+                    + rb" host="
+                    + str(host).encode()
+                    + rb" count=(\d+) overflow=(\d+) values=([0-9a-f,]*)\r?\n"
+                ),
+                timeout=10,
+            )
+            assert match.group(2) == b"0"
+            values = {
+                int(value, 16)
+                for value in match.group(3).decode().split(",")
+                if value
+            }
+            allowed = NIMBLE_OPCODES if host == 0 else CLASSIC_OPCODES
+            assert values <= allowed
+            if host == 1:
+                post_disconnect_classic |= values
+    # Exit Sniff Mode is conditional: only the side whose link entered sniff
+    # emits it during this teardown.
+    assert 0x0804 in post_disconnect_classic
 
     # Stop both rejoined hosts. The final unregister must trigger the broker's
     # adopted controller-stop callback, with no command surviving the session.

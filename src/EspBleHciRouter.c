@@ -121,6 +121,14 @@ void espble_hci_router_init(espble_hci_router_t *router)
   if (router != NULL) memset(router, 0, sizeof(*router));
 }
 
+bool espble_hci_router_owns_handle(
+  const espble_hci_router_t *router, espble_hci_route_t owner,
+  uint16_t handle)
+{
+  return router != NULL && one_host(owner) &&
+    owner_for_handle(router, handle) == owner;
+}
+
 espble_hci_router_result_t espble_hci_router_track_outgoing(
   espble_hci_router_t *router, espble_hci_route_t owner,
   const uint8_t *packet, size_t length)

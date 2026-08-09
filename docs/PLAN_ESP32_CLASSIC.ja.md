@@ -63,31 +63,32 @@ broker taskから成功Command CompleteをClassicだけへ返す。
 | IDF v5.5.5 host-only / Classic-only / SPP / HID Device / HID Host build | 成功 |
 | 必須API（HCI attach、SPP、HID Device、HID Host）のIDF link check | 成功 |
 | 1,788 defined symbolsの名前空間化 | 成功 |
-| 再生成archiveの再現性 | SHA-256一致 |
+| 再生成archiveの同一環境比較 | SHA-256一致。cleanな固定環境からの再現確認はrelease gateとして残る |
 | Arduino-ESP32 3.3.11への独自host link | 成功、SPP例827,172 B |
-| ESP32 2台の独自host SPP Peer test | 1 passed（接続、binary echo、切断、再初期化、再接続） |
-| 独自hostのHID Device / HID Host profile実機init/deinit | 1 passed（両profile同時） |
-| 公開HID APIのDevice→Host Input / Host→Device Output | 1 passed |
-| 公開HID APIの切断・host全体再初期化・再登録・再接続 | 1 passed（同じPeer test内） |
-| 同一Classic host・同一ACL上のHID＋SPP同時利用 | 1 passed（SPP echo後もHID双方向継続） |
-| HCI router host unit test | 1 passed（command、handle、ACL、切断、mixed completed packet） |
-| HCI command scheduler host unit test | 1 passed（FIFO、credit 0、no-response command、copy所有権、overflow、opcode不一致） |
-| NimBLE＋独自Classic host同時利用 | 1 passed（Classic HID双方向→LE接続・GATT readのsmoke） |
-| dual-host ACL反復負荷 | 1 passed（GATT read 25回後もClassic HID双方向、両側LE ACL tx/rx/completed=36/36/36） |
-| dual-host command scheduler負荷 | 1 passed（両hostから送信、投入＝物理送信、最大queue深度3、overflow / opcode不一致0） |
-| dual-host command inventory / flow-control仮想化 | 1 passed（NimBLE 19種、Classic 32〜34種、再attach時Reset 1件＋flow設定2件を仮想完了） |
-| dual-host security / bonding | 1 passed（Classic HID接続中にpairing・bond保存、BLE bond再接続、暗号化必須GATT read、両側`encrypted=1 bonded=1`） |
-| host-based RPA / bond再起動 | 1 passed（初回pairing、両端再起動後のLTK復元、暗号化GATT、復元bond削除、再pairing。scan/connectionはOTA RPAを維持） |
-| dual-host + host-based RPA | 1 passed（Classic HID ACL接続中に双方RPAでpairing、暗号化GATT、bond済みLE再接続。2秒timeoutでPeripheral advertisingとCentral scan双方のpreempt・再開およびRPA rotationを検証。両端再起動後もNVSのIRK/LTKから復元） |
-| dual-host LE / BR-EDR連続切断 | 1 passed（両handleの切断を正しいhostへ配送後、正常停止・再起動・両destructor順成功） |
-| dual-host正常停止 | 1 passed（両側ともNimBLE→Classic、解除時in-flight command 0） |
-| dual-host再登録 | 1 passed（同一instance・GATT/HID定義でClassic→NimBLE再起動→正常停止を100サイクル、両基板とも102点のheap測定でfree heap減少0 byte） |
-| dual-host event mask union | 1 passed（両側ともmask command 4、host要求からのunion書換え1） |
-| NimBLE継続中のClassic再attach | 1 passed（HCI Reset仮想完了後も同じGATT接続を維持し、Classic HID再接続・双方向通信成功） |
-| dual-host任意順停止 | 1 passed（Classic先行停止後もNimBLE GATT継続、最後のhost解除でcontroller停止・再起動成功） |
-| dual-host任意順destructor | 1 passed（Classic先行／NimBLE先行の両方で残存host継続、controller停止後の再起動成功） |
-| 通常NimBLE BLEのESP32 Peer regression | 2 passed（GATT read/write、反復discovery） |
-| host unit test | 10 passed（controller policyのGeneral / Page 2 / LE mask独立cacheを含む） |
+| ESP32 2台の独自host SPP Peer test | 接続、binary echo、切断、再初期化、再接続を確認 |
+| 独自hostのHID Device / HID Host profile実機init/deinit | 両profile同時に確認 |
+| 公開HID APIのDevice→Host Input / Host→Device Output | 双方向成功 |
+| 公開HID APIの切断・host全体再初期化・再登録・再接続 | 同じPeer test内で確認 |
+| 同一Classic host・同一ACL上のHID＋SPP同時利用 | SPP echo後もHID双方向継続 |
+| HCI router host unit test | command、handle、ACL、切断、mixed completed packetを確認 |
+| HCI command scheduler host unit test | FIFO、credit 0、no-response command、copy所有権、overflow、opcode不一致を確認 |
+| NimBLE＋独自Classic host同時利用 | Classic HID双方向→LE接続・GATT readのsmoke成功 |
+| dual-host ACL反復負荷 | GATT read反復後もClassic HID双方向、unknown handleなし |
+| dual-host command scheduler負荷 | 両hostから送信、投入＝物理送信、overflow / opcode不一致なし |
+| dual-host command inventory / flow-control仮想化 | 観測commandを分類し、再attach時Resetとflow設定を仮想完了 |
+| dual-host security / bonding | Classic HID接続中にpairing・bond保存、BLE bond再接続、暗号化必須GATT readを確認 |
+| host-based RPA / bond再起動 | 初回pairing、両端再起動後のLTK復元、暗号化GATT、bond削除、再pairingを確認 |
+| dual-host + host-based RPA | Classic HID接続中のRPA更新、bond済みLE再接続、両端再起動後のIRK/LTK復元を確認 |
+| dual-host LE / BR-EDR連続切断 | 両handleの切断を正しいhostへ配送後、正常停止・再起動・両destructor順成功 |
+| dual-host正常停止 | 両側ともNimBLE→Classic、解除時in-flight commandなし |
+| dual-host再登録 | 同一instance・GATT/HID定義で反復し、heap低下なし |
+| dual-host event mask union | host別要求からのunion書換えを両側で確認 |
+| NimBLE継続中のClassic再attach | HCI Reset仮想完了後もGATT接続を維持し、Classic HIDを再接続 |
+| dual-host任意順停止 | Classic先行停止後もNimBLE GATT継続、最後のhost解除でcontroller停止・再起動成功 |
+| dual-host任意順destructor | Classic先行／NimBLE先行の両方で残存host継続、controller停止後の再起動成功 |
+| dual-host異常report / peer消失 | 不正report拒否後の接続維持、突然再起動後のbond済みBLEとClassic HID復旧 |
+| 通常NimBLE BLEのESP32 Peer regression | GATT read/write、反復discoveryを確認 |
+| host unit test | controller policyを含むhost非依存ロジックを確認 |
 | ESP32-S3 CompileSmoke | 成功、274,253 B。Classic archiveは非リンク |
 | ESP32-S3 RPA regression compile | Central 640,276 B、Peripheral 641,360 B。無印ESP32専用host privacy patchは非適用 |
 
@@ -100,10 +101,10 @@ Arduino coreの設定はSPP有効・Classic HID無効であり、core `libbt.a`�
 引き継ぎ時の完了範囲、優先順位、実行コマンドは
 [HANDOFF_ESP32_CLASSIC.ja.md](HANDOFF_ESP32_CLASSIC.ja.md)を正本とする。
 
-1. dual-hostのcommand同時発行10サイクルと、test-only dispatch holdによる16 packet FIFO満杯・超過拒否・復帰を実機確認済み。次は同時発行とlifecycleを数時間級soakで反復する。
-2. controller / hostの任意順停止・再登録を数時間級のsoakで反復する。100サイクルのheap記録では減少0 byteを確認済み。
-3. 取得済みcommand inventoryを基に、未処理のcontroller-wide設定と接続単位commandを仕様表へ分類する。
-4. HID接続失敗と異常長Reportを両transport同時状態で試験する。
+1. dual-hostのcommand同時発行とlifecycleを、20 run・1時間41分44秒のsoakで反復済み。各runの競合／再登録100サイクルでbroker errorとheap低下はなかった。
+2. 観測済みcommandをcontroller policyへ全件分類し、dual-host時の未知／別host opcodeをfail-closedにした。接続後cleanup inventoryを追加し、`Exit Sniff Mode`とClassic `Disconnect`も捕捉済み。
+3. null・上限超過HID Reportの拒否とpeer突然再起動後の両transport復旧は実機確認済み。
+4. HID接続失敗とBLE pairing失敗を両transport同時状態で試験する。
 
 ## 将来の配布形式統一
 

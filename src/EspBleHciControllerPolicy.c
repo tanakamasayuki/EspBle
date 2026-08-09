@@ -26,6 +26,114 @@ static bool valid_exact_command(
     packet[3] == parameter_length;
 }
 
+espble_hci_command_scope_t espble_hci_controller_policy_classify_opcode(
+  uint16_t opcode)
+{
+  switch (opcode)
+  {
+    // Read-only local controller information shared by both hosts.
+    case 0x1001: // Read Local Version Information
+    case 0x1002: // Read Local Supported Commands
+    case 0x1003: // Read Local Supported Features
+    case 0x1004: // Read Local Extended Features
+    case 0x1005: // Read Buffer Size
+    case 0x1009: // Read BD_ADDR
+      return ESPBLE_HCI_COMMAND_SCOPE_SHARED_READ;
+
+    case OPCODE_SET_EVENT_MASK:
+    case OPCODE_SET_EVENT_MASK_PAGE_2:
+    case OPCODE_LE_SET_EVENT_MASK:
+      return ESPBLE_HCI_COMMAND_SCOPE_CONTROLLER_MERGED;
+
+    case OPCODE_RESET:
+    case OPCODE_SET_CONTROLLER_TO_HOST_FLOW_CONTROL:
+    case OPCODE_HOST_BUFFER_SIZE:
+      return ESPBLE_HCI_COMMAND_SCOPE_CONTROLLER_VIRTUAL;
+    case OPCODE_HOST_NUMBER_COMPLETED_PACKETS:
+      return ESPBLE_HCI_COMMAND_SCOPE_HOST_CREDIT;
+
+    // LE procedures and LE-local controller state used by vendored NimBLE.
+    case 0x2002: // LE Read Buffer Size
+    case 0x2003: // LE Read Local Supported Features
+    case 0x2006: // LE Set Advertising Parameters
+    case 0x2008: // LE Set Advertising Data
+    case 0x2009: // LE Set Scan Response Data
+    case 0x200a: // LE Set Advertising Enable
+    case 0x200b: // LE Set Scan Parameters
+    case 0x200c: // LE Set Scan Enable
+    case 0x200d: // LE Create Connection
+    case 0x2018: // LE Rand
+      return ESPBLE_HCI_COMMAND_SCOPE_NIMBLE_RADIO;
+    case 0x2016: // LE Read Remote Features
+    case 0x2019: // LE Start Encryption
+    case 0x201a: // LE Long Term Key Request Reply
+    case 0x2022: // LE Set Data Length
+    case 0x2030: // LE Read PHY
+      return ESPBLE_HCI_COMMAND_SCOPE_NIMBLE_CONNECTION;
+
+    // BR/EDR procedures and local state used by Classic-only Bluedroid.
+    case 0x0405: // Create Connection
+    case 0x0409: // Accept Connection Request
+    case 0x040b: // Link Key Request Reply
+    case 0x040f: // PIN Code Request Reply
+    case 0x0419: // Remote Name Request
+    case 0x041f: // IO Capability Request Reply
+    case 0x080f: // Write Default Link Policy Settings
+    case 0x0c13: // Write Local Name
+    case 0x0c14: // Read Local Name
+    case 0x0c18: // Write Page Timeout
+    case 0x0c1a: // Write Scan Enable
+    case 0x0c1e: // Write Authentication Enable
+    case 0x0c24: // Write Class of Device
+    case 0x0c3a: // Write Current IAC LAP
+    case 0x0c43: // Write Inquiry Scan Type
+    case 0x0c45: // Write Inquiry Mode
+    case 0x0c47: // Write Page Scan Type
+    case 0x0c52: // Write Extended Inquiry Response
+    case 0x0c56: // Write Simple Pairing Mode
+      return ESPBLE_HCI_COMMAND_SCOPE_CLASSIC_RADIO;
+    case 0x0411: // Authentication Requested
+    case 0x0413: // Set Connection Encryption
+    case 0x041b: // Read Remote Supported Features
+    case 0x041c: // Read Remote Extended Features
+    case 0x0803: // Sniff Mode
+    case 0x0804: // Exit Sniff Mode
+    case 0x080d: // Write Link Policy Settings
+    case 0x0c37: // Write Link Supervision Timeout
+      return ESPBLE_HCI_COMMAND_SCOPE_CLASSIC_CONNECTION;
+
+    // These are valid for either LE or BR/EDR and must follow handle ownership.
+    case 0x0406: // Disconnect
+    case 0x041d: // Read Remote Version Information
+    case 0x1405: // Read RSSI
+      return ESPBLE_HCI_COMMAND_SCOPE_SHARED_CONNECTION;
+    default:
+      return ESPBLE_HCI_COMMAND_SCOPE_UNKNOWN;
+  }
+}
+
+espble_hci_command_authorization_t espble_hci_controller_policy_authorize(
+  uint8_t host, const uint8_t *packet, size_t length)
+{
+  if (host >= ESPBLE_HCI_CONTROLLER_POLICY_HOST_COUNT || packet == NULL ||
+      length < 4 || packet[0] != H4_COMMAND ||
+      length != (size_t)packet[3] + 4u)
+    return ESPBLE_HCI_COMMAND_INVALID_PACKET;
+
+  const uint16_t opcode = (uint16_t)packet[1] | ((uint16_t)packet[2] << 8);
+  const espble_hci_command_scope_t scope =
+    espble_hci_controller_policy_classify_opcode(opcode);
+  if (scope == ESPBLE_HCI_COMMAND_SCOPE_UNKNOWN)
+    return ESPBLE_HCI_COMMAND_UNCLASSIFIED;
+  if ((scope == ESPBLE_HCI_COMMAND_SCOPE_NIMBLE_RADIO ||
+       scope == ESPBLE_HCI_COMMAND_SCOPE_NIMBLE_CONNECTION) && host != 0)
+    return ESPBLE_HCI_COMMAND_WRONG_HOST;
+  if ((scope == ESPBLE_HCI_COMMAND_SCOPE_CLASSIC_RADIO ||
+       scope == ESPBLE_HCI_COMMAND_SCOPE_CLASSIC_CONNECTION) && host != 1)
+    return ESPBLE_HCI_COMMAND_WRONG_HOST;
+  return ESPBLE_HCI_COMMAND_AUTHORIZED;
+}
+
 bool espble_hci_controller_policy_is_reset(
   const uint8_t *packet, size_t length)
 {

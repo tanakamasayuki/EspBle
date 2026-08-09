@@ -27,6 +27,31 @@ typedef enum
   ESPBLE_HCI_CONTROLLER_POLICY_VIRTUAL_INVALID_PACKET,
 } espble_hci_controller_policy_virtual_action_t;
 
+// Every command observed from the two hosts is assigned a scope before it is
+// allowed onto a shared controller. Unknown commands fail closed only while
+// dual-host mode is active; single-host pass-through remains unchanged.
+typedef enum
+{
+  ESPBLE_HCI_COMMAND_SCOPE_UNKNOWN = 0,
+  ESPBLE_HCI_COMMAND_SCOPE_SHARED_READ,
+  ESPBLE_HCI_COMMAND_SCOPE_NIMBLE_RADIO,
+  ESPBLE_HCI_COMMAND_SCOPE_CLASSIC_RADIO,
+  ESPBLE_HCI_COMMAND_SCOPE_NIMBLE_CONNECTION,
+  ESPBLE_HCI_COMMAND_SCOPE_CLASSIC_CONNECTION,
+  ESPBLE_HCI_COMMAND_SCOPE_SHARED_CONNECTION,
+  ESPBLE_HCI_COMMAND_SCOPE_CONTROLLER_MERGED,
+  ESPBLE_HCI_COMMAND_SCOPE_CONTROLLER_VIRTUAL,
+  ESPBLE_HCI_COMMAND_SCOPE_HOST_CREDIT,
+} espble_hci_command_scope_t;
+
+typedef enum
+{
+  ESPBLE_HCI_COMMAND_AUTHORIZED = 0,
+  ESPBLE_HCI_COMMAND_INVALID_PACKET,
+  ESPBLE_HCI_COMMAND_UNCLASSIFIED,
+  ESPBLE_HCI_COMMAND_WRONG_HOST,
+} espble_hci_command_authorization_t;
+
 typedef struct
 {
   uint8_t masks[ESPBLE_HCI_CONTROLLER_POLICY_MASK_COUNT]
@@ -44,6 +69,10 @@ bool espble_hci_controller_policy_is_reset(
 espble_hci_controller_policy_virtual_action_t
 espble_hci_controller_policy_virtual_action(
   const uint8_t *packet, size_t length);
+espble_hci_command_scope_t espble_hci_controller_policy_classify_opcode(
+  uint16_t opcode);
+espble_hci_command_authorization_t espble_hci_controller_policy_authorize(
+  uint8_t host, const uint8_t *packet, size_t length);
 
 // Caches each host's Set Event Mask request and writes the union required by
 // every registered logical host. General, Page 2, and LE masks are independent.

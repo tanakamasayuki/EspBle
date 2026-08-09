@@ -55,6 +55,12 @@ typedef struct
 
 void espble_hci_router_init(espble_hci_router_t *router);
 
+// Returns whether a live controller connection handle belongs to the logical
+// host. The PB/BC flag bits, if present, are ignored.
+bool espble_hci_router_owns_handle(
+  const espble_hci_router_t *router, espble_hci_route_t owner,
+  uint16_t handle);
+
 // Records ownership of an outgoing command and validates ACL ownership.  The
 // owner must be exactly ESPBLE_HCI_ROUTE_NIMBLE or ESPBLE_HCI_ROUTE_CLASSIC.
 espble_hci_router_result_t espble_hci_router_track_outgoing(
