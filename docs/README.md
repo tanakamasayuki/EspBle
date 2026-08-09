@@ -7,7 +7,7 @@ The design documents are written in Japanese. This guide lists them and shows th
 ## Get oriented (recommended order for newcomers)
 
 1. [../README.md](../README.md) — library overview, supported/unsupported chips, getting started
-2. [STATUS.md](STATUS.md) — **where things stand**: verification, limitations, and remaining work for 1.0.0
+2. [STATUS.md](STATUS.md) — **where things stand**: verification, limitations, and remaining work for the next release
 3. [DECISIONS.ja.md](DECISIONS.ja.md) — the ledger of settled design decisions (the "why")
 4. [HID_DEVICE_SPEC.ja.md](HID_DEVICE_SPEC.ja.md) / [HID_HOST_SPEC.ja.md](HID_HOST_SPEC.ja.md) — specifications for the completed composite HID API redesign
 
@@ -28,8 +28,11 @@ The design documents are written in Japanese. This guide lists them and shows th
 | BLE communication beginner guide: GAP / security / GATT / UUID / HID / BLE MIDI | [GUIDE_BLE_BASICS.md](GUIDE_BLE_BASICS.md) |
 | Test strategy and coverage | [../tests/TEST_PLAN.md](../tests/TEST_PLAN.md) |
 | Release checks | [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) |
+| Remaining gates for the next release (Japanese) | [PLAN_RELEASE_NEXT.ja.md](PLAN_RELEASE_NEXT.ja.md) |
 | Board / core build matrices (CI-generated) | `BOARDS.<version>.md` / `COMPATIBILITY.<version>.md` |
 | Original-ESP32 support: policy, upstream sources, verification plan (Japanese) | [PLAN_ESP32.ja.md](PLAN_ESP32.ja.md) |
+| Original-ESP32 Classic handoff and remaining work (Japanese) | [HANDOFF_ESP32_CLASSIC.ja.md](HANDOFF_ESP32_CLASSIC.ja.md) |
+| Rebuilding the Classic-only Bluedroid archive (Japanese) | [CLASSIC_HOST_BUILD.ja.md](CLASSIC_HOST_BUILD.ja.md) |
 | ESP32-P4 / ESP-Hosted setup, versions, and C6 update (Japanese) | [ESP_HOSTED_SETUP.ja.md](ESP_HOSTED_SETUP.ja.md) |
 | Verified ESP32-P4 / ESP-Hosted limitations (Japanese) | [ESP_HOSTED_LIMITATIONS.ja.md](ESP_HOSTED_LIMITATIONS.ja.md) |
 | Arduino Core issue draft for P4 Secure Connections | [ESP_HOSTED_SC_ISSUE.md](ESP_HOSTED_SC_ISSUE.md) |
@@ -43,4 +46,4 @@ The design documents are written in Japanese. This guide lists them and shows th
 
 ## One-line status
 
-The **BLE foundation and composite HID Device / Host are implemented and covered by peer/unit tests**. Further practical HID extensions and interoperability checks are in progress, with 1.0.0 planned as the first public release.
+The **BLE foundation and composite HID Device / Host are released and covered by peer/unit tests**. Original-ESP32 Classic / dual-host support is experimental; an hours-long soak and a release-scope decision are next.

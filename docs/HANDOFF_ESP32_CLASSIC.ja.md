@@ -1,0 +1,113 @@
+# 無印ESP32 NimBLE / Classic共存 引き継ぎ
+
+2026-08-09時点の実装、検証済み範囲、未完了事項、作業再開手順をまとめます。新しく作業する人は
+この文書、[Classic設計・検証記録](PLAN_ESP32_CLASSIC.ja.md)、
+[技術検証](TECHNICAL_VALIDATION_ESP32_CLASSIC.ja.md)の順に読んでください。
+
+## 現在の結論
+
+無印ESP32では、独自buildしたClassic-only Bluedroid hostとEspBle同梱NimBLE hostを、単一BTDM
+controllerへ同時接続できます。Classic hostはcore内蔵archiveではなく、SPP、HID Device、HID Host、
+SMPを有効にした名前空間化済み`libespble_bluedroid_classic.a`を使います。
+
+dual-hostは`ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL`によるopt-inです。通常buildはsingle-hostのままで、
+無印ESP32以外はcore同梱NimBLE経路を変更しません。現段階は技術検証済みの実験機能であり、一般対応へ
+昇格していません。
+
+## 完了済み
+
+| 領域 | 状態 |
+|---|---|
+| Classic host独自build | IDF v5.5.5 / GCC 14.2.0、controller/BLE無効、SPP/HID Device/HID Host/SMP有効 |
+| symbol分離 | archiveのglobal defined symbolを`espble_bd_`へ名前空間化。core Bluedroidと衝突なし |
+| Classic排他モード | SPP、HID Device/Host、双方向report、切断、再初期化、再接続を実機確認 |
+| dual-host HCI routing | Command Complete/Status、LE/BR-EDR handle、ACL、切断、Completed Packetsをrouting |
+| command scheduler | broker所有16 packet FIFO、controller credit、opcode照合、1 response command in-flight |
+| controller-wide policy | General/Page 2/LE event mask union、再attach時Resetとflow-control設定の仮想完了 |
+| lifecycle | controller停止責任をbrokerへ委譲し、任意停止順、再attach、両destructor順、再起動を確認 |
+| Security / privacy | Classic接続中のBLE pairing、bond復元、暗号化GATT、host-based RPA rotationと再起動復元 |
+| 負荷 | GATT/Classic ACL反復、command同時発行、FIFO満杯・超過拒否、再登録反復、heap不変を確認 |
+| 他SoC分離 | ESP32-S3 buildでClassic archive非リンク、無印ESP32専用privacy patch非適用を確認 |
+
+詳細な数値と失敗から得た知見は[技術検証](TECHNICAL_VALIDATION_ESP32_CLASSIC.ja.md)にあります。
+
+## 重要な設計境界
+
+- ClassicがBTDM controllerを先に起動し、NimBLEはcontrollerを再初期化せずhostだけattachする。
+- 最後のlogical hostが外れたときだけbrokerがcontrollerを停止する。
+- HCI commandをhostから物理VHCIへ直接流さず、broker FIFOと単一transaction ownershipを通す。
+- event種別だけで配送せず、command owner、connection handle、LE Meta / BR-EDR event semanticsを使う。
+- Classicが要求するcontroller-to-host ACL flow controlは現在物理controller上で無効化している。
+- test-only backpressure holdは`ESPBLE_HCI_BACKPRESSURE_TEST`時だけ存在し、通常buildには入らない。
+- `.a`のglobal defined symbolだけをprefixし、platform依存のundefined symbolはArduino coreから解決する。
+
+## 未完了・優先順位
+
+### P0: 実験機能の信頼性
+
+1. command競合、GATT/HID通信、停止・再登録を組み合わせた数時間級soakを完走し、heap、broker counter、panic、再接続失敗を記録する。
+2. 取得済みHCI command inventoryを、host専有、connection所有、controller-wideへ全件分類し、未知のcontroller-wide commandをpolicyへ追加する。
+3. dual-host状態でHID接続失敗、pairing失敗、異常長Input/Output Report、peer消失を試験する。
+4. callback解除とcallback実行が別coreで競合するlifecycle境界を監査し、必要なら参照寿命または停止barrierを追加する。
+
+### P1: 一般対応・upstream品質
+
+1. brokerがincoming ACL処理完了を一元管理し、controller-to-host flow controlを無効化せず両hostへcreditを返せる形を設計する。
+2. HCI parser、transaction、handle table、credit分配へfuzz / fault injectionを追加する。
+3. Arduino依存を外したdirection-aware router componentの境界を定め、ESP-IDF upstreamへ出せる差分へ縮小する。
+4. Classic dual-hostの利用者向けAPI、build flag、対応profile、制限、exampleを正式サポート範囲として確定する。
+
+### P2: 配布・保守
+
+1. NimBLEソース同梱とClassic `.a`同梱を、ソースまたはarchiveのどちらかへ統一する方式を評価する。
+2. Arduino-ESP32更新時のIDF/toolchain ABI matrixとarchive再生成gateをCIまたはrelease手順へ組み込む。
+3. 外部Classic HID Host/Deviceとの相互運用を追加する。
+
+## 既知の落とし穴
+
+- `Write Local Name`をsoak刺激として反復するとcontrollerのNVDSが`nvds.c:400`でassertする。永続設定を負荷生成に使わず、scan mode切替を使う。
+- logical hostごとの`can_send()` slot予約はBluedroidの先読みと両立せず、NimBLEをstarveさせるため採用しない。
+- Classicのcontroller-to-host flow controlをそのまま有効化すると、NimBLEへroutingしたLE ACLのcreditをClassicが返せず、共有bufferが枯渇する。
+- NimBLE停止を別taskから直接行うとNPL event queueと競合する。停止開始はNimBLE host task自身へ要求する。
+- RPA更新はadvertising / scanをpreemptする。元の設定と有限deadlineを保持して再開しないと、処理が停止または期限延長する。
+- Classic再attach時の物理HCI Resetは既存LE接続を破壊するため、Classicだけへ仮想Command Completeを返す。
+
+## 作業環境と再開方法
+
+- Arduino-ESP32: 3.3.11
+- Classic archive: ESP-IDF v5.5.5、xtensa-esp32 GCC 14.2.0
+- 実機: 無印ESP32 2台、pytest profile `esp32_peer_host` / `esp32_peer_device`
+- Python環境: `tests/`で`uv run --env-file .env ...`
+
+代表回帰:
+
+```sh
+cd tests
+uv run --env-file .env pytest -s peer/dual_host_smoke/ \
+  --profile esp32_peer_host --peer-profile device:esp32_peer_device
+
+uv run --env-file .env pytest -s peer/dual_host_rpa/ \
+  --profile esp32_peer_host --peer-profile device:esp32_peer_device
+
+uv run pytest -q unit
+```
+
+長時間soakはrepository rootから次で開始します。
+
+```sh
+ESPBLE_DUAL_SOAK_RUNS=20 tools/run_dual_host_soak.sh
+```
+
+既定では各runでcommand競合100サイクル、restart 100サイクルを実行し、最初のrunだけclean buildします。
+ログは`tests/.soak/`へ保存し、1 runでも失敗すればその時点で停止します。実行前に他のprocessが対象boardを
+使っていないことと、`tests/.env`のprofile/port設定を確認します。
+
+archive再生成は[Classic host archive再生成](CLASSIC_HOST_BUILD.ja.md)を参照してください。
+
+## 完了判定と記録
+
+soak完了時は、run数、開始/終了時刻、総経過時間、各runのpytest結果、heap初回/最終値、brokerの
+enqueue/send/qmax/qfull/mismatch/busy/unknown、panic/backtraceの有無を
+[技術検証](TECHNICAL_VALIDATION_ESP32_CLASSIC.ja.md)へ追記します。失敗時は試験を緩めず、最初の失敗logを
+保存して再現条件を最小化します。作業終了時は[次回リリース計画](PLAN_RELEASE_NEXT.ja.md)とSTATUSも
+同じ結論へ更新します。

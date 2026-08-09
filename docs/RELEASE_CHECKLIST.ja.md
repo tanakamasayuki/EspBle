@@ -16,6 +16,7 @@ EspBleをリリースする前の確認項目です。GitHub Actionsと`tools/`�
 - `library.properties`の`name`、`version`、`sentence`、`paragraph`、`architectures`、`includes`が公開内容と一致している。
 - `keywords.txt`に主要class、report/event型、accessor、callback/listener APIが含まれている。
 - 生成済みの`docs/BOARDS.<version>.md` / `docs/COMPATIBILITY.<version>.md`がリリース対象versionと現在のexample集合を反映している。
+- Classicをrelease対象へ含める場合、[archive再生成手順](CLASSIC_HOST_BUILD.ja.md)どおりcleanなESP-IDF v5.5.5 / GCC 14.2.0から一時生成し、格納済み`libespble_bluedroid_classic.a`とのSHA-256一致、必須prefixed symbol、他SoC非リンクを確認する。
 
 ## 自動テスト
 
@@ -52,6 +53,18 @@ uv run --env-file .env pytest --clean \
 ```
 
 除外の理由と実行頻度は[テスト計画](../tests/TEST_PLAN.ja.md#無印esp32回帰)、方針と検証記録は[無印ESP32対応計画](PLAN_ESP32.ja.md)を参照します。無印ESP32の2台はEspBleBluedroidと共用のため、そちらのpytestと同時に走らせても構いません（ポートの調停はpytestが行います。`arduino-cli upload`や`esptool`を直接使うと待たずに失敗するので使わないでください）。
+
+Classicをrelease対象へ含める場合は、同じ無印ESP32 2台でClassic専用構成とdual-hostを追加実行します。
+
+```sh
+uv run --env-file .env pytest --clean -s \
+  peer/classic_spp_exclusive/ peer/classic_hid_profiles/ \
+  peer/classic_hid_report/ peer/dual_host_smoke/ peer/dual_host_rpa/ \
+  --profile esp32_peer_host --peer-profile device:esp32_peer_device
+```
+
+数時間級soakは[引き継ぎ](HANDOFF_ESP32_CLASSIC.ja.md)の条件でコードfreeze前に完走させます。release
+candidateでは上記の通常回帰を再実行し、soak log、heap、broker diagnosticsを技術検証記録へ残します。
 
 次にP4+C6 fixtureとPeer側S3を接続し、ESP-Hosted代表suiteを実行します。P4+C6は常時接続不要ですが、リリース候補では必須です。ESP32-P4-Function-EV-Board、または汎用`esp32p4` variantと同じ標準SDIO配線を基準とし、独自配線では使用したvariantまたはpin上書きを記録します。
 

@@ -16,6 +16,7 @@ Use this checklist before releasing EspBle. The GitHub Actions workflows and `to
 - `library.properties` `name`, `version`, `sentence`, `paragraph`, `architectures`, and `includes` match the public package.
 - `keywords.txt` includes the main classes, report/event types, accessors, and callback/listener APIs.
 - Generated `docs/BOARDS.<version>.md` / `docs/COMPATIBILITY.<version>.md` files match the release version and current example set.
+- If Classic is in scope, regenerate its archive from clean ESP-IDF v5.5.5 / GCC 14.2.0 inputs, verify its SHA-256 and required prefixed symbols, and prove that other SoCs do not link it. The authoritative procedure is [CLASSIC_HOST_BUILD.ja.md](CLASSIC_HOST_BUILD.ja.md) (Japanese).
 
 ## Automated Tests
 
@@ -52,6 +53,18 @@ uv run --env-file .env pytest --clean \
 ```
 
 The exclusions and the frequency rule are in the [test plan](../tests/TEST_PLAN.md#original-esp32-regression); the policy and verification record are in the Japanese [original-ESP32 plan](PLAN_ESP32.ja.md). The two boards are shared with EspBleBluedroid, and running both repositories' suites at the same time is fine (pytest arbitrates the ports). Do not use `arduino-cli upload` or `esptool` directly -- they fail instead of waiting.
+
+If Classic is in scope, add the Classic-only and dual-host regressions on the same two original-ESP32 boards:
+
+```sh
+uv run --env-file .env pytest --clean -s \
+  peer/classic_spp_exclusive/ peer/classic_hid_profiles/ \
+  peer/classic_hid_report/ peer/dual_host_smoke/ peer/dual_host_rpa/ \
+  --profile esp32_peer_host --peer-profile device:esp32_peer_device
+```
+
+Complete the hours-long soak under the conditions in the Japanese
+[Classic handoff](HANDOFF_ESP32_CLASSIC.ja.md) before code freeze. Re-run the normal regression above on the release candidate and retain its soak logs, heap samples and broker diagnostics in the technical-validation record.
 
 Then connect the P4+C6 fixture and its S3 peer and run the representative ESP-Hosted suite. The fixture need not remain connected between runs, but it is mandatory for a release candidate. Use an ESP32-P4-Function-EV-Board or a fixture with the generic `esp32p4` variant's standard SDIO wiring as the reference; record the variant or pin override when using custom wiring.
 

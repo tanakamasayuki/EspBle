@@ -13,6 +13,12 @@ To regenerate it, install and export ESP-IDF v5.5.5, then run:
 tools/build_classic_bluedroid_host.sh
 ```
 
-The output is ABI-bound to the ESP-IDF/toolchain used by Arduino-ESP32 3.3.x.
-The build script rejects a different ESP-IDF tag instead of silently producing
-an incompatible library.
+The output is ABI-bound to ESP-IDF v5.5.5 and xtensa-esp32 GCC 14.2.0, matching
+Arduino-ESP32 3.3.11. The build script rejects a different IDF tag, a dirty IDF
+checkout, or a different compiler instead of silently producing an incompatible
+library. It also checks the required HCI/SPP/HID symbols and prints the archive
+size, global-symbol count and SHA-256 digest.
+
+The complete clean-room setup, reproducibility check, configuration and update
+procedure are documented in
+[`docs/CLASSIC_HOST_BUILD.ja.md`](../../docs/CLASSIC_HOST_BUILD.ja.md).

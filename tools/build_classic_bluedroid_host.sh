@@ -18,12 +18,19 @@ if [[ $idf_version != v5.5.5 ]]; then
   exit 2
 fi
 
-for tool in idf.py xtensa-esp32-elf-nm xtensa-esp32-elf-objcopy; do
+for tool in idf.py xtensa-esp32-elf-gcc xtensa-esp32-elf-nm \
+  xtensa-esp32-elf-objcopy sha256sum; do
   command -v "$tool" >/dev/null || {
     echo "required tool is unavailable: $tool" >&2
     exit 2
   }
 done
+
+gcc_version=$(xtensa-esp32-elf-gcc -dumpfullversion)
+if [[ $gcc_version != 14.2.0 ]]; then
+  echo "xtensa-esp32 GCC 14.2.0 is required; found $gcc_version" >&2
+  exit 2
+fi
 
 idf.py -C "$project_dir" -B "$build_dir" \
   -DIDF_TARGET=esp32 \
@@ -60,4 +67,10 @@ for symbol in \
   fi
 done
 
-echo "generated $output from ESP-IDF $idf_version"
+archive_size=$(wc -c < "$output" | tr -d '[:space:]')
+archive_sha256=$(sha256sum "$output" | awk '{print $1}')
+defined_count=$(wc -l < "$defined_symbols" | tr -d '[:space:]')
+echo "generated $output"
+echo "source: ESP-IDF $idf_version, xtensa-esp32 GCC $gcc_version"
+echo "archive: $archive_size bytes, $defined_count global defined symbols"
+echo "sha256: $archive_sha256"

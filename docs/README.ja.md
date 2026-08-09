@@ -7,7 +7,7 @@ EspBleの開発ドキュメント一覧と、初見の人が状況を把握す�
 ## まず状況を把握する（初見の推奨順）
 
 1. [../README.ja.md](../README.ja.md) — ライブラリの概要、対応/非対応チップ、はじめかた
-2. [STATUS.ja.md](STATUS.ja.md) — **現在地**。検証状況・主な制限・1.0.0までの残作業
+2. [STATUS.ja.md](STATUS.ja.md) — **現在地**。検証状況・主な制限・次回リリースまでの残作業
 3. [DECISIONS.ja.md](DECISIONS.ja.md) — 確定した設計決定の台帳（「なぜこうなっているか」）
 4. [HID_DEVICE_SPEC.ja.md](HID_DEVICE_SPEC.ja.md) / [HID_HOST_SPEC.ja.md](HID_HOST_SPEC.ja.md) — 完了した複合HID API再設計の仕様
 
@@ -27,11 +27,13 @@ EspBleの開発ドキュメント一覧と、初見の人が状況を把握す�
 | HIDの仕様（Device / Host） | [HID_DEVICE_SPEC.ja.md](HID_DEVICE_SPEC.ja.md) / [HID_HOST_SPEC.ja.md](HID_HOST_SPEC.ja.md) |
 | BLE通信の入門ガイド（GAP / セキュリティ / GATT / UUID / HID / BLE MIDI） | [GUIDE_BLE_BASICS.ja.md](GUIDE_BLE_BASICS.ja.md) |
 | テスト方針・カバレッジ | [../tests/TEST_PLAN.ja.md](../tests/TEST_PLAN.ja.md) |
-| 1.0.0までに残っている作業 | [PLAN_RELEASE_1_0_0.ja.md](PLAN_RELEASE_1_0_0.ja.md) |
+| 次回リリースまでに残っている作業 | [PLAN_RELEASE_NEXT.ja.md](PLAN_RELEASE_NEXT.ja.md) |
 | リリース前の確認手順 | [RELEASE_CHECKLIST.ja.md](RELEASE_CHECKLIST.ja.md) |
 | ボード / coreビルド対応表（CI生成） | `BOARDS.<version>.md` / `COMPATIBILITY.<version>.md` |
 | 無印ESP32対応の方針・取得元・検証計画 | [PLAN_ESP32.ja.md](PLAN_ESP32.ja.md) |
 | 無印ESP32でNimBLEとClassicを共存させる調査・技術検証 | [TECHNICAL_VALIDATION_ESP32_CLASSIC.ja.md](TECHNICAL_VALIDATION_ESP32_CLASSIC.ja.md) |
+| 無印ESP32 Classic作業の引き継ぎ・未完了事項 | [HANDOFF_ESP32_CLASSIC.ja.md](HANDOFF_ESP32_CLASSIC.ja.md) |
+| Classic-only Bluedroid `.a`の再生成 | [CLASSIC_HOST_BUILD.ja.md](CLASSIC_HOST_BUILD.ja.md) |
 | ESP32-P4 / ESP-Hostedの準備、対応version、C6更新 | [ESP_HOSTED_SETUP.ja.md](ESP_HOSTED_SETUP.ja.md) |
 | ESP32-P4 / ESP-Hostedの実機確認済み制限 | [ESP_HOSTED_LIMITATIONS.ja.md](ESP_HOSTED_LIMITATIONS.ja.md) |
 | P4 Secure ConnectionsのArduino Core向けissue投稿案 | [ESP_HOSTED_SC_ISSUE.md](ESP_HOSTED_SC_ISSUE.md) |
@@ -46,4 +48,4 @@ EspBleの開発ドキュメント一覧と、初見の人が状況を把握す�
 
 ## 現在の一言サマリ
 
-**BLE共通基盤と複合HID Device / Hostは実装・Peer/unit検証済み**です。可能なHID拡張と相互運用確認を進め、初回公開版を1.0.0としてリリースする予定です。
+**BLE共通基盤と複合HID Device / Hostは公開済み**です。無印ESP32のClassic / dual-hostは実験実装と実機検証が進み、長時間soakと公開範囲の確定を次に行います。

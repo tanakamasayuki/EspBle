@@ -250,13 +250,10 @@ Phase 0〜2を実装した。Phase 3（実機Peerテスト）は未実施。
 
 ### Phase 3: 実機Peerテストの結果（core 3.3.11、ESP32 × ESP32-S3）
 
-`esp32_peer_host` / `esp32_peer_device` profileを全対象suiteへ追加し、pytest経由で両役割の
-全suiteを掃引した（親側62 suite、Peer側64 suite。core同梱`BLE`ラッパを使うsketchは対象外）。
-
-| 掃引 | 結果 | 所要 |
-|---|---|---|
-| ESP32 = 親側(Central) | 84 test中 **82 passed** / 1 failed(`phy_update`) / 1 error(`ble_keybridge_keyboard`) | 1時間4分 |
-| ESP32 = Peer(Peripheral) | 85 test中 **83 passed** / 2 failed(`phy_update`、`local_identity`) | 1時間7分 |
+`esp32_peer_host` / `esp32_peer_device` profileを対象suiteへ追加し、pytest経由でCentral / Peripheral
+両役割を掃引した。core同梱`BLE`ラッパを使うsketchと、BLE 4.2 controllerが持たない2M PHYの試験は
+構造上の対象外としてprofileを持たせず、自動skipする。現在のrelease回帰条件は
+[リリースチェックリスト](RELEASE_CHECKLIST.ja.md)を正とする。
 
 passした範囲にはGAP（advertising / scan / accept list / address privacy / directed /
 service data / beacon / iBeacon）、GATT client / server、標準Service群、security（passkey /
@@ -312,16 +309,14 @@ upstreamには存在しない問題。**vendorツールのパッチとして**`c
 `config_opts.ble_max_conn = CONFIG_BT_NIMBLE_MAX_CONNECTIONS`を`nimble_port.c`へ入れて解決した
 （パッチは`old`が見つからなければ失敗するので、version bump時に必ず気づく）。
 
-### 未実施・保留
+### 運用上の注意
 
-- **残りのPeer suiteをESP32構成へ展開する。** 今回profileを追加したのは上表の7 suiteだけ。
-  EspBleが両側のsuiteは同じ2行を`sketch.yaml`へ足すだけで対象にできる。
 - **実機作業はpytest経由に限る。** ポートの排他はpytest側で管理されており、
   `arduino-cli upload`や`esptool`を直接使うと**待機せずに失敗**する。実際に手動uploadを
   試みてapp書き込み前に中断し（ボードが一時的に起動不能）、EspBleBluedroid側で実行中の
   pytestを巻き込んだ。EspBleとEspBleBluedroidのpytestを同時に走らせるのは問題ない。
-- `README` / `STATUS` / `FEATURE_MATRIX` / `library.properties`への反映（Phase 4）。
-  実機で確認できたsuiteが決まるまで「対応済み」とは書かない。
+- README / STATUS / FEATURE_MATRIX / `library.properties`への反映は完了済み。今後の対応範囲は
+  実機で確認できた経路だけを「対応済み」とする。
 
 ## 参考: 試作で得た実測値（core 3.3.11、`Hid/KeyboardDevice`）
 

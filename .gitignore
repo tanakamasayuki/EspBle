@@ -4,6 +4,7 @@ output/
 .venv/
 .pytest*/
 .env
+.soak/
 
 # Arduino output and local settings
 build/

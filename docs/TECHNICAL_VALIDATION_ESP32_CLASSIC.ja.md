@@ -18,6 +18,9 @@ Classic再attach時のflow-control command仮想化まで実装した。Classic 
 bond再接続、暗号化必須GATT readも成立した。ただし未分類のcontroller-wide commandと長時間負荷は残るため、
 通常buildは引き続き二つ目のhost登録を`ESP_ERR_NOT_SUPPORTED`とする。
 
+現在の引き継ぎ状態と残作業は[HANDOFF_ESP32_CLASSIC.ja.md](HANDOFF_ESP32_CLASSIC.ja.md)、
+独自Classic host archiveの再生成方法は[CLASSIC_HOST_BUILD.ja.md](CLASSIC_HOST_BUILD.ja.md)を参照する。
+
 ## 実機・ビルド検証結果
 
 | 検証 | 結果 | 確認できたこと |
@@ -69,8 +72,8 @@ EspBleが現在基準にするESP-IDF v5.5.5にも存在するが、今回の完
 ESP32-S3などcore内蔵NimBLEを使うtargetでは既存transportを変更せず、brokerもリンクされない。
 vendored NimBLEの再生成で変更を失わないよう、書き換えは`tools/vendor_nimble_esp32.py`へ記録した。
 
-dual-host parserとcommand scheduler stateはcritical sectionで保護する。callback登録解除とcallback実行の完全な
-lifecycle同期は今後の作業である。commandは`send()`で16 packetのbroker所有FIFOへcopyし、専用taskが
+dual-host parserとcommand scheduler stateはcritical sectionで保護する。callback登録解除時はreceive gateと
+host session世代を使い、停止済みhostへの遅延配送と旧sessionのcommand送信を防ぐ。commandは`send()`で16 packetのbroker所有FIFOへcopyし、専用taskが
 controller creditを見て1 transactionずつ送る。`can_send()`時点のslot予約は
 Bluedroidの先読み確認と両立しないことを実機で確認したため、送信queueは`send()`でpacketを
 broker所有メモリへcopyする境界として実装する。FIFOだけでは反復負荷時のClassic ACL停滞を

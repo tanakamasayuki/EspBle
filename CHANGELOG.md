@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+- (EN) Added experimental original-ESP32 Bluetooth Classic support backed by a
+  separately built, namespaced Classic-only Bluedroid host. SPP, generic HID
+  Device/Host, custom reports, reconnect and lifecycle paths are covered on two
+  original ESP32 boards. The archive enables Classic HID APIs that are absent
+  from Arduino-ESP32's built-in Bluedroid configuration.
+- (JA) 無印ESP32向けBluetooth Classic実験対応を追加。独自build・名前空間化した
+  Classic-only Bluedroid hostを使い、SPP、generic HID Device/Host、custom report、
+  再接続、lifecycleを無印ESP32 2台で検証した。Arduino-ESP32内蔵Bluedroidでは
+  無効なClassic HID APIも独自archiveでは有効にしている。
+- (EN) Added opt-in experimental NimBLE + Classic dual-host operation on the
+  original ESP32. The HCI broker owns command FIFO/credits, event-mask union,
+  command-response and ACL-handle routing, controller lifecycle, Classic
+  reattachment virtualization, and host-based RPA recovery. Hardware tests cover
+  encrypted GATT plus Classic HID, bonding, both shutdown orders, restart,
+  contention and full-FIFO backpressure recovery. Hours-long soak and remaining
+  controller-wide command classification are still release gates.
+- (JA) 無印ESP32でNimBLE + Classicを同時利用するopt-in実験機能を追加。HCI brokerが
+  command FIFO/credit、event mask union、command応答・ACL handle routing、controller
+  lifecycle、Classic再attach仮想化、host-based RPA復帰を管理する。暗号化GATTと
+  Classic HID、bond、任意停止順、再起動、command競合、FIFO満杯復帰まで実機検証済み。
+  数時間級soakと残controller-wide command分類はrelease gateとして残る。
+- (EN) Added a reproducible Classic-host archive builder pinned to ESP-IDF
+  v5.5.5 and xtensa-esp32 GCC 14.2.0, with link checks, global-symbol
+  namespacing, required-symbol validation and SHA-256 reporting.
+- (JA) Classic host archive生成をESP-IDF v5.5.5 / xtensa-esp32 GCC 14.2.0へ
+  固定し、link check、global symbol名前空間化、必須symbol検査、SHA-256表示を追加した。
+
 ## 1.2.0
 - (EN) Added support for the original ESP32. Its Arduino-ESP32 prebuilt libraries
   are built with Bluedroid, so EspBle now bundles the NimBLE host for that chip

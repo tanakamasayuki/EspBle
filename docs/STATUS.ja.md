@@ -2,7 +2,7 @@
 
 > English: [STATUS.md](STATUS.md)
 
-この文書は現在の実装状況、既知の制限、1.0.0までの残作業だけを追跡します。対応機能の一覧は[FEATURE_MATRIX.ja.md](FEATURE_MATRIX.ja.md)、確定仕様は[REQUIREMENTS.ja.md](REQUIREMENTS.ja.md)・[DECISIONS.ja.md](DECISIONS.ja.md)・各仕様書を正とします。
+この文書は現在の実装状況、既知の制限、次回リリースまでの残作業だけを追跡します。対応機能の一覧は[FEATURE_MATRIX.ja.md](FEATURE_MATRIX.ja.md)、確定仕様は[REQUIREMENTS.ja.md](REQUIREMENTS.ja.md)・[DECISIONS.ja.md](DECISIONS.ja.md)・各仕様書を正とします。
 
 ## 現在地
 
@@ -10,7 +10,7 @@ Arduino-ESP32 3.3.11に同梱されるNimBLEホストAPIを直接使い、Centra
 
 ESP32-P4 + ESP32-C6のESP-Hosted構成は、compile、scan、接続、GATT read/write、
 notify/indicate、MTU、Wi-Fi/BLE共存と共有transport lifecycleに加え、Security非依存の
-Peer test 23件をP4/S3で実機確認済みです。
+代表Peer testをP4/S3で実機確認済みです。
 Security/bondingはCore 3.3.11同梱IDFのP4 ECC不具合、複数回の完全再初期化は
 Hosted 2.12.11のresource leakにより、
 [ESP-Hostedの既知制限](ESP_HOSTED_LIMITATIONS.ja.md)として上流修正取り込み待ちです。
@@ -21,20 +21,20 @@ BLE MIDIはbackend非依存のpacket codec（timestamp・running status・複数
 
 ## 検証状況
 
-- P4/C6 Hosted + S3 Peer: Security非依存の追加23 testが成功（GAP/controller 9、advertising 6、GATT state 8）
+- P4/C6 Hosted + S3 Peer: Security非依存のGAP/controller、advertising、GATT state回帰が成功
 - P4/C6 Hosted Wi-Fi/BLE共存: DHCP取得中も含むWi-Fi接続、GATT read/write/notify、BLE終了後のWi-Fi維持、Wi-Fi終了後のtransport解放が成功
 
-- Peer test: 66 suite、88 test。接続、GATT、接続ごとdiscovery cache、persistent subscription（再接続時に自動で再購読、registry上限超過の計数）、address privacy（random static address）、iBeacon broadcast/decode、Service Data送受信、Fitness Machine（Indoor Bike Data）、Security、標準Service、複合HID、NKRO、任意Report DescriptorのCustom HID、non-connectable Beacon、BLE MIDI、Health Thermometer、Blood Pressure、Weight Scale、Body Composition、Cycling / Running Speed and Cadence、Cycling Power、Pulse Oximeter、Glucose（RACP手続き）、Location and Navigation、User Data（書き込み→onWritten→notify）、Alert Notification（Control Point→notify）、Immediate Alert（Write Without Response）、Phone Alert Status（Control Point→状態変更notify）、Proximity（Link Loss + Tx Power、2 Service同居）、Reference Time Update（Control Point→state遷移）、Bond Management（Feature Read + Control Point）、Continuous Glucose Monitoring（E2E-CRC）、切断理由コード、接続パラメータ更新、PHY更新（2M）、Service Changed、実行時passkey入力、Numeric Comparison、Directed Advertising（チャネル絞り込み含む）、切断時のGATT queue purgeとGATT op中`disconnect()`の遅延実行、NKROのMTU下限拒否、多重listenerの配送・解除・上限（generic側・接続系・HID Host側）、接続系listenerのprimary→登録順の配送、HID Deviceの`ready()`が購読gateどおりに真偽を返すこと、NKRO全状態の1 report送信、`heldState()`が全送信経路に追従すること、`ledState()`がHostの書いたLEDを返すこと（callback未設定でqueueが溢れている間も追従すること）、HIDの便利入力API（`pressKey()` / `tapKey()` / `write()` / `tapUsage()` / `setLayout()` / mouse `wheel()` / `click()` / consumer・system `sendUsage()` / gamepad `send()`）が電波へ出すReport、Custom HIDのFeature Report、HID Boot Protocol切替、Custom HID Report Descriptor、non-connectable Beacon（送信間隔制御）、異常系、再接続を実機検証
+- Peer test: 接続、GATT、接続ごとdiscovery cache、persistent subscription（再接続時に自動で再購読、registry上限超過の計数）、address privacy（random static address）、iBeacon broadcast/decode、Service Data送受信、Fitness Machine（Indoor Bike Data）、Security、標準Service、複合HID、NKRO、任意Report DescriptorのCustom HID、non-connectable Beacon、BLE MIDI、Health Thermometer、Blood Pressure、Weight Scale、Body Composition、Cycling / Running Speed and Cadence、Cycling Power、Pulse Oximeter、Glucose（RACP手続き）、Location and Navigation、User Data（書き込み→onWritten→notify）、Alert Notification（Control Point→notify）、Immediate Alert（Write Without Response）、Phone Alert Status（Control Point→状態変更notify）、Proximity（Link Loss + Tx Power、2 Service同居）、Reference Time Update（Control Point→state遷移）、Bond Management（Feature Read + Control Point）、Continuous Glucose Monitoring（E2E-CRC）、切断理由コード、接続パラメータ更新、PHY更新（2M）、Service Changed、実行時passkey入力、Numeric Comparison、Directed Advertising（チャネル絞り込み含む）、切断時のGATT queue purgeとGATT op中`disconnect()`の遅延実行、NKROのMTU下限拒否、多重listenerの配送・解除・上限（generic側・接続系・HID Host側）、接続系listenerのprimary→登録順の配送、HID Deviceの`ready()`が購読gateどおりに真偽を返すこと、NKRO全状態の1 report送信、`heldState()`が全送信経路に追従すること、`ledState()`がHostの書いたLEDを返すこと（callback未設定でqueueが溢れている間も追従すること）、HIDの便利入力API（`pressKey()` / `tapKey()` / `write()` / `tapUsage()` / `setLayout()` / mouse `wheel()` / `click()` / consumer・system `sendUsage()` / gamepad `send()`）が電波へ出すReport、Custom HIDのFeature Report、HID Boot Protocol切替、Custom HID Report Descriptor、non-connectable Beacon（送信間隔制御）、異常系、再接続を実機検証
 - Manual test（3台目board前提、未接続時は自動skip）: `multi_connection`で複数同時接続・接続ごとのnotify routing・auto-reconnect（`setAutoReconnect`）・再接続時のpersistent subscription復元を実機検証
 - Unit test: keymap変換、HID Report Map parser、BLE MIDI codec、IEEE-11073 medical float codec、CGM E2E-CRC codec、iBeacon codec、HCI router、HCI command scheduler
-- 追加RPA Peer test: 無印ESP32 2台でhost-based RPAの初回pairing、両端再起動後のbond/LTK復元、暗号化GATT、復元bond削除、再pairingが成功。さらにClassic HID ACLを維持したまま両roleのRPAをhost timerでrotationし、preemptされたadvertisingとscanを再開して新RPAからbond済みLEへ再接続する。両dual-host stackの再起動後にもClassicとbond済みRPA/LEを復元する試験が成功。上記集計と合わせて68 suite、90 test
-- Example compile: ESP32-S3向け92 example
+- 追加RPA Peer test: 無印ESP32 2台でhost-based RPAの初回pairing、両端再起動後のbond/LTK復元、暗号化GATT、復元bond削除、再pairingが成功。さらにClassic HID ACLを維持したまま両roleのRPAをhost timerでrotationし、preemptされたadvertisingとscanを再開して新RPAからbond済みLEへ再接続する。両dual-host stackの再起動後にもClassicとbond済みRPA/LEを復元する試験が成功
+- Example compile: 公開exampleをESP32-S3向けに検証。Classic exampleは無印ESP32専用条件で検証
 
 実行方法は[tests/TEST_PLAN.ja.md](../tests/TEST_PLAN.ja.md)、リリース時の確認項目は[RELEASE_CHECKLIST.ja.md](RELEASE_CHECKLIST.ja.md)を参照してください。
 
 ## 既知の制限
 
-- 1.0.0リリース前のため、公開APIは互換性を保証しません。
+- Classic / dual-host APIとbuild flagは実験扱いで、正式サポート範囲を確定するまでは互換性を保証しません。
 - Core 3.3.11のP4/C6 ESP-Hosted構成では、同梱ESP-IDF 5.5.5のTinyCrypt/ECC不具合で
   LE Secure ConnectionsがDHKey check failureとなるため、Security、bonding、それを
   前提とするHIDは未対応です。ESP-IDF `release/v5.5`では`9fd7cb7`で修正済みですが、
@@ -63,15 +63,16 @@ BLE MIDIはbackend非依存のpacket codec（timestamp・running status・複数
 - dual-host再登録の100サイクル試験では、baseline、各サイクル、destructor後の計102点で両基板のfree heapとlargest blockがそれぞれ同一で、観測された減少は0 byteでした。数時間級のsoakは未検証です。
 - dual-host HCI command競合は、別taskのClassic scan mode切替とNimBLE Read RSSIを10サイクル反復し、各基板で競合区間だけで約210件／約500件を送信しました。最大queue深度4／5、投入＝物理送信、broker error 0で、各サイクル後の暗号化GATTとHID双方向通信、全lifecycle、heap安定性まで成功しています。test-only dispatch holdでは両hostから24件を同時投入し、16 packet FIFO満杯、8件の超過拒否、未送信分破棄後のlive session復帰も両基板で確認しました。数時間級soakは未検証です。`Write Local Name`の反復はcontrollerのNVDS assertionになるため、負荷刺激から除外しています。
 
-## 1.0.0までの残作業
+## 次回リリースまでの残作業
 
-1. 全Peer + unit testを`--clean`で連続実行し、複数回反復する。
-2. board / Arduino-ESP32 core matrixをCIで再生成し、対応環境を確定する。
-3. 市販BLE Keyboardと複数の外部Hostでmanual interoperabilityを確認する。
-4. metadata、CHANGELOG、example、仕様書を最終APIと照合する。
-5. `library.properties`を含むrelease metadataを1.0.0へ更新し、release workflowを実行する。
+1. dual-hostの数時間級soak、残HCI command分類、異常系、lifecycle競合監査を終え、Classicの公開範囲を決める。
+2. Classic archiveをcleanな固定環境から再生成し、格納済み生成物との再現性を確認する。
+3. コードfreeze後に全Peer + unit testを`--clean`で連続実行し、複数回反復する。
+4. board / Arduino-ESP32 core matrix、P4/C6代表回帰、外部機器との相互運用を確定する。
+5. CHANGELOG、metadata、README、Feature Matrix、example、仕様書をrelease scopeと照合する。
+6. bump preview、release workflow、公開後のLibrary Manager取得・compile確認を行う。
 
-残作業の一覧は[PLAN_RELEASE_1_0_0.ja.md](PLAN_RELEASE_1_0_0.ja.md)が正本です。初回リリース範囲は固定せず、安全に実装・検証できる機能は1.0.0へ含めます。未実装候補は約束ではなく、採用時に仕様、example、unit/build/Peer testを同時に追加します。今後の機能候補は[DECISIONS.ja.md](DECISIONS.ja.md)の「優先順位候補」を正とします。
+残作業の一覧は[PLAN_RELEASE_NEXT.ja.md](PLAN_RELEASE_NEXT.ja.md)、Classic作業の再開条件は[HANDOFF_ESP32_CLASSIC.ja.md](HANDOFF_ESP32_CLASSIC.ja.md)を正本とします。未実装候補は約束ではなく、採用時に仕様、example、unit/build/Peer testを同時に追加します。今後の機能候補は[DECISIONS.ja.md](DECISIONS.ja.md)の「優先順位候補」を正とします。
 
 ## 更新ルール
 

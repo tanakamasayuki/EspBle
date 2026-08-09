@@ -32,6 +32,7 @@ core内蔵Bluedroidとリンク時に衝突せず、独自hostの公開APIが誤
 
 再生成入口は`tools/build_classic_bluedroid_host.sh`、設定と必須APIのlink checkは
 `tools/classic_bluedroid_host/`に置く。スクリプトはIDF tagがv5.5.5以外なら停止する。
+環境構築、生成手順、成果物の照合方法は[CLASSIC_HOST_BUILD.ja.md](CLASSIC_HOST_BUILD.ja.md)を正本とする。
 
 ## Arduino側の分離
 
@@ -95,6 +96,9 @@ Arduino coreの設定はSPP有効・Classic HID無効であり、core `libbt.a`�
 実体はない。独自archiveでは両方のAPIが存在することをsymbol検査済みである。
 
 ## 次の実装
+
+引き継ぎ時の完了範囲、優先順位、実行コマンドは
+[HANDOFF_ESP32_CLASSIC.ja.md](HANDOFF_ESP32_CLASSIC.ja.md)を正本とする。
 
 1. dual-hostのcommand同時発行10サイクルと、test-only dispatch holdによる16 packet FIFO満杯・超過拒否・復帰を実機確認済み。次は同時発行とlifecycleを数時間級soakで反復する。
 2. controller / hostの任意順停止・再登録を数時間級のsoakで反復する。100サイクルのheap記録では減少0 byteを確認済み。
