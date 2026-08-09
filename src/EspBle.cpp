@@ -32,6 +32,12 @@ extern "C" bool bleInUse(void)
 // The NimBLE host API. EspBleNimbleHost.h is the only place that knows whether
 // it comes from the core or from the copy EspBle bundles for the original ESP32.
 #include "EspBleNimbleHost.h"
+#if defined(CONFIG_IDF_TARGET_ESP32) && !defined(CONFIG_NIMBLE_ENABLED)
+// The original ESP32 uses the vendored host-based privacy implementation. Its
+// controller only sees a random address; the host generates and rotates RPAs.
+#include "nimble_esp32/include/host/ble_hs_pvcy.h"
+#define ESPBLE_NIMBLE_HOST_BASED_PRIVACY 1
+#endif
 // The NVS-backed bond store. Its initialiser has no public header in the
 // ESP-IDF build, so it is declared the way the IDF's own examples do.
 extern "C" void ble_store_config_init(void);
@@ -1116,6 +1122,14 @@ struct EspBleImpl
       // Pairing input is answered from the connection's own callback: the
       // global listener is not guaranteed to see this event.
       impl->handlePasskeyAction(event->passkey.conn_handle, event->passkey.params);
+    }
+    else if (event->type == BLE_GAP_EVENT_ADV_COMPLETE &&
+             event->adv_complete.reason == BLE_HS_EPREEMPTED)
+    {
+      // Host-based RPA rotation stops advertising before HCI Set Random
+      // Address. NimBLE deliberately reports the stop to the application and
+      // does not restart it; preserve EspBle's requested advertising state.
+      impl->owner->advertising_.resumeAfterPrivacyPreemption();
     }
     return 0;
   }
@@ -4869,8 +4883,18 @@ struct EspBleScannerImpl
 
   void handleReport(const ble_gap_disc_desc &report)
   {
+#if defined(ESPBLE_NIMBLE_HOST_BASED_PRIVACY)
+    // The vendored host resolves a bonded RPA before publishing the report and
+    // leaves the resolved identity in addr. Connecting to those bytes with the
+    // original random type breaks the security-record lookup. Keep the API's
+    // scan address as the address actually received over the air; NimBLE saved
+    // it expressly for this purpose before performing host-side resolution.
+    const ble_addr_t &reportAddress = report.ota_addr;
+#else
+    const ble_addr_t &reportAddress = report.addr;
+#endif
     const bool isScanResponse = report.event_type == BLE_HCI_ADV_RPT_EVTYPE_SCAN_RSP;
-    Pending *entry = findPending(report.addr.val, report.addr.type);
+    Pending *entry = findPending(reportAddress.val, reportAddress.type);
 
     if (isScanResponse)
     {
@@ -4879,8 +4903,8 @@ struct EspBleScannerImpl
         // A scan response with no advertisement to attach it to: report what it
         // carries rather than discard it.
         EspBleScanResult result;
-        result.address = formatAddress(report.addr.val);
-        result.addressType = static_cast<EspBleAddressType>(report.addr.type);
+        result.address = formatAddress(reportAddress.val);
+        result.addressType = static_cast<EspBleAddressType>(reportAddress.type);
         result.rssi = report.rssi;
         parseAdvertisingReport(report.data, report.length_data, result);
         publish(std::move(result));
@@ -4895,8 +4919,8 @@ struct EspBleScannerImpl
     }
 
     EspBleScanResult result;
-    result.address = formatAddress(report.addr.val);
-    result.addressType = static_cast<EspBleAddressType>(report.addr.type);
+    result.address = formatAddress(reportAddress.val);
+    result.addressType = static_cast<EspBleAddressType>(reportAddress.type);
     result.rssi = report.rssi;
     // The PDU type says what the advertiser accepts; the payload cannot.
     result.connectable = report.event_type == BLE_HCI_ADV_RPT_EVTYPE_ADV_IND ||
@@ -4932,8 +4956,8 @@ struct EspBleScannerImpl
       publish(std::move(entry->result));
     }
     entry->used = true;
-    entry->addressType = report.addr.type;
-    memcpy(entry->address, report.addr.val, 6);
+    entry->addressType = reportAddress.type;
+    memcpy(entry->address, reportAddress.val, 6);
     entry->result = std::move(result);
   }
 
@@ -4960,6 +4984,10 @@ struct EspBleScannerImpl
     else if (event->type == BLE_GAP_EVENT_DISC_COMPLETE)
     {
       impl->flushPending();
+      if (event->disc_complete.reason == BLE_HS_EPREEMPTED)
+      {
+        impl->scanner->resumeAfterPrivacyPreemption();
+      }
     }
     return 0;
   }
@@ -5590,8 +5618,45 @@ bool EspBleAdvertising::start(uint32_t durationSeconds)
     return false;
   }
 
+  restartAfterPreemption_ = true;
+  advertisingDeadlineMs_ = durationSeconds == 0
+    ? 0
+    : millis() + durationSeconds * 1000;
   owner_->clearError();
   return true;
+}
+
+void EspBleAdvertising::resumeAfterPrivacyPreemption()
+{
+  if (!restartAfterPreemption_ || !owner_->initialized()) return;
+
+  uint32_t remainingSeconds = 0;
+  const uint32_t originalDeadline = advertisingDeadlineMs_;
+  if (originalDeadline != 0)
+  {
+    const int32_t remainingMs =
+      static_cast<int32_t>(originalDeadline - millis());
+    if (remainingMs <= 0)
+    {
+      restartAfterPreemption_ = false;
+      advertisingDeadlineMs_ = 0;
+      return;
+    }
+    remainingSeconds =
+      (static_cast<uint32_t>(remainingMs) + 999) / 1000;
+  }
+
+  if (start(remainingSeconds))
+  {
+    // start() rounds a finite duration to seconds. Keep the original deadline
+    // so repeated rotations cannot extend the requested advertising window.
+    advertisingDeadlineMs_ = originalDeadline;
+  }
+  else
+  {
+    restartAfterPreemption_ = false;
+    advertisingDeadlineMs_ = 0;
+  }
 }
 
 bool EspBleAdvertising::stop()
@@ -5601,6 +5666,8 @@ bool EspBleAdvertising::stop()
     owner_->setError(EspBleError::InvalidState, "BLE stack is not initialized");
     return false;
   }
+  restartAfterPreemption_ = false;
+  advertisingDeadlineMs_ = 0;
   const int backendCode = ble_gap_adv_stop();
   // BLE_HS_EALREADY simply means it was not advertising.
   if (backendCode != 0 && backendCode != BLE_HS_EALREADY)
@@ -5681,8 +5748,44 @@ bool EspBleScanner::start(const EspBleScanConfig &config)
     return false;
   }
 
+  restartConfig_ = config;
+  restartAfterPreemption_ = true;
+  scanDeadlineMs_ = config.durationSeconds == 0
+    ? 0
+    : millis() + config.durationSeconds * 1000;
   owner_->clearError();
   return true;
+}
+
+void EspBleScanner::resumeAfterPrivacyPreemption()
+{
+  if (!restartAfterPreemption_ || !owner_->initialized()) return;
+
+  EspBleScanConfig config = restartConfig_;
+  const uint32_t originalDeadline = scanDeadlineMs_;
+  if (originalDeadline != 0)
+  {
+    const int32_t remainingMs =
+      static_cast<int32_t>(originalDeadline - millis());
+    if (remainingMs <= 0)
+    {
+      restartAfterPreemption_ = false;
+      scanDeadlineMs_ = 0;
+      return;
+    }
+    config.durationSeconds =
+      (static_cast<uint32_t>(remainingMs) + 999) / 1000;
+  }
+
+  if (start(config))
+  {
+    scanDeadlineMs_ = originalDeadline;
+  }
+  else
+  {
+    restartAfterPreemption_ = false;
+    scanDeadlineMs_ = 0;
+  }
 }
 
 bool EspBleScanner::stop()
@@ -5694,6 +5797,8 @@ bool EspBleScanner::stop()
   }
   // Cancelling a scan that is not running reports BLE_HS_EALREADY, which is the
   // requested state rather than a failure.
+  restartAfterPreemption_ = false;
+  scanDeadlineMs_ = 0;
   const int status = ble_gap_disc_cancel();
   if (status != 0 && status != BLE_HS_EALREADY)
   {
@@ -8914,8 +9019,9 @@ bool EspBle::begin(const EspBleConfig &config)
 
   // Address privacy: present a random static address, or a rotating Resolvable
   // Private Address, instead of the factory public address. Both need a random
-  // static identity set first; for RPA the controller then derives the rotating
-  // addresses from it. Applied before any advertising/scanning starts.
+  // static identity set first. The usual controller-based path derives RPAs in
+  // the controller; the original ESP32's vendored host does it in software.
+  // Applied before any advertising/scanning starts.
   if (config.ownAddressType != EspBleOwnAddressType::Public)
   {
     ble_addr_t randomAddress{};
@@ -8926,12 +9032,22 @@ bool EspBle::begin(const EspBleConfig &config)
       setError(EspBleError::BackendFailure, "failed to set a random device address");
       return false;
     }
-    // Every supported SoC generates the Resolvable Private Address in the
-    // controller (the original ESP32, whose controller cannot, has no NimBLE
-    // build and is rejected at compile time).
+#if defined(ESPBLE_NIMBLE_HOST_BASED_PRIVACY)
+    if (config.ownAddressType == EspBleOwnAddressType::ResolvablePrivate &&
+        ble_hs_pvcy_rpa_config(NIMBLE_HOST_ENABLE_RPA) != 0)
+    {
+      stopNimbleHost();
+      setError(EspBleError::BackendFailure, "failed to enable host-based address privacy");
+      return false;
+    }
+#endif
     const uint8_t ownType =
       config.ownAddressType == EspBleOwnAddressType::ResolvablePrivate
+#if defined(ESPBLE_NIMBLE_HOST_BASED_PRIVACY)
+        ? BLE_OWN_ADDR_RANDOM
+#else
         ? BLE_OWN_ADDR_RPA_RANDOM_DEFAULT
+#endif
         : BLE_OWN_ADDR_RANDOM;
     if (ble_hs_id_copy_addr(ownType & 1, nullptr, nullptr) != 0)
     {
@@ -8956,7 +9072,11 @@ bool EspBle::begin(const EspBleConfig &config)
     ? BLE_OWN_ADDR_PUBLIC
     : (config.ownAddressType == EspBleOwnAddressType::RandomStatic
          ? BLE_OWN_ADDR_RANDOM
+#if defined(ESPBLE_NIMBLE_HOST_BASED_PRIVACY)
+         : BLE_OWN_ADDR_RANDOM);
+#else
          : BLE_OWN_ADDR_RPA_RANDOM_DEFAULT);
+#endif
   impl_->securityEnabled = config.security.enabled;
   impl_->pairOnConnect = config.security.pairOnConnect;
   impl_->persistentSubscriptionsEnabled = config.persistentSubscriptions;
@@ -9062,10 +9182,14 @@ void EspBle::end()
   {
     ble_gap_disc_cancel();
   }
+  scanner_.restartAfterPreemption_ = false;
+  scanner_.scanDeadlineMs_ = 0;
   if (advertising_.isAdvertising())
   {
     ble_gap_adv_stop();
   }
+  advertising_.restartAfterPreemption_ = false;
+  advertising_.advertisingDeadlineMs_ = 0;
 
   if (impl_ != nullptr)
   {

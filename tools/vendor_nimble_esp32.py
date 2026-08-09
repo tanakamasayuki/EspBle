@@ -504,6 +504,95 @@ PATCHES = [
         "restore bond flags when Encryption Change arrives without an SM procedure",
     ),
     (
+        "nimble/host/src/ble_gap.c",
+        "        if (rl != NULL && rl->rl_isrpa) {\n"
+        "            memcpy(bhc_peer_addr.val, rl->rl_peer_rpa, BLE_DEV_ADDR_LEN);\n"
+        "            bhc_peer_addr.type = rl->rl_addr_type;\n"
+        "        }\n",
+        "        if (rl != NULL && rl->rl_isrpa) {\n"
+        "            memcpy(bhc_peer_addr.val, rl->rl_peer_rpa, BLE_DEV_ADDR_LEN);\n"
+        "            bhc_peer_addr.type = BLE_ADDR_RANDOM;\n"
+        "        }\n",
+        "send a resolved peer RPA to the controller with its OTA random type",
+    ),
+    (
+        "nimble/host/src/ble_hs_resolv.c",
+        "        if(ble_hs_resolv_rpa(addr, rl->rl_peer_irk) == 0) {\n"
+        "            memcpy(g_ble_hs_resolv_list[i].rl_peer_rpa, addr, BLE_DEV_ADDR_LEN);\n"
+        "            g_ble_hs_resolv_list[i].rl_addr_type = addr_type;\n"
+        "            return rl;\n",
+        "        if(ble_hs_resolv_rpa(addr, rl->rl_peer_irk) == 0) {\n"
+        "            memcpy(g_ble_hs_resolv_list[i].rl_peer_rpa, addr, BLE_DEV_ADDR_LEN);\n"
+        "            return rl;\n",
+        "do not overwrite a resolved peer's identity type with its RPA type",
+    ),
+    (
+        "nimble/host/src/ble_hs_hci_evt.c",
+        "        struct ble_hs_resolv_entry *rl = NULL;\n"
+        "        ble_hs_lock();\n"
+        "        ble_rpa_replace_peer_params_with_rl(evt.peer_addr,\n",
+        "        struct ble_hs_resolv_entry *rl = NULL;\n"
+        "        ble_addr_t peer_ota_addr = { .type = evt.peer_addr_type };\n"
+        "        memcpy(peer_ota_addr.val, evt.peer_addr, BLE_DEV_ADDR_LEN);\n"
+        "        if (BLE_ADDR_IS_RPA(&peer_ota_addr)) {\n"
+        "            memcpy(evt.peer_rpa, evt.peer_addr, BLE_DEV_ADDR_LEN);\n"
+        "        }\n"
+        "        ble_hs_lock();\n"
+        "        ble_rpa_replace_peer_params_with_rl(evt.peer_addr,\n",
+        "preserve the peer OTA RPA before enhanced connection resolution",
+    ),
+    (
+        "nimble/host/src/ble_hs_hci_evt.c",
+        "        struct ble_hs_resolv_entry *rl = NULL;\n"
+        "        ble_hs_lock();\n"
+        "        ble_rpa_replace_peer_params_with_rl(evt.peer_addr,\n",
+        "        struct ble_hs_resolv_entry *rl = NULL;\n"
+        "        ble_addr_t peer_ota_addr = { .type = evt.peer_addr_type };\n"
+        "        memcpy(peer_ota_addr.val, evt.peer_addr, BLE_DEV_ADDR_LEN);\n"
+        "        if (BLE_ADDR_IS_RPA(&peer_ota_addr)) {\n"
+        "            memcpy(evt.peer_rpa, evt.peer_addr, BLE_DEV_ADDR_LEN);\n"
+        "        }\n"
+        "        ble_hs_lock();\n"
+        "        ble_rpa_replace_peer_params_with_rl(evt.peer_addr,\n",
+        "preserve the peer OTA RPA before legacy connection resolution",
+    ),
+    (
+        "nimble/host/src/ble_hs_conn.c",
+        "        memcpy(addrs->peer_id_addr.val, rl->rl_identity_addr, BLE_DEV_ADDR_LEN);\n"
+        "        addrs->peer_id_addr.type = rl->rl_addr_type;\n\n"
+        "        if (ble_host_rpa_enabled()) {\n",
+        "        memcpy(addrs->peer_id_addr.val, rl->rl_identity_addr, BLE_DEV_ADDR_LEN);\n"
+        "        addrs->peer_id_addr.type = rl->rl_addr_type;\n"
+        "        if (memcmp(conn->bhc_peer_rpa_addr.val, ble_hs_conn_null_addr, 6) != 0) {\n"
+        "            addrs->peer_ota_addr = conn->bhc_peer_rpa_addr;\n"
+        "        }\n\n"
+        "        if (ble_host_rpa_enabled()) {\n",
+        "report the preserved OTA RPA in host-based connection descriptions",
+    ),
+    (
+        "nimble/host/src/ble_hs_resolv.c",
+        "            if (rl) {\n"
+        "                memcpy(peer_addr, p_dev_rec->identity_addr, BLE_DEV_ADDR_LEN);\n"
+        "                *peer_addr_type = p_dev_rec->peer_sec.peer_addr.type;\n",
+        "            if (rl) {\n"
+        "                memcpy(peer_addr, p_dev_rec->identity_addr, BLE_DEV_ADDR_LEN);\n"
+        "                /* The resolving list is restored from the canonical security\n"
+        "                 * record.  The auxiliary peer record can still carry the OTA\n"
+        "                 * random type from before identity exchange. */\n"
+        "                *peer_addr_type = rl->rl_addr_type;\n",
+        "use the canonical resolving-list identity type after RPA resolution",
+    ),
+    (
+        "nimble/host/src/ble_hs_resolv.c",
+        "                memcpy(peer_addr, p_dev_rec->identity_addr, BLE_DEV_ADDR_LEN);\n"
+        "                *peer_addr_type = p_dev_rec->peer_sec.peer_addr.type;\n"
+        "            } else {\n",
+        "                memcpy(peer_addr, p_dev_rec->identity_addr, BLE_DEV_ADDR_LEN);\n"
+        "                *peer_addr_type = rl->rl_addr_type;\n"
+        "            } else {\n",
+        "use the canonical resolving-list identity type for pseudo-address lookup",
+    ),
+    (
         "nimble/host/src/ble_store_util.c",
         "        rc = ble_rpa_remove_peer_dev_rec(peer_rec);\n"
         "        if (rc != 0) {\n"

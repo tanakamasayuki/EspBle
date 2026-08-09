@@ -29,12 +29,18 @@ void setup()
   Serial.begin(115200);
   delay(500);
   loopTask = xTaskGetCurrentTaskHandle();
+#if defined(ESPBLE_TEST_RPA_BOND)
+  Serial.println("RPA_CENTRAL_BOOT");
+#endif
 
   EspBleConfig config;
   config.deviceName = "EspBle Security Central";
   config.security.enabled = true;
   config.security.bonding = true;
   config.security.pairOnConnect = true;
+#if defined(ESPBLE_TEST_RPA_BOND)
+  config.ownAddressType = EspBleOwnAddressType::ResolvablePrivate;
+#endif
   if (!ble.begin(config))
   {
     Serial.printf("BLE_INIT_FAILED %s %s\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
@@ -67,6 +73,11 @@ void setup()
       static_cast<unsigned>(connection.id),
       connection.encrypted ? 1 : 0,
       connection.bonded ? 1 : 0);
+#if defined(ESPBLE_TEST_RPA_BOND)
+    Serial.printf("RPA_CENTRAL_PEER addr=%s type=%u\n",
+      connection.peerAddress.c_str(),
+      static_cast<unsigned>(connection.peerAddressType));
+#endif
   });
   ble.onSecurityChanged([](const EspBleSecurityChanged &event) {
     EspBleConnection storedConnection;
@@ -136,10 +147,19 @@ void setup()
     {
       return;
     }
+#if defined(ESPBLE_TEST_RPA_BOND)
+    Serial.printf("RPA_SEEN addr=%s type=%u\n",
+      scanResult.address.c_str(),
+      static_cast<unsigned>(scanResult.addressType));
+#endif
     ble.scanner().stop();
     connectionRequested = ble.connect(scanResult);
     Serial.println(connectionRequested ? "CONNECT_REQUESTED" : "CONNECT_REQUEST_FAILED");
   });
+#if defined(ESPBLE_TEST_RPA_BOND)
+  Serial.printf("RPA_CENTRAL_READY local=%s type=%u\n",
+    ble.localAddress().c_str(), static_cast<unsigned>(ble.localAddressType()));
+#endif
 }
 
 void loop()
@@ -167,6 +187,19 @@ void loop()
     {
       Serial.println(ble.disconnect(connectionId) ? "DISCONNECT_REQUESTED" : "DISCONNECT_REQUEST_FAILED");
     }
+#if defined(ESPBLE_TEST_RPA_BOND)
+    else if (command == '?')
+    {
+      Serial.printf("RPA_CENTRAL_READY local=%s type=%u\n",
+        ble.localAddress().c_str(), static_cast<unsigned>(ble.localAddressType()));
+    }
+    else if (command == 'r' && connectionId == 0)
+    {
+      Serial.println("RPA_CENTRAL_RESTARTING");
+      Serial.flush();
+      ESP.restart();
+    }
+#endif
   }
 
   ble.update();

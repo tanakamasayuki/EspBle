@@ -812,6 +812,11 @@ ble_hs_hci_evt_le_enh_conn_complete(uint8_t subevent, const void *data,
         }
 
         struct ble_hs_resolv_entry *rl = NULL;
+        ble_addr_t peer_ota_addr = { .type = evt.peer_addr_type };
+        memcpy(peer_ota_addr.val, evt.peer_addr, BLE_DEV_ADDR_LEN);
+        if (BLE_ADDR_IS_RPA(&peer_ota_addr)) {
+            memcpy(evt.peer_rpa, evt.peer_addr, BLE_DEV_ADDR_LEN);
+        }
         ble_hs_lock();
         ble_rpa_replace_peer_params_with_rl(evt.peer_addr,
                                             &evt.peer_addr_type, &rl);
@@ -890,6 +895,11 @@ ble_hs_hci_evt_le_conn_complete(uint8_t subevent, const void *data,
         }
 
         struct ble_hs_resolv_entry *rl = NULL;
+        ble_addr_t peer_ota_addr = { .type = evt.peer_addr_type };
+        memcpy(peer_ota_addr.val, evt.peer_addr, BLE_DEV_ADDR_LEN);
+        if (BLE_ADDR_IS_RPA(&peer_ota_addr)) {
+            memcpy(evt.peer_rpa, evt.peer_addr, BLE_DEV_ADDR_LEN);
+        }
         ble_hs_lock();
         ble_rpa_replace_peer_params_with_rl(evt.peer_addr,
                                             &evt.peer_addr_type, &rl);

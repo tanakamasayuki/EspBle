@@ -25,6 +25,9 @@ void setup()
   Serial.begin(115200);
   delay(500);
   loopTask = xTaskGetCurrentTaskHandle();
+#if defined(ESPBLE_TEST_RPA_BOND)
+  Serial.println("RPA_PERIPHERAL_BOOT");
+#endif
 
   auto &gattServer = ble.gattServer();
   EspBleGattCharacteristicConfig characteristicConfig;
@@ -51,6 +54,9 @@ void setup()
   config.security.enabled = true;
   config.security.bonding = true;
   config.security.pairOnConnect = true;
+#if defined(ESPBLE_TEST_RPA_BOND)
+  config.ownAddressType = EspBleOwnAddressType::ResolvablePrivate;
+#endif
   if (!ble.begin(config))
   {
     Serial.printf("BLE_INIT_FAILED %s %s\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
@@ -73,6 +79,13 @@ void setup()
       Serial.printf("PERIPHERAL_SECURITY_FAILURE detail=%s\n", event.detail.c_str());
     }
   });
+#if defined(ESPBLE_TEST_RPA_BOND)
+  ble.onConnected([](const EspBleConnection &connection) {
+    Serial.printf("RPA_PERIPHERAL_PEER addr=%s type=%u\n",
+      connection.peerAddress.c_str(),
+      static_cast<unsigned>(connection.peerAddressType));
+  });
+#endif
   ble.onDisconnected([](const EspBleConnection &connection) {
     Serial.printf("PERIPHERAL_DISCONNECTED id=%u context=%s\n",
       static_cast<unsigned>(connection.id), callbackContext());
@@ -82,6 +95,10 @@ void setup()
   advertising.setName("EspBle Security Peer");
   advertising.addServiceUuid(TEST_SERVICE_UUID);
   startAdvertising();
+#if defined(ESPBLE_TEST_RPA_BOND)
+  Serial.printf("RPA_PERIPHERAL_READY local=%s type=%u\n",
+    ble.localAddress().c_str(), static_cast<unsigned>(ble.localAddressType()));
+#endif
 }
 
 void loop()
@@ -107,6 +124,19 @@ void loop()
     {
       Serial.printf("ADVERTISING %u\n", ble.advertising().isAdvertising() ? 1 : 0);
     }
+#if defined(ESPBLE_TEST_RPA_BOND)
+    else if (command == 'r')
+    {
+      Serial.println("RPA_PERIPHERAL_RESTARTING");
+      Serial.flush();
+      ESP.restart();
+    }
+    else if (command == 'R')
+    {
+      Serial.printf("RPA_PERIPHERAL_READY local=%s type=%u\n",
+        ble.localAddress().c_str(), static_cast<unsigned>(ble.localAddressType()));
+    }
+#endif
   }
 
   ble.update();

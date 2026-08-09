@@ -991,6 +991,7 @@ public:
 
 private:
   friend class EspBle;
+  friend struct EspBleImpl;
 
   explicit EspBleAdvertising(EspBle *owner);
 
@@ -1009,6 +1010,10 @@ private:
     Payload &destination,
     bool includeFlags,
     const char *payloadName) const;
+  // Host-based privacy has to stop every active GAP procedure before HCI Set
+  // Random Address. NimBLE reports that stop as EPreempted; resume only an
+  // advertisement that this object still considers requested.
+  void resumeAfterPrivacyPreemption();
 
   EspBle *owner_;
   EspBleAdvertisingData data_;
@@ -1023,6 +1028,8 @@ private:
   String directedAddress_;
   EspBleAddressType directedAddressType_ = EspBleAddressType::Public;
   uint8_t channelMask_ = 0;
+  bool restartAfterPreemption_ = false;
+  uint32_t advertisingDeadlineMs_ = 0;
 };
 
 class EspBleScanner
@@ -1044,10 +1051,14 @@ private:
   ~EspBleScanner();
   void dispatchPendingResults();
   void flushPendingResults();
+  void resumeAfterPrivacyPreemption();
 
   EspBle *owner_;
   ResultCallback resultCallback_;
   EspBleScannerImpl *impl_ = nullptr;
+  EspBleScanConfig restartConfig_;
+  bool restartAfterPreemption_ = false;
+  uint32_t scanDeadlineMs_ = 0;
 };
 
 class EspBleGattServer
@@ -1625,11 +1636,11 @@ public:
   void end();
   void update();
 
-  // The address this device currently presents to peers, as a string, or an
-  // empty String before begin(). With ownAddressType = ResolvablePrivate this is
-  // the RPA in use at the moment, so it changes when the controller rotates it.
-  // Its type is the one requested through EspBleConfig::ownAddressType, reported
-  // by localAddressType().
+  // The local address exposed by the active host, or an empty String before
+  // begin(). With ResolvablePrivate, backends can expose either their identity
+  // address or the current host-generated RPA; do not use this as a stable way
+  // to observe RPA rotation. Scan / connection results carry the address seen
+  // over the air. localAddressType() reports the type requested in the config.
   String localAddress() const;
   EspBleAddressType localAddressType() const;
 

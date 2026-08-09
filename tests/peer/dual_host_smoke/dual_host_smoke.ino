@@ -2,6 +2,9 @@
 #include <EspBleClassic.h>
 #include <EspBleHciBroker.h>
 #include <esp_mac.h>
+#if defined(ESPBLE_TEST_DUAL_RPA)
+#include <nimble_esp32/include/host/ble_hs_pvcy.h>
+#endif
 
 static const char *ServiceUuid = "c8a53600-98f4-4f2c-a231-522b5c4d9001";
 static const char *CharacteristicUuid = "c8a53601-98f4-4f2c-a231-522b5c4d9001";
@@ -65,6 +68,9 @@ bool startDualStacks()
   bleConfig.security.enabled = true;
   bleConfig.security.bonding = true;
   bleConfig.security.pairOnConnect = true;
+#if defined(ESPBLE_TEST_DUAL_RPA)
+  bleConfig.ownAddressType = EspBleOwnAddressType::ResolvablePrivate;
+#endif
   if (!service.valid() || !characteristic.valid() || !ble.begin(bleConfig))
     return false;
   if (!advertisingConfigured)
@@ -118,9 +124,14 @@ void setup()
     printHex(report.value);
     Serial.println();
   });
-  ble.onConnected([](const EspBleConnection &) {
+  ble.onConnected([](const EspBleConnection &connection) {
     bleConnected = true;
     Serial.println("DUAL_BLE_SERVER_CONNECTED");
+#if defined(ESPBLE_TEST_DUAL_RPA)
+    Serial.printf("RPA_DUAL_SERVER_PEER addr=%s type=%u\n",
+      connection.peerAddress.c_str(),
+      static_cast<unsigned>(connection.peerAddressType));
+#endif
   });
   ble.onDisconnected([](const EspBleConnection &) {
     bleConnected = false;
@@ -140,7 +151,9 @@ void setup()
       classic.lastErrorDetail().c_str(), ble.lastErrorDetail().c_str());
     return;
   }
+#if !defined(ESPBLE_TEST_DUAL_RPA)
   (void)ble.deleteAllBonds();
+#endif
 
   uint8_t address[6] = {};
   esp_read_mac(address, ESP_MAC_BT);
@@ -172,6 +185,45 @@ void loop()
         static_cast<unsigned>(ble.bondCount()));
     else if (command == 'h')
       printHeap("DUAL_HEAP");
+#if defined(ESPBLE_TEST_DUAL_RPA)
+    else if (command == 'X')
+    {
+      const bool cleared = ble.deleteAllBonds();
+      Serial.printf("RPA_DUAL_BONDS_CLEARED success=%u count=%u\n",
+        cleared ? 1 : 0,
+        static_cast<unsigned>(ble.bondCount()));
+    }
+    else if (command == 'Z')
+    {
+      Serial.println("RPA_DUAL_RESTARTING");
+      Serial.flush();
+      ESP.restart();
+    }
+    else if (command == 'T')
+      Serial.printf("RPA_DUAL_TIMEOUT seconds=2 rc=%d\n",
+        ble_hs_set_rpa_timeout(2));
+    else if (command == 'Y')
+      Serial.printf("RPA_DUAL_TIMEOUT seconds=900 rc=%d\n",
+        ble_hs_set_rpa_timeout(900));
+    else if (command == 'S')
+      Serial.printf("RPA_DUAL_ADVERTISING_STOP %u\n",
+        ble.advertising().stop() ? 1 : 0);
+    else if (command == 'R')
+    {
+      uint8_t address[6] = {};
+      esp_read_mac(address, ESP_MAC_BT);
+      Serial.printf(
+        "DUAL_READY classic=%02x:%02x:%02x:%02x:%02x:%02x ble=%s type=%u\n",
+        address[0], address[1], address[2], address[3], address[4], address[5],
+        ble.localAddress().c_str(),
+        static_cast<unsigned>(ble.localAddressType()));
+      Serial.printf("RPA_DUAL_INIT ble=%u classic=%u ble_error=%s:%s "
+        "classic_error=%s:%s\n",
+        ble.initialized() ? 1 : 0, classic.initialized() ? 1 : 0,
+        ble.lastErrorName(), ble.lastErrorDetail().c_str(),
+        classic.lastErrorName(), classic.lastErrorDetail().c_str());
+    }
+#endif
     else if (command == '?')
       Serial.printf("DUAL_STATE adv=%u classic=%u ble=%u\n",
         ble.advertising().isAdvertising() ? 1 : 0,

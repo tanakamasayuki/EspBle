@@ -93,6 +93,9 @@ Classic→NimBLEを再登録し、両hostの初期化成功と正常停止を通
 free 187692 byte、peerはfree 188192 byteで全測定値が同一だった（観測分解能上の漏れ0 byte）。
 DUTのminimum free / largest blockは84144 / 73716 byte、peerは71124 / 59380 byteだった。数時間級の長時間soakは
 引き続き未検証である。
+その後、heap減少許容値を0 byteにしてテスト上限の100サイクルも実行した。baseline、100サイクル、
+destructor後の計102点で、DUTのfree / largestは187788 / 73716 byte、peerは188288 / 69620 byteと
+すべて同一だった。再登録・停止は全回`started=1`、`ble=0 classic=0 busy=0`で完了し、246.57秒で合格した。
 Classicは起動直後にcontroller停止callbackをbrokerへ委譲する。Classic先行`end()`ではClassic
 profile/hostだけが停止し、NimBLEとcontrollerは継続する。追加のLE GATT readが成功した後、最後の
 NimBLE解除でbrokerがcontrollerを停止し、その後のClassic→NimBLE再起動と3サイクル停止も成功した。
@@ -179,6 +182,41 @@ host-based resolving listにはlocalとpeerの2 entryが残っていた。Espres
 peer-device recordが見つかる場合だけlistから削除する。同梱生成patchではrecordが無い復元IRKも
 identity addressで削除する。修正後は旧bond復元→削除→再pairingで`rc=3`は発生せず、bond数1、
 暗号化必須read、bond再接続が成功した（89.97秒）。
+
+RPA専用Peer testも追加し、両側を`ResolvablePrivate`にして初回pairing、NVSへbond保存、両端の
+`ESP.restart()`、復元LTKでの再暗号化、暗号化必須GATT read/write、復元bond削除、再pairingを連続実行した。
+この検証でhost-based privacyの4点を修正した。(1) 無印ESP32ではcontroller用
+`BLE_OWN_ADDR_RPA_RANDOM_DEFAULT`ではなく`ble_hs_pvcy_rpa_config()`と`BLE_OWN_ADDR_RANDOM`を使う、
+(2) scan結果はidentity置換後ではなく保存済みOTA RPAを公開する、(3) RPA照合時にResolving Listの
+identity typeをOTA random typeで上書きしない、(4) HCI接続先へRPAを渡す場合だけ明示的にrandom型を使い、
+接続完了時は置換前RPAを`peer_ota_addr`へ保存する、という分離である。補助peer recordの古い型ではなく
+canonicalなResolving Listの型を使う修正も含む。修正後、全シナリオは49.18秒で成功し、通常の
+public-address security/bond試験も62.56秒で成功した。ESP32-S3向けRPA Central/Peripheral compileと
+host unit test 10件も成功した。生成script再実行前後の同梱NimBLE全ファイルSHA-256集約値は一致した。
+
+このRPA経路をdual-hostへ組み合わせる専用Peer testも追加した。無印ESP32 2台の双方で独自Classic
+hostとNimBLE hostを起動し、Classic HID ACLを接続したまま、BLEは双方host-based RPAで初回pairing、
+暗号化必須GATT read、bond保存、LE切断、保存LTKによる再暗号化とGATT readを実行した。scan結果と
+client/server双方のconnection結果はいずれもrandom型かつ上位bit `01`のOTA RPAを維持した。さらに
+RPA timeoutを試験中だけ2秒へ短縮し、Classic HID ACLを維持した状態でhost privacy calloutを発火させた。
+初回実験ではNimBLEの`ble_gap_preempt()`がadvertisingを停止し、`ADV_COMPLETE(EPreempted)`を通知した後、
+EspBleが通知を無視するためadvertisingが停止したままになる問題を検出した。EspBleAdvertisingに
+「アプリがadvertising継続を要求しているか」と有限durationの元deadlineを保持させ、privacy preempt時だけ
+再開するよう修正した。同じ契約の`DISC_COMPLETE(EPreempted)`にもscan条件と有限durationの元deadlineを
+保持する対称な処理を追加した。明示的な`stop()`/`end()`では要求を消すため意図しない再開はしない。
+scan側の試験ではPeripheralを停止したままCentralの2秒timerを3周期発火させ、発火後に初めて開始した
+advertisingを受信できることで、preempt前の受信ではなくscanが毎回実際に再開したことを確認する。
+advertising側も3回連続で異なるRPAを観測し、各周期にClassic HID input/output reportを往復させた。
+Centralの接続RPAは`79:05:43:5b:b8:4b`から`44:7d:08:48:b2:91`へ変化した。advertising側は
+`66:34:47:7b:4f:45`から`57:30:23:ce:b6:61`、`70:dd:75:77:38:2b`、`52:27:50:6c:be:d7`と
+3周期すべてで変化し、Classic接続を維持したまま新RPAから保存bondで
+暗号化GATTを再確立した。
+
+続いて両端を同時再起動し、NVS上のbond数1を確認してClassic HIDを再接続後、再起動で変化した双方のRPAを
+IRKで解決し、保存LTKによる暗号化とGATT readを復元した。最後に`classic=1 ble=1`を確認し、rotationと
+再起動復元までを含む一連の実機試験は113.03秒で成功した。
+条件マクロを使わない通常public-addressのdual-host smokeも再実行し、暗号化GATT反復、bond再接続、
+Classic再attach、両link切断、3回再起動、両destructor順、heap不変を118.29秒で完走した。
 
 bond再接続とClassic再attach後、中央側からLEとBR/EDRのDisconnectを連続発行する試験も追加した。
 controllerからの完了順に依存せず、NimBLE client/serverとClassic HID Host/Deviceの4切断callbackが

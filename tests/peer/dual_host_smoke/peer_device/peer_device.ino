@@ -1,10 +1,16 @@
 #include <EspBleClassic.h>
 #include <EspBle.h>
 #include <EspBleHciBroker.h>
+#if defined(ESPBLE_TEST_DUAL_RPA)
+#include <nimble_esp32/include/host/ble_hs_pvcy.h>
+#endif
 
 EspBleClassic classic;
 EspBle ble;
 bool bleConnectionRequested;
+#if defined(ESPBLE_TEST_DUAL_RPA)
+bool rpaObserveOnly;
+#endif
 EspBleConnectionId bleConnectionId;
 static const char *ServiceUuid = "c8a53600-98f4-4f2c-a231-522b5c4d9001";
 static const char *CharacteristicUuid = "c8a53601-98f4-4f2c-a231-522b5c4d9001";
@@ -36,6 +42,9 @@ bool startDualStacks()
   bleConfig.security.enabled = true;
   bleConfig.security.bonding = true;
   bleConfig.security.pairOnConnect = true;
+#if defined(ESPBLE_TEST_DUAL_RPA)
+  bleConfig.ownAddressType = EspBleOwnAddressType::ResolvablePrivate;
+#endif
   return ble.begin(bleConfig);
 }
 
@@ -91,6 +100,18 @@ void setup()
   }
   ble.scanner().onResult([](const EspBleScanResult &result) {
     if (bleConnectionRequested || !result.advertisesService(ServiceUuid)) return;
+#if defined(ESPBLE_TEST_DUAL_RPA)
+    Serial.printf("RPA_DUAL_SEEN addr=%s type=%u\n",
+      result.address.c_str(), static_cast<unsigned>(result.addressType));
+    if (rpaObserveOnly)
+    {
+      rpaObserveOnly = false;
+      ble.scanner().stop();
+      Serial.printf("RPA_DUAL_OBSERVED addr=%s type=%u\n",
+        result.address.c_str(), static_cast<unsigned>(result.addressType));
+      return;
+    }
+#endif
     ble.scanner().stop();
     bleConnectionRequested = ble.connect(result);
     Serial.printf("DUAL_BLE_CONNECT %u\n", bleConnectionRequested ? 1 : 0);
@@ -98,6 +119,11 @@ void setup()
   ble.onConnected([](const EspBleConnection &connection) {
     bleConnectionId = connection.id;
     Serial.println("DUAL_BLE_CLIENT_CONNECTED");
+#if defined(ESPBLE_TEST_DUAL_RPA)
+    Serial.printf("RPA_DUAL_CLIENT_PEER addr=%s type=%u\n",
+      connection.peerAddress.c_str(),
+      static_cast<unsigned>(connection.peerAddressType));
+#endif
     Serial.printf("DUAL_BLE_READ_REQUESTED %u\n",
       ble.readCharacteristic(
         connection.id, ServiceUuid, CharacteristicUuid) ? 1 : 0);
@@ -119,7 +145,9 @@ void setup()
       result.success ? 1 : 0, result.value.c_str(),
       classic.hidHost().connected() ? 1 : 0);
   });
+#if !defined(ESPBLE_TEST_DUAL_RPA)
   (void)ble.deleteAllBonds();
+#endif
   Serial.println("DUAL_PEER_READY");
 }
 
@@ -168,6 +196,46 @@ void loop()
         static_cast<unsigned>(ble.bondCount()));
     else if (command == "h")
       printHeap("DUAL_PEER_HEAP");
+#if defined(ESPBLE_TEST_DUAL_RPA)
+    else if (command == "X")
+    {
+      const bool cleared = ble.deleteAllBonds();
+      Serial.printf("RPA_DUAL_PEER_BONDS_CLEARED success=%u count=%u\n",
+        cleared ? 1 : 0,
+        static_cast<unsigned>(ble.bondCount()));
+    }
+    else if (command == "Z")
+    {
+      Serial.println("RPA_DUAL_PEER_RESTARTING");
+      Serial.flush();
+      ESP.restart();
+    }
+    else if (command == "p")
+    {
+      rpaObserveOnly = true;
+      EspBleScanConfig scanConfig;
+      scanConfig.active = true;
+      Serial.printf("RPA_DUAL_OBSERVE %u\n",
+        ble.scanner().start(scanConfig) ? 1 : 0);
+    }
+    else if (command == "t")
+      Serial.printf("RPA_DUAL_PEER_TIMEOUT seconds=2 rc=%d\n",
+        ble_hs_set_rpa_timeout(2));
+    else if (command == "y")
+      Serial.printf("RPA_DUAL_PEER_TIMEOUT seconds=900 rc=%d\n",
+        ble_hs_set_rpa_timeout(900));
+    else if (command == "R")
+    {
+      Serial.printf("DUAL_PEER_READY local=%s type=%u\n",
+        ble.localAddress().c_str(),
+        static_cast<unsigned>(ble.localAddressType()));
+      Serial.printf("RPA_DUAL_PEER_INIT ble=%u classic=%u ble_error=%s:%s "
+        "classic_error=%s:%s\n",
+        ble.initialized() ? 1 : 0, classic.initialized() ? 1 : 0,
+        ble.lastErrorName(), ble.lastErrorDetail().c_str(),
+        classic.lastErrorName(), classic.lastErrorDetail().c_str());
+    }
+#endif
     else if (command == "u")
     {
       EspBleConnection connection;

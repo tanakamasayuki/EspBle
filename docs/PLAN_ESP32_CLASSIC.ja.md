@@ -76,9 +76,11 @@ broker taskから成功Command CompleteをClassicだけへ返す。
 | dual-host command scheduler負荷 | 1 passed（両hostから送信、投入＝物理送信、最大queue深度3、overflow / opcode不一致0） |
 | dual-host command inventory / flow-control仮想化 | 1 passed（NimBLE 19種、Classic 32〜34種、再attach時Reset 1件＋flow設定2件を仮想完了） |
 | dual-host security / bonding | 1 passed（Classic HID接続中にpairing・bond保存、BLE bond再接続、暗号化必須GATT read、両側`encrypted=1 bonded=1`） |
+| host-based RPA / bond再起動 | 1 passed（初回pairing、両端再起動後のLTK復元、暗号化GATT、復元bond削除、再pairing。scan/connectionはOTA RPAを維持） |
+| dual-host + host-based RPA | 1 passed（Classic HID ACL接続中に双方RPAでpairing、暗号化GATT、bond済みLE再接続。2秒timeoutでPeripheral advertisingとCentral scan双方のpreempt・再開およびRPA rotationを検証。両端再起動後もNVSのIRK/LTKから復元） |
 | dual-host LE / BR-EDR連続切断 | 1 passed（両handleの切断を正しいhostへ配送後、正常停止・再起動・両destructor順成功） |
 | dual-host正常停止 | 1 passed（両側ともNimBLE→Classic、解除時in-flight command 0） |
-| dual-host再登録 | 1 passed（同一instance・GATT/HID定義でClassic→NimBLE再起動→正常停止を20サイクル、両基板とも22点のheap測定でfree heap減少0 byte） |
+| dual-host再登録 | 1 passed（同一instance・GATT/HID定義でClassic→NimBLE再起動→正常停止を100サイクル、両基板とも102点のheap測定でfree heap減少0 byte） |
 | dual-host event mask union | 1 passed（両側ともmask command 4、host要求からのunion書換え1） |
 | NimBLE継続中のClassic再attach | 1 passed（HCI Reset仮想完了後も同じGATT接続を維持し、Classic HID再接続・双方向通信成功） |
 | dual-host任意順停止 | 1 passed（Classic先行停止後もNimBLE GATT継続、最後のhost解除でcontroller停止・再起動成功） |
@@ -86,6 +88,7 @@ broker taskから成功Command CompleteをClassicだけへ返す。
 | 通常NimBLE BLEのESP32 Peer regression | 2 passed（GATT read/write、反復discovery） |
 | host unit test | 10 passed（controller policyのGeneral / Page 2 / LE mask独立cacheを含む） |
 | ESP32-S3 CompileSmoke | 成功、274,253 B。Classic archiveは非リンク |
+| ESP32-S3 RPA regression compile | Central 640,276 B、Peripheral 641,360 B。無印ESP32専用host privacy patchは非適用 |
 
 core内蔵hostを使った先行SPP試験も同じPeer testで成功したが、最終構成には使わない。
 Arduino coreの設定はSPP有効・Classic HID無効であり、core `libbt.a`にHID Device/Host APIの
@@ -94,7 +97,7 @@ Arduino coreの設定はSPP有効・Classic HID無効であり、core `libbt.a`�
 ## 次の実装
 
 1. dual-hostのcommand同時発行と実機queue overflowを長時間反復する。
-2. controller / hostの任意順停止・再登録を数時間級のsoakで反復する。20サイクルのheap記録では減少0 byteを確認済み。
+2. controller / hostの任意順停止・再登録を数時間級のsoakで反復する。100サイクルのheap記録では減少0 byteを確認済み。
 3. 取得済みcommand inventoryを基に、未処理のcontroller-wide設定と接続単位commandを仕様表へ分類する。
 4. HID接続失敗と異常長Reportを両transport同時状態で試験する。
 

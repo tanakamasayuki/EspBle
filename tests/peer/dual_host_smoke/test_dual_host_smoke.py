@@ -178,8 +178,14 @@ def test_nimble_and_custom_classic_host_run_together(dut, peers):
 
     dut.write("d")
     peer.write("d\n")
-    dut_diag = dut.expect(re.compile(rb"DUAL_DIAG .*"), timeout=10)
-    peer_diag = peer.expect(re.compile(rb"DUAL_PEER_DIAG .*"), timeout=10)
+    # Wait for the terminating field. A bare `.*` can match while the serial
+    # reader has only received the first fragment of this long line.
+    dut_diag = dut.expect(
+        re.compile(rb"DUAL_DIAG .* masks=\d+/\d+"), timeout=10
+    )
+    peer_diag = peer.expect(
+        re.compile(rb"DUAL_PEER_DIAG .* masks=\d+/\d+"), timeout=10
+    )
     print(dut_diag.group(0).decode())
     print(peer_diag.group(0).decode())
     for diag in (dut_diag.group(0), peer_diag.group(0)):
