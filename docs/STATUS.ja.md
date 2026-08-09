@@ -59,6 +59,8 @@ BLE MIDIはbackend非依存のpacket codec（timestamp・running status・複数
 - 自動実機検証はESP32-S3中心です。市販機器およびAndroid / Linux / Windows / macOSとの相互運用確認は未完了です。
 - 外部NimBLE-Arduinoは対象外です。無印ESP32はEspBleがNimBLE Hostを同梱して動かします（`src/nimble_esp32/`）。加えて独自buildしたClassic-only Bluedroid hostによるSPPとgeneric HID Device/Hostを実験対応しています。排他構成に加え、`ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL`ではClassicを先にBTDMで起動し、Classic HID接続中のLE接続、GATT read 25回、その後のHID双方向通信まで実機確認済みです。共有HCI command schedulerはbroker所有FIFO、controller command credit、opcode応答照合を実装し、完全再ビルドの同負荷試験でqueue overflow・応答不一致・取りこぼし0を確認しました。General / Page 2 / LE event maskはhost別要求をbrokerでunionし、Classic再attach時のHCI Resetとflow-control設定は仮想完了します。Classic HID接続中のBLE pairing、bond保存・再接続、暗号化必須GATT readも両側で成功しました。controller停止責任もbrokerへ委譲し、NimBLE→Classic、Classic→NimBLEの両停止順、Classic停止後のGATT継続、BLE接続中のClassic再attachとHID再接続、同一instanceによる再登録・正常停止20サイクル、両順序の実destructorを両側で確認済みです。ただし長時間再登録soak、未分類のcontroller-wide command、長時間負荷試験は未完了なので一般対応とはしません。NimBLEはソース、Classicは`.a`という現在の同梱形式は、機能安定後にどちらかへ統一する将来課題として[Classic計画](PLAN_ESP32_CLASSIC.ja.md#将来の配布形式統一)へ記録しています。HIDは任意Report Descriptor、Input/Output Report、接続・切断・再初期化をESP32 2台のPeer testで検証済みです。実機Peerテストで確認できた範囲だけを対応済みとします——方針・検証記録は[PLAN_ESP32.ja.md](PLAN_ESP32.ja.md)と[PLAN_ESP32_CLASSIC.ja.md](PLAN_ESP32_CLASSIC.ja.md)にあります。
 
+- dual-host再登録の20サイクル試験では、baseline、各サイクル、destructor後の計22点で両基板のfree heapがそれぞれ同一で、観測された減少は0 byteでした。数時間級のsoakは未検証です。
+
 ## 1.0.0までの残作業
 
 1. 全Peer + unit testを`--clean`で連続実行し、複数回反復する。

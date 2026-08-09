@@ -78,7 +78,7 @@ broker taskから成功Command CompleteをClassicだけへ返す。
 | dual-host security / bonding | 1 passed（Classic HID接続中にpairing・bond保存、BLE bond再接続、暗号化必須GATT read、両側`encrypted=1 bonded=1`） |
 | dual-host LE / BR-EDR連続切断 | 1 passed（両handleの切断を正しいhostへ配送後、正常停止・再起動・両destructor順成功） |
 | dual-host正常停止 | 1 passed（両側ともNimBLE→Classic、解除時in-flight command 0） |
-| dual-host再登録 | 1 passed（同一instance・GATT/HID定義でClassic→NimBLE再起動→正常停止を20サイクル） |
+| dual-host再登録 | 1 passed（同一instance・GATT/HID定義でClassic→NimBLE再起動→正常停止を20サイクル、両基板とも22点のheap測定でfree heap減少0 byte） |
 | dual-host event mask union | 1 passed（両側ともmask command 4、host要求からのunion書換え1） |
 | NimBLE継続中のClassic再attach | 1 passed（HCI Reset仮想完了後も同じGATT接続を維持し、Classic HID再接続・双方向通信成功） |
 | dual-host任意順停止 | 1 passed（Classic先行停止後もNimBLE GATT継続、最後のhost解除でcontroller停止・再起動成功） |
@@ -94,7 +94,7 @@ Arduino coreの設定はSPP有効・Classic HID無効であり、core `libbt.a`�
 ## 次の実装
 
 1. dual-hostのcommand同時発行と実機queue overflowを長時間反復する。
-2. controller / hostの任意順停止・再登録を20サイクルより長いsoakで反復し、heapも記録する。
+2. controller / hostの任意順停止・再登録を数時間級のsoakで反復する。20サイクルのheap記録では減少0 byteを確認済み。
 3. 取得済みcommand inventoryを基に、未処理のcontroller-wide設定と接続単位commandを仕様表へ分類する。
 4. HID接続失敗と異常長Reportを両transport同時状態で試験する。
 

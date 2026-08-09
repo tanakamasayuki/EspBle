@@ -2,6 +2,83 @@ import os
 import re
 
 
+NIMBLE_OPCODES = {
+    0x0406,
+    0x041D,
+    0x0C01,
+    0x0C63,
+    0x1001,
+    0x1002,
+    0x1003,
+    0x1009,
+    0x2001,
+    0x2002,
+    0x2003,
+    0x2006,
+    0x2008,
+    0x2009,
+    0x200A,
+    0x200B,
+    0x200C,
+    0x200D,
+    0x2016,
+    0x2018,
+    0x2019,
+    0x201A,
+    0x2022,
+    0x2030,
+}
+
+CLASSIC_OPCODES = {
+    0x0405,
+    0x0409,
+    0x040B,
+    0x040F,
+    0x0411,
+    0x0413,
+    0x0419,
+    0x041B,
+    0x041C,
+    0x041D,
+    0x041F,
+    0x0803,
+    0x080D,
+    0x080F,
+    0x0C01,
+    0x0C03,
+    0x0C13,
+    0x0C14,
+    0x0C18,
+    0x0C1A,
+    0x0C1E,
+    0x0C24,
+    0x0C31,
+    0x0C33,
+    0x0C35,
+    0x0C37,
+    0x0C3A,
+    0x0C43,
+    0x0C45,
+    0x0C47,
+    0x0C52,
+    0x0C56,
+    0x1001,
+    0x1002,
+    0x1004,
+    0x1005,
+    0x1009,
+}
+
+
+def read_heap(device, command, prefix):
+    device.write(command)
+    match = device.expect(
+        re.compile(prefix + rb" free=(\d+) min=(\d+) largest=(\d+)"),
+        timeout=10,
+    )
+    return tuple(int(match.group(index)) for index in range(1, 4))
+
+
 def test_nimble_and_custom_classic_host_run_together(dut, peers):
     peer = peers["device"]
     peer.expect_exact("DUAL_PEER_READY", timeout=20)
@@ -141,6 +218,15 @@ def test_nimble_and_custom_classic_host_run_together(dut, peers):
             )
             assert int(match.group(1)) > 0
             assert match.group(2) == b"0"
+            values = {
+                int(value, 16)
+                for value in match.group(3).decode().split(",")
+                if value
+            }
+            allowed = NIMBLE_OPCODES if host == 0 else CLASSIC_OPCODES
+            assert values <= allowed
+            if host == 1:
+                assert {0x0C03, 0x0C31, 0x0C33, 0x0C35} <= values
             opcode_lines.append(match.group(0).decode())
     print("\n".join(opcode_lines))
 
@@ -230,6 +316,9 @@ def test_nimble_and_custom_classic_host_run_together(dut, peers):
     dut.write("e")
     dut.expect_exact("DUAL_ENDED ble=0 classic=0 busy=0", timeout=20)
 
+    peer_heap = [read_heap(peer, "h\n", rb"DUAL_PEER_HEAP")]
+    dut_heap = [read_heap(dut, "h", rb"DUAL_HEAP")]
+
     restart_cycles = int(os.getenv("ESPBLE_DUAL_RESTART_CYCLES", "3"))
     assert 1 <= restart_cycles <= 100
     for _ in range(restart_cycles):
@@ -246,6 +335,8 @@ def test_nimble_and_custom_classic_host_run_together(dut, peers):
         peer.expect_exact("DUAL_PEER_ENDED ble=0 classic=0 busy=0", timeout=20)
         dut.write("e")
         dut.expect_exact("DUAL_ENDED ble=0 classic=0 busy=0", timeout=20)
+        peer_heap.append(read_heap(peer, "h\n", rb"DUAL_PEER_HEAP"))
+        dut_heap.append(read_heap(dut, "h", rb"DUAL_HEAP"))
 
     # Exercise the actual C++ destructors in both object orders, then prove the
     # controller was fully released by starting the long-lived instances again.
@@ -262,3 +353,20 @@ def test_nimble_and_custom_classic_host_run_together(dut, peers):
     peer.expect_exact("DUAL_PEER_ENDED ble=0 classic=0 busy=0", timeout=20)
     dut.write("e")
     dut.expect_exact("DUAL_ENDED ble=0 classic=0 busy=0", timeout=20)
+    peer_heap.append(read_heap(peer, "h\n", rb"DUAL_PEER_HEAP"))
+    dut_heap.append(read_heap(dut, "h", rb"DUAL_HEAP"))
+
+    heap_loss_limit = int(os.getenv("ESPBLE_DUAL_HEAP_LOSS_LIMIT", "8192"))
+    assert 0 <= heap_loss_limit <= 65536
+    for name, samples in (("dut", dut_heap), ("peer", peer_heap)):
+        free_values = [sample[0] for sample in samples]
+        minimum_values = [sample[1] for sample in samples]
+        largest_values = [sample[2] for sample in samples]
+        print(
+            f"DUAL_HEAP_SAMPLES {name} free={free_values} "
+            f"min={minimum_values} largest={largest_values}"
+        )
+        assert min(free_values) >= free_values[0] - heap_loss_limit
+        assert free_values[-1] >= free_values[0] - heap_loss_limit
+        assert min(minimum_values) >= 16384
+        assert min(largest_values) >= 16384

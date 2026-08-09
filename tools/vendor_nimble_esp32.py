@@ -504,6 +504,38 @@ PATCHES = [
         "restore bond flags when Encryption Change arrives without an SM procedure",
     ),
     (
+        "nimble/host/src/ble_store_util.c",
+        "        rc = ble_rpa_remove_peer_dev_rec(peer_rec);\n"
+        "        if (rc != 0) {\n"
+        "            if (needs_unlock) {\n"
+        "                ble_hs_unlock();\n"
+        "            }\n"
+        "            return rc;\n"
+        "        }\n"
+        "    }\n"
+        "    if (needs_unlock) {\n",
+        "        rc = ble_rpa_remove_peer_dev_rec(peer_rec);\n"
+        "        if (rc != 0) {\n"
+        "            if (needs_unlock) {\n"
+        "                ble_hs_unlock();\n"
+        "            }\n"
+        "            return rc;\n"
+        "        }\n"
+        "    } else {\n"
+        "        /* Restored IRKs can exist in the host resolving list without a\n"
+        "         * peer-device record.  Deleting the persisted bond must remove\n"
+        "         * that entry too, otherwise the next pairing is rejected as a\n"
+        "         * duplicate and keeps using the stale IRK. */\n"
+        "        rc = ble_hs_resolv_list_rmv(peer_id_addr->type,\n"
+        "                                    peer_id_addr->val);\n"
+        "        if (rc != 0 && rc != BLE_HS_ENOENT) {\n"
+        "            BLE_HS_LOG(DEBUG, \"Restored peer was not removed from RL \\n\");\n"
+        "        }\n"
+        "    }\n"
+        "    if (needs_unlock) {\n",
+        "remove a restored resolving-list entry even without a peer record",
+    ),
+    (
         "esp-idf/esp_nimble_hci.c",
         '#include "esp_bt.h"\n#endif\n',
         '#include "esp_bt.h"\n#endif\n#include "EspBleHciBroker.h"\n',

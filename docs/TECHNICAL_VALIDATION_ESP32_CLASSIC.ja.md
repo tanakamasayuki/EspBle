@@ -89,7 +89,10 @@ LE tx/rx/completed=36/36/36、Classic tx/rx/completed=25/25/25で、unknown hand
 commandを再登録後のcontrollerへ送らない。再登録の長時間soakは未検証である。
 同じ実機試験で、停止後に同一の`EspBle` / `EspBleClassic` instanceとGATT/HID定義を使って
 Classic→NimBLEを再登録し、両hostの初期化成功と正常停止を通常3サイクル、拡張実行20サイクルで
-確認した。さらに長時間のheap付きsoakは未検証である。
+確認した。20サイクル実行ではbaseline、各サイクル、destructor後の計22点でheapを計測し、DUTは
+free 187692 byte、peerはfree 188192 byteで全測定値が同一だった（観測分解能上の漏れ0 byte）。
+DUTのminimum free / largest blockは84144 / 73716 byte、peerは71124 / 59380 byteだった。数時間級の長時間soakは
+引き続き未検証である。
 Classicは起動直後にcontroller停止callbackをbrokerへ委譲する。Classic先行`end()`ではClassic
 profile/hostだけが停止し、NimBLEとcontrollerは継続する。追加のLE GATT readが成功した後、最後の
 NimBLE解除でbrokerがcontrollerを停止し、その後のClassic→NimBLE再起動と3サイクル停止も成功した。
@@ -169,6 +172,13 @@ esp-nimbleの現行masterにも同じ制御構造がある。同梱生成patch�
 applicationへ通知し、成功した暗号化が既存bondに対応する場合はpeer security storeからauthenticated、
 bonded、key sizeを復元する。変更は`tools/vendor_nimble_esp32.py`に固定し、二回の再生成で同一生成物になることを
 確認した。この修正後に短縮clean試験（102.88秒）と通常25 read試験（66.93秒）がともに成功した。
+
+さらに、起動時に復元したIRKを`deleteAllBonds()`で削除して再pairingすると、両側で
+`ble_hs_resolv_list_add rc=3`が発生することを検出した。診断では、永続storeとpeer-device recordは削除済みだが、
+host-based resolving listにはlocalとpeerの2 entryが残っていた。Espressif esp-nimbleの現行実装は
+peer-device recordが見つかる場合だけlistから削除する。同梱生成patchではrecordが無い復元IRKも
+identity addressで削除する。修正後は旧bond復元→削除→再pairingで`rc=3`は発生せず、bond数1、
+暗号化必須read、bond再接続が成功した（89.97秒）。
 
 bond再接続とClassic再attach後、中央側からLEとBR/EDRのDisconnectを連続発行する試験も追加した。
 controllerからの完了順に依存せず、NimBLE client/serverとClassic HID Host/Deviceの4切断callbackが

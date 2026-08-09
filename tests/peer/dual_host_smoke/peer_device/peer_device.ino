@@ -15,6 +15,12 @@ void printHex(const String &value)
     Serial.printf("%02x", static_cast<uint8_t>(value[i]));
 }
 
+void printHeap(const char *prefix)
+{
+  Serial.printf("%s free=%u min=%u largest=%u\n", prefix,
+    ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
+}
+
 bool startClassicStack()
 {
   EspBleClassicConfig config;
@@ -160,6 +166,8 @@ void loop()
     else if (command == "n")
       Serial.printf("DUAL_BLE_BONDS %u\n",
         static_cast<unsigned>(ble.bondCount()));
+    else if (command == "h")
+      printHeap("DUAL_PEER_HEAP");
     else if (command == "u")
     {
       EspBleConnection connection;

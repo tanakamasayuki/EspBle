@@ -241,6 +241,16 @@ ble_store_util_delete_peer(const ble_addr_t *peer_id_addr)
             }
             return rc;
         }
+    } else {
+        /* Restored IRKs can exist in the host resolving list without a
+         * peer-device record.  Deleting the persisted bond must remove
+         * that entry too, otherwise the next pairing is rejected as a
+         * duplicate and keeps using the stale IRK. */
+        rc = ble_hs_resolv_list_rmv(peer_id_addr->type,
+                                    peer_id_addr->val);
+        if (rc != 0 && rc != BLE_HS_ENOENT) {
+            BLE_HS_LOG(DEBUG, "Restored peer was not removed from RL \n");
+        }
     }
     if (needs_unlock) {
         ble_hs_unlock();
