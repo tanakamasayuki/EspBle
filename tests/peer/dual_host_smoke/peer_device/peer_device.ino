@@ -224,6 +224,17 @@ void loop()
     else if (command == "y")
       Serial.printf("RPA_DUAL_PEER_TIMEOUT seconds=900 rc=%d\n",
         ble_hs_set_rpa_timeout(900));
+    else if (command == "f")
+    {
+      EspBleScanConfig scanConfig;
+      scanConfig.active = true;
+      scanConfig.durationSeconds = 8;
+      Serial.printf("RPA_DUAL_FINITE_SCAN seconds=8 success=%u\n",
+        ble.scanner().start(scanConfig) ? 1 : 0);
+    }
+    else if (command == "w")
+      Serial.printf("RPA_DUAL_SCAN_STATE active=%u\n",
+        ble.scanner().isScanning() ? 1 : 0);
     else if (command == "R")
     {
       Serial.printf("DUAL_PEER_READY local=%s type=%u\n",

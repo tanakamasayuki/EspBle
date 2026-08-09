@@ -208,6 +208,9 @@ void loop()
     else if (command == 'S')
       Serial.printf("RPA_DUAL_ADVERTISING_STOP %u\n",
         ble.advertising().stop() ? 1 : 0);
+    else if (command == 'F')
+      Serial.printf("RPA_DUAL_FINITE_ADVERTISING seconds=8 success=%u\n",
+        ble.advertising().start(8) ? 1 : 0);
     else if (command == 'R')
     {
       uint8_t address[6] = {};

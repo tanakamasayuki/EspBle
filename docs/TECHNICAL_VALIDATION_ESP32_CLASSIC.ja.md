@@ -204,17 +204,20 @@ EspBleが通知を無視するためadvertisingが停止したままになる問
 「アプリがadvertising継続を要求しているか」と有限durationの元deadlineを保持させ、privacy preempt時だけ
 再開するよう修正した。同じ契約の`DISC_COMPLETE(EPreempted)`にもscan条件と有限durationの元deadlineを
 保持する対称な処理を追加した。明示的な`stop()`/`end()`では要求を消すため意図しない再開はしない。
-scan側の試験ではPeripheralを停止したままCentralの2秒timerを3周期発火させ、発火後に初めて開始した
-advertisingを受信できることで、preempt前の受信ではなくscanが毎回実際に再開したことを確認する。
-advertising側も3回連続で異なるRPAを観測し、各周期にClassic HID input/output reportを往復させた。
-Centralの接続RPAは`79:05:43:5b:b8:4b`から`44:7d:08:48:b2:91`へ変化した。advertising側は
-`66:34:47:7b:4f:45`から`57:30:23:ce:b6:61`、`70:dd:75:77:38:2b`、`52:27:50:6c:be:d7`と
-3周期すべてで変化し、Classic接続を維持したまま新RPAから保存bondで
-暗号化GATTを再確立した。
+scan側の試験ではPeripheralを停止したままCentralの2秒timerを発火させ、発火後に初めて開始した
+advertisingを受信できることで、preempt前の受信ではなくscanが毎回実際に再開したことを確認した。
+既定回帰は3周期、追加soakは10周期連続で行い、advertising側では毎回異なるRPAを観測した。各周期に
+Classic HID input/output reportを往復させ、scan側でも10回のpreemption中に同じ双方向通信を継続した。
+新RPAから保存bondによる暗号化GATTも再確立した。
+
+有限durationも別に検査した。8秒のadvertising/scanを2秒ごとに3回preemptし、3秒時点ではactive、
+元deadlineを越えた9秒時点ではinactiveだった。再開時に元の8秒を再設定して期限を延長する実装では
+成立しない条件である。両基板のbroker opcode履歴にNimBLE hostの`0x2005`（LE Set Random Address）が
+残り、10周期soak後も`unknown=0 qfull=0 mismatch=0 busy=0`だった。
 
 続いて両端を同時再起動し、NVS上のbond数1を確認してClassic HIDを再接続後、再起動で変化した双方のRPAを
 IRKで解決し、保存LTKによる暗号化とGATT readを復元した。最後に`classic=1 ble=1`を確認し、rotationと
-再起動復元までを含む一連の実機試験は113.03秒で成功した。
+再起動復元までを含む既定3周期試験は128.16秒、10周期soakは160.56秒で成功した。
 条件マクロを使わない通常public-addressのdual-host smokeも再実行し、暗号化GATT反復、bond再接続、
 Classic再attach、両link切断、3回再起動、両destructor順、heap不変を118.29秒で完走した。
 

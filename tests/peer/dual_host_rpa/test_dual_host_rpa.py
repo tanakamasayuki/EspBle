@@ -74,6 +74,22 @@ def expect_classic_hid_round_trip(dut, peer):
     )
 
 
+def expect_clean_broker_and_rpa_opcode(device, diag_command, opcode_command, prefix):
+    device.write(diag_command)
+    diagnostics = device.expect(
+        re.compile(prefix + rb"_DIAG .* masks=\d+/\d+"), timeout=10
+    ).group(0)
+    for clean_field in (b"unknown=0", b"qfull=0", b"mismatch=0", b"busy=0"):
+        assert clean_field in diagnostics
+
+    device.write(opcode_command)
+    opcodes = device.expect(
+        re.compile(prefix + rb"_OPCODES host=0 .* values=([0-9a-f,]+)"),
+        timeout=10,
+    ).group(1).split(b",")
+    assert b"2005" in opcodes, "LE Set Random Address was not routed to NimBLE"
+
+
 def test_rpa_bond_reconnect_and_reboot_restore_with_classic_hid(dut, peers):
     peer = peers["device"]
     # Query readiness explicitly because some USB-UART bridges can finish the
@@ -177,6 +193,50 @@ def test_rpa_bond_reconnect_and_reboot_restore_with_classic_hid(dut, peers):
     assert rotated_central_rpa != initial_central_rpa
     dut.write("?")
     dut.expect_exact("DUAL_STATE adv=0 classic=1 ble=1", timeout=10)
+
+    # A privacy restart must consume the remaining finite duration, not begin
+    # the original duration again. Eight seconds crosses three two-second RPA
+    # rotations; it must still be active at three seconds and expired at nine.
+    disconnect_ble(dut, peer)
+    dut.write("T")
+    dut.expect_exact("RPA_DUAL_TIMEOUT seconds=2 rc=0", timeout=10)
+    dut.write("F")
+    dut.expect_exact(
+        "RPA_DUAL_FINITE_ADVERTISING seconds=8 success=1", timeout=10
+    )
+    time.sleep(3)
+    dut.write("?")
+    dut.expect_exact("DUAL_STATE adv=1 classic=1 ble=0", timeout=10)
+    expect_classic_hid_round_trip(dut, peer)
+    time.sleep(6)
+    dut.write("?")
+    dut.expect_exact("DUAL_STATE adv=0 classic=1 ble=0", timeout=10)
+    dut.write("Y")
+    dut.expect_exact("RPA_DUAL_TIMEOUT seconds=900 rc=0", timeout=10)
+
+    peer.write("t\n")
+    peer.expect_exact("RPA_DUAL_PEER_TIMEOUT seconds=2 rc=0", timeout=10)
+    peer.write("f\n")
+    peer.expect_exact("RPA_DUAL_FINITE_SCAN seconds=8 success=1", timeout=10)
+    time.sleep(3)
+    peer.write("w\n")
+    peer.expect_exact("RPA_DUAL_SCAN_STATE active=1", timeout=10)
+    expect_classic_hid_round_trip(dut, peer)
+    time.sleep(6)
+    peer.write("w\n")
+    peer.expect_exact("RPA_DUAL_SCAN_STATE active=0", timeout=10)
+    peer.write("y\n")
+    peer.expect_exact("RPA_DUAL_PEER_TIMEOUT seconds=900 rc=0", timeout=10)
+
+    # Restore the connected state used by the reboot/bond restoration case.
+    dut.write("a")
+    dut.expect_exact("DUAL_BLE_ADVERTISING 1", timeout=10)
+    start_rpa_connection(peer)
+    expect_secure_read(dut, peer)
+    dut.write("?")
+    dut.expect_exact("DUAL_STATE adv=0 classic=1 ble=1", timeout=10)
+    expect_clean_broker_and_rpa_opcode(dut, "d", "v", rb"DUAL")
+    expect_clean_broker_and_rpa_opcode(peer, "d\n", "v\n", rb"DUAL_PEER")
 
     # Reboot both complete dual-host stacks with their IRK/LTK in NVS. Classic
     # necessarily drops across reset; restore it first, then prove that LE uses
