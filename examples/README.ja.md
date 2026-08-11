@@ -40,11 +40,18 @@ arduino-cli compile --profile esp32s3 examples/<path>
 
 ### Bluetooth Classic（無印ESP32・実験対応）
 
+`EspBleClassic`を使うと独自buildしたClassic hostが自動選択されます。Classic-only exampleに
+`build_opt.h`やcompiler flagは不要です。BLEとの同時利用だけは実験flagによる明示opt-inです。
+
 | Example | Role | 説明 |
 |---|---|---|
 | [Classic/SppServer](Classic/SppServer/) | SPP Server | binary-safeなSPP echo server |
 | [Classic/HidVendorDevice](Classic/HidVendorDevice/) | HID Device | 任意Report DescriptorのClassic HID Device |
 | [Classic/HidVendorHost](Classic/HidVendorHost/) | HID Host | アドレス指定で接続しraw Input Reportを受信 |
+| [Classic/A2dpSinkRaw](Classic/A2dpSinkRaw/) | A2DP Sink | codec設定とencode済みSBC mediaをcallbackで受信 |
+| [Classic/A2dpSinkAvrcp](Classic/A2dpSinkAvrcp/) | A2DP Sink / AVRCP TG | A2DP接続と再生操作・absolute volume |
+| [Classic/HfpClientRaw](Classic/HfpClientRaw/) | HFP Client | 単一call controlとraw CVSD/mSBC SCO transport |
+| [Classic/HfpAudioGatewayRaw](Classic/HfpAudioGatewayRaw/) | HFP Audio Gateway | 小さいtelephony modelとraw CVSD/mSBC SCO transport |
 
 ### GAP — advertise / scan / connect
 

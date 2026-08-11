@@ -1,4 +1,5 @@
 #include "EspBleClassic.h"
+#include "EspBleClassicBuild.h"
 
 #include <algorithm>
 #include <atomic>
@@ -7,7 +8,6 @@
 #include <new>
 #include <utility>
 
-#include <sdkconfig.h>
 #include <soc/soc_caps.h>
 
 #if defined(CONFIG_IDF_TARGET_ESP32) && defined(CONFIG_BT_CLASSIC_ENABLED) && \

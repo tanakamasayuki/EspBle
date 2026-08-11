@@ -1,4 +1,5 @@
 #include <EspBleClassic.h>
+#include <esp_heap_caps.h>
 #if defined(ESPBLE_TEST_DUAL_A2DP)
 #include <EspBle.h>
 #endif
@@ -13,7 +14,9 @@ bool a2dpConnected = false;
 bool avrcpControllerConnected = false;
 bool avrcpCommandsSent = false;
 bool teardownRequested = false;
-constexpr size_t PacketTarget = 100;
+size_t packetTarget = 100;
+uint32_t baselineHeap = 0;
+constexpr size_t MaximumPacketTarget = 500000;
 
 #if defined(ESPBLE_TEST_DUAL_A2DP)
 EspBle dualBle;
@@ -128,6 +131,7 @@ void setup()
   }
   Serial.println("AVRCP_SOURCE_READY");
   const bool initialized = bluetooth.a2dpSource().begin();
+  baselineHeap = ESP.getFreeHeap();
   Serial.printf("A2DP_SOURCE_PROFILE initialized=%u\n",
     initialized ? 1 : 0);
   Serial.printf("A2DP_SOURCE_READY endpoint=%u seid=0\n",
@@ -160,7 +164,7 @@ EspBleClassicAudioSendResult sendPacket()
   {
     ++sentPackets;
     nextTimestamp += 128;
-    if (sentPackets <= 3 || sentPackets == PacketTarget)
+    if (sentPackets <= 3 || sentPackets == packetTarget)
       Serial.printf("A2DP_SOURCE_SENT packet=%u timestamp=%lu\n",
         static_cast<unsigned>(sentPackets),
         static_cast<unsigned long>(packet.timestamp));
@@ -188,10 +192,23 @@ void loop()
     if (command.startsWith("c"))
       Serial.printf("A2DP_SOURCE_CONNECT requested=%u\n",
         bluetooth.a2dpSource().connect(command.c_str() + 1) ? 1 : 0);
-    else if (command == "v" && a2dpConnected &&
+    else if (command.startsWith("v") && a2dpConnected &&
              avrcpControllerConnected && !avrcpCommandsSent)
     {
+      if (command.length() > 1)
+      {
+        const unsigned long requested = command.substring(1).toInt();
+        if (requested == 0 || requested > MaximumPacketTarget)
+        {
+          Serial.printf("A2DP_SOURCE_TARGET_REJECTED value=%lu\n", requested);
+          delay(1);
+          return;
+        }
+        packetTarget = static_cast<size_t>(requested);
+      }
       avrcpCommandsSent = true;
+      Serial.printf("A2DP_SOURCE_TARGET packets=%u\n",
+        static_cast<unsigned>(packetTarget));
       Serial.printf("AVRCP_SOURCE_REGISTER_VOLUME requested=%u\n",
         bluetooth.avrcp().registerVolumeNotifications() ? 1 : 0);
       Serial.printf("AVRCP_SOURCE_PLAY requested=%u\n",
@@ -209,11 +226,11 @@ void loop()
           DualA2dpCharacteristicUuid) ? 1 : 0);
 #endif
   }
-  if (bluetooth.a2dpSource().streaming() && sentPackets < PacketTarget)
+  if (bluetooth.a2dpSource().streaming() && sentPackets < packetTarget)
   {
-    for (size_t attempt = 0; attempt < 32 && sentPackets < PacketTarget; ++attempt)
+    for (size_t attempt = 0; attempt < 32 && sentPackets < packetTarget; ++attempt)
       if (sendPacket() != EspBleClassicAudioSendResult::Accepted) break;
-    if (sentPackets == PacketTarget)
+    if (sentPackets == packetTarget)
 #if defined(ESPBLE_TEST_DUAL_A2DP)
       drainDeadline = millis() + 3000;
 #else
@@ -221,7 +238,7 @@ void loop()
 #endif
   }
   if (bluetooth.a2dpSource().streaming() &&
-      sentPackets == PacketTarget && !suspendRequested &&
+      sentPackets == packetTarget && !suspendRequested &&
       static_cast<int32_t>(millis() - drainDeadline) >= 0)
   {
     suspendRequested = true;
@@ -231,6 +248,14 @@ void loop()
   if (teardownRequested)
   {
     teardownRequested = false;
+    Serial.printf(
+      "A2DP_SOURCE_HEAP baseline=%lu current=%lu minimum=%lu largest=%lu\n",
+      static_cast<unsigned long>(baselineHeap),
+      static_cast<unsigned long>(ESP.getFreeHeap()),
+      static_cast<unsigned long>(
+        heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT)),
+      static_cast<unsigned long>(
+        heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)));
     bluetooth.avrcp().end();
     bluetooth.a2dpSource().end();
     Serial.println("AVRCP_SOURCE_ENDED");

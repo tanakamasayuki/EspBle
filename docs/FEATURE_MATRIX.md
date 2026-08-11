@@ -119,12 +119,12 @@ An overview of what EspBle supports: the BLE equivalents of what EspUsbHost / Es
 
 ## Bluetooth Classic (BR/EDR) — experimental, original ESP32 only
 
-ESP32-S3/C3/C6/H2 and similar targets have no Bluetooth Classic radio. The original ESP32 can opt into a custom-built
-Classic-only Bluedroid host. Dual-host support remains experimental and its release scope is not final.
+ESP32-S3/C3/C6/H2 and similar targets have no Bluetooth Classic radio. On the original ESP32, using `EspBleClassic`
+automatically selects the custom-built Classic-only Bluedroid host. Dual-host support remains experimental and its release scope is not final.
 
 | Feature | Status | Notes |
 |---|---|---|
-| Bluetooth Classic (BR/EDR) in general | ⚠️ | Original-ESP32 Classic-only opt-in; unsupported on other SoCs |
+| Bluetooth Classic (BR/EDR) in general | ⚠️ | Selected automatically when `EspBleClassic` is used on the original ESP32; unsupported on other SoCs |
 | A2DP (audio streaming) | ⚠️ | Sink/Source SBC negotiation and encoded-payload transport; codec/PCM/device I/O stays in another library |
 | HFP (hands-free) | ⚠️ | Client/Audio Gateway SLC, outgoing/incoming/answer/end, selectable CVSD/mSBC raw SCO, and role exclusion are implemented; both codecs are hardware-verified, while multi-call and external-device interoperability remain |
 | AVRCP (media control) | ⚠️ | CT/TG passthrough, metadata/play-status requests, and absolute volume; external-target metadata interoperability remains |

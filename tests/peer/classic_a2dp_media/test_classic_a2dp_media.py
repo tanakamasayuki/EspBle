@@ -1,7 +1,11 @@
+import os
 import re
 
 
 def test_a2dp_sink_receives_external_codec_media(dut, peers):
+    packet_target = int(os.environ.get("ESPBLE_A2DP_PACKET_TARGET", "100"))
+    assert 1 <= packet_target <= 500000
+    transfer_timeout = max(30, packet_target // 250 + 30)
     peer = peers["device"]
     dut.expect_exact("AVRCP_SINK_READY", timeout=30)
     ready = dut.expect(
@@ -42,7 +46,8 @@ def test_a2dp_sink_receives_external_codec_media(dut, peers):
         dut.expect(connected_pattern, timeout=30)
     assert codec.group(1) == b"48000"
     assert codec.group(2) == b"2"
-    peer.write(b"v\n")
+    peer.write(f"v{packet_target}\n".encode())
+    peer.expect_exact(f"A2DP_SOURCE_TARGET packets={packet_target}", timeout=10)
     peer.expect_exact("AVRCP_SOURCE_REGISTER_VOLUME requested=1", timeout=10)
     peer.expect_exact("AVRCP_SOURCE_PLAY requested=1", timeout=10)
     peer.expect_exact("AVRCP_SOURCE_SET_VOLUME requested=1", timeout=10)
@@ -78,14 +83,33 @@ def test_a2dp_sink_receives_external_codec_media(dut, peers):
     assert int(media.group(1)) >= 1000
     disconnected = dut.expect(
         re.compile(rb"A2DP_SINK_DISCONNECTED id=\d+ packets=(\d+) bytes=(\d+)"),
-        timeout=30,
+        timeout=transfer_timeout,
     )
-    assert disconnected.group(1) == b"100"
-    assert disconnected.group(2) == b"1300"
+    assert int(disconnected.group(1)) == packet_target
+    assert int(disconnected.group(2)) == packet_target * 13
     dut.expect_exact("A2DP_SINK_MEDIA_UNREGISTERED", timeout=10)
+    sink_heap = dut.expect(
+        re.compile(
+            rb"A2DP_SINK_HEAP baseline=(\d+) current=(\d+) "
+            rb"minimum=(\d+) largest=(\d+)"
+        ),
+        timeout=10,
+    )
+    assert all(int(value) > 0 for value in sink_heap.groups())
     dut.expect_exact("A2DP_SINK_ENDED initialized=0", timeout=10)
     source_disconnected = peer.expect(
-        re.compile(rb"A2DP_SOURCE_DISCONNECTED sent=100 would_block=(\d+)"),
-        timeout=30,
+        re.compile(
+            rb"A2DP_SOURCE_DISCONNECTED sent=(\d+) would_block=(\d+)"
+        ),
+        timeout=transfer_timeout,
     )
-    assert int(source_disconnected.group(1)) > 0
+    assert int(source_disconnected.group(1)) == packet_target
+    assert int(source_disconnected.group(2)) > 0
+    source_heap = peer.expect(
+        re.compile(
+            rb"A2DP_SOURCE_HEAP baseline=(\d+) current=(\d+) "
+            rb"minimum=(\d+) largest=(\d+)"
+        ),
+        timeout=10,
+    )
+    assert all(int(value) > 0 for value in source_heap.groups())

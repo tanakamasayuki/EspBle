@@ -575,3 +575,55 @@ GATT Client、Security Static Passkey Server、HID Keyboard Device / Hostをロ�
 参照し、GATT欄を`absent`としてbuildせず通過していた。現在の `Gatt/Basics/...`へ修正し、既定または明示指定した
 exampleが存在しない場合は実行前にerror終了するguardを追加した。これにより今後のcore matrixでexample renameを
 未対応のまま検証済みと誤認しない。
+
+## 2026-08-11 Classic-only A2DP連続転送checkpoint
+
+通常の`classic_a2dp_media` fixtureをpacket数可変にし、同じ接続・codec negotiation・AVRCP操作・A2DP
+suspend/disconnect経路のまま20,000 packetを連続転送した。13 byteの既知SBC payloadをSinkが20,000 packet /
+260,000 byteとして受信し、Sourceの受理数とも完全一致した。Sourceでは送信queue満杯による`WouldBlock`を
+25,192回観測したが、同じpacketを再試行して欠落なく復帰した。pytest全体は約64秒、実転送区間は約25秒で、
+panic、watchdog、backtrace、切断失敗はなかった。
+
+開始時 / 転送後のfree heap、実行中minimum、終了時largest blockは、Sinkが
+157,692 / 150,588 / 124,172 / 110,580 byte、Sourceが
+159,640 / 156,940 / 127,964 / 110,580 byteだった。これは単一接続のwatermarkであり、反復時のleak判定とは
+区別する。実行logは`tests/.soak/classic-a2dp-20260811T132727Z/run.log`に保存した。
+
+最大速度でqueueを満たすこの試験では、Bluedroidの
+`BT_L2CAP: l2cab is_cong_cback_context`も多数出力された。ESP-IDF v5.5.5の
+`l2c_link_check_send_pkts()`は、L2CAPの輻輳解除callbackからAVDTPが次のpacketを送ろうとした場合に再入を避け、
+packetをlink queueへ残して次のNumber Of Completed Packets処理へ委ねる分岐でこのerror level logを出す。
+EspBleのapplication taskから不正なcallback contextでAPIを呼んだことを示すものではなく、全packet到達とも整合する。
+実時間送信側はtimestampに合わせてpaceするが、将来archive元を更新するときは上流でlog levelまたは再入処理が
+変更されていないか再確認する。
+
+## 2026-08-11 Classic専用clean回帰checkpoint
+
+Arduino-ESP32 3.3.11と無印ESP32 2台で、Classic専用SPP、HID Device/Host profile初期化、generic HID
+双方向reportをすべて`--clean`で再buildして確認した。SPPはbinary payloadのecho、切断、server再初期化後の
+再接続、HIDはDevice→Host input、Host→Device output、同じClassic sessionでのSPP併用、HID切断・Device
+profile再初期化後の再接続まで成功した。
+
+当初リリースチェックリストの一括commandは、peerを持たない`classic_hid_profiles`にも
+`--peer-profile device:...`を渡すためpytest collection後にunknown peerで停止した。fixtureやfirmwareの失敗では
+ない。profile初期化suiteを単独commandへ分けて再実行し成功したため、チェックリストも同じ2段構成へ修正した。
+
+## 2026-08-11 Classic-only flagなしbuild checkpoint
+
+公開Classic-only sketchに`ESPBLE_CLASSIC_ONLY`と`ESPBLE_CLASSIC_CUSTOM_HOST`を要求せず、無印ESP32向けの
+Classic実装TUが独自hostを自動選択する内部build設定へ変更した。通常はstatic archiveの未参照objectがlinkされない
+ため、BLEだけのsketchは従来経路を維持する。dual-hostは引き続き`ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL`による
+明示opt-inで、test instrumentationも個別flagのままとする。
+
+公開Classic exampleから`build_opt.h`を除去し、SPP、HID Device/Host、A2DP Sink/AVRCP、HFP Client/AGを
+Arduino-ESP32 3.3.11の無印ESP32 profileでclean compileした。flagなしSPP fixtureはESP32 2台でbinary echo、
+切断、server再初期化、再接続まで成功した。flagなしA2DP/AVRCP fixtureもclean実機回帰し、codec negotiation、
+passthrough / absolute volume、100 packetの完全受信、`WouldBlock`復帰、suspend / disconnectまで成功した。
+通常BLEのESP32-S3 CompileSmokeもclean compileし、target guardが
+他SoCでClassic backendを有効化しないことを確認した。変更前HEADの独立worktreeと比較して、S3のflash
+274,537 byte、global 21,920 byteは完全に同値だった。
+
+dual-host fixtureの`build_opt.h`から自動選択済みの`ESPBLE_ENABLE_CLASSIC`と
+`ESPBLE_CLASSIC_CUSTOM_HOST`を除き、実験opt-inとfixture固有flagだけに縮小した。この状態でdual-host smokeを
+clean実機回帰し、Classic HID、誤passkey復旧、bond済み暗号化GATT、command競合、FIFO満杯復帰、Classic再attach、
+任意順停止・destructor、heap不変、broker異常0まで完走した。

@@ -14,6 +14,9 @@ dual-hostは`ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL`によるopt-inです。通常bui
 無印ESP32以外はcore同梱NimBLE経路を変更しません。現段階は技術検証済みの実験機能であり、一般対応へ
 昇格していません。
 
+Classic-onlyは`EspBleClassic`を使うだけで独自hostを自動選択し、公開exampleに`build_opt.h`はありません。
+明示flagを残すのはdual-hostとtest instrumentationだけです。
+
 Classic-only A2DP Sink / Source、AVRCP CT/TG、HFP Client / Audio Gatewayの公開APIと実機転送まで完了しました。
 dual-hostでもBLE GATT接続中のmSBC SCO双方向転送、A2DP encode済みmedia転送、AVRCP操作と、各link切断後のGATT継続まで確認済みです。EspBleはBluetooth profile、codec negotiation、encode済みmedia/SCO payloadの受け渡し
 までを担当し、PCM処理やdevice I/Oは担当しません。詳細は
@@ -28,7 +31,7 @@ dual-hostでもBLE GATT接続中のmSBC SCO双方向転送、A2DP encode済みme
 | symbol分離 | archiveのglobal defined symbolを`espble_bd_`へ名前空間化。core Bluedroidと衝突なし |
 | Classic排他モード | SPP、HID Device/Host、双方向report、切断、再初期化、再接続を実機確認 |
 | A2DP Sink transport | 接続、SBC設定、stream状態、raw media view、buffer解放、callback停止を公開API化。ESP32同士でexternal-codec mediaを実機受信 |
-| A2DP Source transport | 固定SBC endpoint、接続、start/suspend、copy送信、MTU検査、`WouldBlock` retryを公開API化。100 packetを欠損なく実機送信 |
+| A2DP Source transport | 固定SBC endpoint、接続、start/suspend、copy送信、MTU検査、`WouldBlock` retryを公開API化。通常回帰と20,000 packet連続転送を欠損なく完走 |
 | AVRCP CT/TG | 接続、remote feature、passthrough送受信、metadata/play-status要求と応答event、absolute volumeとone-shot通知を公開API化。A2DP併用でPlayと音量変更を実機確認 |
 | HFP Client | SLC、発信/応答/終了等のcall control、call/volume/AT event、CVSD/mSBC raw SCO送受信、bad-frame、packet statisticsを公開API化。ESP32 AG probeとmSBC双方向転送を確認 |
 | HFP Audio Gateway | CIND/COPS/CNUM/CLCC自動応答、単一call model、application command event、CVSD/mSBC raw SCO送受信を公開API化。公開Clientとの発信・mSBC往復とClient/AG process-wide排他を確認 |
@@ -149,6 +152,16 @@ ESPBLE_DUAL_SOAK_RUNS=20 tools/run_dual_host_soak.sh
 既定では各runでcommand競合100サイクル、restart 100サイクルを実行し、最初のrunだけclean buildします。
 ログは`tests/.soak/`へ保存し、1 runでも失敗すればその時点で停止します。実行前に他のprocessが対象boardを
 使っていないことと、`tests/.env`のprofile/port設定を確認します。
+
+Classic-only A2DPの連続media転送は同じfixtureをpacket数だけ拡張して実行します。
+
+```sh
+ESPBLE_A2DP_SOAK_PACKETS=20000 tools/run_classic_a2dp_soak.sh
+```
+
+既定では最初にclean buildし、packet数は100〜500,000の範囲で指定できます。既存buildを使う調査時だけ
+`ESPBLE_A2DP_SOAK_CLEAN=0`を指定します。送受信packet/byteの完全一致、`WouldBlock`からの再開、両基板の
+free/minimum/largest heapを確認し、logは`tests/.soak/classic-a2dp-<UTC時刻>/run.log`へ保存します。
 
 archive再生成は[Classic host archive再生成](CLASSIC_HOST_BUILD.ja.md)を参照してください。
 

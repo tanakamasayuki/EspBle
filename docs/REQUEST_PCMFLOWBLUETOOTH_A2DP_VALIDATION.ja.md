@@ -46,7 +46,7 @@ vendored OI SBCの `OI_CODEC_SBC_DecoderReset()` はdecoder contextと外部scra
 - DUT: `EspBleClassicA2dpSink` + `EspBleA2dpSinkAdapter`
 - peer: `EspBleClassicA2dpSource`
 - dependency: siblingのEspBleをlocal directory指定し、PCMFlowBluetooth自身もlocal sourceを使用
-- build option: `ESPBLE_CLASSIC_ONLY` + `ESPBLE_CLASSIC_CUSTOM_HOST`
+- build option: 不要（`EspBleClassic`利用時にEspBleが独自Classic hostを自動選択）
 - input: 既存の事前生成済み48 kHz stereo SBC vector
 - lifecycle: connect → start → decode → suspend → resume → decode → disconnect → reconnect → decode
 - assert: negotiated PCM format、PCM frame数、sample hash、signal peak、packet/frame counter、全error counter

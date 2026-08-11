@@ -35,7 +35,7 @@ For how to run them see [tests/TEST_PLAN.md](../tests/TEST_PLAN.md); for the rel
 
 ## Known limits
 
-- The Classic / dual-host API and build flags are experimental and carry no compatibility guarantee until their supported scope is settled.
+- The Classic / dual-host APIs are experimental and carry no compatibility guarantee until their supported scope is settled. Classic-only needs no compiler flag; only the dual-host build flag remains as an explicit opt-in.
 - With Core 3.3.11 on P4/C6 ESP-Hosted, the TinyCrypt/ECC defect in the bundled
   IDF 5.5.5 makes LE Secure Connections fail with a DHKey check error, so
   Security, bonding, and dependent HID paths are not supported. ESP-IDF

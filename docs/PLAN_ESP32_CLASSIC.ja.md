@@ -37,8 +37,10 @@ core内蔵Bluedroidとリンク時に衝突せず、独自hostの公開APIが誤
 ## Arduino側の分離
 
 - アーカイブは`src/esp32/`だけへ置き、他SoCではリンク対象にしない。
-- `ESPBLE_CLASSIC_ONLY`は同梱NimBLE 83 sourceと`EspBle.cpp`を空にする。
-- `ESPBLE_CLASSIC_CUSTOM_HOST`は名前空間化した独自host APIとHCI broker adapterを選ぶ。
+- 公開Classic-only sketchはcompiler flagを要求しない。無印ESP32で`EspBleClassic`のobjectがlinkされると、
+  名前空間化した独自host APIとHCI broker adapterを自動選択する。
+- `ESPBLE_CLASSIC_ONLY`は同梱NimBLE sourceと`EspBle.cpp`を空にする内部のbuild-size最適化として残すが、
+  利用者向け契約にはしない。`ESPBLE_CLASSIC_CUSTOM_HOST` / `ESPBLE_ENABLE_CLASSIC`も内部互換用である。
 - Classicを明示しない通常BLE buildでは`EspBleClassic.cpp`をstub backendとしてコンパイルし、
   Bluedroidへの未解決参照を一切生成しない。
 - 共通の`EspBleError`だけを`EspBleTypes.h`へ置き、Classic公開headerはBLE公開headerへ依存しない。

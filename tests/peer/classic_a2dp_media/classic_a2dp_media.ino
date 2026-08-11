@@ -1,5 +1,6 @@
 #include <EspBleClassic.h>
 #include <esp_mac.h>
+#include <esp_heap_caps.h>
 #if defined(ESPBLE_TEST_DUAL_A2DP)
 #include <EspBle.h>
 #include <EspBleHciBroker.h>
@@ -9,6 +10,7 @@ EspBleClassic bluetooth;
 size_t mediaPackets = 0;
 size_t mediaBytes = 0;
 bool teardownRequested = false;
+uint32_t baselineHeap = 0;
 
 #if defined(ESPBLE_TEST_DUAL_A2DP)
 EspBle dualBle;
@@ -144,6 +146,7 @@ void setup()
   });
 
   const bool started = bluetooth.a2dpSink().begin();
+  baselineHeap = ESP.getFreeHeap();
   Serial.printf("A2DP_SINK_READY started=%u address=%s error=%s:%s\n",
     started ? 1 : 0, classicAddress().c_str(), bluetooth.lastErrorName(),
     bluetooth.lastErrorDetail().c_str());
@@ -167,6 +170,14 @@ void loop()
   if (teardownRequested)
   {
     teardownRequested = false;
+    Serial.printf(
+      "A2DP_SINK_HEAP baseline=%lu current=%lu minimum=%lu largest=%lu\n",
+      static_cast<unsigned long>(baselineHeap),
+      static_cast<unsigned long>(ESP.getFreeHeap()),
+      static_cast<unsigned long>(
+        heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT)),
+      static_cast<unsigned long>(
+        heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)));
     bluetooth.avrcp().end();
     bluetooth.a2dpSink().end();
     Serial.printf("A2DP_SINK_ENDED initialized=%u\n",

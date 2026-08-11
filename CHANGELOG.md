@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- (EN) Original-ESP32 Classic-only sketches now select EspBle's custom host
+  automatically; published Classic examples no longer need `build_opt.h`.
+  Only experimental dual-host and test-only instrumentation keep explicit flags.
+- (JA) 無印ESP32のClassic-only sketchはEspBleの独自hostを自動選択するようにし、
+  公開Classic exampleから`build_opt.h`を除去した。明示flagは実験的dual-hostと
+  テスト専用instrumentationにだけ残す。
+
+- (EN) Added a configurable Classic-only A2DP transport soak using the regular
+  two-board fixture, with exact packet/byte accounting, backpressure recovery,
+  and heap-watermark reporting.
+- (JA) 通常の2台構成fixtureを使うClassic-only A2DP transport soakを追加し、
+  packet/byteの厳密な照合、backpressure復帰、heap watermarkを記録するようにした。
+
 - (EN) Fixed the compatibility-matrix representative GATT paths and made the
   tool fail when a requested example no longer exists, preventing silent
   coverage gaps after example moves.

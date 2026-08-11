@@ -41,11 +41,19 @@ Examples are grouped by area. Each standard-service directory holds a matching
 
 ### Bluetooth Classic (original ESP32, experimental)
 
+Using `EspBleClassic` selects the separately built Classic host automatically.
+Classic-only examples need no `build_opt.h` or compiler flag; simultaneous BLE
+use remains an explicit experimental opt-in.
+
 | Example | Role | Description |
 |---|---|---|
 | [Classic/SppServer](Classic/SppServer/) | SPP Server | Binary-safe SPP echo server |
 | [Classic/HidVendorDevice](Classic/HidVendorDevice/) | HID Device | Classic HID Device with an arbitrary Report Descriptor |
 | [Classic/HidVendorHost](Classic/HidVendorHost/) | HID Host | Connect by address and receive raw Input Reports |
+| [Classic/A2dpSinkRaw](Classic/A2dpSinkRaw/) | A2DP Sink | Receive codec configuration and encoded SBC media callbacks |
+| [Classic/A2dpSinkAvrcp](Classic/A2dpSinkAvrcp/) | A2DP Sink / AVRCP TG | A2DP connection, playback control, and absolute volume |
+| [Classic/HfpClientRaw](Classic/HfpClientRaw/) | HFP Client | Single-call control and raw CVSD/mSBC SCO transport |
+| [Classic/HfpAudioGatewayRaw](Classic/HfpAudioGatewayRaw/) | HFP Audio Gateway | Small telephony model and raw CVSD/mSBC SCO transport |
 
 ### GAP — advertise, scan, connect
 

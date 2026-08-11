@@ -1,12 +1,11 @@
 #include "EspBleClassic.h"
+#include "EspBleClassicBuild.h"
 
 #include <atomic>
 #include <cstring>
 #include <mutex>
 #include <new>
 #include <utility>
-
-#include <sdkconfig.h>
 
 #if defined(CONFIG_IDF_TARGET_ESP32) && \
   defined(ESPBLE_CLASSIC_CUSTOM_HOST) && \

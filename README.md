@@ -85,8 +85,9 @@ any of it is rejected.
 Support for the classic ESP32 is not on par with the other chips: EspBle carries
 the maintenance of the bundled hosts itself. Experimental Classic SPP, generic
 HID Device/Host, A2DP raw transport, and AVRCP CT/TG use a separately built
-Bluedroid host with those profiles enabled. Exclusive
-selection remains the default. `ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL` starts
+Bluedroid host with those profiles enabled. A Classic-only sketch selects this
+host automatically when it uses `EspBleClassic`, with no `build_opt.h` required.
+Runtime exclusion remains the default. `ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL` starts
 Classic first on a BTDM controller and then attaches bundled NimBLE. Classic HID
 traffic together with an LE connection, repeated GATT reads, and bidirectional HID
 traffic afterwards has passed hardware tests. In Classic-only mode, encoded A2DP

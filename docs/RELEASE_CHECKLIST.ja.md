@@ -57,14 +57,22 @@ uv run --env-file .env pytest --clean \
 Classicをrelease対象へ含める場合は、同じ無印ESP32 2台でClassic専用構成とdual-hostを追加実行します。
 
 ```sh
+# peerを持たないprofile初期化suiteは単独で実行する。
 uv run --env-file .env pytest --clean -s \
-  peer/classic_spp_exclusive/ peer/classic_hid_profiles/ \
-  peer/classic_hid_report/ peer/classic_a2dp_media/ peer/classic_hfp_client/ \
+  peer/classic_hid_profiles/ \
+  --profile esp32_peer_host
+
+uv run --env-file .env pytest --clean -s \
+  peer/classic_spp_exclusive/ peer/classic_hid_report/ \
+  peer/classic_a2dp_media/ peer/classic_hfp_client/ \
   peer/classic_hfp_cvsd/ \
   peer/dual_host_smoke/ peer/dual_host_rpa/ peer/dual_host_hfp/ \
   peer/dual_host_a2dp/ \
   --profile esp32_peer_host --peer-profile device:esp32_peer_device
 ```
+
+`classic_hid_profiles`へ`--peer-profile device:...`を渡すと、peer sketchを持たないためpytestが
+unknown peerとして拒否します。上記2 commandを一括化しないでください。
 
 数時間級soakは[引き継ぎ](HANDOFF_ESP32_CLASSIC.ja.md)の条件でコードfreeze前に完走させます。release
 candidateでは上記の通常回帰を再実行し、soak log、heap、broker diagnosticsを技術検証記録へ残します。

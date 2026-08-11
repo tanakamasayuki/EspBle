@@ -119,12 +119,12 @@ EspUsbHost / EspUsbDeviceで扱っている機能のBLE版、およびBLEで一�
 
 ## Bluetooth Classic（BR/EDR）— 無印ESP32限定・実験機能
 
-ESP32-S3/C3/C6/H2等はBluetooth Classicを搭載しないため利用できません。無印ESP32では独自buildした
-Classic-only Bluedroid hostをopt-inで利用できます。dual-hostは技術検証段階で、正式なrelease scopeは未確定です。
+ESP32-S3/C3/C6/H2等はBluetooth Classicを搭載しないため利用できません。無印ESP32では`EspBleClassic`の利用時に
+独自buildしたClassic-only Bluedroid hostを自動選択します。dual-hostは技術検証段階で、正式なrelease scopeは未確定です。
 
 | 機能 | 状況 | 備考 |
 |---|---|---|
-| Bluetooth Classic（BR/EDR）全般 | ⚠️ | 無印ESP32のClassic-only opt-in。その他SoCは非対応 |
+| Bluetooth Classic（BR/EDR）全般 | ⚠️ | 無印ESP32で`EspBleClassic`利用時に自動選択。その他SoCは非対応 |
 | A2DP（オーディオストリーミング） | ⚠️ | Sink/SourceのSBC negotiationとencode済みpayload transport。codec/PCM/device I/Oは別library |
 | HFP（ハンズフリー） | ⚠️ | Client/Audio GatewayのSLC、発信・着信・応答・終了、CVSD・mSBC raw SCO API、AG codec選択、role排他を実装。両codecを実機確認済み。複数call、外部機器相互運用は未確認 |
 | AVRCP（メディア操作） | ⚠️ | CT/TG passthrough、metadata/play-status要求、absolute volume。metadata応答の外部Target相互運用は未完了 |
