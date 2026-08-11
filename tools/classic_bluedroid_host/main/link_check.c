@@ -175,7 +175,29 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_hf_client_register_audio_data_callback(
         hf_client_audio_callback));
     ESP_ERROR_CHECK(esp_hf_client_init());
-    ESP_ERROR_CHECK(esp_hf_client_audio_data_send(0, NULL));
+    ESP_ERROR_CHECK(esp_hf_client_connect(peer));
+    ESP_ERROR_CHECK(esp_hf_client_connect_audio(peer));
+    ESP_ERROR_CHECK(esp_hf_client_start_voice_recognition());
+    ESP_ERROR_CHECK(esp_hf_client_stop_voice_recognition());
+    ESP_ERROR_CHECK(esp_hf_client_volume_update(
+        ESP_HF_VOLUME_CONTROL_TARGET_SPK, 8));
+    ESP_ERROR_CHECK(esp_hf_client_dial("123"));
+    ESP_ERROR_CHECK(esp_hf_client_answer_call());
+    ESP_ERROR_CHECK(esp_hf_client_reject_call());
+    ESP_ERROR_CHECK(esp_hf_client_query_current_calls());
+    ESP_ERROR_CHECK(esp_hf_client_send_dtmf('1'));
+    ESP_ERROR_CHECK(esp_hf_client_pkt_stat_nums_get(0));
+    esp_hf_audio_buff_t *hf_client_audio =
+        esp_hf_client_audio_buff_alloc(1);
+    if (hf_client_audio != NULL) {
+        hf_client_audio->data[0] = 0;
+        hf_client_audio->data_len = 1;
+        ESP_ERROR_CHECK(esp_hf_client_audio_data_send(0, hf_client_audio));
+    }
+    esp_hf_client_audio_buff_free(NULL);
+    ESP_ERROR_CHECK(esp_hf_client_disconnect_audio(peer));
+    ESP_ERROR_CHECK(esp_hf_client_disconnect(peer));
+    ESP_ERROR_CHECK(esp_hf_client_deinit());
     ESP_ERROR_CHECK(esp_hf_ag_register_callback(hf_ag_callback));
     ESP_ERROR_CHECK(esp_hf_ag_register_audio_data_callback(
         hf_ag_audio_callback));

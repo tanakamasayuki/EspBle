@@ -99,7 +99,25 @@ for symbol in \
   espble_bd_esp_avrc_rn_evt_bit_mask_operation \
   espble_bd_esp_avrc_tg_set_rn_evt_cap \
   espble_bd_esp_avrc_tg_send_rn_rsp \
+  espble_bd_esp_hf_client_register_callback \
   espble_bd_esp_hf_client_register_audio_data_callback \
+  espble_bd_esp_hf_client_init \
+  espble_bd_esp_hf_client_deinit \
+  espble_bd_esp_hf_client_connect \
+  espble_bd_esp_hf_client_disconnect \
+  espble_bd_esp_hf_client_connect_audio \
+  espble_bd_esp_hf_client_disconnect_audio \
+  espble_bd_esp_hf_client_start_voice_recognition \
+  espble_bd_esp_hf_client_stop_voice_recognition \
+  espble_bd_esp_hf_client_volume_update \
+  espble_bd_esp_hf_client_dial \
+  espble_bd_esp_hf_client_answer_call \
+  espble_bd_esp_hf_client_reject_call \
+  espble_bd_esp_hf_client_query_current_calls \
+  espble_bd_esp_hf_client_send_dtmf \
+  espble_bd_esp_hf_client_pkt_stat_nums_get \
+  espble_bd_esp_hf_client_audio_buff_alloc \
+  espble_bd_esp_hf_client_audio_buff_free \
   espble_bd_esp_hf_client_audio_data_send \
   espble_bd_esp_hf_ag_register_audio_data_callback \
   espble_bd_esp_hf_ag_audio_data_send; do

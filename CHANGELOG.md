@@ -45,6 +45,13 @@
 - (JA) 無印ESP32のClassic-only A2DP Sink/Source encode済みmedia transportと
   AVRCP Controller/Target制御を追加。ESP32 2台でA2DP streamとpassthrough操作・応答、
   absolute volume、音量変更通知の併用を確認した。codec/PCM/device I/OはEspBleの外に保つ。
+- (EN) Added an experimental HFP Client transport for the original ESP32:
+  service-level connection and call control, CVSD/mSBC Voice-over-HCI views and
+  copy sends, bad-frame reporting, and packet statistics. Two ESP32 boards
+  negotiate mSBC and exchange synchronous payloads through a test Audio Gateway.
+- (JA) 無印ESP32向け実験的HFP Client transportを追加。SLCとcall control、CVSD/mSBCの
+  Voice-over-HCI view/copy送信、bad-frame、packet statisticsを公開し、ESP32 2台の
+  テスト用Audio Gatewayとの間でmSBC negotiationと同期payload往復を確認した。
 
 ## 1.2.0
 - (EN) Added support for the original ESP32. Its Arduino-ESP32 prebuilt libraries

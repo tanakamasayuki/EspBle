@@ -117,7 +117,8 @@ A2DPが選択するAVRCPは有効にするが、最初のarchiveでは不要なc
 4. **基本操作完了・相互運用継続:** AVRCP CT/TG、passthrough、absolute volume、volume notification、
    Controller側のmetadata / play-status要求と応答eventを公開API化した。ESP32同士でPlayと音量を実機確認済み。
    ESP-IDF公開TG APIにmetadata / play-status応答送信がないため、その受信は外部Targetとの相互運用で確認する。
-5. HFP ClientをVoice over HCI / external codecで追加し、call controlとSCO双方向payloadを確認する。
+5. **完了:** HFP ClientをVoice over HCI / external codecで追加し、SLC、発信、call state、mSBC
+   双方向raw payload、bad-frame、packet statistics、audio切断をESP32同士で確認した。
 6. HFP AGを同じtransport APIへ追加する。Client/AGのruntime排他を検証する。
 7. **仕様確定・実装待ち:** `PCMFlowBluetooth`でexternal SBC/mSBC/CVSD codecとA2DP/HFP adapterを提供する。device出力は
    固定せず、PCMSource/PCMSink境界までを提供する。
@@ -147,6 +148,27 @@ ESP-IDFはHFP ClientとAGの同時実行をサポートしない。両roleは別
 共通値型でSLC、audio state、call indicator、volume、AT response、同期payloadを表す。Clientの最小到達点は
 SLC接続、着信/発信/応答/終了、audio接続、CVSD/mSBC双方向raw payload、切断である。AGは2台実機probe用の
 応答とcall state modelを持たせるが、電話帳や電話網をEspBle内に実装しない。
+
+公開AGは`EspBleClassicHfpAudioGateway`としてClientとは別classにする。接続・audio・raw payload・packet
+statisticsはClientと同じ値型、copy送信、callback寿命を使う。AG固有部分は次の小さいtelephony境界に限定する。
+
+- `begin(config)`のconfigにoperator名、subscriber番号、network/signal/roaming/batteryの初期値を持たせ、
+  HFからのCIND/COPS/CNUM/indicator照会へAG backendが現在値を自動応答する。
+- `onDialRequested`、`onAnswerRequested`、`onHangupRequested`、`onDtmf`、`onVoiceRecognitionRequested`を
+  application eventとして`update()`から配送する。電話網の成功・失敗をEspBleが推測しない。
+- applicationは`reportIncomingCall`、`reportOutgoingCall`、`reportCallActive`、`reportCallEnded`と
+  `setNetworkStatus`で単一call modelを更新する。各操作は必要なAT最終応答とindicatorを一貫して送る。
+- CLCCは保持中の単一call modelから自動応答する。複数call、三者通話、電話帳は初期scope外とし、将来必要なら
+  model/provider interfaceを追加する。低水準Bluedroid列挙値や可変長C文字列を公開APIへ漏らさない。
+- Client/AGはprocess-wide profile gateを共有し、一方の`begin()`中は他方を`InvalidState`で拒否する。
+  `end()`はaudio callback barrier完了後にgateを解放する。これは同一`EspBleClassic` instance内だけでなく、
+  backendのglobal callback slot全体を保護する。
+
+2026-08-11のESP32同士のprobeではWBS/mSBC、同期handle 384、推奨送信frame 57 byteが選択された。
+Clientから57 byteを送るとAG受信viewは58 byteとなり、追加byteは0、先頭57 byteのchecksumは同一だった。
+AGが57 byteへ戻して送信するとClient受信viewは60 byteになった。無音・欠落時には60 byteの
+`badFrame=true`も届く。したがってadapterはview全体を一つのmSBC frameと誤認せず、57 byte frameを
+切り出して末尾paddingを捨て、`badFrame`時はpayload内容ではなくPLCへ進める。
 
 ## PCMFlowBluetoothへの引き継ぎ
 

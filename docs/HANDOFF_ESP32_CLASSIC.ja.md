@@ -30,6 +30,7 @@ Classic-only A2DP Sink / Sourceのraw transportとAVRCP CT/TGの基本制御は�
 | A2DP Sink transport | 接続、SBC設定、stream状態、raw media view、buffer解放、callback停止を公開API化。ESP32同士でexternal-codec mediaを実機受信 |
 | A2DP Source transport | 固定SBC endpoint、接続、start/suspend、copy送信、MTU検査、`WouldBlock` retryを公開API化。100 packetを欠損なく実機送信 |
 | AVRCP CT/TG | 接続、remote feature、passthrough送受信、metadata/play-status要求と応答event、absolute volumeとone-shot通知を公開API化。A2DP併用でPlayと音量変更を実機確認 |
+| HFP Client | SLC、発信/応答/終了等のcall control、call/volume/AT event、CVSD/mSBC raw SCO送受信、bad-frame、packet statisticsを公開API化。ESP32 AG probeとmSBC双方向転送を確認 |
 | dual-host HCI routing | Command Complete/Status、LE/BR-EDR handle、ACL、切断、Completed Packetsをrouting |
 | command scheduler | broker所有16 packet FIFO、controller credit、opcode照合、1 response command in-flight |
 | controller-wide policy | General/Page 2/LE event mask union、再attach時Resetとflow-control設定の仮想完了 |
@@ -62,13 +63,16 @@ Classic-only A2DP Sink / Sourceのraw transportとAVRCP CT/TGの基本制御は�
 4. **完了:** A2DP Sourceのencoded media copy送信と`WouldBlock` backpressureを公開API化し、100 packetを実機確認した。
 5. **基本操作完了:** AVRCP CT/TGのpassthroughとabsolute volumeをA2DP接続上で実機確認した。公開TG APIに
    metadata / play-status応答送信がないため、Controller側応答eventは外部Targetとの相互運用確認を残す。
-6. HFP Client、HFP AGの順にBluetooth固有APIを実装する。
-7. codec/PCM/device処理はEspBleへ入れず、`../PCMFlowBluetooth/SPEC.ja.md`を契約として
+6. **完了:** HFP Clientのcontrol / Voice over HCI transportを実装し、mSBCで実機確認した。
+7. HFP AGを公開API化し、Client/AGのruntime排他と着信/応答/終了を実機確認する。
+8. codec/PCM/device処理はEspBleへ入れず、`../PCMFlowBluetooth/SPEC.ja.md`を契約として
    独立libraryを並行実装する。PCMFlow coreの既存`PCMSource`/`PCMSink`を再利用する。
 
 HFPの公開境界は[Classic Audio拡張計画](PLAN_ESP32_CLASSIC_AUDIO.ja.md#hfp実装前調査)まで調査済み。
 受信bufferはcallback復帰後にEspBleが解放、送信bufferはAPI成功時にBluedroidが消費する。HFP送信には
 A2DPのような同期的`WouldBlock`がないため、受理結果と後続packet discard statisticsを混同しないこと。
+実機ではmSBC 57-byte送信が受信側で58/60 byteのpadding付きviewになり、bad-frameも60 byteで届いた。
+PCMFlowBluetoothへは`badFrame`とraw lengthを失わず渡し、decoder側で57 byte frameを切り出す。
 
 ### 完了: dual-host実験機能の信頼性
 

@@ -474,3 +474,24 @@ metadata / play-status応答を生成できない。Controller側の要求・応
 archive link checkは実装が使用するCT/TG callback、init/deinit、passthrough、metadata、play status、absolute
 volume、notification capability / responseをすべて必須symbol化した。固定ESP-IDF/toolchainから再生成した
 archiveは格納済み`.a`とbyte単位で一致し、SHA-256も同じだった。
+
+## 2026-08-11 HFP Client raw transport checkpoint
+
+`EspBleClassicHfpClient`へ初期化、SLC接続、audio接続、発信/再発信/応答/終了、DTMF、voice recognition、
+volume、call state/current call/AT response、Voice-over-HCI受信view・copy送信、packet statisticsを追加した。
+受信bufferはcallback復帰後に一度だけ解放し、callback差替え・解除とprofile停止は参照寿命barrierを通る。
+送信は専用bufferへcopyし、API成功時だけBluedroidへownershipを移す。
+
+2台目ESP32ではテスト内からnamespaced HFP AG APIを直接使い、CIND/COPS/CLCC/CNUMへ応答する最小AGを構成した。
+SLC確立後にClientから`12345`を発信し、AGのdial event、AT OK、Clientのactive call stateを確認した。
+call activeへの遷移に伴いWBS/mSBC、同期handle 384、推奨送信frame size 57 byteでSCOが自動確立した。
+
+Clientの57-byte既知payloadはAGで58 byte、`badFrame=false`、追加byte 0として届き、先頭57 byteのchecksumは
+同一だった。AGが57 byteへtrimして返すとClientには60-byte viewとして届いた。無音期間には60-byteの
+`badFrame=true`も発生した。raw transportはpaddingを改変せず公開し、PCMFlowBluetooth側がmSBC 57-byte
+frameを切り出してbad-frame時PLCを行う。packet statisticsではこのprobeで送信受理、受信correct、discard 0を
+確認し、audio切断で両側にDisconnected eventが届いた。
+
+`.a`生成link checkへHFP Clientが使用するcallback、init/deinit、SLC/audio接続、call control、volume、
+Voice-over-HCI allocator/free/send、packet statisticsの必須symbolを追加した。固定環境からの再生成物は
+格納済みarchiveとbyte単位で一致した。

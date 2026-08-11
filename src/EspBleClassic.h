@@ -10,6 +10,7 @@
 
 using EspBleClassicSppSessionId = uint32_t;
 using EspBleClassicA2dpConnectionId = uint16_t;
+using EspBleClassicHfpSyncConnectionId = uint16_t;
 
 struct EspBleClassicConfig
 {
@@ -265,6 +266,139 @@ struct EspBleClassicAvrcpVolume
   bool remoteCommand = false;
 };
 
+enum class EspBleClassicHfpConnectionState : uint8_t
+{
+  Disconnected = 0,
+  Connecting,
+  Connected,
+  ServiceLevelConnected,
+  Disconnecting,
+};
+
+enum class EspBleClassicHfpAudioState : uint8_t
+{
+  Disconnected = 0,
+  Connecting,
+  Connected,
+};
+
+enum class EspBleClassicHfpCallSetupState : uint8_t
+{
+  Idle = 0,
+  Incoming,
+  OutgoingDialing,
+  OutgoingAlerting,
+};
+
+enum class EspBleClassicHfpCallHeldState : uint8_t
+{
+  None = 0,
+  HeldAndActive,
+  Held,
+};
+
+enum class EspBleClassicHfpCurrentCallState : uint8_t
+{
+  Active = 0,
+  Held,
+  Dialing,
+  Alerting,
+  Incoming,
+  Waiting,
+  HeldByResponseAndHold,
+};
+
+enum class EspBleClassicHfpVolumeTarget : uint8_t
+{
+  Speaker = 0,
+  Microphone,
+};
+
+struct EspBleClassicHfpConnection
+{
+  String peerAddress;
+  EspBleClassicHfpConnectionState state =
+    EspBleClassicHfpConnectionState::Disconnected;
+  uint32_t peerFeatures = 0;
+  uint32_t callHoldFeatures = 0;
+};
+
+struct EspBleClassicHfpAudioConnection
+{
+  String peerAddress;
+  EspBleClassicHfpAudioState state =
+    EspBleClassicHfpAudioState::Disconnected;
+  EspBleClassicHfpSyncConnectionId id = 0;
+  EspBleClassicAudioCodec codec = EspBleClassicAudioCodec::Unknown;
+  uint16_t preferredFrameSize = 0;
+};
+
+struct EspBleClassicHfpCallState
+{
+  bool active = false;
+  EspBleClassicHfpCallSetupState setup =
+    EspBleClassicHfpCallSetupState::Idle;
+  EspBleClassicHfpCallHeldState held =
+    EspBleClassicHfpCallHeldState::None;
+};
+
+struct EspBleClassicHfpCaller
+{
+  String number;
+  bool waiting = false;
+};
+
+struct EspBleClassicHfpCurrentCall
+{
+  int index = 0;
+  bool incoming = false;
+  EspBleClassicHfpCurrentCallState state =
+    EspBleClassicHfpCurrentCallState::Active;
+  bool multiparty = false;
+  String number;
+};
+
+struct EspBleClassicHfpVolume
+{
+  EspBleClassicHfpVolumeTarget target =
+    EspBleClassicHfpVolumeTarget::Speaker;
+  uint8_t value = 0;
+};
+
+struct EspBleClassicHfpAtResponse
+{
+  uint8_t code = 0;
+  uint16_t extendedError = 0;
+};
+
+struct EspBleClassicHfpPacketStatistics
+{
+  uint32_t received = 0;
+  uint32_t receivedCorrect = 0;
+  uint32_t receivedError = 0;
+  uint32_t receivedMissing = 0;
+  uint32_t receivedLost = 0;
+  uint32_t sent = 0;
+  uint32_t sentDiscarded = 0;
+};
+
+// data is a callback-lifetime view of an encoded CVSD/mSBC HCI synchronous
+// payload. mSBC input may contain controller padding after its 57-byte frame.
+struct EspBleClassicHfpEncodedAudioView
+{
+  EspBleClassicHfpSyncConnectionId connectionId = 0;
+  EspBleClassicAudioCodec codec = EspBleClassicAudioCodec::Unknown;
+  bool badFrame = false;
+  const uint8_t *data = nullptr;
+  size_t length = 0;
+};
+
+struct EspBleClassicHfpEncodedAudioPacket
+{
+  const uint8_t *data = nullptr;
+  size_t length = 0;
+};
+
 enum class EspBleClassicHidReportType : uint8_t
 {
   Input = 1,
@@ -310,6 +444,7 @@ struct EspBleClassicHidHostImpl;
 struct EspBleClassicA2dpSinkImpl;
 struct EspBleClassicA2dpSourceImpl;
 struct EspBleClassicAvrcpImpl;
+struct EspBleClassicHfpClientImpl;
 class EspBleClassic;
 
 class EspBleClassicA2dpSink
@@ -476,6 +611,94 @@ private:
   MetadataCallback metadataCallback_;
   PlayStatusCallback playStatusCallback_;
   VolumeCallback volumeCallback_;
+};
+
+class EspBleClassicHfpClient
+{
+public:
+  using ConnectionCallback =
+    std::function<void(const EspBleClassicHfpConnection &)>;
+  using AudioConnectionCallback =
+    std::function<void(const EspBleClassicHfpAudioConnection &)>;
+  using CallStateCallback =
+    std::function<void(const EspBleClassicHfpCallState &)>;
+  using CallerCallback = std::function<void(const EspBleClassicHfpCaller &)>;
+  using RingCallback = std::function<void()>;
+  using CurrentCallCallback =
+    std::function<void(const EspBleClassicHfpCurrentCall &)>;
+  using VolumeCallback = std::function<void(const EspBleClassicHfpVolume &)>;
+  using AtResponseCallback =
+    std::function<void(const EspBleClassicHfpAtResponse &)>;
+  using PacketStatisticsCallback =
+    std::function<void(const EspBleClassicHfpPacketStatistics &)>;
+  // Runs in the Bluetooth host callback context. Copy view.data before return.
+  using AudioCallback =
+    std::function<void(const EspBleClassicHfpEncodedAudioView &)>;
+
+  bool begin();
+  void end();
+  bool initialized() const;
+  bool connect(const char *address);
+  bool disconnect();
+  bool connected() const;
+  bool serviceLevelConnected() const;
+  EspBleClassicHfpConnection connection() const;
+
+  bool connectAudio();
+  bool disconnectAudio();
+  bool audioConnected() const;
+  EspBleClassicHfpAudioConnection audioConnection() const;
+  // Copies packet.data. Accepted transfers the copy to the host, but does not
+  // guarantee controller delivery; inspect packet statistics for discards.
+  // WouldBlock currently means that the local copy could not be allocated.
+  EspBleClassicAudioSendResult send(
+    const EspBleClassicHfpEncodedAudioPacket &packet);
+  bool requestPacketStatistics();
+
+  bool dial(const char *number);
+  bool redial();
+  bool answerCall();
+  bool rejectOrEndCall();
+  bool queryCurrentCalls();
+  bool sendDtmf(char code);
+  bool setVolume(EspBleClassicHfpVolumeTarget target, uint8_t value);
+  bool startVoiceRecognition();
+  bool stopVoiceRecognition();
+  EspBleClassicHfpCallState callState() const;
+
+  void onConnectionChanged(ConnectionCallback callback);
+  void onAudioConnectionChanged(AudioConnectionCallback callback);
+  void onCallStateChanged(CallStateCallback callback);
+  void onCaller(CallerCallback callback);
+  void onRing(RingCallback callback);
+  void onCurrentCall(CurrentCallCallback callback);
+  void onVolumeChanged(VolumeCallback callback);
+  void onAtResponse(AtResponseCallback callback);
+  void onPacketStatistics(PacketStatisticsCallback callback);
+  // Replacement and removal wait for callbacks already in progress. Do not
+  // call onAudio() or end() from inside the audio callback.
+  void onAudio(AudioCallback callback);
+  size_t droppedEventCount() const;
+
+private:
+  friend class EspBleClassic;
+  friend struct EspBleClassicHfpClientImpl;
+  explicit EspBleClassicHfpClient(EspBleClassic *owner);
+  ~EspBleClassicHfpClient();
+  void update();
+  bool finishCommand(bool connected, bool success, const char *failure);
+
+  EspBleClassic *owner_;
+  EspBleClassicHfpClientImpl *impl_ = nullptr;
+  ConnectionCallback connectionCallback_;
+  AudioConnectionCallback audioConnectionCallback_;
+  CallStateCallback callStateCallback_;
+  CallerCallback callerCallback_;
+  RingCallback ringCallback_;
+  CurrentCallCallback currentCallCallback_;
+  VolumeCallback volumeCallback_;
+  AtResponseCallback atResponseCallback_;
+  PacketStatisticsCallback packetStatisticsCallback_;
 };
 
 class EspBleClassicSpp
@@ -647,6 +870,7 @@ public:
   EspBleClassicA2dpSink &a2dpSink();
   EspBleClassicA2dpSource &a2dpSource();
   EspBleClassicAvrcp &avrcp();
+  EspBleClassicHfpClient &hfpClient();
 
   EspBleError lastError() const;
   const char *lastErrorName() const;
@@ -659,6 +883,7 @@ private:
   friend class EspBleClassicA2dpSink;
   friend class EspBleClassicA2dpSource;
   friend class EspBleClassicAvrcp;
+  friend class EspBleClassicHfpClient;
 
   void clearError();
   void setError(EspBleError error, const char *detail);
@@ -670,6 +895,7 @@ private:
   EspBleClassicA2dpSink a2dpSink_;
   EspBleClassicA2dpSource a2dpSource_;
   EspBleClassicAvrcp avrcp_;
+  EspBleClassicHfpClient hfpClient_;
   EspBleError lastError_ = EspBleError::None;
   String lastErrorDetail_;
 };
