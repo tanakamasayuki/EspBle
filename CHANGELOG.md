@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- (EN) Fixed the compatibility-matrix representative GATT paths and made the
+  tool fail when a requested example no longer exists, preventing silent
+  coverage gaps after example moves.
+- (JA) compatibility matrixの代表GATT pathを修正し、指定exampleが存在しない場合は
+  error終了するようにした。example移動後に検証が黙って欠落することを防止する。
+
 - (EN) Added experimental original-ESP32 Bluetooth Classic support backed by a
   separately built, namespaced Classic-only Bluedroid host. SPP, generic HID
   Device/Host, custom reports, reconnect and lifecycle paths are covered on two

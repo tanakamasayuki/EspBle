@@ -52,7 +52,7 @@ Gate Aの詳細は[引き継ぎ](HANDOFF_ESP32_CLASSIC.ja.md)を正とします�
 | 完了 | dual-host Audio基本回帰 | BLE GATT接続を維持してHFP mSBC SCO、A2DP SBC media、AVRCP Play / absolute volumeを実行し、各link中・切断後のGATT readとbroker異常0を確認 |
 | 未完了 | board matrix | workflowで対象boardを再生成し、次回versionのBOARDS文書を確定 |
 | 未完了 | core matrix | Arduino-ESP32対応versionを再検証し、次回versionのCOMPATIBILITY文書を確定 |
-| 未完了 | 他SoC非影響 | S3/C3/C6/H2/P4の代表compileでClassic archive・無印ESP32 patchが非適用 |
+| 完了 | 他SoC非影響 | Arduino-ESP32 3.3.11のS3/C3/C6/H2/P4代表compileでClassic archive・無印ESP32 patchが非適用 |
 
 archive手順は[Classic host archive再生成](CLASSIC_HOST_BUILD.ja.md)を正とします。
 Audioのscopeと段階は[Classic Audio拡張計画](PLAN_ESP32_CLASSIC_AUDIO.ja.md)を正とします。

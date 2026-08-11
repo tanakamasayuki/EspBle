@@ -563,3 +563,15 @@ controller policyではClassic radio scopeへ分類した。実パラメータ�
 この試験で確認したのはBluetooth profileとencode済みpayload transportの共存であり、SBC decode、PCM処理、
 I2S等のdevice I/Oは引き続きPCMFlowBluetooth側の責務である。またHFP SCOとA2DP ACL audioを同時に動かす
 構成は対象外で、個別profileとBLE GATTの組合せを検証したものとする。
+
+## 2026-08-11 他SoC非影響compile checkpoint
+
+Arduino-ESP32 3.3.11でS3、C3、C6、H2、P4を対象に、CompileSmoke、GAP Connect、GATT Notify Server、
+GATT Client、Security Static Passkey Server、HID Keyboard Device / Hostをローカルmatrix compileした。
+すべて成功し、無印ESP32専用のClassic archive、同梱NimBLE patch、dual-host経路が他SoCへ誤適用されないことを
+代表API経路で確認した。P4はこの項ではcompile分離だけを確認し、ESP-Hosted実機回帰とは区別する。
+
+最初の実行では `tools/version_matrix.py` の既定GATT pathが移動前の `Gatt/NotifyServer` / `Gatt/Client`を
+参照し、GATT欄を`absent`としてbuildせず通過していた。現在の `Gatt/Basics/...`へ修正し、既定または明示指定した
+exampleが存在しない場合は実行前にerror終了するguardを追加した。これにより今後のcore matrixでexample renameを
+未対応のまま検証済みと誤認しない。
