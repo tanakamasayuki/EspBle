@@ -13,6 +13,8 @@
 - Classic-only Bluedroid archive、SPP、HID Device/Host、dual-host HCI brokerは実装・実機検証済みだが実験扱い。
 - Classic-onlyを実用範囲へ広げる次の対象はA2DP/AVRCP/HFP。Bluetooth media payloadまでをEspBleの
   責務とし、PCM処理とdevice I/OはPCMFlow等の独立libraryへ委ねる方針を確定した。
+- A2DP Sink / Sourceのraw transport APIとESP32同士の実機media転送は完了し、PCMFlowBluetoothの初期要件を
+  sibling repositoryへ配置した。次の実装対象はAVRCPである。
 - 配布形式は次回Classic拡張ではNimBLE source / Classic `.a`のmixed distributionを意図的に維持する。
 - dual-hostはcommand/ACL routing、bond/RPA、任意停止順、再attach、FIFO満杯、再登録とheap安定性まで検証済み。
 - 数時間級dual-host soak、観測HCI commandのpolicy分類、不正HID report拒否、peer突然消失後の復旧、接続・pairing失敗後の復旧、lifecycle競合監査は完了。公開サポート範囲の確定が未完了。
@@ -41,6 +43,8 @@ Gate Aの詳細は[引き継ぎ](HANDOFF_ESP32_CLASSIC.ja.md)を正とします�
 | 完了 | Classic archive生成入口 | IDF/tag/toolchain検査、link check、symbol prefix、必須symbol検査をscript化 |
 | 完了 | archive clean再現 | cleanなIDF v5.5.5 worktree・GCC 14.2.0から一時生成し、格納済みarchiveとbyte単位・SHA-256一致 |
 | 完了 | Classic Audio archive | external codec A2DP/AVRCP、Voice over HCI / external codec HFPを有効化し、必須API link checkとclean再生成を完了 |
+| 完了 | A2DP Sink transport | SBC codec設定、接続・stream状態、callback限定raw view、停止barrierを実装し、ESP32同士で実機転送 |
+| 完了 | A2DP Source transport | 固定SBC endpoint、copy送信、MTU検査、`WouldBlock` retryを実装し、100 packetを欠損なく実機転送 |
 | 未完了 | board matrix | workflowで対象boardを再生成し、次回versionのBOARDS文書を確定 |
 | 未完了 | core matrix | Arduino-ESP32対応versionを再検証し、次回versionのCOMPATIBILITY文書を確定 |
 | 未完了 | 他SoC非影響 | S3/C3/C6/H2/P4の代表compileでClassic archive・無印ESP32 patchが非適用 |
@@ -85,12 +89,13 @@ Audioのscopeと段階は[Classic Audio拡張計画](PLAN_ESP32_CLASSIC_AUDIO.ja
 
 ## 推奨実行順
 
-1. A2DP Sinkのencoded media受信APIを実装し、実機でpayloadと所有権境界を確定する。
-2. A2DP/AVRCP/HFPの到達範囲を踏まえてClassicのrelease scopeを決める。
-3. scope確定後にCHANGELOGと利用者向け文書を更新する。
-4. Gate Bのboard/core matrixと他SoC非影響を確定する。
-5. コードfreeze後にGate Cのclean全回帰を複数回行う。
-6. Gate Dを並行実施し、最後にGate Eのmetadata・release操作へ進む。
+1. AVRCP CT/TG、HFP Client/AGの順にcontrol / SCO transportを検証する。
+2. PCMFlowBluetoothのA2DP Sink decoder adapterを並行実装し、実SBC連続再生で最大payloadと負荷を測る。
+3. A2DP/AVRCP/HFPの到達範囲を踏まえてClassicのrelease scopeを決める。
+4. scope確定後にCHANGELOGと利用者向け文書を更新する。
+5. Gate Bのboard/core matrixと他SoC非影響を確定する。
+6. コードfreeze後にGate Cのclean全回帰を複数回行う。
+7. Gate Dを並行実施し、最後にGate Eのmetadata・release操作へ進む。
 
 コード変更後に全回帰を先行してもfreeze後に再実行が必要です。長時間作業の結果は、合否だけでなく
 条件とlog保存先を引き継ぎ文書・技術検証へ記録します。

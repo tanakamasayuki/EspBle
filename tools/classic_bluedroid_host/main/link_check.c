@@ -117,6 +117,10 @@ static void hf_ag_audio_callback(
 
 void app_main(void)
 {
+    uint8_t peer[ESP_BD_ADDR_LEN] = {0};
+    esp_a2d_mcc_t codec = {0};
+    esp_a2d_audio_buff_t *audio = esp_a2d_audio_buff_alloc(1);
+    esp_a2d_audio_buff_free(audio);
     const esp_bluedroid_hci_driver_operations_t operations = {
         .send = send_packet,
         .check_send_available = can_send,
@@ -130,8 +134,17 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_a2d_register_callback(a2dp_callback));
     ESP_ERROR_CHECK(esp_a2d_sink_register_audio_data_callback(a2dp_audio_callback));
     ESP_ERROR_CHECK(esp_a2d_sink_init());
+    ESP_ERROR_CHECK(esp_a2d_sink_register_stream_endpoint(0, &codec));
+    ESP_ERROR_CHECK(esp_a2d_sink_connect(peer));
+    ESP_ERROR_CHECK(esp_a2d_sink_disconnect(peer));
+    ESP_ERROR_CHECK(esp_a2d_sink_deinit());
     ESP_ERROR_CHECK(esp_a2d_source_init());
+    ESP_ERROR_CHECK(esp_a2d_source_register_stream_endpoint(0, &codec));
+    ESP_ERROR_CHECK(esp_a2d_source_connect(peer));
+    ESP_ERROR_CHECK(esp_a2d_media_ctrl(ESP_A2D_MEDIA_CTRL_CHECK_SRC_RDY));
     ESP_ERROR_CHECK(esp_a2d_source_audio_data_send(0, NULL));
+    ESP_ERROR_CHECK(esp_a2d_source_disconnect(peer));
+    ESP_ERROR_CHECK(esp_a2d_source_deinit());
     ESP_ERROR_CHECK(esp_avrc_ct_register_callback(avrc_ct_callback));
     ESP_ERROR_CHECK(esp_avrc_ct_init());
     ESP_ERROR_CHECK(esp_avrc_tg_register_callback(avrc_tg_callback));

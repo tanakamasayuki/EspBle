@@ -14,8 +14,9 @@ dual-hostは`ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL`によるopt-inです。通常bui
 無印ESP32以外はcore同梱NimBLE経路を変更しません。現段階は技術検証済みの実験機能であり、一般対応へ
 昇格していません。
 
-次の主作業はClassic-onlyのA2DP/AVRCP/HFP対応です。EspBleはBluetooth profile、codec negotiation、
-encode済みmedia/SCO payloadの受け渡しまでを担当し、PCM処理やdevice I/Oは担当しません。詳細は
+Classic-only A2DP Sink / Sourceのraw transportは公開APIと実機転送まで完了しました。次はAVRCP、HFPへ
+広げます。EspBleはBluetooth profile、codec negotiation、encode済みmedia/SCO payloadの受け渡し
+までを担当し、PCM処理やdevice I/Oは担当しません。詳細は
 [Classic Audio拡張計画](PLAN_ESP32_CLASSIC_AUDIO.ja.md)を正本とします。
 
 ## 完了済み
@@ -26,6 +27,8 @@ encode済みmedia/SCO payloadの受け渡しまでを担当し、PCM処理やdev
 | archive clean再現 | cleanなv5.5.5 worktreeから一時生成し、格納済み`.a`とbyte単位・SHA-256一致 |
 | symbol分離 | archiveのglobal defined symbolを`espble_bd_`へ名前空間化。core Bluedroidと衝突なし |
 | Classic排他モード | SPP、HID Device/Host、双方向report、切断、再初期化、再接続を実機確認 |
+| A2DP Sink transport | 接続、SBC設定、stream状態、raw media view、buffer解放、callback停止を公開API化。ESP32同士でexternal-codec mediaを実機受信 |
+| A2DP Source transport | 固定SBC endpoint、接続、start/suspend、copy送信、MTU検査、`WouldBlock` retryを公開API化。100 packetを欠損なく実機送信 |
 | dual-host HCI routing | Command Complete/Status、LE/BR-EDR handle、ACL、切断、Completed Packetsをrouting |
 | command scheduler | broker所有16 packet FIFO、controller credit、opcode照合、1 response command in-flight |
 | controller-wide policy | General/Page 2/LE event mask union、再attach時Resetとflow-control設定の仮想完了 |
@@ -53,10 +56,12 @@ encode済みmedia/SCO payloadの受け渡しまでを担当し、PCM処理やdev
 ### P0: Classic-only Audio
 
 1. **完了:** A2DP/AVRCP/HFPをexternal codec / Voice over HCI構成でarchiveへ追加し、生成scriptのlink checkを拡張した。
-2. A2DP Sink、Source、AVRCP、HFP Client、HFP AGの順にBluetooth固有APIを実装する。
-3. Classic-onlyで各profileの接続、media transfer、切断、再接続、callback停止を実機確認する。
-4. codec/PCM/device処理はEspBleへ入れず、EspBleとPCMFlowへ依存する独立`PCMFlowBluetooth` siblingを
-   第一候補としてcodec wrapperとadapterをまとめる。PCMFlow coreの既存`PCMSource`/`PCMSink`を再利用する。
+2. **完了:** A2DP Sinkの接続、SBC設定、stream状態、encoded media callback、所有権と停止barrierを公開API化した。
+3. **完了:** Classic-only ESP32同士で接続、codec設定、5 packet受信、suspend、切断を実機確認した。
+4. **完了:** A2DP Sourceのencoded media copy送信と`WouldBlock` backpressureを公開API化し、100 packetを実機確認した。
+5. AVRCP、HFP Client、HFP AGの順にBluetooth固有APIを実装する。
+6. codec/PCM/device処理はEspBleへ入れず、`../PCMFlowBluetooth/REQUIREMENTS.ja.md`を契約として
+   独立libraryを並行実装する。PCMFlow coreの既存`PCMSource`/`PCMSink`を再利用する。
 
 ### 完了: dual-host実験機能の信頼性
 

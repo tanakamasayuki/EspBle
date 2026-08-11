@@ -110,23 +110,25 @@ A2DPが選択するAVRCPは有効にするが、最初のarchiveでは不要なc
 ## 実装順
 
 1. **完了:** archiveのA2DP/AVRCP/HFP external codec設定とlink checkを追加し、clean再生成する。
-2. Classic-only A2DP Sinkの接続、codec negotiation、encoded SBC受信、停止・再接続を公開API化する。
-3. A2DP Sourceのencoded SBC送信とqueue backpressureを追加する。
+2. **完了:** Classic-only A2DP Sinkの接続、codec negotiation、encoded SBC受信、停止を公開API化し、
+   ESP32同士のexternal-codec転送で実機確認した。
+3. **完了:** A2DP Sourceの固定SBC endpoint、接続、start/suspend、encoded SBC copy送信、
+   `WouldBlock` backpressureを公開API化し、Sinkとの100 packet実機転送で確認した。
 4. AVRCP CT/TGの基本操作、metadata、absolute volumeを追加する。
 5. HFP ClientをVoice over HCI / external codecで追加し、call controlとSCO双方向payloadを確認する。
 6. HFP AGを同じtransport APIへ追加する。Client/AGのruntime排他を検証する。
-7. `PCMFlowBluetooth`でexternal SBC/mSBC/CVSD codecとA2DP/HFP adapterを提供する。device出力は
+7. **仕様確定・実装待ち:** `PCMFlowBluetooth`でexternal SBC/mSBC/CVSD codecとA2DP/HFP adapterを提供する。device出力は
    固定せず、PCMSource/PCMSink境界までを提供する。
-8. EspBle側にはraw media example、PCMFlowBluetooth側にはEspBleとのintegration exampleを置く。
+8. **一部完了:** EspBle側にA2DP Sink raw media exampleを追加した。PCMFlowBluetooth側にはEspBleとのintegration exampleを置く。
    I2Sやboard speakerの実例が必要ならPCMFlowDevice側またはsketchで接続する。
 9. Classic-onlyで安定したprofileごとにdual-host smokeを追加する。dual-host固有の音声最適化は後回しにする。
 
 ## PCMFlowBluetoothへの引き継ぎ
 
-仕様確定後は、既にlicenseだけが置かれている`../PCMFlowBluetooth` repositoryへ
-`REQUIREMENTS.ja.md`を作成する。現時点ではtransportの実測前に公開仕様を固定しない。少なくとも
-A2DP Sinkでcodec configuration、encoded frame境界、buffer寿命、停止時callback保証を実機確認し、
-HFPのSCO payload境界をESP-IDF APIと小さいprobeで確認してから作成する。
+`../PCMFlowBluetooth/REQUIREMENTS.ja.md`を作成済みで、初期releaseのA2DP Sinkは実装開始可能である。
+公開責務、API、queue、thread、callback lifetime、SBC backend候補、完了条件を確定し、EspBleの実機probeで
+codec configuration、encoded frame境界、buffer寿命、停止時callback保証を確認して反映した。HFPのSCO
+payload境界は後続phaseで追記し、初期A2DP Sink実装を止めない。
 
 要件書には、EspBle / PCMFlowBluetooth / PCMFlow / device libraryの責務、公開classと依存方向、
 SBC・mSBC・CVSD backendの選定とlicense、buffering/backpressure、heap/stack上限、thread/callback規約、

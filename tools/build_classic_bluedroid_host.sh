@@ -67,7 +67,21 @@ for symbol in \
   espble_bd_esp_spp_register_callback \
   espble_bd_esp_bt_hid_device_register_callback \
   espble_bd_esp_bt_hid_host_register_callback \
+  espble_bd_esp_a2d_register_callback \
+  espble_bd_esp_a2d_audio_buff_free \
+  espble_bd_esp_a2d_audio_buff_alloc \
+  espble_bd_esp_a2d_media_ctrl \
+  espble_bd_esp_a2d_sink_init \
+  espble_bd_esp_a2d_sink_deinit \
+  espble_bd_esp_a2d_sink_connect \
+  espble_bd_esp_a2d_sink_disconnect \
   espble_bd_esp_a2d_sink_register_audio_data_callback \
+  espble_bd_esp_a2d_sink_register_stream_endpoint \
+  espble_bd_esp_a2d_source_init \
+  espble_bd_esp_a2d_source_deinit \
+  espble_bd_esp_a2d_source_connect \
+  espble_bd_esp_a2d_source_disconnect \
+  espble_bd_esp_a2d_source_register_stream_endpoint \
   espble_bd_esp_a2d_source_audio_data_send \
   espble_bd_esp_avrc_ct_init \
   espble_bd_esp_avrc_tg_init \

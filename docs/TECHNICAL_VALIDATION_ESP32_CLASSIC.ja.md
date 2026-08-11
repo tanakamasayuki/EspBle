@@ -435,3 +435,23 @@ privacy preemptionを繰り返した有限advertising/scanが元deadline後もho
 発見した。command条件を分離し、`EspBle::update()`で元deadlineを最終的に強制するbackstopを追加した。
 2秒RPA rotation中の有限8秒advertising/scanは、途中でactive、元deadline後にinactiveとなる条件で再確認した。
 ESP32-S3の代表BLE sketchも再compileし、無印ESP32用Classic archiveがリンクされないことを確認した。
+
+## 2026-08-11 A2DP Sink raw transport checkpoint
+
+`EspBleClassicA2dpSink`へ接続、切断、SBC codec設定、stream状態、callback中だけ有効なencoded media viewを
+追加した。media bufferは利用者callbackから戻った直後にbackendが一度だけ解放し、callbackのatomic解除と
+profile終了は実行中callback参照がなくなるまで待つ。control eventは`EspBleClassic::update()`から配送する。
+
+ESP32-D0WD-V3 2台をSink / external-codec Sourceとして接続し、48,000 Hz stereo、media MTU 995、
+13 byte・1 frameの既知payloadを100 packet送信した。Sinkは100 packet / 1,300 byteを欠損なく受信し、Sourceが
+設定したtimestamp 1000、1128、1256…を同値で観測した。codec通知が接続通知より先に届くことも確認したため、
+公開契約は両通知の順序を規定しない。Started、Suspended、Disconnectedまで成功した。
+
+Sourceも固定SBC endpoint、接続、start/suspend、caller dataのcopy送信、MTU検査、送信queue満杯時の
+`WouldBlock`を公開API化した。burst probeでは`WouldBlock`を72回観測し、そのpacketだけを後で再試行して
+100 packetすべてを配送できた。受理されなかったBluedroid bufferはEspBleが解放し、`Accepted`時だけ
+Bluedroidへ所有権を移す。Sink / Source roleは単一A2DP callbackを共有するためruntime排他とした。
+
+`.a`生成link checkへSinkが実際に使うregister callback、buffer free、init/deinit、connect/disconnect、
+SEP登録を必須symbolとして追加した。cleanなESP-IDF v5.5.5 / GCC 14.2.0で再生成し、格納済みarchiveと
+byte単位およびSHA-256が一致したためbinary差し替えはない。ESP32-S3代表sketchもcompile成功した。
