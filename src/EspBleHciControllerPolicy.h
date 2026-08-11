@@ -71,6 +71,11 @@ espble_hci_controller_policy_virtual_action(
   const uint8_t *packet, size_t length);
 espble_hci_command_scope_t espble_hci_controller_policy_classify_opcode(
   uint16_t opcode);
+// True only when command parameter byte 0 is a connection handle whose owner
+// must match the sending logical host. Connection-scoped commands addressed by
+// Bluetooth device address (for example Accept Synchronous Connection Request)
+// remain host-restricted by their scope but do not use handle ownership.
+bool espble_hci_controller_policy_targets_handle(uint16_t opcode);
 espble_hci_command_authorization_t espble_hci_controller_policy_authorize(
   uint8_t host, const uint8_t *packet, size_t length);
 

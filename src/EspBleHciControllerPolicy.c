@@ -86,6 +86,9 @@ espble_hci_command_scope_t espble_hci_controller_policy_classify_opcode(
     case 0x0c1a: // Write Scan Enable
     case 0x0c1e: // Write Authentication Enable
     case 0x0c24: // Write Class of Device
+    case 0x0c25: // Read Voice Setting
+    case 0x0c26: // Write Voice Setting
+    case 0x0c2e: // Read Synchronous Flow Control Enable
     case 0x0c2f: // Write Synchronous Flow Control Enable
     case 0x0c3a: // Write Current IAC LAP
     case 0x0c43: // Write Inquiry Scan Type
@@ -99,6 +102,9 @@ espble_hci_command_scope_t espble_hci_controller_policy_classify_opcode(
     case 0x0413: // Set Connection Encryption
     case 0x041b: // Read Remote Supported Features
     case 0x041c: // Read Remote Extended Features
+    case 0x0428: // Setup Synchronous Connection
+    case 0x0429: // Accept Synchronous Connection Request
+    case 0x042a: // Reject Synchronous Connection Request
     case 0x0803: // Sniff Mode
     case 0x0804: // Exit Sniff Mode
     case 0x080d: // Write Link Policy Settings
@@ -135,6 +141,33 @@ espble_hci_command_authorization_t espble_hci_controller_policy_authorize(
        scope == ESPBLE_HCI_COMMAND_SCOPE_CLASSIC_CONNECTION) && host != 1)
     return ESPBLE_HCI_COMMAND_WRONG_HOST;
   return ESPBLE_HCI_COMMAND_AUTHORIZED;
+}
+
+bool espble_hci_controller_policy_targets_handle(uint16_t opcode)
+{
+  switch (opcode)
+  {
+    case 0x0406: // Disconnect
+    case 0x0411: // Authentication Requested
+    case 0x0413: // Set Connection Encryption
+    case 0x041b: // Read Remote Supported Features
+    case 0x041c: // Read Remote Extended Features
+    case 0x041d: // Read Remote Version Information
+    case 0x0428: // Setup Synchronous Connection
+    case 0x0803: // Sniff Mode
+    case 0x0804: // Exit Sniff Mode
+    case 0x080d: // Write Link Policy Settings
+    case 0x0c37: // Write Link Supervision Timeout
+    case 0x1405: // Read RSSI
+    case 0x2016: // LE Read Remote Features
+    case 0x2019: // LE Start Encryption
+    case 0x201a: // LE Long Term Key Request Reply
+    case 0x2022: // LE Set Data Length
+    case 0x2030: // LE Read PHY
+      return true;
+    default:
+      return false;
+  }
 }
 
 bool espble_hci_controller_policy_is_reset(

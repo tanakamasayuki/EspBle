@@ -130,7 +130,7 @@ Classic-only Bluedroid hostをopt-inで利用できます。dual-hostは技術�
 | AVRCP（メディア操作） | ⚠️ | CT/TG passthrough、metadata/play-status要求、absolute volume。metadata応答の外部Target相互運用は未完了 |
 | SPP（Serial Port Profile） | ⚠️ | Classic-onlyでServer/Client transportを実機確認。BLEではNUS等で代替 |
 | Classic HID（BT HID） | ⚠️ | Classic-onlyでgeneric Device/Hostを実機確認。BLEではHOGP |
-| Classic / BLE同時利用（Dual-host） | ⚠️ | opt-inの実験機能。HID中心に検証済み、audioは未検証 |
+| Classic / BLE同時利用（Dual-host） | ⚠️ | opt-inの実験機能。HID/security/lifecycleに加え、BLE GATT接続中のHFP mSBC SCO双方向通信、SCO中・切断後のGATT readを実機確認済み |
 
 ## 補足
 

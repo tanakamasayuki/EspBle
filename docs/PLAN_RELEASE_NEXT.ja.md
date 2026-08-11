@@ -17,7 +17,7 @@
   absolute volumeに加え、HFP Client/Audio GatewayのSLC、単一call control、mSBC raw SCO transport、
   process-wide role排他まで完了した。PCMFlowBluetoothの初期仕様はsibling repositoryへ配置済みである。
 - 配布形式は次回Classic拡張ではNimBLE source / Classic `.a`のmixed distributionを意図的に維持する。
-- dual-hostはcommand/ACL routing、bond/RPA、任意停止順、再attach、FIFO満杯、再登録とheap安定性まで検証済み。
+- dual-hostはcommand/ACL routing、bond/RPA、任意停止順、再attach、FIFO満杯、再登録とheap安定性に加え、BLE GATT接続中のHFP mSBC SCO双方向通信まで検証済み。
 - 数時間級dual-host soak、観測HCI commandのpolicy分類、不正HID report拒否、peer突然消失後の復旧、接続・pairing失敗後の復旧、lifecycle競合監査は完了。公開サポート範囲の確定が未完了。
 - `CHANGELOG.md`のUnreleasedと利用者向けClassic文書は、次回release内容として未整理。
 

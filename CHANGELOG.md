@@ -59,6 +59,11 @@
 - (JA) 必須SLC照会の自動応答、意図的に小さい単一call model、application側telephony
   command event、raw SCO transportを持つ実験的HFP Audio Gatewayを公開した。
   Client/AGはprocess-wideで排他とし、公開API同士のmSBC payload往復を実機確認した。
+- (EN) Extended experimental dual-host routing to HFP mSBC SCO alongside a
+  live LE GATT connection, including synchronous-handle ownership and Classic
+  voice/eSCO command policy.
+- (JA) 実験的dual-host routingをHFP mSBC SCOへ拡張し、BLE GATT接続中の双方向音声payload、
+  同期接続handle所有権、Classic voice/eSCO command policyを実機確認した。
 
 ## 1.2.0
 - (EN) Added support for the original ESP32. Its Arduino-ESP32 prebuilt libraries

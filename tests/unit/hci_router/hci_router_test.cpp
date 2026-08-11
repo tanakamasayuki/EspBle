@@ -86,6 +86,30 @@ int main()
     ESPBLE_HCI_ROUTE_NIMBLE, classicAcl, sizeof(classicAcl)) ==
       ESPBLE_HCI_ROUTER_UNKNOWN_HANDLE);
 
+  // Synchronous Connection Complete: status=0, SCO/eSCO handle=0x0180.
+  const uint8_t synchronousConnection[] = {
+    0x04, 0x2c, 0x11, 0x00, 0x80, 0x01, 1, 2, 3, 4, 5, 6,
+    0x02, 0x06, 0x00, 0x00, 0x3c, 0x00, 0x02, 0x00};
+  check("synchronous connection route", espble_hci_router_route_incoming(
+    &router, synchronousConnection, sizeof(synchronousConnection)) ==
+      ESPBLE_HCI_ROUTE_CLASSIC);
+  check("Classic owns synchronous handle", espble_hci_router_owns_handle(
+    &router, ESPBLE_HCI_ROUTE_CLASSIC, 0x0180));
+
+  const uint8_t sco[] = {0x03, 0x80, 0x01, 0x02, 0xaa, 0xbb};
+  const uint8_t malformedSco[] = {0x03, 0x80, 0x01, 0x03, 0xaa, 0xbb};
+  check("Classic SCO outgoing", espble_hci_router_track_outgoing(&router,
+    ESPBLE_HCI_ROUTE_CLASSIC, sco, sizeof(sco)) == ESPBLE_HCI_ROUTER_OK);
+  check("reject NimBLE SCO outgoing", espble_hci_router_track_outgoing(&router,
+    ESPBLE_HCI_ROUTE_NIMBLE, sco, sizeof(sco)) ==
+      ESPBLE_HCI_ROUTER_INVALID_PACKET);
+  check("Classic SCO incoming", espble_hci_router_route_incoming(
+    &router, sco, sizeof(sco)) == ESPBLE_HCI_ROUTE_CLASSIC);
+  check("malformed SCO outgoing rejected", espble_hci_router_track_outgoing(
+    &router, ESPBLE_HCI_ROUTE_CLASSIC, malformedSco,
+    sizeof(malformedSco)) == ESPBLE_HCI_ROUTER_INVALID_PACKET);
+  check("malformed SCO incoming dropped", espble_hci_router_route_incoming(
+    &router, malformedSco, sizeof(malformedSco)) == ESPBLE_HCI_ROUTE_NONE);
   const uint8_t encryptionChange[] = {
     0x04, 0x08, 0x04, 0x00, 0x40, 0x00, 0x01};
   const uint8_t encryptionKeyRefresh[] = {

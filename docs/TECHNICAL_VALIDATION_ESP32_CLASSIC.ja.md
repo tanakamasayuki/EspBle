@@ -20,6 +20,11 @@ bond再接続、暗号化必須GATT readも成立した。数時間級負荷を�
 callback参照寿命監査も完了した。公開範囲とACL credit一元管理が未確定なので、opt-inでない通常buildは
 引き続き二つ目のhost登録を`ESP_ERR_NOT_SUPPORTED`とする。
 
+HFPについてもdual-host実機検証を追加し、BLE GATT接続を維持したままSLC、発信、mSBC SCOの
+双方向payload転送、SCO中と切断後のGATT readが成立した。HCI policyへVoice Settingと同期接続commandを
+追加し、BD_ADDR指定commandとhandle指定commandを分離した。同期接続完了eventからSCO handleをClassic所有として
+登録するため、共通Disconnectも正しいhostへ限定できる。
+
 現在の引き継ぎ状態と残作業は[HANDOFF_ESP32_CLASSIC.ja.md](HANDOFF_ESP32_CLASSIC.ja.md)、
 独自Classic host archiveの再生成方法は[CLASSIC_HOST_BUILD.ja.md](CLASSIC_HOST_BUILD.ja.md)を参照する。
 
@@ -41,6 +46,7 @@ callback参照寿命監査も完了した。公開範囲とACL credit一元管�
 | dual-host同時切断 | LE / BR-EDR Disconnectの完了を正しいhostへ配送後、停止・再起動・destructor成功 |
 | dual-host異常report / peer消失 | null・上限超過reportを接続維持のまま拒否し、peer突然再起動後にbond済みBLEとClassic HIDを復旧 |
 | dual-host接続 / pairing失敗 | 誤passkey後にbondなしで再pairing。HID非同期接続失敗後も暗号化LEを維持してClassic再接続 |
+| dual-host HFP / SCO | BLE GATT接続中のSLC、発信、mSBC SCO双方向、SCO中・切断後のGATT read。`unknown=0 mismatch=0 qfull=0` |
 | Classic callback参照寿命 | SPP/HID targetの登録mutex・参照数barrierを追加し、全停止順とdestructor順をclean実機回帰 |
 | Classic archive clean再現 | cleanなIDF v5.5.5 / GCC 14.2.0から生成し、格納済み`.a`とbyte単位・SHA-256一致 |
 | HCI router / controller policy unit | opcode応答、handle所有、ACL、切断、mixed completed event、command scopeと許可host |

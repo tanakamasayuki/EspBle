@@ -278,6 +278,16 @@ static int physical_receive(uint8_t *data, uint16_t length)
     else if (data[1] == 0x3e && length >= 5)
       ESP_LOGE(TAG, "TRACE RX LE meta subevent=0x%02x status=0x%02x",
         data[3], data[4]);
+    else if (data[1] == 0x03 && length >= 13)
+      ESP_LOGE(TAG,
+        "TRACE RX connection complete status=0x%02x handle=%u link=0x%02x",
+        data[3], (unsigned)((uint16_t)data[4] |
+          ((uint16_t)data[5] << 8)), data[12]);
+    else if (data[1] == 0x05 && length >= 7)
+      ESP_LOGE(TAG,
+        "TRACE RX disconnection complete status=0x%02x handle=%u reason=0x%02x",
+        data[3], (unsigned)((uint16_t)data[4] |
+          ((uint16_t)data[5] << 8)), data[6]);
     else if ((data[1] == 0x08 && length >= 7) ||
              (data[1] == 0x30 && length >= 6))
       ESP_LOGE(TAG,
@@ -635,9 +645,7 @@ esp_err_t espble_hci_broker_send(
           "unclassified" : "wrong host");
       return ESP_ERR_NOT_SUPPORTED;
     }
-    if (scope == ESPBLE_HCI_COMMAND_SCOPE_NIMBLE_CONNECTION ||
-        scope == ESPBLE_HCI_COMMAND_SCOPE_CLASSIC_CONNECTION ||
-        scope == ESPBLE_HCI_COMMAND_SCOPE_SHARED_CONNECTION)
+    if (espble_hci_controller_policy_targets_handle(opcode))
     {
       if (length < 6) return ESP_ERR_INVALID_ARG;
       const uint16_t handle = (uint16_t)data[4] | ((uint16_t)data[5] << 8);

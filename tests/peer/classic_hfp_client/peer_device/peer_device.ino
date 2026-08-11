@@ -1,8 +1,56 @@
 #include <EspBleClassic.h>
 #include <esp_mac.h>
+#if defined(ESPBLE_TEST_DUAL_HFP)
+#include <EspBle.h>
+#endif
 
 EspBleClassic bluetooth;
 bool audioEchoed = false;
+
+#if defined(ESPBLE_TEST_DUAL_HFP)
+EspBle dualBle;
+EspBleConnectionId dualConnectionId = 0;
+bool dualConnectionRequested = false;
+constexpr const char *DualHfpServiceUuid =
+  "a6d56000-6807-47b3-8457-bd60344d0001";
+constexpr const char *DualHfpCharacteristicUuid =
+  "a6d56001-6807-47b3-8457-bd60344d0001";
+
+bool startDualBleClient()
+{
+  dualBle.scanner().onResult([](const EspBleScanResult &result) {
+    if (dualConnectionRequested ||
+        !result.advertisesService(DualHfpServiceUuid)) return;
+    dualBle.scanner().stop();
+    dualConnectionRequested = dualBle.connect(result);
+    Serial.printf("DUAL_HFP_BLE_CONNECT requested=%u\n",
+      dualConnectionRequested ? 1 : 0);
+  });
+  dualBle.onConnected([](const EspBleConnection &connection) {
+    dualConnectionId = connection.id;
+    Serial.println("DUAL_HFP_BLE_CLIENT_CONNECTED");
+    Serial.printf("DUAL_HFP_BLE_READ_REQUESTED %u\n",
+      dualBle.readCharacteristic(
+        connection.id, DualHfpServiceUuid, DualHfpCharacteristicUuid) ? 1 : 0);
+  });
+  dualBle.onDisconnected([](const EspBleConnection &) {
+    dualConnectionId = 0;
+    dualConnectionRequested = false;
+    Serial.println("DUAL_HFP_BLE_CLIENT_DISCONNECTED");
+  });
+  dualBle.onCharacteristicRead([](const EspBleGattResult &result) {
+    Serial.printf("DUAL_HFP_BLE_READ success=%u value=%s hfp=%u\n",
+      result.success ? 1 : 0, result.value.c_str(),
+      bluetooth.hfpAudioGateway().audioConnected() ? 1 : 0);
+  });
+  EspBleConfig config;
+  config.deviceName = "EspBle Dual HFP Peer";
+  if (!dualBle.begin(config)) return false;
+  EspBleScanConfig scanConfig;
+  scanConfig.active = true;
+  return dualBle.scanner().start(scanConfig);
+}
+#endif
 
 String classicAddress()
 {
@@ -105,18 +153,37 @@ void setup()
   const bool clientAccepted = bluetooth.hfpClient().begin();
   Serial.printf("HFP_AG_EXCLUSION client=%u error=%s\n",
     clientAccepted ? 1 : 0, bluetooth.lastErrorName());
+#if defined(ESPBLE_TEST_DUAL_HFP)
+  if (!startDualBleClient())
+  {
+    Serial.printf("DUAL_HFP_BLE_START_FAILED %s\n",
+      dualBle.lastErrorDetail().c_str());
+    return;
+  }
+  Serial.println("DUAL_HFP_BLE_CLIENT_READY");
+#endif
   Serial.printf("HFP_AG_READY address=%s\n", classicAddress().c_str());
 }
 
 void loop()
 {
   bluetooth.update();
+#if defined(ESPBLE_TEST_DUAL_HFP)
+  dualBle.update();
+#endif
   if (Serial.available())
   {
     const String command = Serial.readStringUntil('\n');
     if (command == "i")
       Serial.printf("HFP_AG_INCOMING reported=%u\n",
         bluetooth.hfpAudioGateway().reportIncomingCall("54321") ? 1 : 0);
+#if defined(ESPBLE_TEST_DUAL_HFP)
+    else if (command == "r")
+      Serial.printf("DUAL_HFP_BLE_READ_REQUESTED %u\n",
+        dualConnectionId != 0 && dualBle.readCharacteristic(
+          dualConnectionId, DualHfpServiceUuid, DualHfpCharacteristicUuid)
+          ? 1 : 0);
+#endif
   }
   delay(1);
 }

@@ -1,7 +1,45 @@
 #include <EspBleClassic.h>
 #include <esp_mac.h>
+#if defined(ESPBLE_TEST_DUAL_HFP)
+#include <EspBle.h>
+#include <EspBleHciBroker.h>
+#endif
 
 EspBleClassic bluetooth;
+
+#if defined(ESPBLE_TEST_DUAL_HFP)
+EspBle dualBle;
+EspBleGattService dualService;
+EspBleGattCharacteristic dualCharacteristic;
+constexpr const char *DualHfpServiceUuid =
+  "a6d56000-6807-47b3-8457-bd60344d0001";
+constexpr const char *DualHfpCharacteristicUuid =
+  "a6d56001-6807-47b3-8457-bd60344d0001";
+
+bool startDualBleServer()
+{
+  EspBleGattCharacteristicConfig characteristicConfig;
+  characteristicConfig.readable = true;
+  dualService = dualBle.gattServer().addService(DualHfpServiceUuid);
+  dualCharacteristic = dualBle.gattServer().addCharacteristic(
+    dualService, DualHfpCharacteristicUuid, characteristicConfig);
+  dualBle.gattServer().setValue(dualCharacteristic, String("dual-hfp"));
+  dualBle.onConnected([](const EspBleConnection &) {
+    Serial.println("DUAL_HFP_BLE_SERVER_CONNECTED");
+  });
+  dualBle.onDisconnected([](const EspBleConnection &) {
+    Serial.println("DUAL_HFP_BLE_SERVER_DISCONNECTED");
+  });
+  EspBleConfig config;
+  config.deviceName = "EspBle Dual HFP";
+  if (!dualService.valid() || !dualCharacteristic.valid() ||
+      !dualBle.begin(config))
+    return false;
+  dualBle.advertising().setName("EspBle Dual HFP");
+  dualBle.advertising().addServiceUuid(DualHfpServiceUuid);
+  return dualBle.advertising().start();
+}
+#endif
 
 String classicAddress()
 {
@@ -80,6 +118,15 @@ void setup()
   const bool gatewayAccepted = bluetooth.hfpAudioGateway().begin();
   Serial.printf("HFP_CLIENT_EXCLUSION ag=%u error=%s\n",
     gatewayAccepted ? 1 : 0, bluetooth.lastErrorName());
+#if defined(ESPBLE_TEST_DUAL_HFP)
+  if (!startDualBleServer())
+  {
+    Serial.printf("DUAL_HFP_BLE_START_FAILED %s\n",
+      dualBle.lastErrorDetail().c_str());
+    return;
+  }
+  Serial.println("DUAL_HFP_BLE_SERVER_READY");
+#endif
   Serial.printf("HFP_CLIENT_READY address=%s\n",
     classicAddress().c_str());
 }
@@ -87,6 +134,9 @@ void setup()
 void loop()
 {
   bluetooth.update();
+#if defined(ESPBLE_TEST_DUAL_HFP)
+  dualBle.update();
+#endif
   if (!Serial.available()) { delay(1); return; }
   const String command = Serial.readStringUntil('\n');
   if (command.startsWith("c"))
@@ -123,4 +173,21 @@ void loop()
   else if (command == "h")
     Serial.printf("HFP_CLIENT_HANGUP requested=%u\n",
       bluetooth.hfpClient().rejectOrEndCall() ? 1 : 0);
+#if defined(ESPBLE_TEST_DUAL_HFP)
+  else if (command == "z")
+  {
+    espble_hci_broker_diagnostics_t diagnostics = {};
+    espble_hci_broker_get_diagnostics(&diagnostics);
+    Serial.printf(
+      "DUAL_HFP_DIAGNOSTICS acl_tx=%lu,%lu acl_rx=%lu,%lu "
+      "unknown=%lu mismatch=%lu qfull=%lu\n",
+      static_cast<unsigned long>(diagnostics.tx_acl[0]),
+      static_cast<unsigned long>(diagnostics.tx_acl[1]),
+      static_cast<unsigned long>(diagnostics.rx_acl[0]),
+      static_cast<unsigned long>(diagnostics.rx_acl[1]),
+      static_cast<unsigned long>(diagnostics.unknown_acl),
+      static_cast<unsigned long>(diagnostics.command_response_mismatch),
+      static_cast<unsigned long>(diagnostics.command_queue_full));
+  }
+#endif
 }

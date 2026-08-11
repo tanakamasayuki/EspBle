@@ -21,6 +21,7 @@ enum
   EVT_NUMBER_COMPLETED_PACKETS = 0x13,
   EVT_MODE_CHANGE = 0x14,
   EVT_DATA_BUFFER_OVERFLOW = 0x1a,
+  EVT_SYNCHRONOUS_CONNECTION_COMPLETE = 0x2c,
   EVT_ENCRYPTION_KEY_REFRESH_COMPLETE = 0x30,
   EVT_LE_META = 0x3e,
   LE_CONNECTION_COMPLETE = 0x01,
@@ -171,6 +172,8 @@ espble_hci_router_result_t espble_hci_router_track_outgoing(
 
   if (packet[0] == H4_SCO)
   {
+    if (length < 4 || (size_t)packet[3] + 4u > length)
+      return ESPBLE_HCI_ROUTER_INVALID_PACKET;
     return owner == ESPBLE_HCI_ROUTE_CLASSIC ? ESPBLE_HCI_ROUTER_OK :
       ESPBLE_HCI_ROUTER_INVALID_PACKET;
   }
@@ -193,7 +196,9 @@ espble_hci_route_t espble_hci_router_route_incoming(
       return ESPBLE_HCI_ROUTE_NONE;
     return owner_for_handle(router, read_le16(&packet[1]));
   }
-  if (packet[0] == H4_SCO) return ESPBLE_HCI_ROUTE_CLASSIC;
+  if (packet[0] == H4_SCO)
+    return length >= 4 && (size_t)packet[3] + 4u <= length
+      ? ESPBLE_HCI_ROUTE_CLASSIC : ESPBLE_HCI_ROUTE_NONE;
   if (packet[0] == H4_ISO) return ESPBLE_HCI_ROUTE_NIMBLE;
   if (!valid_event(packet, length)) return ESPBLE_HCI_ROUTE_NONE;
 
@@ -224,6 +229,13 @@ espble_hci_route_t espble_hci_router_route_incoming(
         packet[4] == 0 && !set_handle_owner(router, read_le16(&packet[5]),
           ESPBLE_HCI_ROUTE_NIMBLE)) return ESPBLE_HCI_ROUTE_NONE;
     return ESPBLE_HCI_ROUTE_NIMBLE;
+  }
+  if (event == EVT_SYNCHRONOUS_CONNECTION_COMPLETE)
+  {
+    if (packet[2] < 3) return ESPBLE_HCI_ROUTE_NONE;
+    if (packet[3] == 0 && !set_handle_owner(router, read_le16(&packet[4]),
+      ESPBLE_HCI_ROUTE_CLASSIC)) return ESPBLE_HCI_ROUTE_NONE;
+    return ESPBLE_HCI_ROUTE_CLASSIC;
   }
   if (event == EVT_DISCONNECTION_COMPLETE)
   {
