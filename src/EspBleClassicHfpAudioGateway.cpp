@@ -39,6 +39,7 @@
 #define esp_hf_ag_volume_control espble_bd_esp_hf_ag_volume_control
 #define esp_hf_ag_vra_control espble_bd_esp_hf_ag_vra_control
 #define esp_bt_gap_set_scan_mode espble_bd_esp_bt_gap_set_scan_mode
+extern "C" uint8_t espble_bd_btc_conf_hf_force_wbs;
 #include <esp_hf_ag_api.h>
 #include <esp_gap_bt_api.h>
 #else
@@ -489,6 +490,13 @@ bool EspBleClassicHfpAudioGateway::begin(
       "HFP signal strength and battery level must be in the range 0..5");
     return false;
   }
+  if (config.preferredAudioCodec != EspBleClassicAudioCodec::Msbc &&
+      config.preferredAudioCodec != EspBleClassicAudioCodec::Cvsd)
+  {
+    owner_->setError(EspBleError::InvalidArgument,
+      "HFP Audio Gateway codec must be mSBC or CVSD");
+    return false;
+  }
   if (!impl_) impl_ = new (std::nothrow) EspBleClassicHfpAudioGatewayImpl();
   if (!impl_)
   {
@@ -516,6 +524,12 @@ bool EspBleClassicHfpAudioGateway::begin(
     owner_->setError(EspBleError::InvalidState, "another HFP profile is active");
     return false;
   }
+  // Bluedroid exposes this preference as process-wide state. EspBle permits
+  // only one HFP Client or AG at a time, so changing it cannot race another
+  // profile instance. The standard +BAC/+BCS negotiation still selects the
+  // on-air codec; this only chooses the AG preference.
+  espble_bd_btc_conf_hf_force_wbs =
+    config.preferredAudioCodec == EspBleClassicAudioCodec::Msbc ? 1 : 0;
   if (esp_hf_ag_register_callback(hfpAgCallback) != ESP_OK ||
       esp_hf_ag_register_audio_data_callback(hfpAgAudioCallback) != ESP_OK ||
       esp_hf_ag_init() != ESP_OK ||

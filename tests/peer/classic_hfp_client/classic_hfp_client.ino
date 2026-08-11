@@ -150,12 +150,20 @@ void loop()
       bluetooth.hfpClient().connectAudio() ? 1 : 0);
   else if (command == "s")
   {
-    uint8_t payload[57];
-    for (size_t index = 0; index < sizeof(payload); ++index)
+    uint8_t payload[256];
+    const size_t payloadLength =
+      bluetooth.hfpClient().audioConnection().preferredFrameSize;
+    if (payloadLength == 0 || payloadLength > sizeof(payload))
+    {
+      Serial.printf("HFP_CLIENT_SEND_INVALID_FRAME frame=%u\n",
+        static_cast<unsigned>(payloadLength));
+      return;
+    }
+    for (size_t index = 0; index < payloadLength; ++index)
       payload[index] = static_cast<uint8_t>(index + 1);
     EspBleClassicHfpEncodedAudioPacket packet;
     packet.data = payload;
-    packet.length = sizeof(payload);
+    packet.length = payloadLength;
     Serial.printf("HFP_CLIENT_SEND result=%u\n",
       static_cast<unsigned>(bluetooth.hfpClient().send(packet)));
   }

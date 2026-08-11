@@ -59,6 +59,11 @@
 - (JA) 必須SLC照会の自動応答、意図的に小さい単一call model、application側telephony
   command event、raw SCO transportを持つ実験的HFP Audio Gatewayを公開した。
   Client/AGはprocess-wideで排他とし、公開API同士のmSBC payload往復を実機確認した。
+- (EN) Added Audio Gateway codec selection and verified Classic-only CVSD raw
+  SCO in both directions, including audio disconnect and reconnection within the
+  same call. mSBC remains the default.
+- (JA) Audio Gatewayのcodec選択を追加し、Classic-only CVSD raw SCOの双方向transport、
+  同一call中のaudio切断・再接続を実機確認した。既定値は引き続きmSBCである。
 - (EN) Extended experimental dual-host routing to HFP mSBC SCO alongside a
   live LE GATT connection, including synchronous-handle ownership and Classic
   voice/eSCO command policy.

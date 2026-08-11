@@ -402,6 +402,10 @@ struct EspBleClassicHfpEncodedAudioPacket
 struct EspBleClassicHfpAudioGatewayConfig
 {
   bool discoverable = true;
+  // mSBC is the normal HFP 1.6+ choice. Select Cvsd to require narrowband
+  // codec negotiation for peers and applications that need it.
+  EspBleClassicAudioCodec preferredAudioCodec =
+    EspBleClassicAudioCodec::Msbc;
   const char *operatorName = "EspBle";
   const char *subscriberNumber = "";
   bool networkAvailable = true;

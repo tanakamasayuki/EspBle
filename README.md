@@ -95,8 +95,9 @@ Client/Audio Gateway single-call control plus raw mSBC SCO transport also pass;
 dual-host mode also passes bidirectional mSBC SCO while an LE GATT connection
 remains usable during and after the audio link. It also passes A2DP encoded-media
 streaming and AVRCP playback/volume control while GATT reads remain usable before,
-during, and after the stream;
-the same API represents CVSD, which still needs interoperability coverage. The
+during, and after the stream. In Classic-only mode the Audio Gateway can select
+CVSD or mSBC, and both codecs pass raw SCO transfer on hardware; external-device
+interoperability remains. The
 two HFP roles are process-wide mutually exclusive.
 Shared-command scheduling now
 uses a broker-owned FIFO and controller command credits. The broker stops the

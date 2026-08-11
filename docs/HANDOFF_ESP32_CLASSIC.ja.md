@@ -32,6 +32,7 @@ dual-hostでもBLE GATT接続中のmSBC SCO双方向転送、A2DP encode済みme
 | AVRCP CT/TG | 接続、remote feature、passthrough送受信、metadata/play-status要求と応答event、absolute volumeとone-shot通知を公開API化。A2DP併用でPlayと音量変更を実機確認 |
 | HFP Client | SLC、発信/応答/終了等のcall control、call/volume/AT event、CVSD/mSBC raw SCO送受信、bad-frame、packet statisticsを公開API化。ESP32 AG probeとmSBC双方向転送を確認 |
 | HFP Audio Gateway | CIND/COPS/CNUM/CLCC自動応答、単一call model、application command event、CVSD/mSBC raw SCO送受信を公開API化。公開Clientとの発信・mSBC往復とClient/AG process-wide排他を確認 |
+| Classic-only HFP CVSD | AGの`preferredAudioCodec`でCVSDを選択。120-byte raw SCO viewの双方向transport、audio切断・再接続を公開Client/AG間で確認 |
 | dual-host HFP | BLE GATT接続中のSLC、発信、mSBC SCO双方向payload、SCO中・切断後のGATT readを確認。Voice Setting/eSCO command policy、BD_ADDR指定command、SCO handle ownershipを実装 |
 | dual-host A2DP / AVRCP | BLE GATT接続中にSBC media、Play、absolute volume、stream中・切断後のGATT readを確認。ESP A2DP coexistence command `0xfc82`をClassic radio policyへ分類 |
 | dual-host HCI routing | Command Complete/Status、LE/BR-EDR handle、ACL、切断、Completed Packetsをrouting |
@@ -66,9 +67,9 @@ dual-hostでもBLE GATT接続中のmSBC SCO双方向転送、A2DP encode済みme
 4. **完了:** A2DP Sourceのencoded media copy送信と`WouldBlock` backpressureを公開API化し、100 packetを実機確認した。
 5. **基本操作完了:** AVRCP CT/TGのpassthroughとabsolute volumeをA2DP接続上で実機確認した。公開TG APIに
    metadata / play-status応答送信がないため、Controller側応答eventは外部Targetとの相互運用確認を残す。
-6. **完了:** HFP Clientのcontrol / Voice over HCI transportを実装し、mSBCで実機確認した。
+6. **完了:** HFP Clientのcontrol / Voice over HCI transportを実装し、mSBC/CVSDで実機確認した。
 7. **基本完了:** HFP AGを公開API化し、Client/AGのruntime排他、発信、着信、応答、終了、call active、
-   mSBC往復を実機確認した。外部HFP機器との相互運用は残す。
+   mSBC/CVSD往復とCVSD SCO再接続を実機確認した。外部HFP機器との相互運用は残す。
 8. codec/PCM/device処理はEspBleへ入れず、`../PCMFlowBluetooth/SPEC.ja.md`を契約として
    独立libraryを並行実装する。PCMFlow coreの既存`PCMSource`/`PCMSink`を再利用する。
 
@@ -125,6 +126,9 @@ uv run --env-file .env pytest -s peer/dual_host_rpa/ \
   --profile esp32_peer_host --peer-profile device:esp32_peer_device
 
 uv run --env-file .env pytest -s peer/classic_a2dp_media/ \
+  --profile esp32_peer_host --peer-profile device:esp32_peer_device
+
+uv run --env-file .env pytest --clean -s peer/classic_hfp_cvsd/ \
   --profile esp32_peer_host --peer-profile device:esp32_peer_device
 
 uv run --env-file .env pytest --clean -s peer/dual_host_hfp/ \

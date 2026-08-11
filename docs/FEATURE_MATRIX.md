@@ -126,7 +126,7 @@ Classic-only Bluedroid host. Dual-host support remains experimental and its rele
 |---|---|---|
 | Bluetooth Classic (BR/EDR) in general | ⚠️ | Original-ESP32 Classic-only opt-in; unsupported on other SoCs |
 | A2DP (audio streaming) | ⚠️ | Sink/Source SBC negotiation and encoded-payload transport; codec/PCM/device I/O stays in another library |
-| HFP (hands-free) | ⚠️ | Client/Audio Gateway SLC, outgoing/incoming/answer/end, CVSD/mSBC raw SCO APIs, and role exclusion are implemented; mSBC is hardware-verified, while CVSD, multi-call, and external-device interoperability remain |
+| HFP (hands-free) | ⚠️ | Client/Audio Gateway SLC, outgoing/incoming/answer/end, selectable CVSD/mSBC raw SCO, and role exclusion are implemented; both codecs are hardware-verified, while multi-call and external-device interoperability remain |
 | AVRCP (media control) | ⚠️ | CT/TG passthrough, metadata/play-status requests, and absolute volume; external-target metadata interoperability remains |
 | SPP (Serial Port Profile) | ⚠️ | Classic-only Server/Client transport verified on hardware. Use NUS or similar on BLE |
 | Classic HID (BT HID) | ⚠️ | Classic-only generic Device/Host verified on hardware. Use HOGP on BLE |

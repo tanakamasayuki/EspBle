@@ -64,6 +64,11 @@ ESPBLE_CLASSIC_HOST_BUILD_DIR="$work_dir/build" \
 6. 全global defined symbolが名前空間化されたことと必須profile symbolを検査し、size、symbol数、
    SHA-256を表示する。
 
+必須symbolにはHFP AGのcodec preferenceを保持する名前空間化済み
+`espble_bd_btc_conf_hf_force_wbs`も含む。ESP-IDFの公開AG APIにはcodec選択関数がないため、EspBleの
+`preferredAudioCodec`はこのprocess-wide設定をSLC前に切り替え、その後は標準`+BAC/+BCS` negotiationへ委ねる。
+Client/AGはprocess-wideで排他なので、別HFP roleとの競合は発生しない。
+
 FreeRTOS、NVS、timer、loggingなどarchiveが参照するundefined symbolは変換しません。これらは
 Arduino-ESP32から解決します。archive自身が定義するsymbolだけを名前空間化することで、core内蔵の
 Bluedroidと衝突せず、独自host APIが誤ってcore側へ解決されることを防ぎます。

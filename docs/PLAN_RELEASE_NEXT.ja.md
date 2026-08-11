@@ -47,7 +47,7 @@ Gate Aの詳細は[引き継ぎ](HANDOFF_ESP32_CLASSIC.ja.md)を正とします�
 | 完了 | A2DP Sink transport | SBC codec設定、接続・stream状態、callback限定raw view、停止barrierを実装し、ESP32同士で実機転送 |
 | 完了 | A2DP Source transport | 固定SBC endpoint、copy送信、MTU検査、`WouldBlock` retryを実装し、100 packetを欠損なく実機転送 |
 | 一部完了 | AVRCP CT/TG | passthrough、absolute volume、通知をA2DP併用で実機確認。metadata/play-status受信は外部Targetとの相互運用を残す |
-| 一部完了 | HFP | Client/Audio GatewayのSLC、発信・着信・応答・終了、mSBC raw SCO transport、packet statistics、role排他を実機確認。外部機器相互運用を残す |
+| 一部完了 | HFP | Client/Audio GatewayのSLC、発信・着信・応答・終了、選択可能なmSBC/CVSD raw SCO transport、packet statistics、role排他を実機確認。外部機器相互運用を残す |
 | 完了 | dual-host Audio基本回帰 | BLE GATT接続を維持してHFP mSBC SCO、A2DP SBC media、AVRCP Play / absolute volumeを実行し、各link中・切断後のGATT readとbroker異常0を確認 |
 | 未完了 | board matrix | workflowで対象boardを再生成し、次回versionのBOARDS文書を確定 |
 | 未完了 | core matrix | Arduino-ESP32対応versionを再検証し、次回versionのCOMPATIBILITY文書を確定 |

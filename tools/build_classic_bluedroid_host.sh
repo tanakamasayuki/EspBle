@@ -142,7 +142,8 @@ for symbol in \
   espble_bd_esp_hf_ag_pkt_stat_nums_get \
   espble_bd_esp_hf_ag_audio_buff_alloc \
   espble_bd_esp_hf_ag_audio_buff_free \
-  espble_bd_esp_hf_ag_audio_data_send; do
+  espble_bd_esp_hf_ag_audio_data_send \
+  espble_bd_btc_conf_hf_force_wbs; do
   if ! grep -Fxq "$symbol" "$defined_symbols"; then
     echo "generated archive is missing $symbol" >&2
     exit 1

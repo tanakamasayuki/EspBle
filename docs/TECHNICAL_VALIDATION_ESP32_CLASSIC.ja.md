@@ -25,6 +25,9 @@ HFPについてもdual-host実機検証を追加し、BLE GATT接続を維持し
 追加し、BD_ADDR指定commandとhandle指定commandを分離した。同期接続完了eventからSCO handleをClassic所有として
 登録するため、共通Disconnectも正しいhostへ限定できる。
 
+Classic-only HFPではAGのcodec preferenceを公開設定へ追加し、CVSDを実機確認した。標準codec negotiation後に
+両roleでCVSDと推奨120-byte frameを観測し、raw SCOの双方向送信、切断、同一call中の再接続が成立した。
+
 A2DP/AVRCPについてもdual-host実機検証を追加した。BLE GATT接続を維持してSBC encode済みmediaを転送し、
 AVRCP Playとabsolute volumeを操作した。stream前・中・切断後のGATT readが成立し、brokerのunknown ACL、
 command response mismatch、queue fullはいずれも0だった。A2DP状態遷移でBluedroidが送るESP固有coexistence
@@ -52,6 +55,7 @@ command `0xfc82`をClassic radio scopeへ分類した。
 | dual-host異常report / peer消失 | null・上限超過reportを接続維持のまま拒否し、peer突然再起動後にbond済みBLEとClassic HIDを復旧 |
 | dual-host接続 / pairing失敗 | 誤passkey後にbondなしで再pairing。HID非同期接続失敗後も暗号化LEを維持してClassic再接続 |
 | dual-host HFP / SCO | BLE GATT接続中のSLC、発信、mSBC SCO双方向、SCO中・切断後のGATT read。`unknown=0 mismatch=0 qfull=0` |
+| Classic-only HFP CVSD | AGでCVSDを選択し、Client/AG両側の120-byte raw SCO view、双方向send、同一call中のSCO再接続を確認 |
 | dual-host A2DP / AVRCP | BLE GATT接続中のSBC media、Play、absolute volume、stream中・切断後のGATT read。ESP coexistence commandを配送しbroker異常0 |
 | Classic callback参照寿命 | SPP/HID targetの登録mutex・参照数barrierを追加し、全停止順とdestructor順をclean実機回帰 |
 | Classic archive clean再現 | cleanなIDF v5.5.5 / GCC 14.2.0から生成し、格納済み`.a`とbyte単位・SHA-256一致 |
@@ -519,6 +523,26 @@ Clientから終了までを続けて確認した。call開始・終了に追従�
 AGで実際に使用するSLC/audio、必須照会応答、call report、volume/voice recognition、allocator/free/send、
 packet statisticsをarchiveの最終linkと必須symbol検査へ追加した。ESP-IDF v5.5.5 / GCC 14.2.0で生成した
 一時archiveは格納済みarchiveとbyte単位で一致し、SHA-256も変わらなかった。
+
+## 2026-08-11 HFP CVSD checkpoint
+
+ESP-IDF v5.5.5の公開HFP AG APIにはcodec選択関数がないが、BluedroidのAG実装は
+`btc_conf_hf_force_wbs`をSLC時のcodec preferenceとして使い、peerの`AT+BAC`を受けた後に
+`BTA_AgSetCodec(CVSD/MSBC)`を呼ぶ。名前空間化済みarchiveには
+`espble_bd_btc_conf_hf_force_wbs`が存在するため、`EspBleClassicHfpAudioGatewayConfig`へ
+`preferredAudioCodec`を追加し、AG初期化前にこの値を設定する。選択後の手順はprivate AT処理ではなく、
+既存Bluedroidの標準`+BAC/+BCS` negotiationである。既定値は従来どおりmSBCとした。
+
+ESP32-D0WD-V3 2台の公開Client/AG fixtureでCVSDを選択すると、両側でcodec `Cvsd`、同期handle 384、
+`preferredFrameSize=120`が通知された。Client/AGの受信callbackはいずれも120-byte viewを受け取り、両方向の
+`send()`が受理された。SCOだけを切断してcall/SLCを維持し、Clientから再接続すると再びCVSDと120-byte frameが
+選ばれ、双方向transportを再開できた。初回・再接続後の両方でpacket statisticsの正常受信と送信を確認し、
+送信discardはなかった。120 byteはcontroller/connection条件による観測値であり、公開APIの
+固定値にはしない。送信fixtureもmSBCの57 byte固定をやめ、接続eventの`preferredFrameSize`を使うよう変更した。
+
+同じ変更で既定mSBC fixtureをclean実機回帰し、mSBC 57-byte送信、58/60-byte receive view、call control、
+packet statisticsが従来どおり成立した。archive本体は既に必要globalを含むため差し替え不要で、生成scriptの
+必須symbol検査へ同globalを追加した。
 
 ## 2026-08-11 dual-host A2DP / AVRCP checkpoint
 

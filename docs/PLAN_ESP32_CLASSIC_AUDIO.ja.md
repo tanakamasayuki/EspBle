@@ -120,7 +120,8 @@ A2DPが選択するAVRCPは有効にするが、最初のarchiveでは不要なc
 5. **完了:** HFP ClientをVoice over HCI / external codecで追加し、SLC、発信、call state、mSBC
    双方向raw payload、bad-frame、packet statistics、audio切断をESP32同士で確認した。
 6. **完了:** HFP Audio Gatewayを同じtransport APIへ追加し、Client/AGのprocess-wide runtime排他、
-   自動SLC応答、発信、call state、mSBC双方向payloadをESP32同士で検証した。
+   自動SLC応答、発信、call state、mSBC双方向payloadをESP32同士で検証した。AG設定でmSBC/CVSDを選択可能にし、
+   CVSD双方向payload、SCO切断・再接続も確認した。
 7. **仕様確定・実装待ち:** `PCMFlowBluetooth`でexternal SBC/mSBC/CVSD codecとA2DP/HFP adapterを提供する。device出力は
    固定せず、PCMSource/PCMSink境界までを提供する。
 8. **一部完了:** EspBle側にA2DP Sink raw media exampleを追加した。PCMFlowBluetooth側にはEspBleとのintegration exampleを置く。
@@ -172,6 +173,11 @@ Clientから57 byteを送るとAG受信viewは58 byteとなり、追加byteは0�
 AGが57 byteへ戻して送信するとClient受信viewは60 byteになった。無音・欠落時には60 byteの
 `badFrame=true`も届く。したがってadapterはview全体を一つのmSBC frameと誤認せず、57 byte frameを
 切り出して末尾paddingを捨て、`badFrame`時はpayload内容ではなくPLCへ進める。
+
+同日のCVSD probeではAGの`preferredAudioCodec=Cvsd`から標準`+BAC/+BCS` negotiationを通し、両roleで
+CVSD、推奨送信frame 120 byteが選択された。120-byte受信viewと双方向sendを確認し、SCO切断後に同一callのまま
+再接続してもCVSDと120-byte frameが再設定された。この値はESP32同士の観測値であり固定仕様にはせず、adapterは
+接続eventのcodec、handle、`preferredFrameSize`が変わるたびにcodec stateとqueueをresetする。
 
 ## PCMFlowBluetoothへの引き継ぎ
 

@@ -126,7 +126,7 @@ Classic-only Bluedroid hostをopt-inで利用できます。dual-hostは技術�
 |---|---|---|
 | Bluetooth Classic（BR/EDR）全般 | ⚠️ | 無印ESP32のClassic-only opt-in。その他SoCは非対応 |
 | A2DP（オーディオストリーミング） | ⚠️ | Sink/SourceのSBC negotiationとencode済みpayload transport。codec/PCM/device I/Oは別library |
-| HFP（ハンズフリー） | ⚠️ | Client/Audio GatewayのSLC、発信・着信・応答・終了、CVSD・mSBC raw SCO API、role排他を実装。mSBCを実機確認済み。CVSD、複数call、外部機器相互運用は未確認 |
+| HFP（ハンズフリー） | ⚠️ | Client/Audio GatewayのSLC、発信・着信・応答・終了、CVSD・mSBC raw SCO API、AG codec選択、role排他を実装。両codecを実機確認済み。複数call、外部機器相互運用は未確認 |
 | AVRCP（メディア操作） | ⚠️ | CT/TG passthrough、metadata/play-status要求、absolute volume。metadata応答の外部Target相互運用は未完了 |
 | SPP（Serial Port Profile） | ⚠️ | Classic-onlyでServer/Client transportを実機確認。BLEではNUS等で代替 |
 | Classic HID（BT HID） | ⚠️ | Classic-onlyでgeneric Device/Hostを実機確認。BLEではHOGP |

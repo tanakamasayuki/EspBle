@@ -84,6 +84,8 @@ void setup()
   });
   gateway.onAudioConnectionChanged(
     [](const EspBleClassicHfpAudioConnection &event) {
+      if (event.state == EspBleClassicHfpAudioState::Disconnected)
+        audioEchoed = false;
       Serial.printf("HFP_AG_AUDIO state=%u codec=%u handle=%u frame=%u\n",
         static_cast<unsigned>(event.state), static_cast<unsigned>(event.codec),
         event.id, event.preferredFrameSize);
@@ -129,19 +131,24 @@ void setup()
     uint32_t checksum = 0;
     for (size_t index = 0; index < view.length; ++index)
       checksum += view.data[index];
-    Serial.printf("HFP_AG_MEDIA handle=%u len=%u bad=%u checksum=%lu\n",
+    Serial.printf(
+      "HFP_AG_MEDIA handle=%u len=%u bad=%u checksum=%lu codec=%u\n",
       view.connectionId, view.length, view.badFrame ? 1 : 0,
-      static_cast<unsigned long>(checksum));
+      static_cast<unsigned long>(checksum), static_cast<unsigned>(view.codec));
     if (audioEchoed) return;
     audioEchoed = true;
     EspBleClassicHfpEncodedAudioPacket packet;
     packet.data = view.data;
-    packet.length = min(view.length, static_cast<size_t>(57));
+    packet.length = min(view.length, static_cast<size_t>(
+      gateway.audioConnection().preferredFrameSize));
     const auto result = gateway.send(packet);
     Serial.printf("HFP_AG_SEND result=%u\n", static_cast<unsigned>(result));
   });
 
   EspBleClassicHfpAudioGatewayConfig gatewayConfig;
+#if defined(ESPBLE_TEST_HFP_CVSD)
+  gatewayConfig.preferredAudioCodec = EspBleClassicAudioCodec::Cvsd;
+#endif
   gatewayConfig.operatorName = "EspBle";
   gatewayConfig.subscriberNumber = "5550000";
   if (!gateway.begin(gatewayConfig))
