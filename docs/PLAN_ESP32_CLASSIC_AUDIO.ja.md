@@ -119,7 +119,8 @@ A2DPが選択するAVRCPは有効にするが、最初のarchiveでは不要なc
    ESP-IDF公開TG APIにmetadata / play-status応答送信がないため、その受信は外部Targetとの相互運用で確認する。
 5. **完了:** HFP ClientをVoice over HCI / external codecで追加し、SLC、発信、call state、mSBC
    双方向raw payload、bad-frame、packet statistics、audio切断をESP32同士で確認した。
-6. HFP AGを同じtransport APIへ追加する。Client/AGのruntime排他を検証する。
+6. **完了:** HFP Audio Gatewayを同じtransport APIへ追加し、Client/AGのprocess-wide runtime排他、
+   自動SLC応答、発信、call state、mSBC双方向payloadをESP32同士で検証した。
 7. **仕様確定・実装待ち:** `PCMFlowBluetooth`でexternal SBC/mSBC/CVSD codecとA2DP/HFP adapterを提供する。device出力は
    固定せず、PCMSource/PCMSink境界までを提供する。
 8. **一部完了:** EspBle側にA2DP Sink raw media exampleを追加した。PCMFlowBluetooth側にはEspBleとのintegration exampleを置く。
@@ -175,7 +176,7 @@ AGが57 byteへ戻して送信するとClient受信viewは60 byteになった。
 `../PCMFlowBluetooth/SPEC.ja.md`を作成済みで、初期releaseのA2DP Sinkは実装開始可能である。
 公開責務、API、queue、thread、callback lifetime、SBC backend候補、完了条件を確定し、EspBleの実機probeで
 codec configuration、encoded frame境界、buffer寿命、停止時callback保証を確認して反映した。HFPのSCO
-payload境界は後続phaseで追記し、初期A2DP Sink実装を止めない。
+payload境界も公開Client/AG実機probe後に追記済みで、mSBC/CVSD adapterを独立phaseとして実装開始できる。
 
 要件書には、EspBle / PCMFlowBluetooth / PCMFlow / device libraryの責務、公開classと依存方向、
 SBC・mSBC・CVSD backendの選定とlicense、buffering/backpressure、heap/stack上限、thread/callback規約、

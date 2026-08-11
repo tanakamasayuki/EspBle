@@ -399,6 +399,36 @@ struct EspBleClassicHfpEncodedAudioPacket
   size_t length = 0;
 };
 
+struct EspBleClassicHfpAudioGatewayConfig
+{
+  bool discoverable = true;
+  const char *operatorName = "EspBle";
+  const char *subscriberNumber = "";
+  bool networkAvailable = true;
+  uint8_t signalStrength = 5;
+  bool roaming = false;
+  uint8_t batteryLevel = 5;
+};
+
+enum class EspBleClassicHfpAudioGatewayCommandType : uint8_t
+{
+  Dial,
+  Answer,
+  Hangup,
+  Dtmf,
+  VoiceRecognition,
+  NoiseReduction,
+  UnknownAt,
+};
+
+struct EspBleClassicHfpAudioGatewayCommand
+{
+  EspBleClassicHfpAudioGatewayCommandType type =
+    EspBleClassicHfpAudioGatewayCommandType::Dial;
+  String value;
+  bool enabled = false;
+};
+
 enum class EspBleClassicHidReportType : uint8_t
 {
   Input = 1,
@@ -445,6 +475,7 @@ struct EspBleClassicA2dpSinkImpl;
 struct EspBleClassicA2dpSourceImpl;
 struct EspBleClassicAvrcpImpl;
 struct EspBleClassicHfpClientImpl;
+struct EspBleClassicHfpAudioGatewayImpl;
 class EspBleClassic;
 
 class EspBleClassicA2dpSink
@@ -701,6 +732,86 @@ private:
   PacketStatisticsCallback packetStatisticsCallback_;
 };
 
+class EspBleClassicHfpAudioGateway
+{
+public:
+  using ConnectionCallback =
+    std::function<void(const EspBleClassicHfpConnection &)>;
+  using AudioConnectionCallback =
+    std::function<void(const EspBleClassicHfpAudioConnection &)>;
+  using CallStateCallback =
+    std::function<void(const EspBleClassicHfpCallState &)>;
+  using CommandCallback =
+    std::function<void(const EspBleClassicHfpAudioGatewayCommand &)>;
+  using VolumeCallback = std::function<void(const EspBleClassicHfpVolume &)>;
+  using PacketStatisticsCallback =
+    std::function<void(const EspBleClassicHfpPacketStatistics &)>;
+  // Runs in the Bluetooth host callback context. Copy view.data before return.
+  using AudioCallback =
+    std::function<void(const EspBleClassicHfpEncodedAudioView &)>;
+
+  bool begin(
+    const EspBleClassicHfpAudioGatewayConfig &config =
+      EspBleClassicHfpAudioGatewayConfig());
+  void end();
+  bool initialized() const;
+  bool connect(const char *address);
+  bool disconnect();
+  bool connected() const;
+  bool serviceLevelConnected() const;
+  EspBleClassicHfpConnection connection() const;
+
+  bool connectAudio();
+  bool disconnectAudio();
+  bool audioConnected() const;
+  EspBleClassicHfpAudioConnection audioConnection() const;
+  // The ownership and delivery semantics match EspBleClassicHfpClient::send().
+  EspBleClassicAudioSendResult send(
+    const EspBleClassicHfpEncodedAudioPacket &packet);
+  bool requestPacketStatistics();
+
+  bool setNetworkStatus(
+    bool available, uint8_t signalStrength,
+    bool roaming, uint8_t batteryLevel);
+  bool respondToCommand(bool accepted, uint16_t extendedError = 0);
+  bool respondToUnknownAt(const char *response);
+  bool reportIncomingCall(const char *number);
+  bool reportOutgoingCall(const char *number);
+  bool reportCallActive();
+  bool reportCallEnded();
+  bool setVolume(EspBleClassicHfpVolumeTarget target, uint8_t value);
+  bool setVoiceRecognition(bool enabled);
+  EspBleClassicHfpCallState callState() const;
+  EspBleClassicHfpCurrentCall currentCall() const;
+
+  void onConnectionChanged(ConnectionCallback callback);
+  void onAudioConnectionChanged(AudioConnectionCallback callback);
+  void onCallStateChanged(CallStateCallback callback);
+  void onCommand(CommandCallback callback);
+  void onVolumeChanged(VolumeCallback callback);
+  void onPacketStatistics(PacketStatisticsCallback callback);
+  // Replacement and removal wait for callbacks already in progress. Do not
+  // call onAudio() or end() from inside the audio callback.
+  void onAudio(AudioCallback callback);
+  size_t droppedEventCount() const;
+
+private:
+  friend class EspBleClassic;
+  friend struct EspBleClassicHfpAudioGatewayImpl;
+  explicit EspBleClassicHfpAudioGateway(EspBleClassic *owner);
+  ~EspBleClassicHfpAudioGateway();
+  void update();
+
+  EspBleClassic *owner_;
+  EspBleClassicHfpAudioGatewayImpl *impl_ = nullptr;
+  ConnectionCallback connectionCallback_;
+  AudioConnectionCallback audioConnectionCallback_;
+  CallStateCallback callStateCallback_;
+  CommandCallback commandCallback_;
+  VolumeCallback volumeCallback_;
+  PacketStatisticsCallback packetStatisticsCallback_;
+};
+
 class EspBleClassicSpp
 {
 public:
@@ -871,6 +982,7 @@ public:
   EspBleClassicA2dpSource &a2dpSource();
   EspBleClassicAvrcp &avrcp();
   EspBleClassicHfpClient &hfpClient();
+  EspBleClassicHfpAudioGateway &hfpAudioGateway();
 
   EspBleError lastError() const;
   const char *lastErrorName() const;
@@ -884,6 +996,7 @@ private:
   friend class EspBleClassicA2dpSource;
   friend class EspBleClassicAvrcp;
   friend class EspBleClassicHfpClient;
+  friend class EspBleClassicHfpAudioGateway;
 
   void clearError();
   void setError(EspBleError error, const char *detail);
@@ -896,6 +1009,7 @@ private:
   EspBleClassicA2dpSource a2dpSource_;
   EspBleClassicAvrcp avrcp_;
   EspBleClassicHfpClient hfpClient_;
+  EspBleClassicHfpAudioGateway hfpAudioGateway_;
   EspBleError lastError_ = EspBleError::None;
   String lastErrorDetail_;
 };

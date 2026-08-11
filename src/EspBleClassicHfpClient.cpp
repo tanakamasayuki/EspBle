@@ -1,4 +1,5 @@
 #include "EspBleClassic.h"
+#include "EspBleClassicHfpInternal.h"
 
 #include <atomic>
 #include <cstring>
@@ -172,8 +173,13 @@ private:
 
 bool activateHfpClient(EspBleClassicHfpClientImpl *impl)
 {
+  if (!espBleClassicAcquireHfpProfile(impl)) return false;
   std::lock_guard<std::mutex> lock(hfpClientTargetMutex);
-  if (activeHfpClient.load(std::memory_order_relaxed)) return false;
+  if (activeHfpClient.load(std::memory_order_relaxed))
+  {
+    espBleClassicReleaseHfpProfile(impl);
+    return false;
+  }
   activeHfpClient.store(impl, std::memory_order_release);
   return true;
 }
@@ -186,6 +192,7 @@ void deactivateHfpClient(EspBleClassicHfpClientImpl *impl)
       activeHfpClient.store(nullptr, std::memory_order_release);
   }
   while (impl->callbackUsers.load(std::memory_order_acquire) != 0) delay(1);
+  espBleClassicReleaseHfpProfile(impl);
 }
 
 bool hfpInitSucceeded(esp_hf_prof_state_t state)
@@ -454,7 +461,7 @@ bool EspBleClassicHfpClient::begin()
     std::lock_guard<std::mutex> lock(impl_->mutex);
     impl_->requested = false;
     owner_->setError(EspBleError::InvalidState,
-      "another HFP Client profile is active");
+      "another HFP profile is active");
     return false;
   }
   if (esp_hf_client_register_callback(hfpClientCallback) != ESP_OK ||

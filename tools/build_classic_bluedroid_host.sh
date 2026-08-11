@@ -120,6 +120,28 @@ for symbol in \
   espble_bd_esp_hf_client_audio_buff_free \
   espble_bd_esp_hf_client_audio_data_send \
   espble_bd_esp_hf_ag_register_audio_data_callback \
+  espble_bd_esp_hf_ag_register_callback \
+  espble_bd_esp_hf_ag_init \
+  espble_bd_esp_hf_ag_deinit \
+  espble_bd_esp_hf_ag_slc_connect \
+  espble_bd_esp_hf_ag_slc_disconnect \
+  espble_bd_esp_hf_ag_audio_connect \
+  espble_bd_esp_hf_ag_audio_disconnect \
+  espble_bd_esp_hf_ag_vra_control \
+  espble_bd_esp_hf_ag_volume_control \
+  espble_bd_esp_hf_ag_unknown_at_send \
+  espble_bd_esp_hf_ag_cmee_send \
+  espble_bd_esp_hf_ag_ciev_report \
+  espble_bd_esp_hf_ag_cind_response \
+  espble_bd_esp_hf_ag_cops_response \
+  espble_bd_esp_hf_ag_clcc_response \
+  espble_bd_esp_hf_ag_cnum_response \
+  espble_bd_esp_hf_ag_answer_call \
+  espble_bd_esp_hf_ag_out_call \
+  espble_bd_esp_hf_ag_end_call \
+  espble_bd_esp_hf_ag_pkt_stat_nums_get \
+  espble_bd_esp_hf_ag_audio_buff_alloc \
+  espble_bd_esp_hf_ag_audio_buff_free \
   espble_bd_esp_hf_ag_audio_data_send; do
   if ! grep -Fxq "$symbol" "$defined_symbols"; then
     echo "generated archive is missing $symbol" >&2

@@ -77,6 +77,9 @@ void setup()
       bluetooth.lastErrorName(), bluetooth.lastErrorDetail().c_str());
     return;
   }
+  const bool gatewayAccepted = bluetooth.hfpAudioGateway().begin();
+  Serial.printf("HFP_CLIENT_EXCLUSION ag=%u error=%s\n",
+    gatewayAccepted ? 1 : 0, bluetooth.lastErrorName());
   Serial.printf("HFP_CLIENT_READY address=%s\n",
     classicAddress().c_str());
 }
@@ -114,4 +117,10 @@ void loop()
     Serial.printf("HFP_CLIENT_AUDIO_DISCONNECT requested=%u\n",
       bluetooth.hfpClient().disconnectAudio() ? 1 : 0);
   }
+  else if (command == "n")
+    Serial.printf("HFP_CLIENT_ANSWER requested=%u\n",
+      bluetooth.hfpClient().answerCall() ? 1 : 0);
+  else if (command == "h")
+    Serial.printf("HFP_CLIENT_HANGUP requested=%u\n",
+      bluetooth.hfpClient().rejectOrEndCall() ? 1 : 0);
 }

@@ -52,6 +52,13 @@
 - (JA) 無印ESP32向け実験的HFP Client transportを追加。SLCとcall control、CVSD/mSBCの
   Voice-over-HCI view/copy送信、bad-frame、packet statisticsを公開し、ESP32 2台の
   テスト用Audio Gatewayとの間でmSBC negotiationと同期payload往復を確認した。
+- (EN) Added a public experimental HFP Audio Gateway with automatic mandatory
+  SLC query responses, a deliberately small single-call model, application-side
+  telephony command events, raw SCO transport, and process-wide Client/AG
+  exclusion. The public Client and Gateway exchange mSBC payloads on hardware.
+- (JA) 必須SLC照会の自動応答、意図的に小さい単一call model、application側telephony
+  command event、raw SCO transportを持つ実験的HFP Audio Gatewayを公開した。
+  Client/AGはprocess-wideで排他とし、公開API同士のmSBC payload往復を実機確認した。
 
 ## 1.2.0
 - (EN) Added support for the original ESP32. Its Arduino-ESP32 prebuilt libraries

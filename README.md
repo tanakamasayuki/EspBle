@@ -91,8 +91,9 @@ Classic first on a BTDM controller and then attaches bundled NimBLE. Classic HID
 traffic together with an LE connection, repeated GATT reads, and bidirectional HID
 traffic afterwards has passed hardware tests. In Classic-only mode, encoded A2DP
 Sink/Source media transport, AVRCP playback/absolute-volume control, and HFP
-Client call control plus raw CVSD/mSBC SCO transport also pass. A public HFP
-Audio Gateway remains planned.
+Client/Audio Gateway single-call control plus raw mSBC SCO transport also pass;
+the same API represents CVSD, which still needs interoperability coverage. The
+two HFP roles are process-wide mutually exclusive.
 Shared-command scheduling now
 uses a broker-owned FIFO and controller command credits. The broker stops the
 controller after the final host leaves, independent of host destruction order;

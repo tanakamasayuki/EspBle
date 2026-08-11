@@ -202,5 +202,46 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_hf_ag_register_audio_data_callback(
         hf_ag_audio_callback));
     ESP_ERROR_CHECK(esp_hf_ag_init());
-    ESP_ERROR_CHECK(esp_hf_ag_audio_data_send(0, NULL));
+    ESP_ERROR_CHECK(esp_hf_ag_slc_connect(peer));
+    ESP_ERROR_CHECK(esp_hf_ag_audio_connect(peer));
+    ESP_ERROR_CHECK(esp_hf_ag_vra_control(peer, ESP_HF_VR_STATE_ENABLED));
+    ESP_ERROR_CHECK(esp_hf_ag_volume_control(
+        peer, ESP_HF_VOLUME_CONTROL_TARGET_SPK, 8));
+    ESP_ERROR_CHECK(esp_hf_ag_unknown_at_send(peer, NULL));
+    ESP_ERROR_CHECK(esp_hf_ag_cmee_send(
+        peer, ESP_HF_AT_RESPONSE_CODE_OK, ESP_HF_CME_AG_FAILURE));
+    ESP_ERROR_CHECK(esp_hf_ag_ciev_report(
+        peer, ESP_HF_IND_TYPE_SIGNAL, 5));
+    ESP_ERROR_CHECK(esp_hf_ag_cind_response(peer,
+        ESP_HF_CALL_STATUS_NO_CALLS, ESP_HF_CALL_SETUP_STATUS_IDLE,
+        ESP_HF_NETWORK_STATE_AVAILABLE, 5, ESP_HF_ROAMING_STATUS_INACTIVE,
+        5, ESP_HF_CALL_HELD_STATUS_NONE));
+    ESP_ERROR_CHECK(esp_hf_ag_cops_response(peer, "EspBle"));
+    ESP_ERROR_CHECK(esp_hf_ag_cnum_response(peer, "123", 0x81,
+        ESP_HF_SUBSCRIBER_SERVICE_TYPE_VOICE));
+    ESP_ERROR_CHECK(esp_hf_ag_clcc_response(peer, 0,
+        ESP_HF_CURRENT_CALL_DIRECTION_OUTGOING,
+        ESP_HF_CURRENT_CALL_STATUS_ACTIVE, ESP_HF_CURRENT_CALL_MODE_VOICE,
+        ESP_HF_CURRENT_CALL_MPTY_TYPE_SINGLE, NULL,
+        ESP_HF_CALL_ADDR_TYPE_UNKNOWN));
+    ESP_ERROR_CHECK(esp_hf_ag_answer_call(peer, 1, 0,
+        ESP_HF_CALL_STATUS_CALL_IN_PROGRESS, ESP_HF_CALL_SETUP_STATUS_IDLE,
+        "123", ESP_HF_CALL_ADDR_TYPE_UNKNOWN));
+    ESP_ERROR_CHECK(esp_hf_ag_out_call(peer, 1, 0,
+        ESP_HF_CALL_STATUS_CALL_IN_PROGRESS, ESP_HF_CALL_SETUP_STATUS_IDLE,
+        "123", ESP_HF_CALL_ADDR_TYPE_UNKNOWN));
+    ESP_ERROR_CHECK(esp_hf_ag_end_call(peer, 0, 0,
+        ESP_HF_CALL_STATUS_NO_CALLS, ESP_HF_CALL_SETUP_STATUS_IDLE,
+        "123", ESP_HF_CALL_ADDR_TYPE_UNKNOWN));
+    ESP_ERROR_CHECK(esp_hf_ag_pkt_stat_nums_get(0));
+    esp_hf_audio_buff_t *hf_ag_audio = esp_hf_ag_audio_buff_alloc(1);
+    if (hf_ag_audio != NULL) {
+        hf_ag_audio->data[0] = 0;
+        hf_ag_audio->data_len = 1;
+        ESP_ERROR_CHECK(esp_hf_ag_audio_data_send(0, hf_ag_audio));
+    }
+    esp_hf_ag_audio_buff_free(NULL);
+    ESP_ERROR_CHECK(esp_hf_ag_audio_disconnect(peer));
+    ESP_ERROR_CHECK(esp_hf_ag_slc_disconnect(peer));
+    ESP_ERROR_CHECK(esp_hf_ag_deinit());
 }

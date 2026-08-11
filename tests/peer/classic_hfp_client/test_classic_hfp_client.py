@@ -3,6 +3,8 @@ import re
 
 def test_hfp_client_control_and_external_codec_audio(dut, peers):
     peer = peers["device"]
+    dut.expect_exact("HFP_CLIENT_EXCLUSION ag=0 error=InvalidState", timeout=30)
+    peer.expect_exact("HFP_AG_EXCLUSION client=0 error=InvalidState", timeout=30)
     client = dut.expect(
         re.compile(rb"HFP_CLIENT_READY address=([0-9a-f:]+)"), timeout=30
     )
@@ -27,7 +29,10 @@ def test_hfp_client_control_and_external_codec_audio(dut, peers):
         re.compile(rb"HFP_CLIENT_AUDIO state=2 codec=([23]) handle=(\d+) frame=(\d+)"),
         timeout=30,
     )
-    peer.expect(re.compile(rb"HFP_AG_AUDIO state=[23] handle=\d+ frame=\d+"), timeout=30)
+    peer.expect(
+        re.compile(rb"HFP_AG_AUDIO state=2 codec=([23]) handle=\d+ frame=\d+"),
+        timeout=30,
+    )
     assert int(client_audio.group(3)) > 0
 
     dut.write(b"s\n")
@@ -46,3 +51,22 @@ def test_hfp_client_control_and_external_codec_audio(dut, peers):
     dut.write(b"x\n")
     dut.expect_exact("HFP_CLIENT_AUDIO_DISCONNECT requested=1", timeout=10)
     dut.expect(re.compile(rb"HFP_CLIENT_AUDIO state=0 codec=0 handle=\d+ frame=\d+"), timeout=30)
+
+    dut.write(b"h\n")
+    dut.expect_exact("HFP_CLIENT_HANGUP requested=1", timeout=10)
+    peer.expect_exact("HFP_AG_HANGUP ended=1", timeout=20)
+    dut.expect(re.compile(rb"HFP_CLIENT_CALL active=0 setup=0 held=\d+"), timeout=20)
+
+    peer.write(b"i\n")
+    peer.expect_exact("HFP_AG_INCOMING reported=1", timeout=10)
+    dut.expect(re.compile(rb"HFP_CLIENT_CALL active=0 setup=1 held=\d+"), timeout=20)
+
+    dut.write(b"n\n")
+    dut.expect_exact("HFP_CLIENT_ANSWER requested=1", timeout=10)
+    peer.expect_exact("HFP_AG_ANSWER active=1", timeout=20)
+    dut.expect(re.compile(rb"HFP_CLIENT_CALL active=1 setup=0 held=\d+"), timeout=20)
+
+    dut.write(b"h\n")
+    dut.expect_exact("HFP_CLIENT_HANGUP requested=1", timeout=10)
+    peer.expect_exact("HFP_AG_HANGUP ended=1", timeout=20)
+    dut.expect(re.compile(rb"HFP_CLIENT_CALL active=0 setup=0 held=\d+"), timeout=20)

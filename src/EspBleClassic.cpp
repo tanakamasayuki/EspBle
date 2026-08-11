@@ -1175,7 +1175,8 @@ void EspBleClassicSpp::update()
 
 EspBleClassic::EspBleClassic() :
   spp_(this), hidDevice_(this), hidHost_(this), a2dpSink_(this),
-  a2dpSource_(this), avrcp_(this), hfpClient_(this) {}
+  a2dpSource_(this), avrcp_(this), hfpClient_(this),
+  hfpAudioGateway_(this) {}
 
 EspBleClassic::~EspBleClassic()
 {
@@ -1354,6 +1355,7 @@ bool EspBleClassic::begin(const EspBleClassicConfig &config)
 void EspBleClassic::end()
 {
   if (!initialized()) return;
+  hfpAudioGateway_.end();
   hfpClient_.end();
   avrcp_.end();
   a2dpSink_.end();
@@ -1393,6 +1395,7 @@ void EspBleClassic::update()
   a2dpSource_.update();
   avrcp_.update();
   hfpClient_.update();
+  hfpAudioGateway_.update();
 }
 
 bool EspBleClassic::initialized() const
@@ -1433,6 +1436,11 @@ EspBleClassicAvrcp &EspBleClassic::avrcp()
 EspBleClassicHfpClient &EspBleClassic::hfpClient()
 {
   return hfpClient_;
+}
+
+EspBleClassicHfpAudioGateway &EspBleClassic::hfpAudioGateway()
+{
+  return hfpAudioGateway_;
 }
 
 EspBleError EspBleClassic::lastError() const
