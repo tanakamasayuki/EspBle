@@ -1014,6 +1014,9 @@ private:
   // Random Address. NimBLE reports that stop as EPreempted; resume only an
   // advertisement that this object still considers requested.
   void resumeAfterPrivacyPreemption();
+  // Enforce the caller's original finite deadline even if repeated privacy
+  // preemption leaves the host procedure active past its rounded duration.
+  void expireFiniteDuration();
 
   EspBle *owner_;
   EspBleAdvertisingData data_;
@@ -1052,6 +1055,7 @@ private:
   void dispatchPendingResults();
   void flushPendingResults();
   void resumeAfterPrivacyPreemption();
+  void expireFiniteDuration();
 
   EspBle *owner_;
   ResultCallback resultCallback_;

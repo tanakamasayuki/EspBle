@@ -11,6 +11,9 @@
 - BLE/GATT/Security/HID/MIDIの公開済み機能はv1.2.0までに提供済み。
 - 無印ESP32向け同梱NimBLE hostはCentral / Peripheral両roleで実機回帰済み。
 - Classic-only Bluedroid archive、SPP、HID Device/Host、dual-host HCI brokerは実装・実機検証済みだが実験扱い。
+- Classic-onlyを実用範囲へ広げる次の対象はA2DP/AVRCP/HFP。Bluetooth media payloadまでをEspBleの
+  責務とし、PCM処理とdevice I/OはPCMFlow等の独立libraryへ委ねる方針を確定した。
+- 配布形式は次回Classic拡張ではNimBLE source / Classic `.a`のmixed distributionを意図的に維持する。
 - dual-hostはcommand/ACL routing、bond/RPA、任意停止順、再attach、FIFO満杯、再登録とheap安定性まで検証済み。
 - 数時間級dual-host soak、観測HCI commandのpolicy分類、不正HID report拒否、peer突然消失後の復旧、接続・pairing失敗後の復旧、lifecycle競合監査は完了。公開サポート範囲の確定が未完了。
 - `CHANGELOG.md`のUnreleasedと利用者向けClassic文書は、次回release内容として未整理。
@@ -37,11 +40,13 @@ Gate Aの詳細は[引き継ぎ](HANDOFF_ESP32_CLASSIC.ja.md)を正とします�
 |---|---|---|
 | 完了 | Classic archive生成入口 | IDF/tag/toolchain検査、link check、symbol prefix、必須symbol検査をscript化 |
 | 完了 | archive clean再現 | cleanなIDF v5.5.5 worktree・GCC 14.2.0から一時生成し、格納済みarchiveとbyte単位・SHA-256一致 |
+| 完了 | Classic Audio archive | external codec A2DP/AVRCP、Voice over HCI / external codec HFPを有効化し、必須API link checkとclean再生成を完了 |
 | 未完了 | board matrix | workflowで対象boardを再生成し、次回versionのBOARDS文書を確定 |
 | 未完了 | core matrix | Arduino-ESP32対応versionを再検証し、次回versionのCOMPATIBILITY文書を確定 |
 | 未完了 | 他SoC非影響 | S3/C3/C6/H2/P4の代表compileでClassic archive・無印ESP32 patchが非適用 |
 
 archive手順は[Classic host archive再生成](CLASSIC_HOST_BUILD.ja.md)を正とします。
+Audioのscopeと段階は[Classic Audio拡張計画](PLAN_ESP32_CLASSIC_AUDIO.ja.md)を正とします。
 
 ## Gate C: 自動回帰
 
@@ -80,11 +85,12 @@ archive手順は[Classic host archive再生成](CLASSIC_HOST_BUILD.ja.md)を正�
 
 ## 推奨実行順
 
-1. Gate Aの結果からClassicのrelease scopeを決める。
-2. scope確定後にCHANGELOGと利用者向け文書を更新する。
-3. Gate Bのboard/core matrixと他SoC非影響を確定する。
-4. コードfreeze後にGate Cのclean全回帰を複数回行う。
-5. Gate Dを並行実施し、最後にGate Eのmetadata・release操作へ進む。
+1. A2DP Sinkのencoded media受信APIを実装し、実機でpayloadと所有権境界を確定する。
+2. A2DP/AVRCP/HFPの到達範囲を踏まえてClassicのrelease scopeを決める。
+3. scope確定後にCHANGELOGと利用者向け文書を更新する。
+4. Gate Bのboard/core matrixと他SoC非影響を確定する。
+5. コードfreeze後にGate Cのclean全回帰を複数回行う。
+6. Gate Dを並行実施し、最後にGate Eのmetadata・release操作へ進む。
 
 コード変更後に全回帰を先行してもfreeze後に再実行が必要です。長時間作業の結果は、合否だけでなく
 条件とlog保存先を引き継ぎ文書・技術検証へ記録します。

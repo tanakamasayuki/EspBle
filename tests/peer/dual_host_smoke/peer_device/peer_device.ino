@@ -349,6 +349,7 @@ void loop()
     if (command.startsWith("c"))
       Serial.printf("DUAL_PEER_CONNECT %u\n",
         classic.hidHost().connect(command.c_str() + 1) ? 1 : 0);
+#if !defined(ESPBLE_TEST_DUAL_RPA)
     else if (command == "f")
     {
       uint8_t address[6] = {};
@@ -362,6 +363,7 @@ void loop()
         selfAddress,
         classic.hidHost().connect(selfAddress) ? 1 : 0);
     }
+#endif
     else if (command == "l")
       Serial.printf("DUAL_PEER_CLASSIC_DISCONNECT %u\n",
         classic.hidHost().disconnect() ? 1 : 0);
@@ -397,7 +399,7 @@ void loop()
     else if (command == "n")
       Serial.printf("DUAL_BLE_BONDS %u\n",
         static_cast<unsigned>(ble.bondCount()));
-    else if (command.startsWith("p"))
+    else if (command.startsWith("p") && command.length() > 1)
     {
       const uint32_t passkey =
         static_cast<uint32_t>(strtoul(command.c_str() + 1, nullptr, 10));

@@ -56,11 +56,25 @@ install -m 0644 "$temporary" "$output"
 xtensa-esp32-elf-nm -g --defined-only "$output" 2>/dev/null |
   awk 'NF >= 3 {print $3}' | sort -u > "$defined_symbols"
 
+if grep -Ev '^espble_bd_' "$defined_symbols" | grep -q .; then
+  echo "generated archive contains unprefixed global defined symbols" >&2
+  grep -Ev '^espble_bd_' "$defined_symbols" >&2
+  exit 1
+fi
+
 for symbol in \
   espble_bd_esp_bluedroid_attach_hci_driver \
   espble_bd_esp_spp_register_callback \
   espble_bd_esp_bt_hid_device_register_callback \
-  espble_bd_esp_bt_hid_host_register_callback; do
+  espble_bd_esp_bt_hid_host_register_callback \
+  espble_bd_esp_a2d_sink_register_audio_data_callback \
+  espble_bd_esp_a2d_source_audio_data_send \
+  espble_bd_esp_avrc_ct_init \
+  espble_bd_esp_avrc_tg_init \
+  espble_bd_esp_hf_client_register_audio_data_callback \
+  espble_bd_esp_hf_client_audio_data_send \
+  espble_bd_esp_hf_ag_register_audio_data_callback \
+  espble_bd_esp_hf_ag_audio_data_send; do
   if ! grep -Fxq "$symbol" "$defined_symbols"; then
     echo "generated archive is missing $symbol" >&2
     exit 1

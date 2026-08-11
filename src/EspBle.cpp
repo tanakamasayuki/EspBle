@@ -5659,6 +5659,17 @@ void EspBleAdvertising::resumeAfterPrivacyPreemption()
   }
 }
 
+void EspBleAdvertising::expireFiniteDuration()
+{
+  if (advertisingDeadlineMs_ == 0 ||
+      static_cast<int32_t>(millis() - advertisingDeadlineMs_) < 0)
+    return;
+
+  restartAfterPreemption_ = false;
+  advertisingDeadlineMs_ = 0;
+  (void)ble_gap_adv_stop();
+}
+
 bool EspBleAdvertising::stop()
 {
   if (!owner_->initialized())
@@ -5786,6 +5797,17 @@ void EspBleScanner::resumeAfterPrivacyPreemption()
     restartAfterPreemption_ = false;
     scanDeadlineMs_ = 0;
   }
+}
+
+void EspBleScanner::expireFiniteDuration()
+{
+  if (scanDeadlineMs_ == 0 ||
+      static_cast<int32_t>(millis() - scanDeadlineMs_) < 0)
+    return;
+
+  restartAfterPreemption_ = false;
+  scanDeadlineMs_ = 0;
+  (void)ble_gap_disc_cancel();
 }
 
 bool EspBleScanner::stop()
@@ -9315,6 +9337,8 @@ void EspBle::drainPendingDisconnects()
 
 void EspBle::update()
 {
+  advertising_.expireFiniteDuration();
+  scanner_.expireFiniteDuration();
   cancelExpiredConnectAttempt();
   expireGattOperation();
   pumpGattQueue();

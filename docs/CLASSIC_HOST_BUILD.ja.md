@@ -11,7 +11,7 @@
 | ESP-IDF | cleanな`v5.5.5` tag | Arduino-ESP32 3.3.11が基準にするIDFとABIを合わせる |
 | target | `esp32` | Classic radioを持つ無印ESP32だけが対象 |
 | compiler | xtensa-esp32 GCC 14.2.0 | Arduino-ESP32 3.3.11とtoolchain ABIを合わせる |
-| Kconfig | `tools/classic_bluedroid_host/sdkconfig.defaults` | host-only、Classic-only、SPP/HID/SMPを固定する |
+| Kconfig | `tools/classic_bluedroid_host/sdkconfig.defaults` | host-only、Classic-only、profileとexternal codec境界を固定する |
 
 スクリプトはIDF tag、dirty checkout、compiler versionを検査し、一致しなければ生成を中止します。
 ESP-IDFやArduino Coreを更新するときは、archiveだけを作り直さず、ABI、公開symbol、実機回帰を
@@ -56,11 +56,13 @@ ESPBLE_CLASSIC_HOST_BUILD_DIR="$work_dir/build" \
 スクリプトは次の処理を順に行います。
 
 1. `tools/classic_bluedroid_host/`をESP-IDF projectとしてbuildする。
-2. `main/link_check.c`を最終linkし、HCI attach、SPP、HID Device、HID Host APIの消失を検出する。
+2. `main/link_check.c`を最終linkし、HCI attach、SPP、HID Device/Host、A2DP Sink/Source、
+   AVRCP CT/TG、HFP Client/AGと各external media APIの消失を検出する。
 3. IDFの`esp-idf/bt/libbt.a`からglobal defined symbol一覧を作る。
 4. `objcopy --redefine-syms`で全global defined symbolへ`espble_bd_` prefixを付ける。
 5. debug情報をstripし、出力先へinstallする。
-6. 名前空間化後の必須HCI/SPP/HID symbolを検査し、size、symbol数、SHA-256を表示する。
+6. 全global defined symbolが名前空間化されたことと必須profile symbolを検査し、size、symbol数、
+   SHA-256を表示する。
 
 FreeRTOS、NVS、timer、loggingなどarchiveが参照するundefined symbolは変換しません。これらは
 Arduino-ESP32から解決します。archive自身が定義するsymbolだけを名前空間化することで、core内蔵の
@@ -80,6 +82,14 @@ CONFIG_BT_HID_ENABLED=y
 CONFIG_BT_HID_HOST_ENABLED=y
 CONFIG_BT_HID_DEVICE_ENABLED=y
 CONFIG_BT_SMP_ENABLE=y
+CONFIG_BT_A2DP_ENABLE=y
+CONFIG_BT_A2DP_USE_EXTERNAL_CODEC=y
+CONFIG_BT_HFP_ENABLE=y
+CONFIG_BT_HFP_CLIENT_ENABLE=y
+CONFIG_BT_HFP_AG_ENABLE=y
+CONFIG_BT_HFP_AUDIO_DATA_PATH_HCI=y
+CONFIG_BT_HFP_USE_EXTERNAL_CODEC=y
+CONFIG_BT_HFP_WBS_ENABLE=y
 # CONFIG_BT_BLE_ENABLED is not set
 ```
 
@@ -91,12 +101,12 @@ controllerとBLE hostをarchiveへ含めないことが重要です。物理cont
 現在repositoryに格納しているarchiveの基準値は次です。
 
 ```text
-size: 3035574 bytes
-global defined symbols: 1788
-sha256: 6b04833c2a1f32a04c357dca26b12ae05eb4f9ffdb14f57d49fc994abebf7a9f
+size: 4596952 bytes
+global defined symbols: 2796
+sha256: d64d3a40a3f598e206c5aaf798e9d8fda5c867b632224ed72a616b1221089421
 ```
 
-2026-08-11に、`v5.5.5` tagの独立したclean worktreeと全submodule、GCC 14.2.0から一時生成し、
+2026-08-11に、`v5.5.5` tagの独立したclean cloneと全submodule、GCC 14.2.0から一時生成し、
 このsize・symbol数・SHA-256を再現した。格納済みarchiveとの`cmp`も一致し、差し替えは不要だった。
 
 一時出力と格納済みarchiveを比較する例です。
@@ -125,7 +135,11 @@ CHANGELOG、Arduino Core互換表を同時に更新します。
 
 ## 配布形式について
 
-現在はNimBLEをソース、Classic Bluedroidを`.a`で同梱しています。これは確定した最終形式では
-ありません。両方をソースへ揃える案と、両方を再現可能archiveへ揃える案を、build時間、ABI互換、
-debuggability、upstream化の差分量で比較する将来課題です。判断まではこの生成手順を正とし、
-機能変更と配布形式変更を同時に行いません。
+次回Classic拡張ではNimBLEをsource、Classic Bluedroidを`.a`で同梱するmixed distributionを維持します。
+NimBLEはlocal patchとtarget条件をsourceで追跡し、ESP-IDF component依存の大きいBluedroidは固定Kconfigから
+再現可能なarchiveとして生成します。形式を揃えること自体はrelease条件ではありません。
+
+A2DP/AVRCP/HFPを追加したarchiveの設定と必須symbolは
+[Classic Audio拡張計画](PLAN_ESP32_CLASSIC_AUDIO.ja.md)を正本とします。A2DPはexternal codec、HFPは
+Voice over HCI / external codecで生成し、cover art / GOEPは無効です。上記基準値はこのAudio設定を
+含む格納済みarchiveの値です。

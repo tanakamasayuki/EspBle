@@ -55,6 +55,7 @@ espble_hci_command_scope_t espble_hci_controller_policy_classify_opcode(
     // LE procedures and LE-local controller state used by vendored NimBLE.
     case 0x2002: // LE Read Buffer Size
     case 0x2003: // LE Read Local Supported Features
+    case 0x2005: // LE Set Random Address
     case 0x2006: // LE Set Advertising Parameters
     case 0x2008: // LE Set Advertising Data
     case 0x2009: // LE Set Scan Response Data
@@ -85,12 +86,14 @@ espble_hci_command_scope_t espble_hci_controller_policy_classify_opcode(
     case 0x0c1a: // Write Scan Enable
     case 0x0c1e: // Write Authentication Enable
     case 0x0c24: // Write Class of Device
+    case 0x0c2f: // Write Synchronous Flow Control Enable
     case 0x0c3a: // Write Current IAC LAP
     case 0x0c43: // Write Inquiry Scan Type
     case 0x0c45: // Write Inquiry Mode
     case 0x0c47: // Write Page Scan Type
     case 0x0c52: // Write Extended Inquiry Response
     case 0x0c56: // Write Simple Pairing Mode
+    case 0x0c5b: // Write Default Erroneous Data Reporting
       return ESPBLE_HCI_COMMAND_SCOPE_CLASSIC_RADIO;
     case 0x0411: // Authentication Requested
     case 0x0413: // Set Connection Encryption

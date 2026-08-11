@@ -14,11 +14,15 @@ dual-hostは`ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL`によるopt-inです。通常bui
 無印ESP32以外はcore同梱NimBLE経路を変更しません。現段階は技術検証済みの実験機能であり、一般対応へ
 昇格していません。
 
+次の主作業はClassic-onlyのA2DP/AVRCP/HFP対応です。EspBleはBluetooth profile、codec negotiation、
+encode済みmedia/SCO payloadの受け渡しまでを担当し、PCM処理やdevice I/Oは担当しません。詳細は
+[Classic Audio拡張計画](PLAN_ESP32_CLASSIC_AUDIO.ja.md)を正本とします。
+
 ## 完了済み
 
 | 領域 | 状態 |
 |---|---|
-| Classic host独自build | IDF v5.5.5 / GCC 14.2.0、controller/BLE無効、SPP/HID Device/HID Host/SMP有効 |
+| Classic host独自build | IDF v5.5.5 / GCC 14.2.0、controller/BLE無効、SPP/HID Device/HID Host/SMP、A2DP/AVRCP、HFP Client/AG external codec有効 |
 | archive clean再現 | cleanなv5.5.5 worktreeから一時生成し、格納済み`.a`とbyte単位・SHA-256一致 |
 | symbol分離 | archiveのglobal defined symbolを`espble_bd_`へ名前空間化。core Bluedroidと衝突なし |
 | Classic排他モード | SPP、HID Device/Host、双方向report、切断、再初期化、再接続を実機確認 |
@@ -46,7 +50,15 @@ dual-hostは`ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL`によるopt-inです。通常bui
 
 ## 未完了・優先順位
 
-### P0: 実験機能の信頼性
+### P0: Classic-only Audio
+
+1. **完了:** A2DP/AVRCP/HFPをexternal codec / Voice over HCI構成でarchiveへ追加し、生成scriptのlink checkを拡張した。
+2. A2DP Sink、Source、AVRCP、HFP Client、HFP AGの順にBluetooth固有APIを実装する。
+3. Classic-onlyで各profileの接続、media transfer、切断、再接続、callback停止を実機確認する。
+4. codec/PCM/device処理はEspBleへ入れず、EspBleとPCMFlowへ依存する独立`PCMFlowBluetooth` siblingを
+   第一候補としてcodec wrapperとadapterをまとめる。PCMFlow coreの既存`PCMSource`/`PCMSink`を再利用する。
+
+### 完了: dual-host実験機能の信頼性
 
 完了。失敗復旧、異常入力、peer消失、callback解除時の参照寿命を実装・監査し、clean実機回帰まで通した。
 
@@ -59,7 +71,7 @@ dual-hostは`ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL`によるopt-inです。通常bui
 
 ### P2: 配布・保守
 
-1. NimBLEソース同梱とClassic `.a`同梱を、ソースまたはarchiveのどちらかへ統一する方式を評価する。
+1. NimBLE source / Classic `.a`のmixed distributionを維持し、理由と生成手順を利用者・保守者文書へ明記する。
 2. Arduino-ESP32更新時のIDF/toolchain ABI matrixとarchive再生成gateをCIまたはrelease手順へ組み込む。
 3. 外部Classic HID Host/Deviceとの相互運用を追加する。
 
@@ -107,9 +119,9 @@ ESPBLE_DUAL_SOAK_RUNS=20 tools/run_dual_host_soak.sh
 
 archive再生成は[Classic host archive再生成](CLASSIC_HOST_BUILD.ja.md)を参照してください。
 
-2026-08-11に`v5.5.5` tagの独立worktreeへ全submoduleをcheckoutし、GCC 14.2.0で一時出力へ
+2026-08-11に`v5.5.5` tagの独立cloneへ全submoduleをcheckoutし、GCC 14.2.0でAudio設定を含む一時出力へ
 clean buildした。生成物は格納済みarchiveと`cmp`で一致し、SHA-256は双方
-`6b04833c2a1f32a04c357dca26b12ae05eb4f9ffdb14f57d49fc994abebf7a9f`だった。
+`d64d3a40a3f598e206c5aaf798e9d8fda5c867b632224ed72a616b1221089421`だった。
 固定Kconfig、必須prefixed symbol、unprefixed global defined symbolがないことも確認した。
 
 ## 完了判定と記録

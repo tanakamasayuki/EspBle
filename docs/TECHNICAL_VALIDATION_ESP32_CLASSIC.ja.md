@@ -415,3 +415,23 @@ Arduino依存を含めない。
 
 これらが通ればBluedroid案を採用する。host-only BluedroidをArduino buildへ安全に同梱できない場合に
 限り、別のClassic hostを再評価する。
+
+## 2026-08-11 Classic Audio archive checkpoint
+
+ESP-IDF v5.5.5の独立clean cloneとGCC 14.2.0から、A2DP/AVRCP、HFP Client/AG、external codec、
+Voice over HCIを有効にしたClassic-only archiveを生成した。link checkはA2DP Sink/Source、AVRCP CT/TG、
+HFP Client/AGのmedia APIまで最終linkする。生成物は4,596,952 bytes、SHA-256は
+`d64d3a40a3f598e206c5aaf798e9d8fda5c867b632224ed72a616b1221089421`で、global defined symbolに
+unprefixed symbolがないことを確認した。symbol総数は仕様値にせず、固定入力からの再生成と必須symbolを
+release gateにする。
+
+Audio設定で追加されたClassic初期化command `0x0c2f`（Write Synchronous Flow Control Enable）と
+`0x0c5b`（Write Default Erroneous Data Reporting）、NimBLE host privacyの`0x2005`（LE Set Random
+Address）をcontroller policyへ明示分類した。更新archiveで通常dual-hostとRPA/bond/Classic HIDの
+実機回帰を行い、unknown、queue full、opcode mismatch、unregister busyなしで完走した。
+
+この回帰ではRPA test peerの単文字`p`/`f`がpasskey/接続失敗commandに先に一致するdispatch不具合と、
+privacy preemptionを繰り返した有限advertising/scanが元deadline後もhost上でactiveになり得る問題を
+発見した。command条件を分離し、`EspBle::update()`で元deadlineを最終的に強制するbackstopを追加した。
+2秒RPA rotation中の有限8秒advertising/scanは、途中でactive、元deadline後にinactiveとなる条件で再確認した。
+ESP32-S3の代表BLE sketchも再compileし、無印ESP32用Classic archiveがリンクされないことを確認した。

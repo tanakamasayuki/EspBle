@@ -62,7 +62,8 @@ broker taskから成功Command CompleteをClassicだけへ返す。
 |---|---|
 | IDF v5.5.5 host-only / Classic-only / SPP / HID Device / HID Host build | 成功 |
 | 必須API（HCI attach、SPP、HID Device、HID Host）のIDF link check | 成功 |
-| 1,788 defined symbolsの名前空間化 | 成功 |
+| Audio profileを含む2,796 defined symbolsの名前空間化 | 成功 |
+| A2DP/AVRCP/HFP external codec APIのIDF link check | 成功 |
 | 再生成archiveの同一環境比較 | SHA-256一致。cleanな固定環境からの再現確認はrelease gateとして残る |
 | Arduino-ESP32 3.3.11への独自host link | 成功、SPP例827,172 B |
 | ESP32 2台の独自host SPP Peer test | 接続、binary echo、切断、再初期化、再接続を確認 |
@@ -108,20 +109,21 @@ Arduino coreの設定はSPP有効・Classic HID無効であり、core `libbt.a`�
 4. HID接続失敗とBLE pairing失敗を両transport同時状態で試験済み。誤passkeyでは両側bond 0を確認してから正しいpasskeyで暗号化を復旧し、HID接続失敗後もLE GATTを維持して正しいClassic peerへ再接続した。
 5. callback解除と実行が別coreで競合するlifecycle境界を監査済み。SPP/HID Device/HID Hostへ登録mutexとcallback参照数による停止barrierを追加し、clean実機lifecycle回帰を完走した。
 
-## 将来の配布形式統一
+## 配布形式の方針
 
 現在はNimBLE hostを`src/nimble_esp32/`のソースとして同梱し、Classic-only Bluedroid hostを
-`src/esp32/libespble_bluedroid_classic.a`として同梱している。機能とlifecycleが安定した段階で、
-両hostを同じ配布形式へ統一する。候補は次の二つで、現時点では決定しない。
+`src/esp32/libespble_bluedroid_classic.a`として同梱する。このmixed distributionを次回Classic拡張の
+確定方針とし、形式を揃えること自体はrelease条件にしない。NimBLEはlocal patchとtarget別条件を追跡しやすい
+sourceが適し、BluedroidはKconfig、生成header、ESP-IDF component依存を固定して短いArduino buildにできる
+archiveが適するためである。
 
-- 両方をソース同梱: toolchainへの固定を弱め、変更・解析・ESP-IDF upstream化を容易にできる。
-  一方でBluedroidの大量sourceがArduino build時間とライブラリ解決へ与える影響を測る必要がある。
-- 両方を再現可能な`.a`として同梱: Arduino buildは軽いが、Arduino Core / ESP-IDF / GCC ABIへの
-  厳密なversion pin、全symbol名前空間化、設定値とarchiveの一致検査が必要になる。
+Classic archiveはIDF / Arduino Core / GCC ABIをpinし、全defined symbolの名前空間化、必須API link check、
+clean再生成をrelease gateとする。ESP-IDFへupstreamする場合はbinaryを提案するのではなく、host分離、HCI
+broker、公開API境界のsource差分をcomponentとして切り出す。形式の再評価はABI更新、Bluedroid hostの独立
+component化、またはNimBLE archive化に明確な保守上の利益が出た場合だけ行う。
 
-判断条件は、ESP32以外のclean build時間、無印ESP32のflash/RAM、再生成物の再現性、debuggability、
-複数Arduino Core versionの互換matrix、ESP-IDF componentとして切り出す際の差分量とする。
-形式を切り替えるまでは現在の二方式を正とし、機能検証と配布形式変更を同時に行わない。
+Classic Audioの責務分離、external codec API、archiveへ追加するKconfig、実装順は
+[Classic Audio拡張計画](PLAN_ESP32_CLASSIC_AUDIO.ja.md)を正本とする。
 
 実験実装はCommand Complete / Statusをopcode所有者へ戻し、connection handleでACLを分離する。
 HCI commandは`send()`時にbroker所有の16 packet FIFOへcopyし、専用taskだけが物理VHCIへ送る。
