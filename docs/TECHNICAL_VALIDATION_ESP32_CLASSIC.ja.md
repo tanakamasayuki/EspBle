@@ -537,7 +537,8 @@ ESP32-D0WD-V3 2台の公開Client/AG fixtureでCVSDを選択すると、両側�
 `preferredFrameSize=120`が通知された。Client/AGの受信callbackはいずれも120-byte viewを受け取り、両方向の
 `send()`が受理された。SCOだけを切断してcall/SLCを維持し、Clientから再接続すると再びCVSDと120-byte frameが
 選ばれ、双方向transportを再開できた。初回・再接続後の両方でpacket statisticsの正常受信と送信を確認し、
-送信discardはなかった。120 byteはcontroller/connection条件による観測値であり、公開APIの
+送信discardはなかった。そのcallを終了してSLC全体を切断し、同じprofile instanceから再接続・再発信した後も
+CVSD SCO、双方向transport、正常statisticsへ復旧した。120 byteはcontroller/connection条件による観測値であり、公開APIの
 固定値にはしない。送信fixtureもmSBCの57 byte固定をやめ、接続eventの`preferredFrameSize`を使うよう変更した。
 
 同じ変更で既定mSBC fixtureをclean実機回帰し、mSBC 57-byte送信、58/60-byte receive view、call control、

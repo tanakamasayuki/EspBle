@@ -142,6 +142,9 @@ void loop()
   if (command.startsWith("c"))
     Serial.printf("HFP_CLIENT_CONNECT requested=%u\n",
       bluetooth.hfpClient().connect(command.substring(1).c_str()) ? 1 : 0);
+  else if (command == "q")
+    Serial.printf("HFP_CLIENT_DISCONNECT requested=%u\n",
+      bluetooth.hfpClient().disconnect() ? 1 : 0);
   else if (command == "d")
     Serial.printf("HFP_CLIENT_DIAL requested=%u\n",
       bluetooth.hfpClient().dial("12345") ? 1 : 0);

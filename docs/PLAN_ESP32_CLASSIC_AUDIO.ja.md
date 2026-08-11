@@ -176,7 +176,8 @@ AGが57 byteへ戻して送信するとClient受信viewは60 byteになった。
 
 同日のCVSD probeではAGの`preferredAudioCodec=Cvsd`から標準`+BAC/+BCS` negotiationを通し、両roleで
 CVSD、推奨送信frame 120 byteが選択された。120-byte受信viewと双方向sendを確認し、SCO切断後に同一callのまま
-再接続してもCVSDと120-byte frameが再設定された。この値はESP32同士の観測値であり固定仕様にはせず、adapterは
+再接続してもCVSDと120-byte frameが再設定された。さらにSLC全体を切断・再接続して再発信した場合も同じcodecと
+transportへ復旧した。この値はESP32同士の観測値であり固定仕様にはせず、adapterは
 接続eventのcodec、handle、`preferredFrameSize`が変わるたびにcodec stateとqueueをresetする。
 
 ## PCMFlowBluetoothへの引き継ぎ

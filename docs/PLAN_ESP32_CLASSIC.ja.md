@@ -90,7 +90,7 @@ broker taskから成功Command CompleteをClassicだけへ返す。
 | dual-host異常report / peer消失 | 不正report拒否後の接続維持、突然再起動後のbond済みBLEとClassic HID復旧 |
 | dual-host接続 / pairing失敗 | 誤passkey失敗後の再pairing、HID Host非同期接続失敗後のBLE維持とClassic再接続を確認 |
 | dual-host HFP / SCO | BLE GATT接続中にSLC、発信、mSBC SCO双方向payload、SCO中と切断後のGATT readを確認。unknown handle / command mismatch / queue fullなし |
-| Classic-only HFP CVSD | AGでCVSDを選択し、Client/AG間の双方向120-byte SCO view、切断、同一call中の再接続を確認 |
+| Classic-only HFP CVSD | AGでCVSDを選択し、Client/AG間の双方向120-byte SCO view、SCO再接続、SLC切断・再接続後の再発信を確認 |
 | dual-host A2DP / AVRCP | BLE GATT接続中にA2DP SBC media、AVRCP Play / absolute volume、stream中と切断後のGATT readを確認。ESP A2DP coexistence commandを分類しbroker異常なし |
 | 通常NimBLE BLEのESP32 Peer regression | GATT read/write、反復discoveryを確認 |
 | host unit test | controller policyを含むhost非依存ロジックを確認 |
