@@ -15,7 +15,8 @@
   責務とし、PCM処理とdevice I/OはPCMFlow等の独立libraryへ委ねる方針を確定した。
 - A2DP Sink / Sourceのraw transport APIとESP32同士の実機media転送、AVRCP CT/TGのpassthroughと
   absolute volumeに加え、HFP Client/Audio GatewayのSLC、単一call control、mSBC raw SCO transport、
-  process-wide role排他まで完了した。PCMFlowBluetoothの初期仕様はsibling repositoryへ配置済みである。
+  process-wide role排他まで完了した。PCMFlowBluetoothのA2DP Sink adapterとSBC decoderは実装済みだが、
+  実機probeで判明したdecoder reset問題と正式E2E追加を担当側へ依頼中である。
 - 配布形式は次回Classic拡張ではNimBLE source / Classic `.a`のmixed distributionを意図的に維持する。
 - dual-hostはcommand/ACL routing、bond/RPA、任意停止順、再attach、FIFO満杯、再登録とheap安定性に加え、BLE GATT接続中のHFP mSBC SCO双方向通信とA2DP/AVRCPまで検証済み。
 - 数時間級dual-host soak、観測HCI commandのpolicy分類、不正HID report拒否、peer突然消失後の復旧、接続・pairing失敗後の復旧、lifecycle競合監査は完了。公開サポート範囲の確定が未完了。
@@ -94,7 +95,8 @@ Audioのscopeと段階は[Classic Audio拡張計画](PLAN_ESP32_CLASSIC_AUDIO.ja
 ## 推奨実行順
 
 1. AVRCP metadata/play-statusの外部Target相互運用と、HFPの外部機器相互運用を行う。
-2. PCMFlowBluetoothのA2DP Sink decoder adapterを並行実装し、実SBC連続再生で最大payloadと負荷を測る。
+2. [PCMFlowBluetooth修正依頼](REQUEST_PCMFLOWBLUETOOTH_A2DP_VALIDATION.ja.md)のreset修正と正式E2E結果を受け取り、
+   PCMFlowDevice等を接続した実出力と長時間負荷へ進む。
 3. A2DP/AVRCP/HFPの到達範囲を踏まえてClassicのrelease scopeを決める。
 4. scope確定後にCHANGELOGと利用者向け文書を更新する。
 5. Gate Bのboard/core matrixと他SoC非影響を確定する。
