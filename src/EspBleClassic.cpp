@@ -1175,7 +1175,7 @@ void EspBleClassicSpp::update()
 
 EspBleClassic::EspBleClassic() :
   spp_(this), hidDevice_(this), hidHost_(this), a2dpSink_(this),
-  a2dpSource_(this) {}
+  a2dpSource_(this), avrcp_(this) {}
 
 EspBleClassic::~EspBleClassic()
 {
@@ -1354,6 +1354,7 @@ bool EspBleClassic::begin(const EspBleClassicConfig &config)
 void EspBleClassic::end()
 {
   if (!initialized()) return;
+  avrcp_.end();
   a2dpSink_.end();
   a2dpSource_.end();
   hidHost_.end();
@@ -1389,6 +1390,7 @@ void EspBleClassic::update()
   hidHost_.update();
   a2dpSink_.update();
   a2dpSource_.update();
+  avrcp_.update();
 }
 
 bool EspBleClassic::initialized() const
@@ -1419,6 +1421,11 @@ EspBleClassicA2dpSink &EspBleClassic::a2dpSink()
 EspBleClassicA2dpSource &EspBleClassic::a2dpSource()
 {
   return a2dpSource_;
+}
+
+EspBleClassicAvrcp &EspBleClassic::avrcp()
+{
+  return avrcp_;
 }
 
 EspBleError EspBleClassic::lastError() const

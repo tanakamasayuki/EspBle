@@ -38,6 +38,13 @@
   namespacing, required-symbol validation and SHA-256 reporting.
 - (JA) Classic host archive生成をESP-IDF v5.5.5 / xtensa-esp32 GCC 14.2.0へ
   固定し、link check、global symbol名前空間化、必須symbol検査、SHA-256表示を追加した。
+- (EN) Added original-ESP32 Classic-only A2DP Sink/Source encoded-media
+  transport and AVRCP Controller/Target control. Two-board hardware coverage
+  combines A2DP streaming with passthrough commands, responses, absolute volume,
+  and volume-change notification. Codec/PCM/device I/O remains outside EspBle.
+- (JA) 無印ESP32のClassic-only A2DP Sink/Source encode済みmedia transportと
+  AVRCP Controller/Target制御を追加。ESP32 2台でA2DP streamとpassthrough操作・応答、
+  absolute volume、音量変更通知の併用を確認した。codec/PCM/device I/OはEspBleの外に保つ。
 
 ## 1.2.0
 - (EN) Added support for the original ESP32. Its Arduino-ESP32 prebuilt libraries

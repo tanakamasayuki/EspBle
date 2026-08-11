@@ -117,19 +117,20 @@ EspUsbHost / EspUsbDeviceで扱っている機能のBLE版、およびBLEで一�
 | 切断理由の取得 | ✅ | `EspBleConnection::disconnectReason`（onDisconnectedでbackend/HCI理由コード）。Server/Client両パスをPeerで検証済み |
 | GATT Service Changed | ✅ | Server側`notifyServicesChanged()`で0x1801/0x2A05のindication送出、Client側は購読して受信・range decode。Peer検証済み（受信時の自動再Discoveryはアプリ判断） |
 
-## Bluetooth Classic（BR/EDR）— すべて対応不可
+## Bluetooth Classic（BR/EDR）— 無印ESP32限定・実験機能
 
-EspBleはNimBLE（BLE専用）を使い、初期ターゲットのESP32-S3等はBluetooth Classicを搭載しません。以下はすべて**対応不可**であり、EspBleの責務にも含めません（DECISIONS 対象外）。
+ESP32-S3/C3/C6/H2等はBluetooth Classicを搭載しないため利用できません。無印ESP32では独自buildした
+Classic-only Bluedroid hostをopt-inで利用できます。dual-hostは技術検証段階で、正式なrelease scopeは未確定です。
 
 | 機能 | 状況 | 備考 |
 |---|---|---|
-| Bluetooth Classic（BR/EDR）全般 | ❌ | NimBLEはBLEのみ。S3/C3/C6/H2はClassic非搭載 |
-| A2DP（オーディオストリーミング） | ❌ | Classicプロファイル |
-| HFP（ハンズフリー） | ❌ | Classicプロファイル |
-| AVRCP（メディア操作） | ❌ | Classicプロファイル |
-| SPP（Serial Port Profile） | ❌ | Classicプロファイル。BLEではNUS等で代替 |
-| Classic HID（BT HID） | ❌ | Classicプロファイル。BLEではHOGPで代替 |
-| Classic / BLE自動切替（Dual-mode） | ❌ | 対象外 |
+| Bluetooth Classic（BR/EDR）全般 | ⚠️ | 無印ESP32のClassic-only opt-in。その他SoCは非対応 |
+| A2DP（オーディオストリーミング） | ⚠️ | Sink/SourceのSBC negotiationとencode済みpayload transport。codec/PCM/device I/Oは別library |
+| HFP（ハンズフリー） | 🔧 | archiveはVoice over HCI / external codec有効。公開transport APIは未実装 |
+| AVRCP（メディア操作） | ⚠️ | CT/TG passthrough、metadata/play-status要求、absolute volume。metadata応答の外部Target相互運用は未完了 |
+| SPP（Serial Port Profile） | ⚠️ | Classic-onlyでServer/Client transportを実機確認。BLEではNUS等で代替 |
+| Classic HID（BT HID） | ⚠️ | Classic-onlyでgeneric Device/Hostを実機確認。BLEではHOGP |
+| Classic / BLE同時利用（Dual-host） | ⚠️ | opt-inの実験機能。HID中心に検証済み、audioは未検証 |
 
 ## 補足
 

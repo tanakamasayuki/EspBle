@@ -3,17 +3,28 @@ import re
 
 def test_a2dp_sink_receives_external_codec_media(dut, peers):
     peer = peers["device"]
+    dut.expect_exact("AVRCP_SINK_READY", timeout=30)
     ready = dut.expect(
         re.compile(
             rb"A2DP_SINK_READY started=1 address=([0-9a-f:]+) error=None:"
         ),
         timeout=30,
     )
+    peer.expect_exact("AVRCP_SOURCE_READY", timeout=30)
     peer.expect_exact("A2DP_SOURCE_PROFILE initialized=1", timeout=30)
     peer.expect_exact("A2DP_SOURCE_READY endpoint=1 seid=0", timeout=30)
     peer.write(b"c" + ready.group(1) + b"\n")
     peer.expect_exact("A2DP_SOURCE_CONNECT requested=1", timeout=10)
-    peer.expect(re.compile(rb"A2DP_SOURCE_CONNECTED id=\d+ mtu=\d+"), timeout=30)
+    peer.expect(
+        [
+            re.compile(rb"A2DP_SOURCE_CONNECTED id=\d+ mtu=\d+"),
+            re.compile(
+                rb"AVRCP_SOURCE_CONNECTION controller=1 connected=1 peer=[0-9a-f:]+"
+            ),
+        ],
+        timeout=30,
+        expect_all=True,
+    )
     connected_pattern = re.compile(
         rb"A2DP_SINK_CONNECTED id=\d+ peer=[0-9a-f:]+ mtu=\d+ incoming=1"
     )
@@ -31,7 +42,32 @@ def test_a2dp_sink_receives_external_codec_media(dut, peers):
         dut.expect(connected_pattern, timeout=30)
     assert codec.group(1) == b"48000"
     assert codec.group(2) == b"2"
-    dut.expect(re.compile(rb"A2DP_SINK_STREAM id=\d+ state=1"), timeout=30)
+    peer.write(b"v\n")
+    peer.expect_exact("AVRCP_SOURCE_REGISTER_VOLUME requested=1", timeout=10)
+    peer.expect_exact("AVRCP_SOURCE_PLAY requested=1", timeout=10)
+    peer.expect_exact("AVRCP_SOURCE_SET_VOLUME requested=1", timeout=10)
+    peer.expect_exact("A2DP_SOURCE_START requested=1", timeout=10)
+    dut.expect(
+        [
+            re.compile(rb"AVRCP_SINK_KEY command=68 state=0"),
+            re.compile(rb"AVRCP_SINK_KEY command=68 state=1"),
+            re.compile(rb"AVRCP_SINK_VOLUME value=77 remote=1"),
+            re.compile(rb"AVRCP_SINK_LOCAL_VOLUME changed=1"),
+            re.compile(rb"A2DP_SINK_STREAM id=\d+ state=1"),
+        ],
+        timeout=20,
+        expect_all=True,
+    )
+    peer.expect(
+        [
+            re.compile(rb"AVRCP_SOURCE_KEY_RESPONSE command=68 state=0 accepted=1"),
+            re.compile(rb"AVRCP_SOURCE_KEY_RESPONSE command=68 state=1 accepted=1"),
+            re.compile(rb"AVRCP_SOURCE_VOLUME value=77 remote=0"),
+            re.compile(rb"AVRCP_SOURCE_VOLUME value=88 remote=0"),
+        ],
+        timeout=20,
+        expect_all=True,
+    )
     media = dut.expect(
         re.compile(
             rb"A2DP_SINK_MEDIA id=\d+ codec=1 timestamp=(\d+) frames=1 "

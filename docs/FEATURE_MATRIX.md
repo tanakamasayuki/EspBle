@@ -117,19 +117,20 @@ An overview of what EspBle supports: the BLE equivalents of what EspUsbHost / Es
 | Reading the disconnect reason | ✅ | `EspBleConnection::disconnectReason` (the backend/HCI reason code, in onDisconnected). Both the server and client paths are peer-verified |
 | GATT Service Changed | ✅ | The server sends the 0x1801/0x2A05 indication with `notifyServicesChanged()`; a client can subscribe, receive it and decode the range. Peer-verified (rediscovery on receipt is the application's decision) |
 
-## Bluetooth Classic (BR/EDR) — none of it is supportable
+## Bluetooth Classic (BR/EDR) — experimental, original ESP32 only
 
-EspBle uses NimBLE (BLE only), and the initial targets such as the ESP32-S3 have no Bluetooth Classic radio. Everything below is therefore **unsupportable** and is not part of EspBle's remit (out of scope per DECISIONS).
+ESP32-S3/C3/C6/H2 and similar targets have no Bluetooth Classic radio. The original ESP32 can opt into a custom-built
+Classic-only Bluedroid host. Dual-host support remains experimental and its release scope is not final.
 
 | Feature | Status | Notes |
 |---|---|---|
-| Bluetooth Classic (BR/EDR) in general | ❌ | NimBLE is BLE-only. The S3/C3/C6/H2 have no Classic radio |
-| A2DP (audio streaming) | ❌ | A Classic profile |
-| HFP (hands-free) | ❌ | A Classic profile |
-| AVRCP (media control) | ❌ | A Classic profile |
-| SPP (Serial Port Profile) | ❌ | A Classic profile. NUS and similar serve as the BLE alternative |
-| Classic HID (BT HID) | ❌ | A Classic profile. HOGP serves as the BLE alternative |
-| Automatic Classic / BLE switching (dual mode) | ❌ | Out of scope |
+| Bluetooth Classic (BR/EDR) in general | ⚠️ | Original-ESP32 Classic-only opt-in; unsupported on other SoCs |
+| A2DP (audio streaming) | ⚠️ | Sink/Source SBC negotiation and encoded-payload transport; codec/PCM/device I/O stays in another library |
+| HFP (hands-free) | 🔧 | Archive enables Voice over HCI/external codec; public transport API is not implemented yet |
+| AVRCP (media control) | ⚠️ | CT/TG passthrough, metadata/play-status requests, and absolute volume; external-target metadata interoperability remains |
+| SPP (Serial Port Profile) | ⚠️ | Classic-only Server/Client transport verified on hardware. Use NUS or similar on BLE |
+| Classic HID (BT HID) | ⚠️ | Classic-only generic Device/Host verified on hardware. Use HOGP on BLE |
+| Simultaneous Classic / BLE (dual host) | ⚠️ | Experimental opt-in; HID-focused validation complete, audio not yet validated |
 
 ## Notes
 

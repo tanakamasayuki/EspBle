@@ -83,12 +83,15 @@ Its configuration is frozen to the values the other targets use, and overriding
 any of it is rejected.
 
 Support for the classic ESP32 is not on par with the other chips: EspBle carries
-the maintenance of the bundled hosts itself. Experimental Classic SPP and
-generic HID Device/Host use a separately built Bluedroid host. Exclusive
+the maintenance of the bundled hosts itself. Experimental Classic SPP, generic
+HID Device/Host, A2DP raw transport, and AVRCP CT/TG use a separately built
+Bluedroid host with those profiles enabled. Exclusive
 selection remains the default. `ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL` starts
 Classic first on a BTDM controller and then attaches bundled NimBLE. Classic HID
 traffic together with an LE connection, repeated GATT reads, and bidirectional HID
-traffic afterwards has passed hardware tests. Shared-command scheduling now
+traffic afterwards has passed hardware tests. In Classic-only mode, encoded A2DP
+Sink/Source media transport and AVRCP playback/absolute-volume control also pass.
+Shared-command scheduling now
 uses a broker-owned FIFO and controller command credits. The broker stops the
 controller after the final host leaves, independent of host destruction order;
 event masks are merged from per-host requests, and Classic can reattach without

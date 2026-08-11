@@ -162,6 +162,109 @@ enum class EspBleClassicAudioSendResult : uint8_t
   BackendFailure,
 };
 
+enum class EspBleClassicAvrcpCommand : uint8_t
+{
+  Select = 0x00,
+  Up = 0x01,
+  Down = 0x02,
+  Left = 0x03,
+  Right = 0x04,
+  VolumeUp = 0x41,
+  VolumeDown = 0x42,
+  Mute = 0x43,
+  Play = 0x44,
+  Stop = 0x45,
+  Pause = 0x46,
+  Rewind = 0x48,
+  FastForward = 0x49,
+  Next = 0x4b,
+  Previous = 0x4c,
+};
+
+enum class EspBleClassicAvrcpKeyState : uint8_t
+{
+  Pressed = 0,
+  Released = 1,
+};
+
+enum EspBleClassicAvrcpMetadataAttribute : uint8_t
+{
+  EspBleClassicAvrcpMetadataTitle = 0x01,
+  EspBleClassicAvrcpMetadataArtist = 0x02,
+  EspBleClassicAvrcpMetadataAlbum = 0x04,
+  EspBleClassicAvrcpMetadataTrackNumber = 0x08,
+  EspBleClassicAvrcpMetadataTrackCount = 0x10,
+  EspBleClassicAvrcpMetadataGenre = 0x20,
+  EspBleClassicAvrcpMetadataPlayingTime = 0x40,
+};
+
+enum class EspBleClassicAvrcpPlaybackState : uint8_t
+{
+  Stopped = 0,
+  Playing,
+  Paused,
+  ForwardSeek,
+  ReverseSeek,
+  Error = 0xff,
+};
+
+struct EspBleClassicAvrcpConfig
+{
+  bool controller = true;
+  bool target = true;
+  uint8_t initialVolume = 64;
+};
+
+struct EspBleClassicAvrcpConnection
+{
+  String peerAddress;
+  bool controller = false;
+  bool connected = false;
+};
+
+struct EspBleClassicAvrcpRemoteFeatures
+{
+  String peerAddress;
+  bool controller = false;
+  uint32_t featureMask = 0;
+  uint16_t featureFlags = 0;
+};
+
+struct EspBleClassicAvrcpPassthrough
+{
+  EspBleClassicAvrcpCommand command = EspBleClassicAvrcpCommand::Play;
+  EspBleClassicAvrcpKeyState state = EspBleClassicAvrcpKeyState::Pressed;
+};
+
+struct EspBleClassicAvrcpPassthroughResponse
+{
+  uint8_t transactionLabel = 0;
+  EspBleClassicAvrcpCommand command = EspBleClassicAvrcpCommand::Play;
+  EspBleClassicAvrcpKeyState state = EspBleClassicAvrcpKeyState::Pressed;
+  uint8_t responseCode = 0;
+  bool accepted = false;
+};
+
+struct EspBleClassicAvrcpMetadata
+{
+  uint8_t attribute = 0;
+  String value;
+};
+
+struct EspBleClassicAvrcpPlayStatus
+{
+  uint32_t trackLengthMilliseconds = 0;
+  uint32_t positionMilliseconds = 0;
+  EspBleClassicAvrcpPlaybackState state =
+    EspBleClassicAvrcpPlaybackState::Error;
+};
+
+struct EspBleClassicAvrcpVolume
+{
+  uint8_t value = 0;
+  bool remoteCommand = false;
+};
+
 enum class EspBleClassicHidReportType : uint8_t
 {
   Input = 1,
@@ -206,6 +309,7 @@ struct EspBleClassicHidDeviceImpl;
 struct EspBleClassicHidHostImpl;
 struct EspBleClassicA2dpSinkImpl;
 struct EspBleClassicA2dpSourceImpl;
+struct EspBleClassicAvrcpImpl;
 class EspBleClassic;
 
 class EspBleClassicA2dpSink
@@ -304,6 +408,74 @@ private:
   ConnectionCallback disconnectedCallback_;
   CodecConfiguredCallback codecConfiguredCallback_;
   StreamCallback streamCallback_;
+};
+
+class EspBleClassicAvrcp
+{
+public:
+  using ConnectionCallback =
+    std::function<void(const EspBleClassicAvrcpConnection &)>;
+  using PassthroughCallback =
+    std::function<void(const EspBleClassicAvrcpPassthrough &)>;
+  using RemoteFeaturesCallback =
+    std::function<void(const EspBleClassicAvrcpRemoteFeatures &)>;
+  using PassthroughResponseCallback =
+    std::function<void(const EspBleClassicAvrcpPassthroughResponse &)>;
+  using MetadataCallback =
+    std::function<void(const EspBleClassicAvrcpMetadata &)>;
+  using PlayStatusCallback =
+    std::function<void(const EspBleClassicAvrcpPlayStatus &)>;
+  using VolumeCallback =
+    std::function<void(const EspBleClassicAvrcpVolume &)>;
+
+  // Start AVRCP before starting A2DP. The selected roles remain fixed until
+  // end(); callbacks below are dispatched from EspBleClassic::update().
+  bool begin(
+    const EspBleClassicAvrcpConfig &config = EspBleClassicAvrcpConfig());
+  void end();
+  bool initialized() const;
+  bool controllerInitialized() const;
+  bool targetInitialized() const;
+  bool controllerConnected() const;
+  bool targetConnected() const;
+  uint8_t volume() const;
+
+  bool sendPassthrough(
+    EspBleClassicAvrcpCommand command,
+    EspBleClassicAvrcpKeyState state);
+  bool sendKey(EspBleClassicAvrcpCommand command);
+  bool requestMetadata(uint8_t attributeMask);
+  bool requestPlayStatus();
+  bool setAbsoluteVolume(uint8_t volume);
+  // AVRCP notifications are one-shot. Register again after each Changed event.
+  bool registerVolumeNotifications();
+  bool setLocalVolume(uint8_t volume);
+
+  void onConnectionChanged(ConnectionCallback callback);
+  void onRemoteFeatures(RemoteFeaturesCallback callback);
+  void onPassthrough(PassthroughCallback callback);
+  void onPassthroughResponse(PassthroughResponseCallback callback);
+  void onMetadata(MetadataCallback callback);
+  void onPlayStatus(PlayStatusCallback callback);
+  void onVolumeChanged(VolumeCallback callback);
+  size_t droppedEventCount() const;
+
+private:
+  friend class EspBleClassic;
+  friend struct EspBleClassicAvrcpImpl;
+  explicit EspBleClassicAvrcp(EspBleClassic *owner);
+  ~EspBleClassicAvrcp();
+  void update();
+
+  EspBleClassic *owner_;
+  EspBleClassicAvrcpImpl *impl_ = nullptr;
+  ConnectionCallback connectionCallback_;
+  RemoteFeaturesCallback remoteFeaturesCallback_;
+  PassthroughCallback passthroughCallback_;
+  PassthroughResponseCallback passthroughResponseCallback_;
+  MetadataCallback metadataCallback_;
+  PlayStatusCallback playStatusCallback_;
+  VolumeCallback volumeCallback_;
 };
 
 class EspBleClassicSpp
@@ -474,6 +646,7 @@ public:
   EspBleClassicHidHost &hidHost();
   EspBleClassicA2dpSink &a2dpSink();
   EspBleClassicA2dpSource &a2dpSource();
+  EspBleClassicAvrcp &avrcp();
 
   EspBleError lastError() const;
   const char *lastErrorName() const;
@@ -485,6 +658,7 @@ private:
   friend class EspBleClassicHidHost;
   friend class EspBleClassicA2dpSink;
   friend class EspBleClassicA2dpSource;
+  friend class EspBleClassicAvrcp;
 
   void clearError();
   void setError(EspBleError error, const char *detail);
@@ -495,6 +669,7 @@ private:
   EspBleClassicHidHost hidHost_;
   EspBleClassicA2dpSink a2dpSink_;
   EspBleClassicA2dpSource a2dpSource_;
+  EspBleClassicAvrcp avrcp_;
   EspBleError lastError_ = EspBleError::None;
   String lastErrorDetail_;
 };

@@ -83,8 +83,22 @@ for symbol in \
   espble_bd_esp_a2d_source_disconnect \
   espble_bd_esp_a2d_source_register_stream_endpoint \
   espble_bd_esp_a2d_source_audio_data_send \
+  espble_bd_esp_avrc_ct_register_callback \
   espble_bd_esp_avrc_ct_init \
+  espble_bd_esp_avrc_ct_deinit \
+  espble_bd_esp_avrc_ct_send_passthrough_cmd \
+  espble_bd_esp_avrc_ct_send_metadata_cmd \
+  espble_bd_esp_avrc_ct_send_get_play_status_cmd \
+  espble_bd_esp_avrc_ct_send_set_absolute_volume_cmd \
+  espble_bd_esp_avrc_ct_send_register_notification_cmd \
+  espble_bd_esp_avrc_tg_register_callback \
   espble_bd_esp_avrc_tg_init \
+  espble_bd_esp_avrc_tg_deinit \
+  espble_bd_esp_avrc_tg_get_psth_cmd_filter \
+  espble_bd_esp_avrc_tg_set_psth_cmd_filter \
+  espble_bd_esp_avrc_rn_evt_bit_mask_operation \
+  espble_bd_esp_avrc_tg_set_rn_evt_cap \
+  espble_bd_esp_avrc_tg_send_rn_rsp \
   espble_bd_esp_hf_client_register_audio_data_callback \
   espble_bd_esp_hf_client_audio_data_send \
   espble_bd_esp_hf_ag_register_audio_data_callback \

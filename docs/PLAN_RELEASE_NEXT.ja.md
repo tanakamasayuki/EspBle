@@ -13,8 +13,8 @@
 - Classic-only Bluedroid archive、SPP、HID Device/Host、dual-host HCI brokerは実装・実機検証済みだが実験扱い。
 - Classic-onlyを実用範囲へ広げる次の対象はA2DP/AVRCP/HFP。Bluetooth media payloadまでをEspBleの
   責務とし、PCM処理とdevice I/OはPCMFlow等の独立libraryへ委ねる方針を確定した。
-- A2DP Sink / Sourceのraw transport APIとESP32同士の実機media転送は完了し、PCMFlowBluetoothの初期要件を
-  sibling repositoryへ配置した。次の実装対象はAVRCPである。
+- A2DP Sink / Sourceのraw transport APIとESP32同士の実機media転送、AVRCP CT/TGのpassthroughと
+  absolute volumeは完了した。PCMFlowBluetoothの初期仕様はsibling repositoryへ配置済みで、次の実装対象はHFPである。
 - 配布形式は次回Classic拡張ではNimBLE source / Classic `.a`のmixed distributionを意図的に維持する。
 - dual-hostはcommand/ACL routing、bond/RPA、任意停止順、再attach、FIFO満杯、再登録とheap安定性まで検証済み。
 - 数時間級dual-host soak、観測HCI commandのpolicy分類、不正HID report拒否、peer突然消失後の復旧、接続・pairing失敗後の復旧、lifecycle競合監査は完了。公開サポート範囲の確定が未完了。
@@ -45,6 +45,7 @@ Gate Aの詳細は[引き継ぎ](HANDOFF_ESP32_CLASSIC.ja.md)を正とします�
 | 完了 | Classic Audio archive | external codec A2DP/AVRCP、Voice over HCI / external codec HFPを有効化し、必須API link checkとclean再生成を完了 |
 | 完了 | A2DP Sink transport | SBC codec設定、接続・stream状態、callback限定raw view、停止barrierを実装し、ESP32同士で実機転送 |
 | 完了 | A2DP Source transport | 固定SBC endpoint、copy送信、MTU検査、`WouldBlock` retryを実装し、100 packetを欠損なく実機転送 |
+| 一部完了 | AVRCP CT/TG | passthrough、absolute volume、通知をA2DP併用で実機確認。metadata/play-status受信は外部Targetとの相互運用を残す |
 | 未完了 | board matrix | workflowで対象boardを再生成し、次回versionのBOARDS文書を確定 |
 | 未完了 | core matrix | Arduino-ESP32対応versionを再検証し、次回versionのCOMPATIBILITY文書を確定 |
 | 未完了 | 他SoC非影響 | S3/C3/C6/H2/P4の代表compileでClassic archive・無印ESP32 patchが非適用 |
@@ -72,7 +73,7 @@ Audioのscopeと段階は[Classic Audio拡張計画](PLAN_ESP32_CLASSIC_AUDIO.ja
 | 未完了 | BLE HID Device | 外部Host 2種類以上でkeyboard/mouse/consumer、切断、bond再接続 |
 | 未完了 | BLE HID Host | 市販BLE keyboardで入力、modifier、LED、切断release、bond再接続 |
 | 未完了 | BLE Security / GATT | 外部実装でJust Works、passkey、scan、read/write、notify |
-| 未完了 | Classic相互運用 | 次回releaseへClassicを含める場合、外部Classic HID/SPP実装で対象profileを確認 |
+| 未完了 | Classic相互運用 | 次回releaseへClassicを含める場合、外部Classic HID/SPP/A2DP/AVRCP実装で対象profileを確認 |
 
 結果には実施日、機器、OS、Bluetooth stack/versionを記録します。
 
@@ -89,7 +90,7 @@ Audioのscopeと段階は[Classic Audio拡張計画](PLAN_ESP32_CLASSIC_AUDIO.ja
 
 ## 推奨実行順
 
-1. AVRCP CT/TG、HFP Client/AGの順にcontrol / SCO transportを検証する。
+1. AVRCP metadata/play-statusの外部Target相互運用を行い、HFP Client/AGのcontrol / SCO transportを検証する。
 2. PCMFlowBluetoothのA2DP Sink decoder adapterを並行実装し、実SBC連続再生で最大payloadと負荷を測る。
 3. A2DP/AVRCP/HFPの到達範囲を踏まえてClassicのrelease scopeを決める。
 4. scope確定後にCHANGELOGと利用者向け文書を更新する。

@@ -6,6 +6,10 @@ size_t sentPackets = 0;
 size_t wouldBlockCount = 0;
 uint32_t drainDeadline = 0;
 bool suspendRequested = false;
+bool a2dpConnected = false;
+bool avrcpControllerConnected = false;
+bool avrcpCommandsSent = false;
+bool teardownRequested = false;
 constexpr size_t PacketTarget = 100;
 
 void setup()
@@ -17,8 +21,7 @@ void setup()
     [](const EspBleClassicA2dpConnection &connection) {
       Serial.printf("A2DP_SOURCE_CONNECTED id=%u mtu=%u\n",
         connection.id, connection.mediaMtu);
-      Serial.printf("A2DP_SOURCE_START requested=%u\n",
-        bluetooth.a2dpSource().start() ? 1 : 0);
+      a2dpConnected = true;
     });
   bluetooth.a2dpSource().onCodecConfigured(
     [](const EspBleClassicA2dpCodecConfig &codec) {
@@ -35,9 +38,11 @@ void setup()
     });
   bluetooth.a2dpSource().onDisconnected(
     [](const EspBleClassicA2dpConnection &) {
+      a2dpConnected = false;
       Serial.printf("A2DP_SOURCE_DISCONNECTED sent=%u would_block=%u\n",
         static_cast<unsigned>(sentPackets),
         static_cast<unsigned>(wouldBlockCount));
+      teardownRequested = true;
     });
 
   EspBleClassicConfig stackConfig;
@@ -48,6 +53,31 @@ void setup()
       bluetooth.lastErrorName(), bluetooth.lastErrorDetail().c_str());
     return;
   }
+  bluetooth.avrcp().onConnectionChanged(
+    [](const EspBleClassicAvrcpConnection &event) {
+      Serial.printf("AVRCP_SOURCE_CONNECTION controller=%u connected=%u peer=%s\n",
+        event.controller ? 1 : 0, event.connected ? 1 : 0,
+        event.peerAddress.c_str());
+      if (event.controller) avrcpControllerConnected = event.connected;
+    });
+  bluetooth.avrcp().onPassthroughResponse(
+    [](const EspBleClassicAvrcpPassthroughResponse &event) {
+      Serial.printf("AVRCP_SOURCE_KEY_RESPONSE command=%u state=%u accepted=%u\n",
+        static_cast<unsigned>(event.command),
+        static_cast<unsigned>(event.state), event.accepted ? 1 : 0);
+    });
+  bluetooth.avrcp().onVolumeChanged(
+    [](const EspBleClassicAvrcpVolume &event) {
+      Serial.printf("AVRCP_SOURCE_VOLUME value=%u remote=%u\n",
+        event.value, event.remoteCommand ? 1 : 0);
+    });
+  if (!bluetooth.avrcp().begin())
+  {
+    Serial.printf("AVRCP_SOURCE_INIT_FAILED %s:%s\n",
+      bluetooth.lastErrorName(), bluetooth.lastErrorDetail().c_str());
+    return;
+  }
+  Serial.println("AVRCP_SOURCE_READY");
   const bool initialized = bluetooth.a2dpSource().begin();
   Serial.printf("A2DP_SOURCE_PROFILE initialized=%u\n",
     initialized ? 1 : 0);
@@ -97,6 +127,19 @@ void loop()
     if (command.startsWith("c"))
       Serial.printf("A2DP_SOURCE_CONNECT requested=%u\n",
         bluetooth.a2dpSource().connect(command.c_str() + 1) ? 1 : 0);
+    else if (command == "v" && a2dpConnected &&
+             avrcpControllerConnected && !avrcpCommandsSent)
+    {
+      avrcpCommandsSent = true;
+      Serial.printf("AVRCP_SOURCE_REGISTER_VOLUME requested=%u\n",
+        bluetooth.avrcp().registerVolumeNotifications() ? 1 : 0);
+      Serial.printf("AVRCP_SOURCE_PLAY requested=%u\n",
+        bluetooth.avrcp().sendKey(EspBleClassicAvrcpCommand::Play) ? 1 : 0);
+      Serial.printf("AVRCP_SOURCE_SET_VOLUME requested=%u\n",
+        bluetooth.avrcp().setAbsoluteVolume(77) ? 1 : 0);
+      Serial.printf("A2DP_SOURCE_START requested=%u\n",
+        bluetooth.a2dpSource().start() ? 1 : 0);
+    }
   }
   if (bluetooth.a2dpSource().streaming() && sentPackets < PacketTarget)
   {
@@ -111,6 +154,13 @@ void loop()
     suspendRequested = true;
     Serial.printf("A2DP_SOURCE_SUSPEND requested=%u\n",
       bluetooth.a2dpSource().suspend() ? 1 : 0);
+  }
+  if (teardownRequested)
+  {
+    teardownRequested = false;
+    bluetooth.avrcp().end();
+    bluetooth.a2dpSource().end();
+    Serial.println("AVRCP_SOURCE_ENDED");
   }
   delay(1);
 }

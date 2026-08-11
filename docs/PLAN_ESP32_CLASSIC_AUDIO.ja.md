@@ -114,7 +114,9 @@ A2DPが選択するAVRCPは有効にするが、最初のarchiveでは不要なc
    ESP32同士のexternal-codec転送で実機確認した。
 3. **完了:** A2DP Sourceの固定SBC endpoint、接続、start/suspend、encoded SBC copy送信、
    `WouldBlock` backpressureを公開API化し、Sinkとの100 packet実機転送で確認した。
-4. AVRCP CT/TGの基本操作、metadata、absolute volumeを追加する。
+4. **基本操作完了・相互運用継続:** AVRCP CT/TG、passthrough、absolute volume、volume notification、
+   Controller側のmetadata / play-status要求と応答eventを公開API化した。ESP32同士でPlayと音量を実機確認済み。
+   ESP-IDF公開TG APIにmetadata / play-status応答送信がないため、その受信は外部Targetとの相互運用で確認する。
 5. HFP ClientをVoice over HCI / external codecで追加し、call controlとSCO双方向payloadを確認する。
 6. HFP AGを同じtransport APIへ追加する。Client/AGのruntime排他を検証する。
 7. **仕様確定・実装待ち:** `PCMFlowBluetooth`でexternal SBC/mSBC/CVSD codecとA2DP/HFP adapterを提供する。device出力は
@@ -123,9 +125,32 @@ A2DPが選択するAVRCPは有効にするが、最初のarchiveでは不要なc
    I2Sやboard speakerの実例が必要ならPCMFlowDevice側またはsketchで接続する。
 9. Classic-onlyで安定したprofileごとにdual-host smokeを追加する。dual-host固有の音声最適化は後回しにする。
 
+AVRCPはA2DPより先に初期化する。Targetのvolume notificationはAVRCP規約どおりone-shotであり、
+`Changed`受信後の再登録はController側applicationが行う。metadata文字列はcallback配送前にEspBle所有の
+`String`へcopyし、Bluedroid callback bufferを公開しない。EspBleはmetadataを保持するplayer databaseや
+UIを提供せず、PCMFlowBluetoothもAVRCPへ依存しない。
+
+## HFP実装前調査
+
+ESP-IDF v5.5.5のVoice over HCI / external codec APIでは、Client / AGともaudio state eventから
+同期connection handle、CVSDまたはmSBC、推奨送信frame sizeを取得できる。受信callbackの
+`esp_hf_audio_buff_t`はapplicationが必ず解放する所有権であり、EspBleはcallback中限定viewを配送して
+復帰直後に一度だけ解放する。送信は専用allocatorへcopyしたbufferをAPI成功時にBluedroidが消費し、
+失敗時だけEspBleが解放する。この境界はA2DPと同じ公開ownershipへ正規化できる。
+
+HFP送信APIにはqueue-fullを返す仕組みがなく、受理後のcontroller側discardはpacket statisticsで後から
+観測する。このためA2DPの`WouldBlock`と同じ意味を偽装せず、HFP sendは「Bluedroidへownershipを渡した」
+結果とpacket statisticsを別々に公開する。mSBC受信は57 byte frameの末尾にpaddingを含む場合があるため、
+EspBleはraw payloadを改変せず、PCMFlowBluetooth decoder側がframe長を解釈する。
+
+ESP-IDFはHFP ClientとAGの同時実行をサポートしない。両roleは別classに分離するが、runtimeでは排他にし、
+共通値型でSLC、audio state、call indicator、volume、AT response、同期payloadを表す。Clientの最小到達点は
+SLC接続、着信/発信/応答/終了、audio接続、CVSD/mSBC双方向raw payload、切断である。AGは2台実機probe用の
+応答とcall state modelを持たせるが、電話帳や電話網をEspBle内に実装しない。
+
 ## PCMFlowBluetoothへの引き継ぎ
 
-`../PCMFlowBluetooth/REQUIREMENTS.ja.md`を作成済みで、初期releaseのA2DP Sinkは実装開始可能である。
+`../PCMFlowBluetooth/SPEC.ja.md`を作成済みで、初期releaseのA2DP Sinkは実装開始可能である。
 公開責務、API、queue、thread、callback lifetime、SBC backend候補、完了条件を確定し、EspBleの実機probeで
 codec configuration、encoded frame境界、buffer寿命、停止時callback保証を確認して反映した。HFPのSCO
 payload境界は後続phaseで追記し、初期A2DP Sink実装を止めない。

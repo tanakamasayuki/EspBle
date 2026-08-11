@@ -119,6 +119,9 @@ void app_main(void)
 {
     uint8_t peer[ESP_BD_ADDR_LEN] = {0};
     esp_a2d_mcc_t codec = {0};
+    esp_avrc_psth_bit_mask_t passthrough_commands = {0};
+    esp_avrc_rn_evt_cap_mask_t notifications = {0};
+    esp_avrc_rn_param_t notification_parameter = {0};
     esp_a2d_audio_buff_t *audio = esp_a2d_audio_buff_alloc(1);
     esp_a2d_audio_buff_free(audio);
     const esp_bluedroid_hci_driver_operations_t operations = {
@@ -147,8 +150,27 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_a2d_source_deinit());
     ESP_ERROR_CHECK(esp_avrc_ct_register_callback(avrc_ct_callback));
     ESP_ERROR_CHECK(esp_avrc_ct_init());
+    ESP_ERROR_CHECK(esp_avrc_ct_send_passthrough_cmd(
+        0, ESP_AVRC_PT_CMD_PLAY, ESP_AVRC_PT_CMD_STATE_PRESSED));
+    ESP_ERROR_CHECK(esp_avrc_ct_send_metadata_cmd(1, ESP_AVRC_MD_ATTR_TITLE));
+    ESP_ERROR_CHECK(esp_avrc_ct_send_get_play_status_cmd(2));
+    ESP_ERROR_CHECK(esp_avrc_ct_send_set_absolute_volume_cmd(3, 64));
+    ESP_ERROR_CHECK(esp_avrc_ct_send_register_notification_cmd(
+        4, ESP_AVRC_RN_VOLUME_CHANGE, 0));
     ESP_ERROR_CHECK(esp_avrc_tg_register_callback(avrc_tg_callback));
     ESP_ERROR_CHECK(esp_avrc_tg_init());
+    ESP_ERROR_CHECK(esp_avrc_tg_get_psth_cmd_filter(
+        ESP_AVRC_PSTH_FILTER_ALLOWED_CMD, &passthrough_commands));
+    ESP_ERROR_CHECK(esp_avrc_tg_set_psth_cmd_filter(
+        ESP_AVRC_PSTH_FILTER_SUPPORTED_CMD, &passthrough_commands));
+    (void)esp_avrc_rn_evt_bit_mask_operation(
+        ESP_AVRC_BIT_MASK_OP_SET, &notifications, ESP_AVRC_RN_VOLUME_CHANGE);
+    ESP_ERROR_CHECK(esp_avrc_tg_set_rn_evt_cap(&notifications));
+    ESP_ERROR_CHECK(esp_avrc_tg_send_rn_rsp(
+        ESP_AVRC_RN_VOLUME_CHANGE, ESP_AVRC_RN_RSP_INTERIM,
+        &notification_parameter));
+    ESP_ERROR_CHECK(esp_avrc_tg_deinit());
+    ESP_ERROR_CHECK(esp_avrc_ct_deinit());
     ESP_ERROR_CHECK(esp_hf_client_register_callback(hf_client_callback));
     ESP_ERROR_CHECK(esp_hf_client_register_audio_data_callback(
         hf_client_audio_callback));

@@ -29,6 +29,36 @@ void setup()
     return;
   }
 
+  bluetooth.avrcp().onConnectionChanged(
+    [](const EspBleClassicAvrcpConnection &event) {
+      Serial.printf("AVRCP_SINK_CONNECTION controller=%u connected=%u peer=%s\n",
+        event.controller ? 1 : 0, event.connected ? 1 : 0,
+        event.peerAddress.c_str());
+    });
+  bluetooth.avrcp().onPassthrough(
+    [](const EspBleClassicAvrcpPassthrough &event) {
+      Serial.printf("AVRCP_SINK_KEY command=%u state=%u\n",
+        static_cast<unsigned>(event.command),
+        static_cast<unsigned>(event.state));
+    });
+  bluetooth.avrcp().onVolumeChanged(
+    [](const EspBleClassicAvrcpVolume &event) {
+      Serial.printf("AVRCP_SINK_VOLUME value=%u remote=%u\n",
+        event.value, event.remoteCommand ? 1 : 0);
+      if (event.remoteCommand && event.value == 77)
+        Serial.printf("AVRCP_SINK_LOCAL_VOLUME changed=%u\n",
+          bluetooth.avrcp().setLocalVolume(88) ? 1 : 0);
+    });
+  EspBleClassicAvrcpConfig avrcpConfig;
+  avrcpConfig.initialVolume = 64;
+  if (!bluetooth.avrcp().begin(avrcpConfig))
+  {
+    Serial.printf("AVRCP_SINK_INIT_FAILED %s:%s\n",
+      bluetooth.lastErrorName(), bluetooth.lastErrorDetail().c_str());
+    return;
+  }
+  Serial.println("AVRCP_SINK_READY");
+
   bluetooth.a2dpSink().onConnected([](const EspBleClassicA2dpConnection &event) {
     Serial.printf("A2DP_SINK_CONNECTED id=%u peer=%s mtu=%u incoming=%u\n",
       event.id, event.peerAddress.c_str(), event.mediaMtu,
@@ -87,6 +117,7 @@ void loop()
   if (teardownRequested)
   {
     teardownRequested = false;
+    bluetooth.avrcp().end();
     bluetooth.a2dpSink().end();
     Serial.printf("A2DP_SINK_ENDED initialized=%u\n",
       bluetooth.a2dpSink().initialized() ? 1 : 0);

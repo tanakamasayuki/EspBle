@@ -455,3 +455,22 @@ Bluedroidへ所有権を移す。Sink / Source roleは単一A2DP callbackを共�
 `.a`生成link checkへSinkが実際に使うregister callback、buffer free、init/deinit、connect/disconnect、
 SEP登録を必須symbolとして追加した。cleanなESP-IDF v5.5.5 / GCC 14.2.0で再生成し、格納済みarchiveと
 byte単位およびSHA-256が一致したためbinary差し替えはない。ESP32-S3代表sketchもcompile成功した。
+
+## 2026-08-11 AVRCP CT/TG checkpoint
+
+`EspBleClassicAvrcp`へController / Targetの初期化、接続・remote feature event、passthrough送受信、
+metadata / play-status要求とController応答event、absolute volume設定、Target側volume変更通知を追加した。
+control eventはcopyして`EspBleClassic::update()`から配送し、終了時はcallback参照がなくなるまで待つ。
+
+ESP32-D0WD-V3 2台でAVRCPをA2DPより先に初期化し、同じA2DP接続上でPlayのpress/releaseとaccepted応答、
+ControllerからTargetへのabsolute volume 77、Targetのlocal volume 88への変更通知を確認した。その後も
+A2DP external-codec streamは開始し、既存のmedia転送、backpressure retry、切断まで完走した。
+
+ESP-IDF v5.5.5の公開Target APIはpassthrough受信とabsolute-volume / registered-notification応答を提供するが、
+application metadataまたはplay statusの応答を送るAPIは提供しない。このためESP32同士の公開APIだけでは
+metadata / play-status応答を生成できない。Controller側の要求・応答copy実装は残し、市販機器またはBlueZ等の
+外部Targetとの相互運用をrelease前の未完了項目とする。private Bluedroid APIへ依存して穴を埋めない。
+
+archive link checkは実装が使用するCT/TG callback、init/deinit、passthrough、metadata、play status、absolute
+volume、notification capability / responseをすべて必須symbol化した。固定ESP-IDF/toolchainから再生成した
+archiveは格納済み`.a`とbyte単位で一致し、SHA-256も同じだった。
