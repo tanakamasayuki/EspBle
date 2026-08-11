@@ -30,7 +30,7 @@ int main()
     0x0405, 0x0409, 0x040b, 0x040f, 0x0419, 0x041f, 0x080f,
     0x0c13, 0x0c14, 0x0c18, 0x0c1a, 0x0c1e, 0x0c24, 0x0c25, 0x0c26,
     0x0c2e, 0x0c2f, 0x0c3a, 0x0c43, 0x0c45, 0x0c47, 0x0c52, 0x0c56,
-    0x0c5b};
+    0x0c5b, 0xfc82};
   const uint16_t nimbleConnection[] = {
     0x2016, 0x2019, 0x201a, 0x2022, 0x2030};
   const uint16_t classicConnection[] = {
@@ -85,6 +85,16 @@ int main()
     }
   }
   const uint8_t unknown[] = {0x01, 0x00, 0xfc, 0x00};
+  const uint8_t classicA2dpCoex[] = {
+    0x01, 0x82, 0xfc, 0x03, 0x02, 0x01, 0x10};
+  check("authorize Classic A2DP coexistence command",
+    espble_hci_controller_policy_authorize(
+      1, classicA2dpCoex, sizeof(classicA2dpCoex)) ==
+      ESPBLE_HCI_COMMAND_AUTHORIZED);
+  check("reject Classic A2DP coexistence command from NimBLE",
+    espble_hci_controller_policy_authorize(
+      0, classicA2dpCoex, sizeof(classicA2dpCoex)) ==
+      ESPBLE_HCI_COMMAND_WRONG_HOST);
   check("synchronous setup targets owned ACL handle",
     espble_hci_controller_policy_targets_handle(0x0428));
   check("synchronous accept targets Bluetooth address",

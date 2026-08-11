@@ -64,6 +64,13 @@
   voice/eSCO command policy.
 - (JA) 実験的dual-host routingをHFP mSBC SCOへ拡張し、BLE GATT接続中の双方向音声payload、
   同期接続handle所有権、Classic voice/eSCO command policyを実機確認した。
+- (EN) Extended dual-host hardware coverage to A2DP encoded-media streaming and
+  AVRCP playback/absolute-volume control while LE GATT stays usable before,
+  during, and after the stream. The broker now classifies ESP's A2DP coexistence
+  vendor command instead of rejecting it.
+- (JA) dual-host実機検証をA2DP encode済みmedia転送とAVRCP再生・absolute volumeへ
+  拡張し、stream前・中・切断後もLE GATTが利用できることを確認した。ESPのA2DP共存状態
+  vendor commandをbroker policyへ分類し、拒否せずcontrollerへ配送する。
 
 ## 1.2.0
 - (EN) Added support for the original ESP32. Its Arduino-ESP32 prebuilt libraries

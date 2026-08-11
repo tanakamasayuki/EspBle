@@ -1,4 +1,7 @@
 #include <EspBleClassic.h>
+#if defined(ESPBLE_TEST_DUAL_A2DP)
+#include <EspBle.h>
+#endif
 
 EspBleClassic bluetooth;
 uint32_t nextTimestamp = 1000;
@@ -11,6 +14,52 @@ bool avrcpControllerConnected = false;
 bool avrcpCommandsSent = false;
 bool teardownRequested = false;
 constexpr size_t PacketTarget = 100;
+
+#if defined(ESPBLE_TEST_DUAL_A2DP)
+EspBle dualBle;
+EspBleConnectionId dualConnectionId = 0;
+bool dualConnectionRequested = false;
+constexpr const char *DualA2dpServiceUuid =
+  "6fd8e000-6548-49b7-a32d-b0240fa70001";
+constexpr const char *DualA2dpCharacteristicUuid =
+  "6fd8e001-6548-49b7-a32d-b0240fa70001";
+
+bool startDualBleClient()
+{
+  dualBle.scanner().onResult([](const EspBleScanResult &result) {
+    if (dualConnectionRequested ||
+        !result.advertisesService(DualA2dpServiceUuid)) return;
+    dualBle.scanner().stop();
+    dualConnectionRequested = dualBle.connect(result);
+    Serial.printf("DUAL_A2DP_BLE_CONNECT requested=%u\n",
+      dualConnectionRequested ? 1 : 0);
+  });
+  dualBle.onConnected([](const EspBleConnection &connection) {
+    dualConnectionId = connection.id;
+    Serial.println("DUAL_A2DP_BLE_CLIENT_CONNECTED");
+    Serial.printf("DUAL_A2DP_BLE_READ_REQUESTED %u\n",
+      dualBle.readCharacteristic(
+        connection.id, DualA2dpServiceUuid,
+        DualA2dpCharacteristicUuid) ? 1 : 0);
+  });
+  dualBle.onDisconnected([](const EspBleConnection &) {
+    dualConnectionId = 0;
+    dualConnectionRequested = false;
+    Serial.println("DUAL_A2DP_BLE_CLIENT_DISCONNECTED");
+  });
+  dualBle.onCharacteristicRead([](const EspBleGattResult &result) {
+    Serial.printf("DUAL_A2DP_BLE_READ success=%u value=%s a2dp=%u\n",
+      result.success ? 1 : 0, result.value.c_str(),
+      bluetooth.a2dpSource().streaming() ? 1 : 0);
+  });
+  EspBleConfig config;
+  config.deviceName = "EspBle Dual A2DP Peer";
+  if (!dualBle.begin(config)) return false;
+  EspBleScanConfig scanConfig;
+  scanConfig.active = true;
+  return dualBle.scanner().start(scanConfig);
+}
+#endif
 
 void setup()
 {
@@ -83,6 +132,15 @@ void setup()
     initialized ? 1 : 0);
   Serial.printf("A2DP_SOURCE_READY endpoint=%u seid=0\n",
     initialized ? 1 : 0);
+#if defined(ESPBLE_TEST_DUAL_A2DP)
+  if (!initialized || !startDualBleClient())
+  {
+    Serial.printf("DUAL_A2DP_BLE_START_FAILED %s\n",
+      dualBle.lastErrorDetail().c_str());
+    return;
+  }
+  Serial.println("DUAL_A2DP_BLE_CLIENT_READY");
+#endif
 }
 
 EspBleClassicAudioSendResult sendPacket()
@@ -120,6 +178,9 @@ EspBleClassicAudioSendResult sendPacket()
 void loop()
 {
   bluetooth.update();
+#if defined(ESPBLE_TEST_DUAL_A2DP)
+  dualBle.update();
+#endif
   if (Serial.available())
   {
     String command = Serial.readStringUntil('\n');
@@ -140,12 +201,24 @@ void loop()
       Serial.printf("A2DP_SOURCE_START requested=%u\n",
         bluetooth.a2dpSource().start() ? 1 : 0);
     }
+#if defined(ESPBLE_TEST_DUAL_A2DP)
+    else if (command == "r")
+      Serial.printf("DUAL_A2DP_BLE_READ_REQUESTED %u\n",
+        dualConnectionId != 0 && dualBle.readCharacteristic(
+          dualConnectionId, DualA2dpServiceUuid,
+          DualA2dpCharacteristicUuid) ? 1 : 0);
+#endif
   }
   if (bluetooth.a2dpSource().streaming() && sentPackets < PacketTarget)
   {
     for (size_t attempt = 0; attempt < 32 && sentPackets < PacketTarget; ++attempt)
       if (sendPacket() != EspBleClassicAudioSendResult::Accepted) break;
-    if (sentPackets == PacketTarget) drainDeadline = millis() + 1000;
+    if (sentPackets == PacketTarget)
+#if defined(ESPBLE_TEST_DUAL_A2DP)
+      drainDeadline = millis() + 3000;
+#else
+      drainDeadline = millis() + 1000;
+#endif
   }
   if (bluetooth.a2dpSource().streaming() &&
       sentPackets == PacketTarget && !suspendRequested &&

@@ -125,8 +125,9 @@ A2DPが選択するAVRCPは有効にするが、最初のarchiveでは不要なc
    固定せず、PCMSource/PCMSink境界までを提供する。
 8. **一部完了:** EspBle側にA2DP Sink raw media exampleを追加した。PCMFlowBluetooth側にはEspBleとのintegration exampleを置く。
    I2Sやboard speakerの実例が必要ならPCMFlowDevice側またはsketchで接続する。
-9. **HFP完了:** BLE GATT接続中のSLC、発信、mSBC SCO双方向payload、SCO中・切断後のGATT readを
-   dual-host smokeで確認した。A2DP/AVRCPのdual-host smokeと音声固有の最適化は後回しにする。
+9. **dual-host基本完了:** BLE GATT接続中のHFP SLC・発信・mSBC SCO双方向payloadに加え、A2DP SBC
+   encode済みmedia転送とAVRCP Play / absolute volumeを確認した。SCO/stream中と切断後もGATT readは継続し、
+   broker異常診断は0だった。音声固有の性能最適化と外部機器相互運用は後続課題とする。
 
 AVRCPはA2DPより先に初期化する。Targetのvolume notificationはAVRCP規約どおりone-shotであり、
 `Changed`受信後の再登録はController側applicationが行う。metadata文字列はcallback配送前にEspBle所有の

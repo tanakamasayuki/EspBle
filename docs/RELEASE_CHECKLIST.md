@@ -59,7 +59,9 @@ If Classic is in scope, add the Classic-only and dual-host regressions on the sa
 ```sh
 uv run --env-file .env pytest --clean -s \
   peer/classic_spp_exclusive/ peer/classic_hid_profiles/ \
-  peer/classic_hid_report/ peer/dual_host_smoke/ peer/dual_host_rpa/ \
+  peer/classic_hid_report/ peer/classic_a2dp_media/ peer/classic_hfp_client/ \
+  peer/dual_host_smoke/ peer/dual_host_rpa/ peer/dual_host_hfp/ \
+  peer/dual_host_a2dp/ \
   --profile esp32_peer_host --peer-profile device:esp32_peer_device
 ```
 

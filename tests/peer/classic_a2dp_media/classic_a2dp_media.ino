@@ -1,10 +1,48 @@
 #include <EspBleClassic.h>
 #include <esp_mac.h>
+#if defined(ESPBLE_TEST_DUAL_A2DP)
+#include <EspBle.h>
+#include <EspBleHciBroker.h>
+#endif
 
 EspBleClassic bluetooth;
 size_t mediaPackets = 0;
 size_t mediaBytes = 0;
 bool teardownRequested = false;
+
+#if defined(ESPBLE_TEST_DUAL_A2DP)
+EspBle dualBle;
+EspBleGattService dualService;
+EspBleGattCharacteristic dualCharacteristic;
+constexpr const char *DualA2dpServiceUuid =
+  "6fd8e000-6548-49b7-a32d-b0240fa70001";
+constexpr const char *DualA2dpCharacteristicUuid =
+  "6fd8e001-6548-49b7-a32d-b0240fa70001";
+
+bool startDualBleServer()
+{
+  EspBleGattCharacteristicConfig characteristicConfig;
+  characteristicConfig.readable = true;
+  dualService = dualBle.gattServer().addService(DualA2dpServiceUuid);
+  dualCharacteristic = dualBle.gattServer().addCharacteristic(
+    dualService, DualA2dpCharacteristicUuid, characteristicConfig);
+  dualBle.gattServer().setValue(dualCharacteristic, String("dual-a2dp"));
+  dualBle.onConnected([](const EspBleConnection &) {
+    Serial.println("DUAL_A2DP_BLE_SERVER_CONNECTED");
+  });
+  dualBle.onDisconnected([](const EspBleConnection &) {
+    Serial.println("DUAL_A2DP_BLE_SERVER_DISCONNECTED");
+  });
+  EspBleConfig config;
+  config.deviceName = "EspBle Dual A2DP";
+  if (!dualService.valid() || !dualCharacteristic.valid() ||
+      !dualBle.begin(config))
+    return false;
+  dualBle.advertising().setName("EspBle Dual A2DP");
+  dualBle.advertising().addServiceUuid(DualA2dpServiceUuid);
+  return dualBle.advertising().start();
+}
+#endif
 
 String classicAddress()
 {
@@ -109,11 +147,23 @@ void setup()
   Serial.printf("A2DP_SINK_READY started=%u address=%s error=%s:%s\n",
     started ? 1 : 0, classicAddress().c_str(), bluetooth.lastErrorName(),
     bluetooth.lastErrorDetail().c_str());
+#if defined(ESPBLE_TEST_DUAL_A2DP)
+  if (!started || !startDualBleServer())
+  {
+    Serial.printf("DUAL_A2DP_BLE_START_FAILED %s\n",
+      dualBle.lastErrorDetail().c_str());
+    return;
+  }
+  Serial.println("DUAL_A2DP_BLE_SERVER_READY");
+#endif
 }
 
 void loop()
 {
   bluetooth.update();
+#if defined(ESPBLE_TEST_DUAL_A2DP)
+  dualBle.update();
+#endif
   if (teardownRequested)
   {
     teardownRequested = false;
@@ -122,5 +172,36 @@ void loop()
     Serial.printf("A2DP_SINK_ENDED initialized=%u\n",
       bluetooth.a2dpSink().initialized() ? 1 : 0);
   }
+#if defined(ESPBLE_TEST_DUAL_A2DP)
+  if (Serial.available())
+  {
+    const String command = Serial.readStringUntil('\n');
+    if (command == "z")
+    {
+      espble_hci_broker_diagnostics_t diagnostics = {};
+      espble_hci_broker_get_diagnostics(&diagnostics);
+      bool coexCommandSeen = false;
+      for (size_t i = 0; i < diagnostics.command_opcode_count[1]; ++i)
+      {
+        if (diagnostics.command_opcodes[1][i] == 0xfc82)
+        {
+          coexCommandSeen = true;
+          break;
+        }
+      }
+      Serial.printf(
+        "DUAL_A2DP_DIAGNOSTICS acl_tx=%lu,%lu acl_rx=%lu,%lu "
+        "unknown=%lu mismatch=%lu qfull=%lu coex=%u\n",
+        static_cast<unsigned long>(diagnostics.tx_acl[0]),
+        static_cast<unsigned long>(diagnostics.tx_acl[1]),
+        static_cast<unsigned long>(diagnostics.rx_acl[0]),
+        static_cast<unsigned long>(diagnostics.rx_acl[1]),
+        static_cast<unsigned long>(diagnostics.unknown_acl),
+        static_cast<unsigned long>(diagnostics.command_response_mismatch),
+        static_cast<unsigned long>(diagnostics.command_queue_full),
+        coexCommandSeen ? 1 : 0);
+    }
+  }
+#endif
   delay(1);
 }

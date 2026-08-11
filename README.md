@@ -93,7 +93,9 @@ traffic afterwards has passed hardware tests. In Classic-only mode, encoded A2DP
 Sink/Source media transport, AVRCP playback/absolute-volume control, and HFP
 Client/Audio Gateway single-call control plus raw mSBC SCO transport also pass;
 dual-host mode also passes bidirectional mSBC SCO while an LE GATT connection
-remains usable during and after the audio link;
+remains usable during and after the audio link. It also passes A2DP encoded-media
+streaming and AVRCP playback/volume control while GATT reads remain usable before,
+during, and after the stream;
 the same API represents CVSD, which still needs interoperability coverage. The
 two HFP roles are process-wide mutually exclusive.
 Shared-command scheduling now

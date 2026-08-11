@@ -15,7 +15,7 @@ dual-hostは`ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL`によるopt-inです。通常bui
 昇格していません。
 
 Classic-only A2DP Sink / Source、AVRCP CT/TG、HFP Client / Audio Gatewayの公開APIと実機転送まで完了しました。
-dual-hostでもBLE GATT接続中のmSBC SCO双方向転送と、SCO切断後のGATT継続まで確認済みです。EspBleはBluetooth profile、codec negotiation、encode済みmedia/SCO payloadの受け渡し
+dual-hostでもBLE GATT接続中のmSBC SCO双方向転送、A2DP encode済みmedia転送、AVRCP操作と、各link切断後のGATT継続まで確認済みです。EspBleはBluetooth profile、codec negotiation、encode済みmedia/SCO payloadの受け渡し
 までを担当し、PCM処理やdevice I/Oは担当しません。詳細は
 [Classic Audio拡張計画](PLAN_ESP32_CLASSIC_AUDIO.ja.md)を正本とします。
 
@@ -33,6 +33,7 @@ dual-hostでもBLE GATT接続中のmSBC SCO双方向転送と、SCO切断後のG
 | HFP Client | SLC、発信/応答/終了等のcall control、call/volume/AT event、CVSD/mSBC raw SCO送受信、bad-frame、packet statisticsを公開API化。ESP32 AG probeとmSBC双方向転送を確認 |
 | HFP Audio Gateway | CIND/COPS/CNUM/CLCC自動応答、単一call model、application command event、CVSD/mSBC raw SCO送受信を公開API化。公開Clientとの発信・mSBC往復とClient/AG process-wide排他を確認 |
 | dual-host HFP | BLE GATT接続中のSLC、発信、mSBC SCO双方向payload、SCO中・切断後のGATT readを確認。Voice Setting/eSCO command policy、BD_ADDR指定command、SCO handle ownershipを実装 |
+| dual-host A2DP / AVRCP | BLE GATT接続中にSBC media、Play、absolute volume、stream中・切断後のGATT readを確認。ESP A2DP coexistence command `0xfc82`をClassic radio policyへ分類 |
 | dual-host HCI routing | Command Complete/Status、LE/BR-EDR handle、ACL、切断、Completed Packetsをrouting |
 | command scheduler | broker所有16 packet FIFO、controller credit、opcode照合、1 response command in-flight |
 | controller-wide policy | General/Page 2/LE event mask union、再attach時Resetとflow-control設定の仮想完了 |
@@ -124,6 +125,12 @@ uv run --env-file .env pytest -s peer/dual_host_rpa/ \
   --profile esp32_peer_host --peer-profile device:esp32_peer_device
 
 uv run --env-file .env pytest -s peer/classic_a2dp_media/ \
+  --profile esp32_peer_host --peer-profile device:esp32_peer_device
+
+uv run --env-file .env pytest --clean -s peer/dual_host_hfp/ \
+  --profile esp32_peer_host --peer-profile device:esp32_peer_device
+
+uv run --env-file .env pytest --clean -s peer/dual_host_a2dp/ \
   --profile esp32_peer_host --peer-profile device:esp32_peer_device
 
 uv run pytest -q unit

@@ -130,7 +130,7 @@ Classic-only Bluedroid host. Dual-host support remains experimental and its rele
 | AVRCP (media control) | ⚠️ | CT/TG passthrough, metadata/play-status requests, and absolute volume; external-target metadata interoperability remains |
 | SPP (Serial Port Profile) | ⚠️ | Classic-only Server/Client transport verified on hardware. Use NUS or similar on BLE |
 | Classic HID (BT HID) | ⚠️ | Classic-only generic Device/Host verified on hardware. Use HOGP on BLE |
-| Simultaneous Classic / BLE (dual host) | ⚠️ | Experimental opt-in; HID/security/lifecycle plus bidirectional HFP mSBC SCO with GATT reads during and after SCO are hardware-verified |
+| Simultaneous Classic / BLE (dual host) | ⚠️ | Experimental opt-in; HID/security/lifecycle, bidirectional HFP mSBC SCO, A2DP encoded-media streaming, AVRCP control, and GATT reads during and after each audio link are hardware-verified |
 
 ## Notes
 

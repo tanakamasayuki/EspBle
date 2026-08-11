@@ -97,6 +97,7 @@ espble_hci_command_scope_t espble_hci_controller_policy_classify_opcode(
     case 0x0c52: // Write Extended Inquiry Response
     case 0x0c56: // Write Simple Pairing Mode
     case 0x0c5b: // Write Default Erroneous Data Reporting
+    case 0xfc82: // ESP vendor: set/clear coexistence status (Classic A2DP)
       return ESPBLE_HCI_COMMAND_SCOPE_CLASSIC_RADIO;
     case 0x0411: // Authentication Requested
     case 0x0413: // Set Connection Encryption

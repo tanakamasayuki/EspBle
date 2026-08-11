@@ -17,7 +17,7 @@
   absolute volumeに加え、HFP Client/Audio GatewayのSLC、単一call control、mSBC raw SCO transport、
   process-wide role排他まで完了した。PCMFlowBluetoothの初期仕様はsibling repositoryへ配置済みである。
 - 配布形式は次回Classic拡張ではNimBLE source / Classic `.a`のmixed distributionを意図的に維持する。
-- dual-hostはcommand/ACL routing、bond/RPA、任意停止順、再attach、FIFO満杯、再登録とheap安定性に加え、BLE GATT接続中のHFP mSBC SCO双方向通信まで検証済み。
+- dual-hostはcommand/ACL routing、bond/RPA、任意停止順、再attach、FIFO満杯、再登録とheap安定性に加え、BLE GATT接続中のHFP mSBC SCO双方向通信とA2DP/AVRCPまで検証済み。
 - 数時間級dual-host soak、観測HCI commandのpolicy分類、不正HID report拒否、peer突然消失後の復旧、接続・pairing失敗後の復旧、lifecycle競合監査は完了。公開サポート範囲の確定が未完了。
 - `CHANGELOG.md`のUnreleasedと利用者向けClassic文書は、次回release内容として未整理。
 
@@ -48,6 +48,7 @@ Gate Aの詳細は[引き継ぎ](HANDOFF_ESP32_CLASSIC.ja.md)を正とします�
 | 完了 | A2DP Source transport | 固定SBC endpoint、copy送信、MTU検査、`WouldBlock` retryを実装し、100 packetを欠損なく実機転送 |
 | 一部完了 | AVRCP CT/TG | passthrough、absolute volume、通知をA2DP併用で実機確認。metadata/play-status受信は外部Targetとの相互運用を残す |
 | 一部完了 | HFP | Client/Audio GatewayのSLC、発信・着信・応答・終了、mSBC raw SCO transport、packet statistics、role排他を実機確認。外部機器相互運用を残す |
+| 完了 | dual-host Audio基本回帰 | BLE GATT接続を維持してHFP mSBC SCO、A2DP SBC media、AVRCP Play / absolute volumeを実行し、各link中・切断後のGATT readとbroker異常0を確認 |
 | 未完了 | board matrix | workflowで対象boardを再生成し、次回versionのBOARDS文書を確定 |
 | 未完了 | core matrix | Arduino-ESP32対応versionを再検証し、次回versionのCOMPATIBILITY文書を確定 |
 | 未完了 | 他SoC非影響 | S3/C3/C6/H2/P4の代表compileでClassic archive・無印ESP32 patchが非適用 |
@@ -62,7 +63,7 @@ Audioのscopeと段階は[Classic Audio拡張計画](PLAN_ESP32_CLASSIC_AUDIO.ja
 | 未完了 | S3標準回帰 | `--clean`全Peer + unitを連続実行し、複数回でflaky failure、heap低下、task残留なし |
 | 未完了 | 無印ESP32 NimBLE回帰 | Central / Peripheral両roleの`--clean`掃引が成功 |
 | 未完了 | Classic専用回帰 | SPP、HID profile/reportの排他構成が成功 |
-| 未完了 | dual-host回帰 | public address、RPA/bond、soakが成功 |
+| 完了 | dual-host回帰 | public address、RPA/bond、soak、HFP、A2DP/AVRCPが成功 |
 | 未完了 | P4/C6 Hosted代表回帰 | Security非依存のrelease gateが成功。上流既知制限は再確認 |
 | 未完了 | 全example compile | release対象boardでworkflow成功、Classic exampleは無印ESP32条件を確認 |
 

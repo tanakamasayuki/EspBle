@@ -25,6 +25,11 @@ HFPについてもdual-host実機検証を追加し、BLE GATT接続を維持し
 追加し、BD_ADDR指定commandとhandle指定commandを分離した。同期接続完了eventからSCO handleをClassic所有として
 登録するため、共通Disconnectも正しいhostへ限定できる。
 
+A2DP/AVRCPについてもdual-host実機検証を追加した。BLE GATT接続を維持してSBC encode済みmediaを転送し、
+AVRCP Playとabsolute volumeを操作した。stream前・中・切断後のGATT readが成立し、brokerのunknown ACL、
+command response mismatch、queue fullはいずれも0だった。A2DP状態遷移でBluedroidが送るESP固有coexistence
+command `0xfc82`をClassic radio scopeへ分類した。
+
 現在の引き継ぎ状態と残作業は[HANDOFF_ESP32_CLASSIC.ja.md](HANDOFF_ESP32_CLASSIC.ja.md)、
 独自Classic host archiveの再生成方法は[CLASSIC_HOST_BUILD.ja.md](CLASSIC_HOST_BUILD.ja.md)を参照する。
 
@@ -47,6 +52,7 @@ HFPについてもdual-host実機検証を追加し、BLE GATT接続を維持し
 | dual-host異常report / peer消失 | null・上限超過reportを接続維持のまま拒否し、peer突然再起動後にbond済みBLEとClassic HIDを復旧 |
 | dual-host接続 / pairing失敗 | 誤passkey後にbondなしで再pairing。HID非同期接続失敗後も暗号化LEを維持してClassic再接続 |
 | dual-host HFP / SCO | BLE GATT接続中のSLC、発信、mSBC SCO双方向、SCO中・切断後のGATT read。`unknown=0 mismatch=0 qfull=0` |
+| dual-host A2DP / AVRCP | BLE GATT接続中のSBC media、Play、absolute volume、stream中・切断後のGATT read。ESP coexistence commandを配送しbroker異常0 |
 | Classic callback参照寿命 | SPP/HID targetの登録mutex・参照数barrierを追加し、全停止順とdestructor順をclean実機回帰 |
 | Classic archive clean再現 | cleanなIDF v5.5.5 / GCC 14.2.0から生成し、格納済み`.a`とbyte単位・SHA-256一致 |
 | HCI router / controller policy unit | opcode応答、handle所有、ACL、切断、mixed completed event、command scopeと許可host |
@@ -513,3 +519,22 @@ Clientから終了までを続けて確認した。call開始・終了に追従�
 AGで実際に使用するSLC/audio、必須照会応答、call report、volume/voice recognition、allocator/free/send、
 packet statisticsをarchiveの最終linkと必須symbol検査へ追加した。ESP-IDF v5.5.5 / GCC 14.2.0で生成した
 一時archiveは格納済みarchiveとbyte単位で一致し、SHA-256も変わらなかった。
+
+## 2026-08-11 dual-host A2DP / AVRCP checkpoint
+
+Classic-onlyで検証済みのA2DP Sink / SourceとAVRCP CT/TG fixtureへ、条件付きでNimBLE GATT Server / Clientを
+追加した。ESP32-D0WD-V3 2台をdual-hostで起動し、GATT接続後にA2DPを接続、48,000 Hz stereoのSBC設定、
+AVRCP Play press/release、absolute volumeとlocal volume notification、encode済みmediaの連続転送を確認した。
+GATT characteristicはA2DP接続前、stream中、A2DP/AVRCP終了後の各段階で同じ値を読み出せた。
+
+最初のprobeではA2DPのstream開始・停止に合わせ、両Classic hostがHCI opcode `0xfc82`を送ることを観測した。
+ESP-IDF v5.5.5の`HCI_VENDOR_COMMON_COEX_STATUS_CMD_OPCODE`であり、parameterはtype、set/clear operation、
+A2DP streaming/paused statusの3 byteである。現dual-host構成の同梱NimBLEはこのESP固有VSCを発行しないため、
+controller policyではClassic radio scopeへ分類した。実パラメータを使ったpolicy unit testでClassicだけを許可し、
+再実機試験では開始後・切断後ともcommand response mismatch、unknown ACL、command queue fullは0だった。
+通常のESP32-S3 `stack_smoke`もclean compileし、Classic archiveとdual-host経路が非対象SoCへ混入しないことを
+再確認した。
+
+この試験で確認したのはBluetooth profileとencode済みpayload transportの共存であり、SBC decode、PCM処理、
+I2S等のdevice I/Oは引き続きPCMFlowBluetooth側の責務である。またHFP SCOとA2DP ACL audioを同時に動かす
+構成は対象外で、個別profileとBLE GATTの組合せを検証したものとする。
