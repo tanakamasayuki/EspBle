@@ -1,6 +1,6 @@
 # 無印ESP32 NimBLE / Classic共存 引き継ぎ
 
-2026-08-09時点の実装、検証済み範囲、未完了事項、作業再開手順をまとめます。新しく作業する人は
+2026-08-11時点の実装、検証済み範囲、未完了事項、作業再開手順をまとめます。新しく作業する人は
 この文書、[Classic設計・検証記録](PLAN_ESP32_CLASSIC.ja.md)、
 [技術検証](TECHNICAL_VALIDATION_ESP32_CLASSIC.ja.md)の順に読んでください。
 
@@ -19,15 +19,17 @@ dual-hostは`ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL`によるopt-inです。通常bui
 | 領域 | 状態 |
 |---|---|
 | Classic host独自build | IDF v5.5.5 / GCC 14.2.0、controller/BLE無効、SPP/HID Device/HID Host/SMP有効 |
+| archive clean再現 | cleanなv5.5.5 worktreeから一時生成し、格納済み`.a`とbyte単位・SHA-256一致 |
 | symbol分離 | archiveのglobal defined symbolを`espble_bd_`へ名前空間化。core Bluedroidと衝突なし |
 | Classic排他モード | SPP、HID Device/Host、双方向report、切断、再初期化、再接続を実機確認 |
 | dual-host HCI routing | Command Complete/Status、LE/BR-EDR handle、ACL、切断、Completed Packetsをrouting |
 | command scheduler | broker所有16 packet FIFO、controller credit、opcode照合、1 response command in-flight |
 | controller-wide policy | General/Page 2/LE event mask union、再attach時Resetとflow-control設定の仮想完了 |
-| lifecycle | controller停止責任をbrokerへ委譲し、任意停止順、再attach、両destructor順、再起動を確認 |
+| lifecycle | controller停止責任をbrokerへ委譲。任意停止順、再attach、両destructor順、再起動に加え、SPP/HID callback解除の参照寿命barrierを確認 |
 | Security / privacy | Classic接続中のBLE pairing、bond復元、暗号化GATT、host-based RPA rotationと再起動復元 |
 | 負荷 | GATT/Classic ACL反復、command同時発行、FIFO満杯・超過拒否、数時間級再登録soak、heap非減少を確認 |
 | 異常report / peer消失 | null・1025 byte HID reportを接続維持のまま拒否。peer突然再起動後にbond済みBLEとClassic HIDを再接続 |
+| 接続・pairing失敗 | 誤passkey後にbondを残さず再pairing。HID Hostの非同期接続失敗通知後もBLEを維持し、正しいpeerへ再接続 |
 | 他SoC分離 | ESP32-S3 buildでClassic archive非リンク、無印ESP32専用privacy patch非適用を確認 |
 
 詳細な数値と失敗から得た知見は[技術検証](TECHNICAL_VALIDATION_ESP32_CLASSIC.ja.md)にあります。
@@ -46,8 +48,7 @@ dual-hostは`ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL`によるopt-inです。通常bui
 
 ### P0: 実験機能の信頼性
 
-1. dual-host状態でHID接続失敗とpairing失敗を試験する。異常長Input/Output Reportとpeer消失後の復旧は完了済み。
-2. callback解除とcallback実行が別coreで競合するlifecycle境界を監査し、必要なら参照寿命または停止barrierを追加する。
+完了。失敗復旧、異常入力、peer消失、callback解除時の参照寿命を実装・監査し、clean実機回帰まで通した。
 
 ### P1: 一般対応・upstream品質
 
@@ -70,6 +71,9 @@ dual-hostは`ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL`によるopt-inです。通常bui
 - NimBLE停止を別taskから直接行うとNPL event queueと競合する。停止開始はNimBLE host task自身へ要求する。
 - RPA更新はadvertising / scanをpreemptする。元の設定と有限deadlineを保持して再開しないと、処理が停止または期限延長する。
 - Classic再attach時の物理HCI Resetは既存LE接続を破壊するため、Classicだけへ仮想Command Completeを返す。
+- Bluedroid公開HID Host APIにはpage中の接続試行を取り消す手段がない。未接続peerへの任意timeoutを
+  `esp_bt_hid_host_disconnect()`で実装すると内部のconnecting状態が残り、次の接続を拒否するため採用しない。
+  APIはbackendの最終`OPEN`失敗を`onConnectionFailed()`で非同期通知する。
 
 ## 作業環境と再開方法
 
@@ -102,6 +106,11 @@ ESPBLE_DUAL_SOAK_RUNS=20 tools/run_dual_host_soak.sh
 使っていないことと、`tests/.env`のprofile/port設定を確認します。
 
 archive再生成は[Classic host archive再生成](CLASSIC_HOST_BUILD.ja.md)を参照してください。
+
+2026-08-11に`v5.5.5` tagの独立worktreeへ全submoduleをcheckoutし、GCC 14.2.0で一時出力へ
+clean buildした。生成物は格納済みarchiveと`cmp`で一致し、SHA-256は双方
+`6b04833c2a1f32a04c357dca26b12ae05eb4f9ffdb14f57d49fc994abebf7a9f`だった。
+固定Kconfig、必須prefixed symbol、unprefixed global defined symbolがないことも確認した。
 
 ## 完了判定と記録
 

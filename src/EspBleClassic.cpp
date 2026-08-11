@@ -208,6 +208,7 @@ struct EspBleClassicSppImpl
   }
 
   mutable std::mutex mutex;
+  std::atomic<size_t> callbackUsers{0};
   Event events[EventQueueCapacity];
   size_t eventHead = 0;
   size_t eventCount = 0;
@@ -247,6 +248,50 @@ namespace
 {
 std::atomic<EspBleClassic *> activeClassic{nullptr};
 std::atomic<EspBleClassicSppImpl *> activeSpp{nullptr};
+std::mutex sppCallbackTargetMutex;
+
+class SppCallbackLease
+{
+public:
+  SppCallbackLease()
+  {
+    std::lock_guard<std::mutex> lock(sppCallbackTargetMutex);
+    impl_ = activeSpp.load(std::memory_order_relaxed);
+    if (impl_ != nullptr)
+      impl_->callbackUsers.fetch_add(1, std::memory_order_acq_rel);
+  }
+
+  ~SppCallbackLease()
+  {
+    if (impl_ != nullptr)
+      impl_->callbackUsers.fetch_sub(1, std::memory_order_acq_rel);
+  }
+
+  EspBleClassicSppImpl *get() const { return impl_; }
+
+private:
+  EspBleClassicSppImpl *impl_ = nullptr;
+};
+
+bool activateSppCallbackTarget(EspBleClassicSppImpl *impl)
+{
+  std::lock_guard<std::mutex> lock(sppCallbackTargetMutex);
+  EspBleClassicSppImpl *current =
+    activeSpp.load(std::memory_order_relaxed);
+  if (current != nullptr && current != impl) return false;
+  activeSpp.store(impl, std::memory_order_release);
+  return true;
+}
+
+void deactivateSppCallbackTarget(EspBleClassicSppImpl *impl)
+{
+  {
+    std::lock_guard<std::mutex> lock(sppCallbackTargetMutex);
+    if (activeSpp.load(std::memory_order_relaxed) == impl)
+      activeSpp.store(nullptr, std::memory_order_release);
+  }
+  while (impl->callbackUsers.load(std::memory_order_acquire) != 0) delay(1);
+}
 
 void failConnection(
   EspBleClassicSppImpl *impl, EspBleError error, const char *detail)
@@ -277,7 +322,7 @@ void startNextWrite(EspBleClassicSppImpl *impl)
   {
     std::lock_guard<std::mutex> lock(impl->mutex);
     if (
-      impl->backendHandle == 0 || impl->txCount == 0 ||
+      impl->ending || impl->backendHandle == 0 || impl->txCount == 0 ||
       impl->txInFlight || impl->txCongested)
     {
       return;
@@ -350,7 +395,8 @@ void classicGapCallback(
 
 void sppCallback(esp_spp_cb_event_t event, esp_spp_cb_param_t *parameter)
 {
-  EspBleClassicSppImpl *impl = activeSpp.load(std::memory_order_acquire);
+  SppCallbackLease lease;
+  EspBleClassicSppImpl *impl = lease.get();
   if (impl == nullptr || parameter == nullptr) return;
 
   if (event == ESP_SPP_INIT_EVT)
@@ -392,7 +438,7 @@ void sppCallback(esp_spp_cb_event_t event, esp_spp_cb_param_t *parameter)
     esp_bd_addr_t address = {};
     {
       std::lock_guard<std::mutex> lock(impl->mutex);
-      connecting = impl->connecting;
+      connecting = impl->connecting && !impl->ending;
       memcpy(address, impl->connectBackendAddress, sizeof(address));
     }
     if (!connecting) return;
@@ -618,10 +664,15 @@ bool EspBleClassicSpp::begin()
     }
     impl_->initializationCompleted = false;
   }
-  activeSpp.store(impl_, std::memory_order_release);
+  if (!activateSppCallbackTarget(impl_))
+  {
+    owner_->setError(
+      EspBleError::InvalidState, "another SPP profile is active");
+    return false;
+  }
   if (esp_spp_register_callback(sppCallback) != ESP_OK)
   {
-    activeSpp.store(nullptr, std::memory_order_release);
+    deactivateSppCallbackTarget(impl_);
     owner_->setError(
       EspBleError::BackendFailure, "failed to register SPP callback");
     return false;
@@ -630,7 +681,7 @@ bool EspBleClassicSpp::begin()
   config.mode = ESP_SPP_MODE_CB;
   if (esp_spp_enhanced_init(&config) != ESP_OK)
   {
-    activeSpp.store(nullptr, std::memory_order_release);
+    deactivateSppCallbackTarget(impl_);
     owner_->setError(EspBleError::BackendFailure, "failed to initialize SPP");
     return false;
   }
@@ -647,12 +698,14 @@ bool EspBleClassicSpp::begin()
     if (completed)
     {
       if (initialized) return true;
+      deactivateSppCallbackTarget(impl_);
       owner_->setError(
         EspBleError::BackendFailure, "SPP initialization failed");
       return false;
     }
     if (static_cast<int32_t>(millis() - deadline) >= 0)
     {
+      deactivateSppCallbackTarget(impl_);
       owner_->setError(EspBleError::Timeout, "SPP initialization timed out");
       return false;
     }
@@ -691,7 +744,7 @@ void EspBleClassicSpp::end()
       delay(1);
     }
   }
-  activeSpp.store(nullptr, std::memory_order_release);
+  deactivateSppCallbackTarget(impl_);
 #endif
   std::lock_guard<std::mutex> lock(impl_->mutex);
   impl_->eventHead = 0;

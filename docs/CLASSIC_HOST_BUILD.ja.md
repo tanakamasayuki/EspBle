@@ -96,6 +96,9 @@ global defined symbols: 1788
 sha256: 6b04833c2a1f32a04c357dca26b12ae05eb4f9ffdb14f57d49fc994abebf7a9f
 ```
 
+2026-08-11に、`v5.5.5` tagの独立したclean worktreeと全submodule、GCC 14.2.0から一時生成し、
+このsize・symbol数・SHA-256を再現した。格納済みarchiveとの`cmp`も一致し、差し替えは不要だった。
+
 一時出力と格納済みarchiveを比較する例です。
 
 ```sh

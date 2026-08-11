@@ -109,6 +109,56 @@ def test_nimble_and_custom_classic_host_run_together(dut, peers):
     peer.expect_exact("DUAL_BLE_CLIENT_CONNECTED", timeout=20)
     dut.expect_exact("DUAL_BLE_SERVER_CONNECTED", timeout=20)
     peer.expect_exact("DUAL_BLE_READ_REQUESTED 1", timeout=20)
+
+    # Reject the first runtime passkey deliberately. Pairing must fail on both
+    # hosts without disturbing the live Classic HID link or creating a bond.
+    displayed = dut.expect(re.compile(rb"DUAL_BLE_PASSKEY (\d{6})"), timeout=20)
+    passkey = int(displayed.group(1))
+    wrong_passkey = (passkey + 1) % 1000000
+    peer.write(f"p{wrong_passkey:06d}\n")
+    peer.expect_exact(
+        f"DUAL_PEER_PASSKEY accepted=1 value={wrong_passkey:06d}", timeout=10
+    )
+    peer.expect(
+        re.compile(
+            rb"DUAL_BLE_CLIENT_SECURITY success=0 encrypted=0 bonded=0 "
+            rb"key=0 classic=1"
+        ),
+        timeout=30,
+    )
+    dut.expect(
+        re.compile(
+            rb"DUAL_BLE_SERVER_SECURITY success=0 encrypted=0 bonded=0 "
+            rb"key=0 classic=1"
+        ),
+        timeout=30,
+    )
+    peer.expect(
+        re.compile(rb"DUAL_BLE_READ success=0 value=.* classic=1"), timeout=20
+    )
+    dut.write("n")
+    peer.write("n\n")
+    dut.expect_exact("DUAL_BLE_BONDS 0", timeout=10)
+    peer.expect_exact("DUAL_BLE_BONDS 0", timeout=10)
+
+    peer.write("k\n")
+    peer.expect_exact("DUAL_BLE_DISCONNECT 1", timeout=10)
+    peer.expect_exact("DUAL_BLE_CLIENT_DISCONNECTED", timeout=20)
+    dut.expect_exact("DUAL_BLE_SERVER_DISCONNECTED", timeout=20)
+    dut.write("a")
+    dut.expect_exact("DUAL_BLE_ADVERTISING 1", timeout=10)
+    peer.write("g\n")
+    peer.expect_exact("DUAL_BLE_SCAN 1", timeout=10)
+    peer.expect_exact("DUAL_BLE_CONNECT 1", timeout=20)
+    peer.expect_exact("DUAL_BLE_CLIENT_CONNECTED", timeout=20)
+    dut.expect_exact("DUAL_BLE_SERVER_CONNECTED", timeout=20)
+    peer.expect_exact("DUAL_BLE_READ_REQUESTED 1", timeout=20)
+    displayed = dut.expect(re.compile(rb"DUAL_BLE_PASSKEY (\d{6})"), timeout=20)
+    passkey_text = displayed.group(1).decode()
+    peer.write(f"p{passkey_text}\n")
+    peer.expect_exact(
+        f"DUAL_PEER_PASSKEY accepted=1 value={passkey_text}", timeout=10
+    )
     peer.expect_exact(
         "DUAL_BLE_CLIENT_SECURITY success=1 encrypted=1 bonded=1 key=16 classic=1",
         timeout=30,
@@ -117,7 +167,52 @@ def test_nimble_and_custom_classic_host_run_together(dut, peers):
         "DUAL_BLE_SERVER_SECURITY success=1 encrypted=1 bonded=1 key=16 classic=1",
         timeout=30,
     )
+    # Runtime passkey entry can outlive the GATT operation that onConnected
+    # started before encryption completed. Issue a fresh protected read after
+    # the successful security event instead of relying on that old deadline.
+    peer.write("r\n")
+    peer.expect_exact("DUAL_BLE_READ_REQUESTED 1", timeout=10)
     peer.expect_exact("DUAL_BLE_READ success=1 value=dual-ready classic=1", timeout=20)
+
+    # Keep encrypted LE alive while a Classic HID connect attempt fails. The
+    # async failure must release the host's connecting state so the real peer
+    # can be reconnected immediately afterwards.
+    peer.write("l\n")
+    peer.expect_exact("DUAL_PEER_CLASSIC_DISCONNECT 1", timeout=10)
+    peer.expect_exact("DUAL_PEER_DISCONNECTED", timeout=20)
+    dut.expect_exact("DUAL_CLASSIC_DISCONNECTED", timeout=20)
+    peer.write("f\n")
+    failure_request = peer.expect(
+        re.compile(rb"DUAL_PEER_FAIL_CONNECT address=([0-9a-f:]+) requested=1"),
+        timeout=10,
+    )
+    peer.expect(
+        re.compile(
+            rb"DUAL_PEER_CONNECT_FAILED address="
+            + failure_request.group(1)
+            + rb" error=3 detail=.* connected=0"
+        ),
+        timeout=15,
+    )
+    peer.write("r\n")
+    peer.expect_exact("DUAL_BLE_READ_REQUESTED 1", timeout=10)
+    peer.expect_exact(
+        "DUAL_BLE_READ success=1 value=dual-ready classic=0", timeout=10
+    )
+    peer.write(b"c" + ready.group(1) + b"\n")
+    peer.expect_exact("DUAL_PEER_CONNECT 1", timeout=10)
+    dut.expect_exact("DUAL_CLASSIC_CONNECTED", timeout=30)
+    peer.expect_exact("DUAL_PEER_CONNECTED", timeout=30)
+    dut.write("i")
+    dut.expect_exact("DUAL_CLASSIC_INPUT 1", timeout=10)
+    peer.expect(
+        re.compile(rb"DUAL_PEER_INPUT hex=(01)?007f80[0-9a-f]{2}"), timeout=20
+    )
+    peer.expect_exact("DUAL_PEER_OUTPUT 1", timeout=10)
+    dut.expect(
+        re.compile(rb"DUAL_CLASSIC_OUTPUT id=2 hex=(a500ff|02a500ff)"),
+        timeout=20,
+    )
 
     # Cross the controller's former 20-packet host-buffer limit by a wide
     # margin.  One initial read plus these repeats generates over 50 LE ACL

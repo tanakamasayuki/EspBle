@@ -72,6 +72,13 @@ struct EspBleClassicHidConnection
   bool incoming = false;
 };
 
+struct EspBleClassicHidConnectionFailure
+{
+  String peerAddress;
+  EspBleError error = EspBleError::BackendFailure;
+  String detail;
+};
+
 struct EspBleClassicHidReport
 {
   String peerAddress;
@@ -202,6 +209,8 @@ public:
   static constexpr size_t MaximumReportLength = 1024;
   using ConnectionCallback =
     std::function<void(const EspBleClassicHidConnection &)>;
+  using ConnectionFailureCallback =
+    std::function<void(const EspBleClassicHidConnectionFailure &)>;
   using ReportCallback = std::function<void(const EspBleClassicHidReport &)>;
 
   bool begin();
@@ -216,6 +225,7 @@ public:
 
   void onConnected(ConnectionCallback callback);
   void onDisconnected(ConnectionCallback callback);
+  void onConnectionFailed(ConnectionFailureCallback callback);
   void onInputReport(ReportCallback callback);
   size_t droppedEventCount() const;
 
@@ -229,6 +239,7 @@ private:
   EspBleClassicHidHostImpl *impl_ = nullptr;
   ConnectionCallback connectedCallback_;
   ConnectionCallback disconnectedCallback_;
+  ConnectionFailureCallback connectionFailureCallback_;
   ReportCallback inputReportCallback_;
 };
 

@@ -1,6 +1,6 @@
 # 無印ESP32 NimBLE / Classic共存 技術検証
 
-検証日: 2026-08-09
+検証日: 2026-08-11
 
 ## 結論
 
@@ -16,8 +16,9 @@ single-host pass-throughを基準にした後、opt-inの
 broker所有FIFOとcontroller credit管理、最後のhostがcontrollerを停止するlifecycle、event maskのunion、
 Classic再attach時のflow-control command仮想化まで実装した。Classic HID接続中のBLE pairing、bond保存、
 bond再接続、暗号化必須GATT readも成立した。数時間級負荷を完走し、実機で観測したcommandを明示policyへ
-分類した。dual-hostは未観測commandをfail-closedにする。HID接続失敗、pairing失敗、lifecycle競合監査が
-残るため、通常buildは引き続き二つ目のhost登録を`ESP_ERR_NOT_SUPPORTED`とする。
+分類した。dual-hostは未観測commandをfail-closedにする。HID接続失敗、pairing失敗からの復旧と
+callback参照寿命監査も完了した。公開範囲とACL credit一元管理が未確定なので、opt-inでない通常buildは
+引き続き二つ目のhost登録を`ESP_ERR_NOT_SUPPORTED`とする。
 
 現在の引き継ぎ状態と残作業は[HANDOFF_ESP32_CLASSIC.ja.md](HANDOFF_ESP32_CLASSIC.ja.md)、
 独自Classic host archiveの再生成方法は[CLASSIC_HOST_BUILD.ja.md](CLASSIC_HOST_BUILD.ja.md)を参照する。
@@ -39,6 +40,9 @@ bond再接続、暗号化必須GATT readも成立した。数時間級負荷を�
 | dual-host FIFO backpressure | FIFO満杯と超過拒否を発生させ、未送信分破棄後にGATT/HID/lifecycle復帰 |
 | dual-host同時切断 | LE / BR-EDR Disconnectの完了を正しいhostへ配送後、停止・再起動・destructor成功 |
 | dual-host異常report / peer消失 | null・上限超過reportを接続維持のまま拒否し、peer突然再起動後にbond済みBLEとClassic HIDを復旧 |
+| dual-host接続 / pairing失敗 | 誤passkey後にbondなしで再pairing。HID非同期接続失敗後も暗号化LEを維持してClassic再接続 |
+| Classic callback参照寿命 | SPP/HID targetの登録mutex・参照数barrierを追加し、全停止順とdestructor順をclean実機回帰 |
+| Classic archive clean再現 | cleanなIDF v5.5.5 / GCC 14.2.0から生成し、格納済み`.a`とbyte単位・SHA-256一致 |
 | HCI router / controller policy unit | opcode応答、handle所有、ACL、切断、mixed completed event、command scopeと許可host |
 | ESP-IDF Classic-only host spike | controllerなし、BLEなし、SPPありのBluedroid hostを外部HCIへattachしてbuild/link成功 |
 | EspBle unit test | 既存host非依存ロジックの回帰なし |
@@ -207,6 +211,44 @@ BLEを再接続する。再接続したBLEは`encrypted=1 bonded=1 key=16`とな
 成立した。生存側はcontrollerもlogical hostも再起動していない。この試験の初期化では通常のupload / power-on時だけ
 bondを削除し、意図したsoftware reset時は削除しないようreset reasonを区別している。
 
+## 接続失敗とpairing失敗からの復旧
+
+public-address版`dual_host_smoke`へ、両transport稼働中の失敗経路を追加した。BLEは両側をMITM必須の
+DisplayOnly / KeyboardOnlyにし、最初の接続では表示値と異なるpasskeyを入力する。client/server双方で
+`success=0 encrypted=0 bonded=0 key=0`、bond数0、暗号化必須GATT read失敗を確認し、その間もClassic HIDは
+接続したまま通信できた。LEだけを切断して再接続し、新しく生成された正しいpasskeyを入力すると、双方が
+`success=1 encrypted=1 bonded=1 key=16`となり、暗号化必須GATT readが成功した。失敗したSMP状態やbondが
+次の試行を汚染しないことを確認している。
+
+Classic側には`EspBleClassicHidHost::onConnectionFailed()`を追加した。接続開始直後のbackend APIエラーだけでなく、
+Bluedroidの最終`ESP_HIDH_OPEN_EVT`がconnected以外で終わる場合も、peer address、`BackendFailure`、backendの
+status/stateをevent queue経由で非同期通知し、内部のconnecting状態とpeer情報を消去する。試験では暗号化LEを
+維持したままClassicだけを切断し、自身のClassic addressへの接続を要求して最終OPEN失敗を発生させた。失敗通知後も
+GATT readは`classic=0`で成功し、直ちに正しいpeerへClassic HIDを再接続して双方向reportを復旧できた。
+
+Bluedroidの公開HID Host APIにはpage中の接続試行を取り消すAPIがない。到達不能peerへ独自timeoutを設け、
+`esp_bt_hid_host_disconnect()`で取り消す案も実機で試したが、公開APIは未接続として拒否する一方、host内部は
+connectingのまま残り次の接続を拒否した。このため任意timeoutは公開せず、backendが返す最終OPEN結果を失敗境界とする。
+
+2026-08-11のclean実機回帰は、上記に加えて暗号化GATT反復、HID双方向、command競合、FIFO backpressure、
+peer突然再起動、停止・再登録、両destructor順を含めて成功した。ESP32-S3代表compileとhost unit testも成功した。
+
+## backend callbackの参照寿命
+
+Classic profileのlifecycleをコード監査した結果、SPP、HID Device、HID Hostがいずれもglobalなatomic生ポインタから
+callback targetを取得していた。atomic load/storeはポインタ値のdata raceを防ぐだけで、callbackがloadした直後に
+別coreの`end()` / destructorがtargetを解除・解放するuse-after-free窓は閉じない。
+
+各profileへcallback target登録mutexとtarget内のatomic参照数を追加した。callbackは登録mutex下でactive targetを
+取得して参照数を増やし、処理終了時にRAIIで減らす。`end()`はbackend deinit callbackを受け取った後、同じ登録mutex下で
+active targetを外して新規取得を止め、既に取得済みの参照数が0になるまで待ってからstateを初期化する。destructorは
+`end()`後にだけstateをdeleteするため、callbackが取得したtargetは処理終了まで生存する。callback内から利用者callbackを
+直接呼ばず固定長event queueへ積む既存設計なので、barrier待ちが利用者コードの実行時間へ依存することもない。
+
+修正後のclean実機回帰では、Classic先行／BLE先行の停止、Classic再attach、停止・再登録、両destructor順を通過し、
+panic、watchdog、heap低下は発生しなかった。callback登録を持たないClassic GAP callbackは所有stateを参照しないため
+同じbarrierの対象外である。公開API自体の`begin()` / `end()`同時呼び出しはthread-safe契約には含めない。
+
 ## controller継続中のClassic再attach
 
 Classic先行`end()`後もNimBLEが登録中なら、BTDM controllerはbroker所有のまま動作している。
@@ -256,7 +298,7 @@ identity typeをOTA random typeで上書きしない、(4) HCI接続先へRPAを
 接続完了時は置換前RPAを`peer_ota_addr`へ保存する、という分離である。補助peer recordの古い型ではなく
 canonicalなResolving Listの型を使う修正も含む。修正後、全シナリオは49.18秒で成功し、通常の
 public-address security/bond試験も62.56秒で成功した。ESP32-S3向けRPA Central/Peripheral compileと
-host unit test 10件も成功した。生成script再実行前後の同梱NimBLE全ファイルSHA-256集約値は一致した。
+host unit testも成功した。生成script再実行前後の同梱NimBLE全ファイルSHA-256集約値は一致した。
 
 このRPA経路をdual-hostへ組み合わせる専用Peer testも追加した。無印ESP32 2台の双方で独自Classic
 hostとNimBLE hostを起動し、Classic HID ACLを接続したまま、BLEは双方host-based RPAで初回pairing、

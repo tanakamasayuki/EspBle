@@ -102,6 +102,7 @@ struct EspBleClassicHidDeviceImpl
   }
 
   mutable std::mutex mutex;
+  std::atomic<size_t> callbackUsers{0};
   Event events[HidEventQueueCapacity];
   size_t eventHead = 0;
   size_t eventCount = 0;
@@ -110,6 +111,7 @@ struct EspBleClassicHidDeviceImpl
   bool initialized = false;
   bool registrationCompleted = false;
   bool registered = false;
+  bool ending = false;
   bool connected = false;
   String peerAddress;
   String name;
@@ -126,11 +128,18 @@ struct EspBleClassicHidDeviceImpl
 
 struct EspBleClassicHidHostImpl
 {
-  enum class EventType : uint8_t { Connected, Disconnected, InputReport };
+  enum class EventType : uint8_t
+  {
+    Connected,
+    Disconnected,
+    ConnectionFailed,
+    InputReport,
+  };
   struct Event
   {
     EventType type = EventType::Connected;
     EspBleClassicHidConnection connection;
+    EspBleClassicHidConnectionFailure failure;
     EspBleClassicHidReport report;
   };
 
@@ -149,12 +158,14 @@ struct EspBleClassicHidHostImpl
   }
 
   mutable std::mutex mutex;
+  std::atomic<size_t> callbackUsers{0};
   Event events[HidEventQueueCapacity];
   size_t eventHead = 0;
   size_t eventCount = 0;
   size_t droppedEvents = 0;
   bool initializationCompleted = false;
   bool initialized = false;
+  bool ending = false;
   bool connecting = false;
   bool connected = false;
   uint8_t handle = 0;
@@ -171,12 +182,83 @@ namespace
 {
 std::atomic<EspBleClassicHidDeviceImpl *> activeHidDevice{nullptr};
 std::atomic<EspBleClassicHidHostImpl *> activeHidHost{nullptr};
+std::mutex hidDeviceCallbackTargetMutex;
+std::mutex hidHostCallbackTargetMutex;
+
+template <typename T>
+class CallbackLease
+{
+public:
+  CallbackLease(std::atomic<T *> &active, std::mutex &targetMutex)
+  {
+    std::lock_guard<std::mutex> lock(targetMutex);
+    impl_ = active.load(std::memory_order_relaxed);
+    if (impl_ != nullptr)
+      impl_->callbackUsers.fetch_add(1, std::memory_order_acq_rel);
+  }
+
+  ~CallbackLease()
+  {
+    if (impl_ != nullptr)
+      impl_->callbackUsers.fetch_sub(1, std::memory_order_acq_rel);
+  }
+
+  T *get() const { return impl_; }
+
+private:
+  T *impl_ = nullptr;
+};
+
+template <typename T>
+bool activateCallbackTarget(
+  std::atomic<T *> &active, std::mutex &targetMutex, T *impl)
+{
+  std::lock_guard<std::mutex> lock(targetMutex);
+  T *current = active.load(std::memory_order_relaxed);
+  if (current != nullptr && current != impl) return false;
+  active.store(impl, std::memory_order_release);
+  return true;
+}
+
+template <typename T>
+void deactivateCallbackTarget(
+  std::atomic<T *> &active, std::mutex &targetMutex, T *impl)
+{
+  {
+    std::lock_guard<std::mutex> lock(targetMutex);
+    if (active.load(std::memory_order_relaxed) == impl)
+      active.store(nullptr, std::memory_order_release);
+  }
+  while (impl->callbackUsers.load(std::memory_order_acquire) != 0) delay(1);
+}
+
+bool failHidHostConnection(
+  EspBleClassicHidHostImpl *impl, EspBleError error, const char *detail)
+{
+  EspBleClassicHidConnectionFailure failure;
+  {
+    std::lock_guard<std::mutex> lock(impl->mutex);
+    if (!impl->connecting) return false;
+    failure.peerAddress = impl->peerAddress;
+    failure.error = error;
+    failure.detail = detail == nullptr ? "" : detail;
+    impl->connecting = false;
+    impl->peerAddress = "";
+    memset(impl->backendAddress, 0, sizeof(impl->backendAddress));
+  }
+  EspBleClassicHidHostImpl::Event queued;
+  queued.type = EspBleClassicHidHostImpl::EventType::ConnectionFailed;
+  queued.failure = std::move(failure);
+  impl->enqueue(std::move(queued));
+  return true;
+}
 
 void hidDeviceCallback(
   esp_hidd_cb_event_t event, esp_hidd_cb_param_t *parameter)
 {
-  EspBleClassicHidDeviceImpl *impl =
-    activeHidDevice.load(std::memory_order_acquire);
+  CallbackLease<EspBleClassicHidDeviceImpl> lease(
+    activeHidDevice, hidDeviceCallbackTargetMutex);
+  EspBleClassicHidDeviceImpl *impl = lease.get();
   if (impl == nullptr || parameter == nullptr) return;
 
   if (event == ESP_HIDD_INIT_EVT)
@@ -210,6 +292,7 @@ void hidDeviceCallback(
     {
       std::lock_guard<std::mutex> lock(impl->mutex);
       impl->connected =
+        !impl->ending &&
         parameter->open.status == ESP_HIDD_SUCCESS &&
         parameter->open.conn_status == ESP_HIDD_CONN_STATE_CONNECTED;
       if (!impl->connected) return;
@@ -257,8 +340,9 @@ void hidDeviceCallback(
 void hidHostCallback(
   esp_hidh_cb_event_t event, esp_hidh_cb_param_t *parameter)
 {
-  EspBleClassicHidHostImpl *impl =
-    activeHidHost.load(std::memory_order_acquire);
+  CallbackLease<EspBleClassicHidHostImpl> lease(
+    activeHidHost, hidHostCallbackTargetMutex);
+  EspBleClassicHidHostImpl *impl = lease.get();
   if (impl == nullptr || parameter == nullptr) return;
 
   if (event == ESP_HIDH_INIT_EVT)
@@ -274,27 +358,69 @@ void hidHostCallback(
   }
   else if (event == ESP_HIDH_OPEN_EVT)
   {
+    // Bluedroid reports the accepted asynchronous request first, followed by a
+    // second OPEN event when paging either connects or fails.
+    if (parameter->open.status == ESP_HIDH_OK &&
+        parameter->open.conn_status == ESP_HIDH_CONN_STATE_CONNECTING)
+      return;
+    const bool succeeded =
+      parameter->open.status == ESP_HIDH_OK &&
+      parameter->open.conn_status == ESP_HIDH_CONN_STATE_CONNECTED;
+    if (!succeeded)
+    {
+      char detail[96];
+      snprintf(
+        detail, sizeof(detail),
+        "Classic HID connection failed (status %u, state %u)",
+        static_cast<unsigned>(parameter->open.status),
+        static_cast<unsigned>(parameter->open.conn_status));
+      (void)failHidHostConnection(
+        impl, EspBleError::BackendFailure, detail);
+      return;
+    }
     EspBleClassicHidHostImpl::Event queued;
     queued.type = EspBleClassicHidHostImpl::EventType::Connected;
     queued.connection.peerAddress = hidAddress(parameter->open.bd_addr);
     queued.connection.incoming = !parameter->open.is_orig;
+    bool acceptConnection = false;
     {
       std::lock_guard<std::mutex> lock(impl->mutex);
-      impl->connecting = false;
-      impl->connected =
-        parameter->open.status == ESP_HIDH_OK &&
-        parameter->open.conn_status == ESP_HIDH_CONN_STATE_CONNECTED;
-      if (!impl->connected) return;
-      impl->handle = parameter->open.handle;
-      impl->peerAddress = queued.connection.peerAddress;
-      memcpy(
-        impl->backendAddress, parameter->open.bd_addr,
-        sizeof(impl->backendAddress));
+      acceptConnection = !impl->ending &&
+        (!parameter->open.is_orig || impl->connecting);
+      if (acceptConnection)
+      {
+        impl->connecting = false;
+        impl->connected = true;
+        impl->handle = parameter->open.handle;
+        impl->peerAddress = queued.connection.peerAddress;
+        memcpy(
+          impl->backendAddress, parameter->open.bd_addr,
+          sizeof(impl->backendAddress));
+      }
+    }
+    // An outgoing OPEN must match an active request. Incoming connections do
+    // not use the connecting flag.
+    if (!acceptConnection)
+    {
+      (void)esp_bt_hid_host_disconnect(parameter->open.bd_addr);
+      return;
     }
     impl->enqueue(std::move(queued));
   }
   else if (event == ESP_HIDH_CLOSE_EVT)
   {
+    bool failedWhileConnecting = false;
+    {
+      std::lock_guard<std::mutex> lock(impl->mutex);
+      failedWhileConnecting = impl->connecting && !impl->connected;
+    }
+    if (failedWhileConnecting)
+    {
+      (void)failHidHostConnection(
+        impl, EspBleError::BackendFailure,
+        "Classic HID connection closed before opening");
+      return;
+    }
     EspBleClassicHidHostImpl::Event queued;
     queued.type = EspBleClassicHidHostImpl::EventType::Disconnected;
     {
@@ -420,8 +546,18 @@ bool EspBleClassicHidDevice::begin(
   impl_->application.desc_list_len = impl_->descriptorLength;
   memset(&impl_->inputQos, 0, sizeof(impl_->inputQos));
   memset(&impl_->outputQos, 0, sizeof(impl_->outputQos));
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    impl_->ending = false;
+  }
 
-  activeHidDevice.store(impl_, std::memory_order_release);
+  if (!activateCallbackTarget(
+        activeHidDevice, hidDeviceCallbackTargetMutex, impl_))
+  {
+    owner_->setError(
+      EspBleError::InvalidState, "another HID device profile is active");
+    return false;
+  }
   if (
     esp_bt_hid_device_register_callback(hidDeviceCallback) != ESP_OK ||
     esp_bt_hid_device_init() != ESP_OK ||
@@ -430,7 +566,8 @@ bool EspBleClassicHidDevice::begin(
       return impl_->initializationCompleted;
     }) || !impl_->initialized)
   {
-    activeHidDevice.store(nullptr, std::memory_order_release);
+    deactivateCallbackTarget(
+      activeHidDevice, hidDeviceCallbackTargetMutex, impl_);
     owner_->setError(EspBleError::BackendFailure, "failed to initialize HID device profile");
     return false;
   }
@@ -443,7 +580,8 @@ bool EspBleClassicHidDevice::begin(
     }) || !impl_->registered)
   {
     esp_bt_hid_device_deinit();
-    activeHidDevice.store(nullptr, std::memory_order_release);
+    deactivateCallbackTarget(
+      activeHidDevice, hidDeviceCallbackTargetMutex, impl_);
     owner_->setError(EspBleError::BackendFailure, "failed to register HID device application");
     return false;
   }
@@ -469,6 +607,7 @@ void EspBleClassicHidDevice::end()
   bool wasConnected = false;
   {
     std::lock_guard<std::mutex> lock(impl_->mutex);
+    impl_->ending = true;
     wasInitialized = impl_->initialized;
     wasRegistered = impl_->registered;
     wasConnected = impl_->connected;
@@ -499,7 +638,8 @@ void EspBleClassicHidDevice::end()
       return !impl_->initialized;
     });
   }
-  activeHidDevice.store(nullptr, std::memory_order_release);
+  deactivateCallbackTarget(
+    activeHidDevice, hidDeviceCallbackTargetMutex, impl_);
 #endif
   std::lock_guard<std::mutex> lock(impl_->mutex);
   impl_->eventHead = 0;
@@ -508,6 +648,7 @@ void EspBleClassicHidDevice::end()
   impl_->initialized = false;
   impl_->registrationCompleted = false;
   impl_->registered = false;
+  impl_->ending = false;
   impl_->connected = false;
   impl_->peerAddress = "";
 }
@@ -671,7 +812,17 @@ bool EspBleClassicHidHost::begin()
       return false;
     }
   }
-  activeHidHost.store(impl_, std::memory_order_release);
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    impl_->ending = false;
+  }
+  if (!activateCallbackTarget(
+        activeHidHost, hidHostCallbackTargetMutex, impl_))
+  {
+    owner_->setError(
+      EspBleError::InvalidState, "another HID host profile is active");
+    return false;
+  }
   if (
     esp_bt_hid_host_register_callback(hidHostCallback) != ESP_OK ||
     esp_bt_hid_host_init() != ESP_OK ||
@@ -680,7 +831,8 @@ bool EspBleClassicHidHost::begin()
       return impl_->initializationCompleted;
     }) || !impl_->initialized)
   {
-    activeHidHost.store(nullptr, std::memory_order_release);
+    deactivateCallbackTarget(
+      activeHidHost, hidHostCallbackTargetMutex, impl_);
     owner_->setError(EspBleError::BackendFailure, "failed to initialize HID host profile");
     return false;
   }
@@ -698,6 +850,7 @@ void EspBleClassicHidHost::end()
   esp_bd_addr_t address = {};
   {
     std::lock_guard<std::mutex> lock(impl_->mutex);
+    impl_->ending = true;
     wasInitialized = impl_->initialized;
     wasConnected = impl_->connected;
     memcpy(address, impl_->backendAddress, sizeof(address));
@@ -718,13 +871,15 @@ void EspBleClassicHidHost::end()
       return !impl_->initialized;
     });
   }
-  activeHidHost.store(nullptr, std::memory_order_release);
+  deactivateCallbackTarget(
+    activeHidHost, hidHostCallbackTargetMutex, impl_);
 #endif
   std::lock_guard<std::mutex> lock(impl_->mutex);
   impl_->eventHead = 0;
   impl_->eventCount = 0;
   impl_->initializationCompleted = false;
   impl_->initialized = false;
+  impl_->ending = false;
   impl_->connecting = false;
   impl_->connected = false;
   impl_->handle = 0;
@@ -771,6 +926,8 @@ bool EspBleClassicHidHost::connect(const char *address)
   {
     std::lock_guard<std::mutex> lock(impl_->mutex);
     impl_->connecting = false;
+    impl_->peerAddress = "";
+    memset(impl_->backendAddress, 0, sizeof(impl_->backendAddress));
     owner_->setError(EspBleError::BackendFailure, "failed to start HID host connection");
     return false;
   }
@@ -848,6 +1005,12 @@ void EspBleClassicHidHost::onDisconnected(ConnectionCallback callback)
   disconnectedCallback_ = std::move(callback);
 }
 
+void EspBleClassicHidHost::onConnectionFailed(
+  ConnectionFailureCallback callback)
+{
+  connectionFailureCallback_ = std::move(callback);
+}
+
 void EspBleClassicHidHost::onInputReport(ReportCallback callback)
 {
   inputReportCallback_ = std::move(callback);
@@ -881,6 +1044,10 @@ void EspBleClassicHidHost::update()
       event.type == EspBleClassicHidHostImpl::EventType::Disconnected &&
       disconnectedCallback_)
       disconnectedCallback_(event.connection);
+    else if (
+      event.type == EspBleClassicHidHostImpl::EventType::ConnectionFailed &&
+      connectionFailureCallback_)
+      connectionFailureCallback_(event.failure);
     else if (
       event.type == EspBleClassicHidHostImpl::EventType::InputReport &&
       inputReportCallback_)

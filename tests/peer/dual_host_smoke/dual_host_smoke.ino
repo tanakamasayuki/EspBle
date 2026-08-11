@@ -246,6 +246,9 @@ bool startDualStacks()
   bleConfig.security.pairOnConnect = true;
 #if defined(ESPBLE_TEST_DUAL_RPA)
   bleConfig.ownAddressType = EspBleOwnAddressType::ResolvablePrivate;
+#else
+  bleConfig.security.mitm = true;
+  bleConfig.security.ioCapability = EspBleSecurityIoCapability::DisplayOnly;
 #endif
   if (!service.valid() || !characteristic.valid() || !ble.begin(bleConfig))
     return false;
@@ -322,6 +325,12 @@ void setup()
       event.connection.bonded ? 1 : 0, event.connection.encryptionKeySize,
       classic.hidDevice().connected() ? 1 : 0);
   });
+#if !defined(ESPBLE_TEST_DUAL_RPA)
+  ble.onPasskeyDisplayed([](const EspBlePasskeyDisplayed &event) {
+    Serial.printf("DUAL_BLE_PASSKEY %06u\n",
+      static_cast<unsigned>(event.passkey));
+  });
+#endif
 
   if (!startDualStacks())
   {

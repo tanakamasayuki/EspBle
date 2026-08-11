@@ -1,6 +1,7 @@
 #include <EspBleClassic.h>
 #include <EspBle.h>
 #include <EspBleHciBroker.h>
+#include <esp_mac.h>
 #include <esp_system.h>
 #if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL) && defined(CONFIG_IDF_TARGET_ESP32)
 #include <nimble_esp32/include/host/ble_gap.h>
@@ -216,6 +217,9 @@ bool startDualStacks()
   bleConfig.security.pairOnConnect = true;
 #if defined(ESPBLE_TEST_DUAL_RPA)
   bleConfig.ownAddressType = EspBleOwnAddressType::ResolvablePrivate;
+#else
+  bleConfig.security.mitm = true;
+  bleConfig.security.ioCapability = EspBleSecurityIoCapability::KeyboardOnly;
 #endif
   return ble.begin(bleConfig);
 }
@@ -256,6 +260,13 @@ void setup()
   classic.hidHost().onDisconnected([](const EspBleClassicHidConnection &) {
     Serial.println("DUAL_PEER_DISCONNECTED");
   });
+  classic.hidHost().onConnectionFailed(
+    [](const EspBleClassicHidConnectionFailure &failure) {
+      Serial.printf(
+        "DUAL_PEER_CONNECT_FAILED address=%s error=%u detail=%s connected=%u\n",
+        failure.peerAddress.c_str(), static_cast<unsigned>(failure.error),
+        failure.detail.c_str(), classic.hidHost().connected() ? 1 : 0);
+    });
   classic.hidHost().onInputReport([](const EspBleClassicHidReport &report) {
     Serial.printf("DUAL_PEER_INPUT hex=");
     printHex(report.value);
@@ -338,6 +349,22 @@ void loop()
     if (command.startsWith("c"))
       Serial.printf("DUAL_PEER_CONNECT %u\n",
         classic.hidHost().connect(command.c_str() + 1) ? 1 : 0);
+    else if (command == "f")
+    {
+      uint8_t address[6] = {};
+      esp_read_mac(address, ESP_MAC_BT);
+      char selfAddress[18];
+      snprintf(selfAddress, sizeof(selfAddress),
+        "%02x:%02x:%02x:%02x:%02x:%02x",
+        address[0], address[1], address[2],
+        address[3], address[4], address[5]);
+      Serial.printf("DUAL_PEER_FAIL_CONNECT address=%s requested=%u\n",
+        selfAddress,
+        classic.hidHost().connect(selfAddress) ? 1 : 0);
+    }
+    else if (command == "l")
+      Serial.printf("DUAL_PEER_CLASSIC_DISCONNECT %u\n",
+        classic.hidHost().disconnect() ? 1 : 0);
     else if (command.startsWith("b"))
     {
       bleConnectionRequested = ble.connect(
@@ -370,6 +397,14 @@ void loop()
     else if (command == "n")
       Serial.printf("DUAL_BLE_BONDS %u\n",
         static_cast<unsigned>(ble.bondCount()));
+    else if (command.startsWith("p"))
+    {
+      const uint32_t passkey =
+        static_cast<uint32_t>(strtoul(command.c_str() + 1, nullptr, 10));
+      Serial.printf("DUAL_PEER_PASSKEY accepted=%u value=%06u\n",
+        ble.providePasskey(passkey) ? 1 : 0,
+        static_cast<unsigned>(passkey));
+    }
     else if (command == "h")
       printHeap("DUAL_PEER_HEAP");
     else if (command == "L")

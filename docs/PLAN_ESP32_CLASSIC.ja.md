@@ -87,6 +87,7 @@ broker taskから成功Command CompleteをClassicだけへ返す。
 | dual-host任意順停止 | Classic先行停止後もNimBLE GATT継続、最後のhost解除でcontroller停止・再起動成功 |
 | dual-host任意順destructor | Classic先行／NimBLE先行の両方で残存host継続、controller停止後の再起動成功 |
 | dual-host異常report / peer消失 | 不正report拒否後の接続維持、突然再起動後のbond済みBLEとClassic HID復旧 |
+| dual-host接続 / pairing失敗 | 誤passkey失敗後の再pairing、HID Host非同期接続失敗後のBLE維持とClassic再接続を確認 |
 | 通常NimBLE BLEのESP32 Peer regression | GATT read/write、反復discoveryを確認 |
 | host unit test | controller policyを含むhost非依存ロジックを確認 |
 | ESP32-S3 CompileSmoke | 成功、274,253 B。Classic archiveは非リンク |
@@ -104,7 +105,8 @@ Arduino coreの設定はSPP有効・Classic HID無効であり、core `libbt.a`�
 1. dual-hostのcommand同時発行とlifecycleを、20 run・1時間41分44秒のsoakで反復済み。各runの競合／再登録100サイクルでbroker errorとheap低下はなかった。
 2. 観測済みcommandをcontroller policyへ全件分類し、dual-host時の未知／別host opcodeをfail-closedにした。接続後cleanup inventoryを追加し、`Exit Sniff Mode`とClassic `Disconnect`も捕捉済み。
 3. null・上限超過HID Reportの拒否とpeer突然再起動後の両transport復旧は実機確認済み。
-4. HID接続失敗とBLE pairing失敗を両transport同時状態で試験する。
+4. HID接続失敗とBLE pairing失敗を両transport同時状態で試験済み。誤passkeyでは両側bond 0を確認してから正しいpasskeyで暗号化を復旧し、HID接続失敗後もLE GATTを維持して正しいClassic peerへ再接続した。
+5. callback解除と実行が別coreで競合するlifecycle境界を監査済み。SPP/HID Device/HID Hostへ登録mutexとcallback参照数による停止barrierを追加し、clean実機lifecycle回帰を完走した。
 
 ## 将来の配布形式統一
 

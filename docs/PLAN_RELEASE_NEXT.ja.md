@@ -12,7 +12,7 @@
 - 無印ESP32向け同梱NimBLE hostはCentral / Peripheral両roleで実機回帰済み。
 - Classic-only Bluedroid archive、SPP、HID Device/Host、dual-host HCI brokerは実装・実機検証済みだが実験扱い。
 - dual-hostはcommand/ACL routing、bond/RPA、任意停止順、再attach、FIFO満杯、再登録とheap安定性まで検証済み。
-- 数時間級dual-host soak、観測HCI commandのpolicy分類、不正HID report拒否、peer突然消失後の復旧は完了。接続・pairing失敗、公開サポート範囲の確定が未完了。
+- 数時間級dual-host soak、観測HCI commandのpolicy分類、不正HID report拒否、peer突然消失後の復旧、接続・pairing失敗後の復旧、lifecycle競合監査は完了。公開サポート範囲の確定が未完了。
 - `CHANGELOG.md`のUnreleasedと利用者向けClassic文書は、次回release内容として未整理。
 
 ## Gate A: Classic / dual-hostの公開範囲
@@ -22,8 +22,8 @@
 | 完了 | 数時間級dual-host soak | 20 run、1時間41分44秒。command競合／停止・再登録各100サイクル、panic・broker error・heap低下なし |
 | 完了 | HCI command policy監査 | 接続後cleanupを含むinventoryを分類し、未知／別host opcodeのfail-closed policyとunit・実機回帰を追加 |
 | 完了 | 不正HID report / peer消失 | null・上限超過reportを送信前に拒否し接続を維持。peer突然再起動後にbond済みBLEとClassic HIDを復旧 |
-| 未完了 | 接続・pairing失敗 | HID接続失敗とBLE pairing失敗後に両hostが回復 |
-| 未完了 | lifecycle競合監査 | callback実行中の解除・停止についてdata raceとuse-after-freeがないことを確認 |
+| 完了 | 接続・pairing失敗 | 誤passkey後にbondを残さず再pairing。HID非同期接続失敗後も暗号化LEを維持し、正しいClassic peerへ再接続 |
+| 完了 | lifecycle競合監査 | SPP/HID callback targetを登録mutex下で取得し、解除後は取得済み参照が0になるまでstateを保持。clean実機lifecycle回帰成功 |
 | 未完了 | release scope決定 | experimental flagのまま同梱するか、正式APIに昇格するか、次回releaseから外すかを決定 |
 | 未完了 | 利用者向け文書 | README、Feature Matrix、example、制限、build flagが決定したscopeと一致 |
 
@@ -36,7 +36,7 @@ Gate Aの詳細は[引き継ぎ](HANDOFF_ESP32_CLASSIC.ja.md)を正とします�
 | 状態 | 項目 | 完了条件 |
 |---|---|---|
 | 完了 | Classic archive生成入口 | IDF/tag/toolchain検査、link check、symbol prefix、必須symbol検査をscript化 |
-| 未完了 | archive clean再現 | cleanなIDF v5.5.5環境から一時出力し、格納済みarchiveとSHA-256一致 |
+| 完了 | archive clean再現 | cleanなIDF v5.5.5 worktree・GCC 14.2.0から一時生成し、格納済みarchiveとbyte単位・SHA-256一致 |
 | 未完了 | board matrix | workflowで対象boardを再生成し、次回versionのBOARDS文書を確定 |
 | 未完了 | core matrix | Arduino-ESP32対応versionを再検証し、次回versionのCOMPATIBILITY文書を確定 |
 | 未完了 | 他SoC非影響 | S3/C3/C6/H2/P4の代表compileでClassic archive・無印ESP32 patchが非適用 |
@@ -80,9 +80,9 @@ archive手順は[Classic host archive再生成](CLASSIC_HOST_BUILD.ja.md)を正�
 
 ## 推奨実行順
 
-1. Gate Aのsoak・異常系・policy監査を終え、Classicのrelease scopeを決める。
+1. Gate Aの結果からClassicのrelease scopeを決める。
 2. scope確定後にCHANGELOGと利用者向け文書を更新する。
-3. Gate Bのarchive再現、board/core matrixを確定する。
+3. Gate Bのboard/core matrixと他SoC非影響を確定する。
 4. コードfreeze後にGate Cのclean全回帰を複数回行う。
 5. Gate Dを並行実施し、最後にGate Eのmetadata・release操作へ進む。
 

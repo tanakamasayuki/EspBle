@@ -19,15 +19,20 @@
   contention, full-FIFO backpressure recovery, and a multi-hour soak. Observed
   commands are classified by transport and scope; unknown or wrong-host commands
   fail closed only in dual-host mode. Invalid HID reports are rejected locally,
-  and bonded LE plus Classic HID recover after an abrupt peer reboot. Connection
-  and pairing failures remain a release gate.
+  and bonded LE plus Classic HID recover after an abrupt peer reboot. HID Host
+  now reports final asynchronous connection failures; hardware coverage verifies
+  wrong-passkey recovery without a stale bond and Classic reconnection while
+  encrypted LE remains live. SPP and HID callback teardown now holds backend
+  state until all callbacks that acquired it have returned.
 - (JA) 無印ESP32でNimBLE + Classicを同時利用するopt-in実験機能を追加。HCI brokerが
   command FIFO/credit、event mask union、command応答・ACL handle routing、controller
   lifecycle、Classic再attach仮想化、host-based RPA復帰を管理する。暗号化GATTと
   Classic HID、bond、任意停止順、再起動、command競合、FIFO満杯復帰、数時間級soakまで
   実機検証済み。観測commandをtransportとscopeで分類し、dual-host時だけ未知／別host
   commandをfail-closedにした。不正HID reportは接続を維持したまま拒否し、peer突然再起動後も
-  bond済みLEとClassic HIDを復旧する。接続失敗とpairing失敗はrelease gateとして残る。
+  bond済みLEとClassic HIDを復旧する。HID Hostの最終的な非同期接続失敗を通知し、誤passkey後に
+  stale bondを残さず再pairingできること、暗号化LEを維持してClassicを再接続できることも検証した。
+  SPP/HID callback解除では、取得済みcallbackが完了するまでbackend stateを保持するbarrierを追加した。
 - (EN) Added a reproducible Classic-host archive builder pinned to ESP-IDF
   v5.5.5 and xtensa-esp32 GCC 14.2.0, with link checks, global-symbol
   namespacing, required-symbol validation and SHA-256 reporting.

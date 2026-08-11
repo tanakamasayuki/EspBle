@@ -9,6 +9,12 @@ void setup()
   bluetooth.hidHost().onConnected([](const EspBleClassicHidConnection &event) {
     Serial.printf("HID device connected: %s\n", event.peerAddress.c_str());
   });
+  bluetooth.hidHost().onConnectionFailed(
+    [](const EspBleClassicHidConnectionFailure &failure) {
+      Serial.printf(
+        "HID connection failed: %s (%s)\n",
+        failure.peerAddress.c_str(), failure.detail.c_str());
+    });
   bluetooth.hidHost().onInputReport([](const EspBleClassicHidReport &event) {
     Serial.printf("Input report ID %u:", event.reportId);
     for (size_t index = 0; index < event.value.length(); ++index)

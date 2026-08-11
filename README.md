@@ -87,14 +87,17 @@ the maintenance of the bundled hosts itself. Experimental Classic SPP and
 generic HID Device/Host use a separately built Bluedroid host. Exclusive
 selection remains the default. `ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL` starts
 Classic first on a BTDM controller and then attaches bundled NimBLE. Classic HID
-traffic together with an LE connection, 25 GATT reads, and bidirectional HID
+traffic together with an LE connection, repeated GATT reads, and bidirectional HID
 traffic afterwards has passed hardware tests. Shared-command scheduling now
 uses a broker-owned FIFO and controller command credits. The broker stops the
 controller after the final host leaves, independent of host destruction order;
 event masks are merged from per-host requests, and Classic can reattach without
 resetting or reconfiguring an active LE controller. Pairing, bond persistence,
 bond reconnection, and encrypted GATT access also pass while Classic HID remains
-connected. Unclassified controller-wide commands and long-duration load remain.
+connected. Observed-command classification and long-duration load have completed;
+wrong-passkey and HID-connection failures recover without dropping the other host,
+and backend callback teardown has a reference-lifetime barrier. The public Classic
+scope and centralized incoming-ACL credit handling are not settled.
 See the [Classic implementation plan](docs/PLAN_ESP32_CLASSIC.ja.md). The classic ESP32
 also has a BLE 4.2 controller, so **LE 2M and LE Coded PHY are unavailable**,
 extended and periodic advertising are unavailable, and the connection limit is 3.
