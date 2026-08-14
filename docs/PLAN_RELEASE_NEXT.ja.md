@@ -63,12 +63,12 @@ Audioのscopeと段階は[Classic Audio拡張計画](PLAN_ESP32_CLASSIC_AUDIO.ja
 
 | 状態 | 項目 | 完了条件 |
 |---|---|---|
-| 未完了 | S3標準回帰 | `--clean`全Peer + unitを連続実行し、複数回でflaky failure、heap低下、task残留なし |
-| 未完了 | 無印ESP32 NimBLE回帰 | Central / Peripheral両roleの`--clean`掃引が成功 |
-| 完了 | Classic専用回帰 | clean buildでSPP、HID profile初期化、HID双方向report・SPP併用・再接続が成功 |
+| 一部完了 | S3標準回帰 | 2026-08-15の`--clean`全Peerで125 passed / 1 failed（`rpa_bond`）。原因はsuiteのprofile設定で、S3ではprivacyがcontroller実装になり接続先がresolving listに無いとinitiator addressがidentityへfallbackするため、bond削除直後の初回接続でRPAを要求できない。**suiteを無印ESP32専用へ変更**し、単独実行で成功を確認。複数回の連続実行が残り |
+| 一部完了 | 無印ESP32 NimBLE回帰 | 両roleの`--clean`掃引を実行。親側83 passed / 21 skipped、Peer側84 passed / 22 skipped。失敗は上記`rpa_bond`のみで、profile修正後は成功。実行commandを分ければerrorも出ない（peer sketchを持たない3 suiteへ`--peer-profile`を渡したための拒否） |
+| 完了 | Classic専用回帰 | clean buildでSPP、HID profile初期化、HID双方向report・SPP併用・再接続が成功。2026-08-15の掃引は単独DUT 3 suiteが成功、2台構成は15 passed / 1 failed（`classic_spp_stream`）。失敗はtest側の競合——`write()`はpacketをqueueした時点で返るのに、peerへ状態を1回しか問い合わせていなかった——で、`probe`で届くまで問い合わせるよう修正し成功を確認 |
 | 完了 | Classic-only build UX | 独自hostを自動選択し、公開Classic exampleから`build_opt.h`を除去。flagなしSPPを実機確認 |
 | 完了 | dual-host回帰 | public address、RPA/bond、soak、HFP、A2DP/AVRCPが成功 |
-| 未完了 | P4/C6 Hosted代表回帰 | Security非依存のrelease gateが成功。上流既知制限は再確認 |
+| 未完了 | P4/C6 Hosted代表回帰 | 2026-08-15の実行は6 suite全滅。DUTのlogは`sdmmc_init_ocr: send_op_cond (1) returned 0x107` / `sdmmc_card_init failed`の反復で、**P4↔C6のSDIO linkが立ち上がっていない**。libraryではなくfixture側の問題なので、配線・C6 firmware・電源を確認してから再実行する |
 
 具体的なcommandは[リリースチェックリスト](RELEASE_CHECKLIST.ja.md)を正とします。
 release対象board全体でのexample compileはworkflowが行うため、gateには含めません（後述）。
@@ -168,7 +168,7 @@ release作業とは独立に着手する。ここに書くのは「やると決�
 
 | 項目 | 内容 | 見積り |
 |---|---|---|
-| HID Host keyboard eventの`rawData` / `rawLength` | keyboard eventだけこの2つが空で配送される。mouse・consumer・system・gamepad・vendorは埋めているので、keyboardだけが例外。配送直前の代入2行で足り、`Event`は`state`と`raw`の両方を持っているので構造体の変更もbuffer追加も不要。**実機回帰の完走後に入れ、`hid_convenience`と`hid_keyboard_host`だけ再実行する** | 1作業単位 |
+| ~~HID Host keyboard eventの`rawData` / `rawLength`~~ | **確認済み・対応不要。**現行実装はstate eventをqueueする時点で`raw`を埋め（`EspBle.cpp`のkeyboard state enqueue）、配送時に`rawData` / `rawLength`へ渡している。Peer test `hid_keyboard_host`が`raw=8:021f`のように長さと先頭byteまで判定している。指摘は古いversionに対するもので、現行では再現しない | — |
 | notification burstとdrop集計のPeerテスト | 購読中に64→128→256件と段階的にnotifyを積み、round別に配送数と`droppedEventCount()`を突き合わせる。現在この経路を触るのは`gatt_queue_purge`と`persistent_subscription_overflow`だけで、**event queue（8件）が溢れる側の契約**——lifecycle eventが最古のnotificationを追い出し、追い出せなければ新しいeventを落とし、どちらも数える——を固定するテストが無い | 1作業単位 |
 | 別スタックとの相互接続テストの拡充 | 現在はSPPのみ。BLE GATT → BLE Security → BLE HID → Classic A2DP/AVRCP → Classic HFP → BLE MIDIの順に、相手側をArduino-ESP32同梱classとESP-IDF Bluedroid APIで書いて追加する。規則と対象範囲は[テスト計画](../tests/TEST_PLAN.ja.md)の「別スタックとの相互接続テスト」を正本とする | BLE系は各1作業単位、Classic Audio系は各2作業単位 |
 | HID Hostの複数device同時接続 | 公開signatureがdevice単位のidを取る形へ変わるため、releaseを跨がせる | 未見積り |

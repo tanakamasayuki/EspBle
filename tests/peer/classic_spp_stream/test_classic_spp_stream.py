@@ -33,12 +33,15 @@ def test_spp_stream_adapter_behaves_like_a_stream(dut, peers, probe):
     peer.expect_exact("PEER_RESET", timeout=10)
     dut.write("l\n")
     dut.expect_exact("STREAM_PRINT written=14", timeout=10)
-    peer.write("?\n")
-    peer.expect(
+    # Ask until it answers with the delivered state: write() returns when the
+    # packet is queued, so a single query can be answered before the bytes land
+    # (and the peer only prints when asked). Seen on hardware as bytes=0.
+    probe(
+        peer,
+        "?\n",
         re.compile(
             rb"PEER_STATE session=\d+ bytes=14 checksum=677446872 line=hello stream"
         ),
-        timeout=20,
     )
 
     # 2500 bytes is more than one 990-byte packet, so the adapter splits it. The
@@ -52,10 +55,12 @@ def test_spp_stream_adapter_behaves_like_a_stream(dut, peers, probe):
         re.compile(rb"STREAM_FLUSH pending=0 elapsed=(\d+)"), timeout=20
     )
     assert int(flushed.group(1)) < 1000, flushed.group(1)
-    peer.write("?\n")
-    peer.expect(
+    # flush() waits for the local queue to drain, which is not the same as the
+    # peer having received and dispatched them, so ask until it agrees.
+    probe(
+        peer,
+        "?\n",
         re.compile(rb"PEER_STATE session=\d+ bytes=2500 checksum=647092539"),
-        timeout=20,
     )
 
     # With the write timeout at zero a write that does not fit reports what it

@@ -291,7 +291,11 @@ profileを置いていないのは次の2種類だけです。
 
 66. ✅ `wifi_ble_coexistence`: P4/C6 ESP-Hosted固有のWi-Fi/BLE共存と共有transport lifecycleを検証。P4でWi-Fiを先に開始してDHCP取得後、同じHosted transportへBLEを追加し、S3 Peerとのscan、接続、GATT read/write、subscribe、notificationがWi-Fi接続を維持したまま成功することを確認する。接続中の`EspBle::end()`はBLE所有分だけを解放してWi-Fiとtransportを維持し、最後の`WiFi.STA.end()`でtransportが解放されることも確認する。資格情報はgit管理外の`.env`からcompile-time defineへ渡す。
 
-67. ✅ `rpa_bond`: 無印ESP32のhost-based privacyを両側で有効化し、scan・接続でOTA RPA（random型、上位bit `01`）を確認する。初回pairingと暗号化GATT read/write後に両端を再起動し、NVSから復元したIRK/LTKで再暗号化する。続いて復元済みbondを削除し、stale resolving-list entryを残さず新規pairingできることまで確認する。
+67. ✅ `rpa_bond`: 無印ESP32のhost-based privacyを両側で有効化し、scan・接続でOTA RPA（random型、上位bit `01`）を確認する。
+    **このsuiteは無印ESP32専用**で、S3のprofileを持たない。S3ではprivacyがcontroller側の実装になり、
+    **接続先がresolving listに無いときはinitiator addressがidentityへfallbackする**ため、bondを消した
+    直後の初回接続でRPAを要求できない（advertisingはRPAのままなので、片側だけ通ってしまう）。
+    無印ESP32のhost実装はbegin()でRPAをrandom address slotへ入れるので、role非対称にならない。初回pairingと暗号化GATT read/write後に両端を再起動し、NVSから復元したIRK/LTKで再暗号化する。続いて復元済みbondを削除し、stale resolving-list entryを残さず新規pairingできることまで確認する。
 68. ✅ `dual_host_rpa`: 無印ESP32 2台で同梱NimBLE hostと独自Classic hostを同時起動する。Classic HID ACLを維持したままhost生成RPAでpairingし、scanと双方connectionのOTA RPA型を検査する。LE切断後もClassic接続を残し、保存bondから暗号化GATTを再確立する。両roleのhost timeoutを2秒へ短縮し、3周期連続のRPA rotationごとにClassic HID reportを双方向送信しながら、preemptされたadvertising/scanが毎回再開することを確認する。有限8秒のadvertising/scanは3秒後に稼働、元deadlineを越えた9秒後に停止すること、HCI `LE Set Random Address`がNimBLEへ配送されbrokerの未知event・queue overflow・応答不一致が0であることも検査する。変化後のRPAからbond済みLEへ再接続し、最後に両dual-host stackを再起動してClassic再接続、新しいRPAの観測、永続IRK/LTKからのLE暗号化復元を行い、両transportが同時接続中であることを確認する。
 
 69. ✅ `classic_core_host_spp`: EspBleの独自Classic hostと、Arduino-ESP32同梱Bluedroid hostの
