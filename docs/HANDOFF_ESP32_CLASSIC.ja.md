@@ -102,6 +102,23 @@ PCMFlowBluetoothへは`badFrame`とraw lengthを失わず渡し、decoder側で5
 2. Arduino-ESP32更新時のIDF/toolchain ABI matrixとarchive再生成gateをCIまたはrelease手順へ組み込む。
 3. 外部Classic HID Host/Deviceとの相互運用を追加する。
 
+### 今後の作業メモ
+
+1. **Classic機能の棚卸し。** 現在の公開APIはSPP server、generic HID Device/Host、A2DP Sink/Source、
+   AVRCP CT/TG、HFP Client/AGだが、利用者から見た機能はまだ足りない。少なくともSPP client
+   （`esp_spp_connect()`は内部で使用済み、公開APIが未整備）、SPP複数session、inquiry / device discovery、
+   pairing UI（PIN・SSP確認）の公開度、HID Deviceのboot protocolとHID Hostのreport出力範囲、
+   AVRCP TGのmetadata / play-status応答送信を洗い出し、実装済み・部分実装・未実装へ分類してから
+   優先度を決める。棚卸し結果は[Feature Matrix](FEATURE_MATRIX.ja.md)と本書へ反映する。
+2. **core内蔵Bluedroid Classicとの相互接続Peer test。** 外部機器が揃うまでの相互運用確認として、
+   peer boardをArduino-ESP32同梱のBluedroid（EspBleの独自hostを使わない別sketch）で動かし、
+   独自host ⇄ core hostのpair testを追加する。core 3.3.11のesp32 sdkconfigは
+   `CONFIG_BT_SPP_ENABLED` / `CONFIG_BT_A2DP_ENABLE` / `CONFIG_BT_HFP_ENABLE`
+   （Client/AG、`CONFIG_BT_HFP_AUDIO_DATA_PATH_HCI`）が有効で、`CONFIG_BT_HID_ENABLED`は無効。
+   したがってSPP、A2DP（core側はinternal codec、EspBle側はexternal codecなのでencode済みframe境界の
+   検証になる）、AVRCP、HFPは相互接続できるが、Classic HIDはcore hostでは試験できない。
+   独自archiveの名前空間化が正しければ同一sketchへ両hostをlinkできない前提も、この構成で確認できる。
+
 ## 既知の落とし穴
 
 - `Write Local Name`をsoak刺激として反復するとcontrollerのNVDSが`nvds.c:400`でassertする。永続設定を負荷生成に使わず、scan mode切替を使う。

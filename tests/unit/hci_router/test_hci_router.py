@@ -45,6 +45,27 @@ def test_hci_command_scheduler():
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def test_hci_acl_credits():
+    here = Path(__file__).parent
+    root = here / ".." / ".." / ".."
+    output = here / "output"
+    output.mkdir(exist_ok=True)
+    binary = output / "hci_acl_credits_test"
+    result = subprocess.run(
+        [
+            "g++", "-std=c++17", "-Wall", "-Wextra", "-Werror",
+            "-I", str(root / "src"),
+            str(here / "hci_acl_credits_test.cpp"),
+            str(root / "src" / "EspBleHciAclCredits.c"),
+            "-o", str(binary),
+        ],
+        capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    result = subprocess.run([str(binary)], capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 def test_hci_fault_injection():
     """Randomized malformed input against all three modules, under sanitizers.
 
@@ -66,6 +87,7 @@ def test_hci_fault_injection():
             str(root / "src" / "EspBleHciRouter.c"),
             str(root / "src" / "EspBleHciCommandScheduler.c"),
             str(root / "src" / "EspBleHciControllerPolicy.c"),
+            str(root / "src" / "EspBleHciAclCredits.c"),
             "-o", str(binary),
         ],
         capture_output=True, text=True,

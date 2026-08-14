@@ -10,6 +10,7 @@
 // random bytes alone almost never pass the length checks that guard the
 // interesting code paths.
 
+#include "EspBleHciAclCredits.h"
 #include "EspBleHciCommandScheduler.h"
 #include "EspBleHciControllerPolicy.h"
 #include "EspBleHciRouter.h"
@@ -483,6 +484,91 @@ void exercise_policy(Random &random, espble_hci_controller_policy_t &policy)
     espble_hci_controller_policy_remove_host(&policy, host);
 }
 
+void check_credits_state(const espble_hci_acl_credits_t &credits)
+{
+  uint32_t counted = 0;
+  for (size_t i = 0; i < ESPBLE_HCI_ACL_CREDITS_MAX_CONNECTIONS; ++i) {
+    if (!credits.entries[i].used) continue;
+    check("credit handle masked", credits.entries[i].handle <= 0x0fff);
+    counted += credits.entries[i].delivered;
+  }
+  // Every uncredited packet must be attributed to exactly one handle, or the
+  // controller would be credited for buffers it never handed over.
+  check("pending credits match the per-handle records",
+    counted == credits.pending_total);
+}
+
+void exercise_credits(Random &random, espble_hci_acl_credits_t &credits)
+{
+  uint8_t command[ESPBLE_HCI_ACL_CREDITS_MAX_COMMAND_LENGTH];
+
+  switch (random.below(6)) {
+  case 0: {
+    // A random walk essentially never produces a Read Buffer Size response, so
+    // synthesize one often enough to configure the loop, including the
+    // degenerate geometries a controller may report.
+    if (random.chance(50)) {
+      std::vector<uint8_t> response = {
+        0x04, 0x0e, 0x0b, 0x01, 0x05, 0x10,
+        (uint8_t)(random.chance(80) ? 0x00 : random.byte())};
+      push_le16(response, random.chance(80) ? 1021 : (uint16_t)random.next());
+      response.push_back(random.byte());
+      push_le16(response, random.chance(80) ? 24 : (uint16_t)random.below(3));
+      push_le16(response, (uint16_t)random.below(8));
+      // Accepting a geometry always leaves the loop configured. Rejecting one
+      // leaves whatever the previous response established.
+      if (espble_hci_acl_credits_observe_event(
+            &credits, response.data(), response.size())) {
+        check("accepted geometry configures the loop",
+          espble_hci_acl_credits_ready(&credits));
+      }
+      break;
+    }
+    const std::vector<uint8_t> packet = next_packet(random);
+    (void)espble_hci_acl_credits_observe_event(
+      &credits, packet.empty() ? nullptr : packet.data(), packet.size());
+    break;
+  }
+  case 1:
+    espble_hci_acl_credits_on_delivered(&credits, favored_handle(random));
+    break;
+  case 2:
+    espble_hci_acl_credits_forget_handle(&credits, favored_handle(random));
+    break;
+  case 3: {
+    // Undersized buffers must be refused or partially filled, never overrun.
+    const size_t capacity = random.below(
+      (uint32_t)ESPBLE_HCI_ACL_CREDITS_MAX_COMMAND_LENGTH + 1);
+    std::vector<uint8_t> output(capacity);
+    const size_t length = espble_hci_acl_credits_build_credits(
+      &credits, random.chance(50), capacity ? output.data() : nullptr, capacity);
+    if (length > 0) {
+      check("credit command fits the buffer", length <= capacity);
+      check("credit command is well formed",
+        output[0] == 0x01 && output[1] == 0x35 && output[2] == 0x0c &&
+        output[3] == (uint8_t)(1u + 4u * output[4]) &&
+        length == 5u + 4u * (size_t)output[4] && output[4] > 0);
+    }
+    break;
+  }
+  case 4: {
+    const size_t length = espble_hci_acl_credits_build_host_buffer_size(
+      &credits, command, sizeof(command));
+    check("host buffer size is sent only once configured",
+      length == 0 || (length == 11 && espble_hci_acl_credits_ready(&credits)));
+    break;
+  }
+  default: {
+    const size_t length = espble_hci_acl_credits_build_flow_control_enable(
+      &credits, command, sizeof(command));
+    check("flow control enable is sent only once configured",
+      length == 0 || (length == 5 && espble_hci_acl_credits_ready(&credits)));
+    break;
+  }
+  }
+  check_credits_state(credits);
+}
+
 // Saturation and null-argument paths a random walk reaches only by luck. They
 // are the ones that matter under fault injection: every table in the broker is
 // fixed size, and a caller that loses a buffer must be rejected, not crash.
@@ -610,9 +696,11 @@ int main(int argc, char **argv)
   espble_hci_router_t router;
   espble_hci_command_scheduler_t scheduler;
   espble_hci_controller_policy_t policy;
+  espble_hci_acl_credits_t credits;
   espble_hci_router_init(&router);
   espble_hci_command_scheduler_init(&scheduler);
   espble_hci_controller_policy_init(&policy);
+  espble_hci_acl_credits_init(&credits, 4);
 
   for (uint32_t iteration = 0; iteration < iterations && failures == 0; ++iteration) {
     // Restarting the modules mid-run covers the re-registration path, where a
@@ -621,10 +709,12 @@ int main(int argc, char **argv)
       espble_hci_router_init(&router);
       espble_hci_command_scheduler_init(&scheduler);
       espble_hci_controller_policy_init(&policy);
+      espble_hci_acl_credits_init(&credits, (uint16_t)random.below(8));
     }
-    switch (random.below(3)) {
+    switch (random.below(4)) {
     case 0: exercise_router(random, router); break;
     case 1: exercise_scheduler(random, scheduler); break;
+    case 2: exercise_credits(random, credits); break;
     default: exercise_policy(random, policy); break;
     }
   }
