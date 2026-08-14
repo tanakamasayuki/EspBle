@@ -75,6 +75,12 @@ void setup()
         connection.id, connection.mediaMtu);
       a2dpConnected = true;
     });
+  bluetooth.a2dpSource().onSinkDelay([](const EspBleClassicA2dpDelay &delay) {
+    // The Sink reports this on its own; a video player would use it to hold
+    // pictures back by the same amount.
+    Serial.printf("A2DP_SOURCE_SINK_DELAY value=%u\n",
+      delay.tenthsOfMilliseconds);
+  });
   bluetooth.a2dpSource().onCodecConfigured(
     [](const EspBleClassicA2dpCodecConfig &codec) {
       Serial.printf("A2DP_SOURCE_CODEC rate=%lu channels=%u\n",
@@ -122,6 +128,12 @@ void setup()
     [](const EspBleClassicAvrcpVolume &event) {
       Serial.printf("AVRCP_SOURCE_VOLUME value=%u remote=%u\n",
         event.value, event.remoteCommand ? 1 : 0);
+    });
+  bluetooth.avrcp().onPlayStatus(
+    [](const EspBleClassicAvrcpPlayStatus &status) {
+      Serial.printf("AVRCP_SOURCE_PLAY_STATUS state=%u position=%lu\n",
+        static_cast<unsigned>(status.state),
+        static_cast<unsigned long>(status.positionMilliseconds));
     });
   if (!bluetooth.avrcp().begin())
   {
@@ -218,6 +230,15 @@ void loop()
       Serial.printf("A2DP_SOURCE_START requested=%u\n",
         bluetooth.a2dpSource().start() ? 1 : 0);
     }
+    else if (command == "n")
+      Serial.printf("AVRCP_SOURCE_REGISTER_PLAY_STATUS requested=%u\n",
+        bluetooth.avrcp().registerNotifications(
+          EspBleClassicAvrcpNotification::PlayStatus) ? 1 : 0);
+    else if (command == "y")
+      // Repeat mode (attribute 2) set to "single track" (value 2). A Target may
+      // refuse it; the command being accepted locally is all this reports.
+      Serial.printf("AVRCP_SOURCE_PLAYER_SETTING requested=%u\n",
+        bluetooth.avrcp().setPlayerSetting(2, 2) ? 1 : 0);
 #if defined(ESPBLE_TEST_DUAL_A2DP)
     else if (command == "r")
       Serial.printf("DUAL_A2DP_BLE_READ_REQUESTED %u\n",

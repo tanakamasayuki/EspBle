@@ -46,6 +46,40 @@ def test_a2dp_sink_receives_external_codec_media(dut, peers):
         dut.expect(connected_pattern, timeout=30)
     assert codec.group(1) == b"48000"
     assert codec.group(2) == b"2"
+
+    # Delay reporting: the Sink is the only side that knows how long it takes to
+    # play what it receives, and a Source rendering video needs that number to
+    # hold pictures back by the same amount. 1500 is 150 ms in the profile's
+    # tenths of a millisecond. Done before the stream starts, so waiting for
+    # these lines does not read past the media reports checked later.
+    dut.write("d1500\n")
+    dut.expect_exact("A2DP_SINK_SET_DELAY requested=1 error=None", timeout=10)
+    dut.expect_exact("A2DP_SINK_DELAY success=1 value=1500", timeout=20)
+    peer.expect_exact("A2DP_SOURCE_SINK_DELAY value=1500", timeout=20)
+
+    # Reading it back returns what was set rather than a fresh measurement.
+    dut.write("g\n")
+    dut.expect_exact("A2DP_SINK_GET_DELAY requested=1 error=None", timeout=10)
+    dut.expect_exact("A2DP_SINK_DELAY success=1 value=1500", timeout=20)
+
+    # What a Target may report is fixed by the bundled host build, not by the
+    # profile: it allows volume changes only (event 0x0d). So this asserts the
+    # limit rather than pretending play status is reachable — declaring anything
+    # else has to fail with a message that says why, not a bare backend error.
+    dut.write("q\n")
+    dut.expect_exact("AVRCP_SINK_SUPPORTED count=1 13", timeout=10)
+    dut.write("p\n")
+    dut.expect_exact(
+        "AVRCP_SINK_CAPABILITIES set=0 error=InvalidArgument", timeout=10)
+    dut.write("v\n")
+    dut.expect_exact("AVRCP_SINK_CAPABILITIES set=1 error=None", timeout=10)
+
+    # A player setting travels the other way: Controller to Target. The Target
+    # here does not implement repeat, so all this asserts is that the command
+    # was accepted locally rather than refused before it left.
+    peer.write("y\n")
+    peer.expect_exact("AVRCP_SOURCE_PLAYER_SETTING requested=1", timeout=10)
+
     peer.write(f"v{packet_target}\n".encode())
     peer.expect_exact(f"A2DP_SOURCE_TARGET packets={packet_target}", timeout=10)
     peer.expect_exact("AVRCP_SOURCE_REGISTER_VOLUME requested=1", timeout=10)
@@ -73,6 +107,7 @@ def test_a2dp_sink_receives_external_codec_media(dut, peers):
         timeout=20,
         expect_all=True,
     )
+
     media = dut.expect(
         re.compile(
             rb"A2DP_SINK_MEDIA id=\d+ codec=1 timestamp=(\d+) frames=1 "

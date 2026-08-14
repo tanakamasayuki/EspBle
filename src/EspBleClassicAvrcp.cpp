@@ -21,6 +21,8 @@
 #define esp_avrc_ct_send_metadata_cmd espble_bd_esp_avrc_ct_send_metadata_cmd
 #define esp_avrc_ct_send_passthrough_cmd \
   espble_bd_esp_avrc_ct_send_passthrough_cmd
+#define esp_avrc_ct_send_set_player_value_cmd \
+  espble_bd_esp_avrc_ct_send_set_player_value_cmd
 #define esp_avrc_ct_send_register_notification_cmd \
   espble_bd_esp_avrc_ct_send_register_notification_cmd
 #define esp_avrc_ct_send_set_absolute_volume_cmd \
@@ -35,6 +37,7 @@
 #define esp_avrc_tg_send_rn_rsp espble_bd_esp_avrc_tg_send_rn_rsp
 #define esp_avrc_tg_set_psth_cmd_filter \
   espble_bd_esp_avrc_tg_set_psth_cmd_filter
+#define esp_avrc_tg_get_rn_evt_cap espble_bd_esp_avrc_tg_get_rn_evt_cap
 #define esp_avrc_tg_set_rn_evt_cap espble_bd_esp_avrc_tg_set_rn_evt_cap
 #include <esp_avrc_api.h>
 #else
@@ -91,6 +94,7 @@ struct EspBleClassicAvrcpImpl
     Metadata,
     PlayStatus,
     Volume,
+    NotificationRegistered,
   };
 
   struct Event
@@ -103,6 +107,8 @@ struct EspBleClassicAvrcpImpl
     EspBleClassicAvrcpMetadata metadata;
     EspBleClassicAvrcpPlayStatus playStatus;
     EspBleClassicAvrcpVolume volume;
+    EspBleClassicAvrcpNotification notification =
+      EspBleClassicAvrcpNotification::PlayStatus;
   };
 
   bool enqueue(Event event)
@@ -366,17 +372,29 @@ void avrcpTargetCallback(
     impl->enqueue(std::move(queued));
     return;
   }
-  if (event == ESP_AVRC_TG_REGISTER_NOTIFICATION_EVT &&
-      parameter->reg_ntf.event_id == ESP_AVRC_RN_VOLUME_CHANGE)
+  if (event == ESP_AVRC_TG_REGISTER_NOTIFICATION_EVT)
   {
-    esp_avrc_rn_param_t response = {};
+    if (parameter->reg_ntf.event_id == ESP_AVRC_RN_VOLUME_CHANGE)
     {
-      std::lock_guard<std::mutex> lock(impl->mutex);
-      impl->volumeNotificationRegistered = true;
-      response.volume = impl->volume;
+      // Volume is answered here rather than by the sketch: this object already
+      // holds the value, so there is nothing only a sketch could know.
+      esp_avrc_rn_param_t response = {};
+      {
+        std::lock_guard<std::mutex> lock(impl->mutex);
+        impl->volumeNotificationRegistered = true;
+        response.volume = impl->volume;
+      }
+      (void)esp_avrc_tg_send_rn_rsp(
+        ESP_AVRC_RN_VOLUME_CHANGE, ESP_AVRC_RN_RSP_INTERIM, &response);
+      return;
     }
-    (void)esp_avrc_tg_send_rn_rsp(
-      ESP_AVRC_RN_VOLUME_CHANGE, ESP_AVRC_RN_RSP_INTERIM, &response);
+    // Anything else has to be answered by the sketch, which is why the
+    // registration is reported rather than absorbed.
+    EspBleClassicAvrcpImpl::Event queued;
+    queued.type = EspBleClassicAvrcpImpl::EventType::NotificationRegistered;
+    queued.notification = static_cast<EspBleClassicAvrcpNotification>(
+      parameter->reg_ntf.event_id);
+    impl->enqueue(std::move(queued));
   }
 }
 } // namespace
@@ -826,5 +844,272 @@ void EspBleClassicAvrcp::update()
     else if (event.type == EspBleClassicAvrcpImpl::EventType::Volume &&
              volumeCallback_)
       volumeCallback_(event.volume);
+    else if (event.type ==
+               EspBleClassicAvrcpImpl::EventType::NotificationRegistered &&
+             notificationRegisteredCallback_)
+      notificationRegisteredCallback_(event.notification);
   }
+}
+
+void EspBleClassicAvrcp::onNotificationRegistered(
+  NotificationRegisteredCallback callback)
+{
+  notificationRegisteredCallback_ = std::move(callback);
+}
+
+bool EspBleClassicAvrcp::registerNotifications(
+  EspBleClassicAvrcpNotification event)
+{
+#if !ESPBLE_CLASSIC_AVRCP_BACKEND_AVAILABLE
+  (void)event;
+  return false;
+#else
+  if (!controllerConnected())
+  {
+    owner_->setError(
+      EspBleError::InvalidState, "AVRCP Controller is not connected");
+    return false;
+  }
+  if (
+    esp_avrc_ct_send_register_notification_cmd(
+      impl_->allocateTransactionLabel(),
+      static_cast<uint8_t>(event), 0) != ESP_OK)
+  {
+    owner_->setError(
+      EspBleError::BackendFailure, "failed to register an AVRCP notification");
+    return false;
+  }
+  owner_->clearError();
+  return true;
+#endif
+}
+
+bool EspBleClassicAvrcp::setPlayerSetting(uint8_t attributeId, uint8_t value)
+{
+#if !ESPBLE_CLASSIC_AVRCP_BACKEND_AVAILABLE
+  (void)attributeId;
+  (void)value;
+  return false;
+#else
+  if (!controllerConnected())
+  {
+    owner_->setError(
+      EspBleError::InvalidState, "AVRCP Controller is not connected");
+    return false;
+  }
+  if (
+    esp_avrc_ct_send_set_player_value_cmd(
+      impl_->allocateTransactionLabel(), attributeId, value) != ESP_OK)
+  {
+    owner_->setError(
+      EspBleError::BackendFailure, "failed to set the AVRCP player setting");
+    return false;
+  }
+  owner_->clearError();
+  return true;
+#endif
+}
+
+#if ESPBLE_CLASSIC_AVRCP_BACKEND_AVAILABLE
+namespace
+{
+// Fills the profile's parameter union for the event being answered.
+void fillNotificationParameter(
+  const EspBleClassicAvrcpNotificationValue &value,
+  esp_avrc_rn_param_t &parameter)
+{
+  switch (value.event)
+  {
+    case EspBleClassicAvrcpNotification::PlayStatus:
+      parameter.playback =
+        static_cast<esp_avrc_playback_stat_t>(value.playbackStatus);
+      break;
+    case EspBleClassicAvrcpNotification::TrackChange:
+      memcpy(parameter.elm_id, value.trackId, sizeof(parameter.elm_id));
+      break;
+    case EspBleClassicAvrcpNotification::PlaybackPosition:
+      parameter.play_pos = value.playbackPosition;
+      break;
+    case EspBleClassicAvrcpNotification::VolumeChange:
+      parameter.volume = value.volume;
+      break;
+    case EspBleClassicAvrcpNotification::BatteryStatus:
+      parameter.batt = static_cast<esp_avrc_batt_stat_t>(value.batteryStatus);
+      break;
+    default:
+      // Reached-end and reached-start carry no value of their own.
+      break;
+  }
+}
+} // namespace
+#endif
+
+size_t EspBleClassicAvrcp::supportedNotifications(
+  EspBleClassicAvrcpNotification *events, size_t capacity) const
+{
+#if !ESPBLE_CLASSIC_AVRCP_BACKEND_AVAILABLE
+  (void)events;
+  (void)capacity;
+  return 0;
+#else
+  esp_avrc_rn_evt_cap_mask_t allowed = {};
+  if (esp_avrc_tg_get_rn_evt_cap(ESP_AVRC_RN_CAP_ALLOWED_EVT, &allowed) !=
+      ESP_OK)
+  {
+    return 0;
+  }
+  static const EspBleClassicAvrcpNotification candidates[] = {
+    EspBleClassicAvrcpNotification::PlayStatus,
+    EspBleClassicAvrcpNotification::TrackChange,
+    EspBleClassicAvrcpNotification::TrackReachedEnd,
+    EspBleClassicAvrcpNotification::TrackReachedStart,
+    EspBleClassicAvrcpNotification::PlaybackPosition,
+    EspBleClassicAvrcpNotification::BatteryStatus,
+    EspBleClassicAvrcpNotification::VolumeChange,
+  };
+  size_t found = 0;
+  for (EspBleClassicAvrcpNotification candidate : candidates)
+  {
+    if (!esp_avrc_rn_evt_bit_mask_operation(
+          ESP_AVRC_BIT_MASK_OP_TEST, &allowed,
+          static_cast<esp_avrc_rn_event_ids_t>(candidate)))
+    {
+      continue;
+    }
+    if (events != nullptr)
+    {
+      if (found >= capacity) break;
+      events[found] = candidate;
+    }
+    ++found;
+  }
+  return found;
+#endif
+}
+
+bool EspBleClassicAvrcp::setNotificationCapabilities(
+  const EspBleClassicAvrcpNotification *events, size_t count)
+{
+#if !ESPBLE_CLASSIC_AVRCP_BACKEND_AVAILABLE
+  (void)events;
+  (void)count;
+  return false;
+#else
+  if (events == nullptr || count == 0 || count > MaximumNotifications)
+  {
+    owner_->setError(
+      EspBleError::InvalidArgument, "invalid AVRCP notification list");
+    return false;
+  }
+  if (!targetInitialized())
+  {
+    owner_->setError(
+      EspBleError::InvalidState, "AVRCP Target is not initialized");
+    return false;
+  }
+  // Checked against what the host build actually allows, so an unsupported
+  // event is named here instead of arriving as a bare backend failure.
+  esp_avrc_rn_evt_cap_mask_t allowed = {};
+  if (esp_avrc_tg_get_rn_evt_cap(ESP_AVRC_RN_CAP_ALLOWED_EVT, &allowed) !=
+      ESP_OK)
+  {
+    owner_->setError(
+      EspBleError::BackendFailure,
+      "failed to read the allowed AVRCP notifications");
+    return false;
+  }
+  esp_avrc_rn_evt_cap_mask_t mask = {};
+  for (size_t index = 0; index < count; ++index)
+  {
+    const esp_avrc_rn_event_ids_t event =
+      static_cast<esp_avrc_rn_event_ids_t>(events[index]);
+    if (!esp_avrc_rn_evt_bit_mask_operation(
+          ESP_AVRC_BIT_MASK_OP_TEST, &allowed, event))
+    {
+      owner_->setError(
+        EspBleError::InvalidArgument,
+        "this host build does not allow that AVRCP notification; "
+        "supportedNotifications() lists the ones it does");
+      return false;
+    }
+    if (!esp_avrc_rn_evt_bit_mask_operation(
+          ESP_AVRC_BIT_MASK_OP_SET, &mask, event))
+    {
+      owner_->setError(
+        EspBleError::InvalidArgument, "invalid AVRCP notification");
+      return false;
+    }
+  }
+  if (esp_avrc_tg_set_rn_evt_cap(&mask) != ESP_OK)
+  {
+    owner_->setError(
+      EspBleError::BackendFailure,
+      "failed to declare AVRCP notification capabilities");
+    return false;
+  }
+  owner_->clearError();
+  return true;
+#endif
+}
+
+bool EspBleClassicAvrcp::respondToNotification(
+  const EspBleClassicAvrcpNotificationValue &value)
+{
+#if !ESPBLE_CLASSIC_AVRCP_BACKEND_AVAILABLE
+  (void)value;
+  return false;
+#else
+  if (!targetConnected())
+  {
+    owner_->setError(
+      EspBleError::InvalidState, "AVRCP Target is not connected");
+    return false;
+  }
+  esp_avrc_rn_param_t parameter = {};
+  fillNotificationParameter(value, parameter);
+  if (
+    esp_avrc_tg_send_rn_rsp(
+      static_cast<esp_avrc_rn_event_ids_t>(value.event),
+      ESP_AVRC_RN_RSP_INTERIM, &parameter) != ESP_OK)
+  {
+    owner_->setError(
+      EspBleError::BackendFailure,
+      "failed to answer the AVRCP notification registration");
+    return false;
+  }
+  owner_->clearError();
+  return true;
+#endif
+}
+
+bool EspBleClassicAvrcp::sendNotificationChanged(
+  const EspBleClassicAvrcpNotificationValue &value)
+{
+#if !ESPBLE_CLASSIC_AVRCP_BACKEND_AVAILABLE
+  (void)value;
+  return false;
+#else
+  if (!targetConnected())
+  {
+    owner_->setError(
+      EspBleError::InvalidState, "AVRCP Target is not connected");
+    return false;
+  }
+  esp_avrc_rn_param_t parameter = {};
+  fillNotificationParameter(value, parameter);
+  // A Changed response also ends the subscription, as the profile defines it:
+  // the Controller registers again if it still wants to be told.
+  if (
+    esp_avrc_tg_send_rn_rsp(
+      static_cast<esp_avrc_rn_event_ids_t>(value.event),
+      ESP_AVRC_RN_RSP_CHANGED, &parameter) != ESP_OK)
+  {
+    owner_->setError(
+      EspBleError::BackendFailure,
+      "failed to send the AVRCP notification change");
+    return false;
+  }
+  owner_->clearError();
+  return true;
+#endif
 }

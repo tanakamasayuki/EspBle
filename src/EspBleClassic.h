@@ -274,6 +274,49 @@ enum class EspBleClassicAudioSendResult : uint8_t
   BackendFailure,
 };
 
+// Events a Controller can subscribe to on a Target. A Target that declares a
+// capability has to answer when a Controller registers for it, so a sketch
+// declares only what it can actually report.
+enum class EspBleClassicAvrcpNotification : uint8_t
+{
+  PlayStatus = 0x01,
+  TrackChange = 0x02,
+  TrackReachedEnd = 0x03,
+  TrackReachedStart = 0x04,
+  PlaybackPosition = 0x05,
+  BatteryStatus = 0x06,
+  VolumeChange = 0x0d,
+};
+
+enum class EspBleClassicAvrcpPlaybackStatus : uint8_t
+{
+  Stopped = 0,
+  Playing = 1,
+  Paused = 2,
+  ForwardSeek = 3,
+  ReverseSeek = 4,
+  Error = 0xff,
+};
+
+// The value that goes with a notification. Which member matters follows from
+// the event, as the profile defines it; the rest are ignored.
+struct EspBleClassicAvrcpNotificationValue
+{
+  EspBleClassicAvrcpNotification event =
+    EspBleClassicAvrcpNotification::PlayStatus;
+  EspBleClassicAvrcpPlaybackStatus playbackStatus =
+    EspBleClassicAvrcpPlaybackStatus::Stopped;
+  // Milliseconds, for PlaybackPosition.
+  uint32_t playbackPosition = 0;
+  // For TrackChange. All ones means "no track selected", which is what the
+  // profile uses when nothing is loaded.
+  uint8_t trackId[8] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+  // 0..127, for VolumeChange.
+  uint8_t volume = 0;
+  // For BatteryStatus, as the profile numbers it.
+  uint8_t batteryStatus = 0;
+};
+
 enum class EspBleClassicAvrcpCommand : uint8_t
 {
   Select = 0x00,
@@ -693,6 +736,16 @@ struct EspBleClassicHfpClientImpl;
 struct EspBleClassicHfpAudioGatewayImpl;
 class EspBleClassic;
 
+// How long after receiving audio the Sink actually plays it. A video player on
+// the Source side uses this to keep pictures in step with sound; without it the
+// Source has no idea how far behind the Sink is. The unit is tenths of a
+// millisecond, as the profile defines it.
+struct EspBleClassicA2dpDelay
+{
+  bool success = false;
+  uint16_t tenthsOfMilliseconds = 0;
+};
+
 class EspBleClassicA2dpSink
 {
 public:
@@ -724,6 +777,16 @@ public:
   void onCodecConfigured(CodecConfiguredCallback callback);
   void onStreamStateChanged(StreamCallback callback);
   void onMedia(MediaCallback callback);
+
+  // Tells the Source how long this Sink takes to play what it receives, and
+  // reads back what the backend has stored. Both are round trips, so the answer
+  // arrives at onDelay(). A Sink that decodes in another library knows its own
+  // latency; this library cannot measure it.
+  using DelayCallback = std::function<void(const EspBleClassicA2dpDelay &)>;
+  bool setDelay(uint16_t tenthsOfMilliseconds);
+  bool requestDelay();
+  void onDelay(DelayCallback callback);
+
   size_t droppedEventCount() const;
 
 private:
@@ -742,6 +805,7 @@ private:
   // Atomically replaced by onMedia(). Keeping the callable in an immutable
   // shared object avoids copying std::function in the Bluetooth hot path.
   std::shared_ptr<MediaCallback> mediaCallback_;
+  DelayCallback delayCallback_;
 };
 
 class EspBleClassicA2dpSource
@@ -774,6 +838,13 @@ public:
   void onDisconnected(ConnectionCallback callback);
   void onCodecConfigured(CodecConfiguredCallback callback);
   void onStreamStateChanged(StreamCallback callback);
+
+  // The delay the Sink reported for itself. Arrives when the Sink sends it,
+  // which it may do at any time while connected — nothing here asks for it.
+  using SinkDelayCallback =
+    std::function<void(const EspBleClassicA2dpDelay &)>;
+  void onSinkDelay(SinkDelayCallback callback);
+
   size_t droppedEventCount() const;
 
 private:
@@ -785,6 +856,7 @@ private:
 
   EspBleClassic *owner_;
   EspBleClassicA2dpSourceImpl *impl_ = nullptr;
+  SinkDelayCallback sinkDelayCallback_;
   ConnectionCallback connectedCallback_;
   ConnectionCallback disconnectedCallback_;
   CodecConfiguredCallback codecConfiguredCallback_;
@@ -830,7 +902,43 @@ public:
   bool setAbsoluteVolume(uint8_t volume);
   // AVRCP notifications are one-shot. Register again after each Changed event.
   bool registerVolumeNotifications();
+  // Controller side: subscribe to any of the events above, not just volume.
+  bool registerNotifications(EspBleClassicAvrcpNotification event);
+  // Controller side: change a player setting such as repeat or shuffle. The
+  // attribute and value numbers are the profile's; a Target may refuse any of
+  // them, which arrives as the failure of this command rather than here.
+  bool setPlayerSetting(uint8_t attributeId, uint8_t value);
   bool setLocalVolume(uint8_t volume);
+
+  // Target side. A Target must answer a registration it advertised support for,
+  // and must send a Changed response when the value moves — a Controller that
+  // gets neither waits, and some Controllers stop asking afterwards.
+  //
+  // Volume is handled by the library already: it answers the registration and
+  // sends the Changed response from setLocalVolume(). Everything else is the
+  // sketch's, because only the sketch knows the values.
+  //
+  // The bundled Classic host allows a Target to declare volume changes only, so
+  // reporting play status or track changes as a Target is not reachable with
+  // this build no matter what the profile permits. supportedNotifications()
+  // reports what is allowed; declaring anything else is refused with a message
+  // that says so. The Controller side has no such limit.
+  static constexpr size_t MaximumNotifications = 8;
+  // Which notifications this backend allows a Target to declare. The set is
+  // fixed by the host build, and setNotificationCapabilities() only accepts a
+  // subset of it, so a sketch can check instead of guessing. Returns the number
+  // written, or the number available when events is null.
+  size_t supportedNotifications(
+    EspBleClassicAvrcpNotification *events, size_t capacity) const;
+  bool setNotificationCapabilities(
+    const EspBleClassicAvrcpNotification *events, size_t count);
+  bool respondToNotification(
+    const EspBleClassicAvrcpNotificationValue &value);
+  bool sendNotificationChanged(
+    const EspBleClassicAvrcpNotificationValue &value);
+  using NotificationRegisteredCallback =
+    std::function<void(EspBleClassicAvrcpNotification)>;
+  void onNotificationRegistered(NotificationRegisteredCallback callback);
 
   void onConnectionChanged(ConnectionCallback callback);
   void onRemoteFeatures(RemoteFeaturesCallback callback);
@@ -857,6 +965,7 @@ private:
   MetadataCallback metadataCallback_;
   PlayStatusCallback playStatusCallback_;
   VolumeCallback volumeCallback_;
+  NotificationRegisteredCallback notificationRegisteredCallback_;
 };
 
 class EspBleClassicHfpClient

@@ -162,6 +162,10 @@ PCMFlowBluetoothへは`badFrame`とraw lengthを失わず渡し、decoder側で5
 - bondが残っているとpairingのHCI経路がまるごと走らない。link key応答とSSP応答をpolicyへ
   分類し忘れていても、bond済みのpeerとは正常に通信できるためtestが通ってしまう。dual-host testは
   接続前にbondを削除して初回pairingを必ず通す。
+- AVRCP Targetが宣言できるnotificationは同梱hostで**volume（`0x0d`）1件だけ**である。`esp_avrc_tg_set_rn_evt_cap`は
+  allowed eventの部分集合しか受け付けず、それ以外を渡すと`ESP_FAIL`になる。profileが許すかどうかとは
+  別問題で、EspBle側では解消できない。許可集合は`esp_avrc_tg_get_rn_evt_cap(ESP_AVRC_RN_CAP_ALLOWED_EVT)`で
+  読める。Controller側にこの制限は無い。
 - inquiry実行中のSDP照会（`get_remote_services`）と`read_remote_name`は受理されるが応答が来ない。
   どちらも無線を使うため、scan完了を待ってから照会する。呼び出しが`true`を返すので、
   待たずに投げると「成功したのにcallbackが来ない」形で詰まる。

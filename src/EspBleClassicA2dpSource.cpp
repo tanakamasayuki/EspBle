@@ -169,13 +169,21 @@ EspBleClassicA2dpCodecConfig sourceCodecConfig(
 
 struct EspBleClassicA2dpSourceImpl
 {
-  enum class EventType : uint8_t { Connected, Disconnected, Codec, Stream };
+  enum class EventType : uint8_t
+  {
+    Connected,
+    Disconnected,
+    Codec,
+    Stream,
+    SinkDelay,
+  };
   struct Event
   {
     EventType type = EventType::Connected;
     EspBleClassicA2dpConnection connection;
     EspBleClassicA2dpCodecConfig codec;
     EspBleClassicA2dpStreamEvent stream;
+    EspBleClassicA2dpDelay sinkDelay;
   };
   bool enqueue(Event event)
   {
@@ -349,6 +357,18 @@ void sourceProfileCallback(
       impl->streaming = queued.stream.state == EspBleClassicA2dpStreamState::Started;
       impl->startPending = false;
     }
+    impl->enqueue(std::move(queued));
+    return;
+  }
+  if (event == ESP_A2D_REPORT_SNK_DELAY_VALUE_EVT)
+  {
+    EspBleClassicA2dpSourceImpl::Event queued;
+    queued.type = EspBleClassicA2dpSourceImpl::EventType::SinkDelay;
+    // The Sink sends this on its own; nothing on this side asked for it, so
+    // there is no request status to report — the value arriving is the answer.
+    queued.sinkDelay.success = true;
+    queued.sinkDelay.tenthsOfMilliseconds =
+      parameter->a2d_report_delay_value_stat.delay_value;
     impl->enqueue(std::move(queued));
     return;
   }
@@ -749,5 +769,13 @@ void EspBleClassicA2dpSource::update()
     else if (event.type == EspBleClassicA2dpSourceImpl::EventType::Stream &&
              streamCallback_)
       streamCallback_(event.stream);
+    else if (event.type == EspBleClassicA2dpSourceImpl::EventType::SinkDelay &&
+             sinkDelayCallback_)
+      sinkDelayCallback_(event.sinkDelay);
   }
+}
+
+void EspBleClassicA2dpSource::onSinkDelay(SinkDelayCallback callback)
+{
+  sinkDelayCallback_ = std::move(callback);
 }

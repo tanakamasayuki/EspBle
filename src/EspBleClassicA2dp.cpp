@@ -15,6 +15,8 @@
 #define esp_a2d_audio_buff_free espble_bd_esp_a2d_audio_buff_free
 #define esp_a2d_register_callback espble_bd_esp_a2d_register_callback
 #define esp_a2d_sink_connect espble_bd_esp_a2d_sink_connect
+#define esp_a2d_sink_get_delay_value espble_bd_esp_a2d_sink_get_delay_value
+#define esp_a2d_sink_set_delay_value espble_bd_esp_a2d_sink_set_delay_value
 #define esp_a2d_sink_deinit espble_bd_esp_a2d_sink_deinit
 #define esp_a2d_sink_disconnect espble_bd_esp_a2d_sink_disconnect
 #define esp_a2d_sink_init espble_bd_esp_a2d_sink_init
@@ -84,6 +86,7 @@ struct EspBleClassicA2dpSinkImpl
     Disconnected,
     CodecConfigured,
     StreamState,
+    Delay,
   };
 
   struct Event
@@ -92,6 +95,7 @@ struct EspBleClassicA2dpSinkImpl
     EspBleClassicA2dpConnection connection;
     EspBleClassicA2dpCodecConfig codec;
     EspBleClassicA2dpStreamEvent stream;
+    EspBleClassicA2dpDelay delay;
   };
 
   bool enqueue(Event event)
@@ -340,6 +344,28 @@ void a2dpProfileCallback(
       if (impl->ending) return;
       impl->streaming =
         queued.stream.state == EspBleClassicA2dpStreamState::Started;
+    }
+    impl->enqueue(std::move(queued));
+  }
+  if (
+    event == ESP_A2D_SNK_SET_DELAY_VALUE_EVT ||
+    event == ESP_A2D_SNK_GET_DELAY_VALUE_EVT)
+  {
+    EspBleClassicA2dpSinkImpl::Event queued;
+    queued.type = EspBleClassicA2dpSinkImpl::EventType::Delay;
+    if (event == ESP_A2D_SNK_SET_DELAY_VALUE_EVT)
+    {
+      queued.delay.success = parameter->a2d_set_delay_value_stat.set_state ==
+        ESP_A2D_SET_SUCCESS;
+      queued.delay.tenthsOfMilliseconds =
+        parameter->a2d_set_delay_value_stat.delay_value;
+    }
+    else
+    {
+      // The get has no status of its own: a value arriving is the success.
+      queued.delay.success = true;
+      queued.delay.tenthsOfMilliseconds =
+        parameter->a2d_get_delay_value_stat.delay_value;
     }
     impl->enqueue(std::move(queued));
   }
@@ -715,5 +741,60 @@ void EspBleClassicA2dpSink::update()
     else if (event.type == EspBleClassicA2dpSinkImpl::EventType::StreamState &&
              streamCallback_)
       streamCallback_(event.stream);
+    else if (event.type == EspBleClassicA2dpSinkImpl::EventType::Delay &&
+             delayCallback_)
+      delayCallback_(event.delay);
   }
+}
+
+bool EspBleClassicA2dpSink::setDelay(uint16_t tenthsOfMilliseconds)
+{
+#if !ESPBLE_CLASSIC_A2DP_BACKEND_AVAILABLE
+  (void)tenthsOfMilliseconds;
+  owner_->setError(
+    EspBleError::BackendFailure, "Classic A2DP is unavailable");
+  return false;
+#else
+  if (!initialized())
+  {
+    owner_->setError(EspBleError::InvalidState, "A2DP Sink is not started");
+    return false;
+  }
+  if (esp_a2d_sink_set_delay_value(tenthsOfMilliseconds) != ESP_OK)
+  {
+    owner_->setError(
+      EspBleError::BackendFailure, "failed to set the A2DP delay value");
+    return false;
+  }
+  owner_->clearError();
+  return true;
+#endif
+}
+
+bool EspBleClassicA2dpSink::requestDelay()
+{
+#if !ESPBLE_CLASSIC_A2DP_BACKEND_AVAILABLE
+  owner_->setError(
+    EspBleError::BackendFailure, "Classic A2DP is unavailable");
+  return false;
+#else
+  if (!initialized())
+  {
+    owner_->setError(EspBleError::InvalidState, "A2DP Sink is not started");
+    return false;
+  }
+  if (esp_a2d_sink_get_delay_value() != ESP_OK)
+  {
+    owner_->setError(
+      EspBleError::BackendFailure, "failed to read the A2DP delay value");
+    return false;
+  }
+  owner_->clearError();
+  return true;
+#endif
+}
+
+void EspBleClassicA2dpSink::onDelay(DelayCallback callback)
+{
+  delayCallback_ = std::move(callback);
 }

@@ -91,6 +91,18 @@ void setup()
     });
   EspBleClassicAvrcpConfig avrcpConfig;
   avrcpConfig.initialVolume = 64;
+  bluetooth.avrcp().onNotificationRegistered(
+    [](EspBleClassicAvrcpNotification event) {
+      Serial.printf("AVRCP_SINK_REGISTERED event=%u\n",
+        static_cast<unsigned>(event));
+      // A Target that advertised the capability has to answer, or the
+      // Controller waits. The value is the sketch's to know.
+      EspBleClassicAvrcpNotificationValue value;
+      value.event = event;
+      value.playbackStatus = EspBleClassicAvrcpPlaybackStatus::Playing;
+      Serial.printf("AVRCP_SINK_INTERIM sent=%u\n",
+        bluetooth.avrcp().respondToNotification(value) ? 1 : 0);
+    });
   if (!bluetooth.avrcp().begin(avrcpConfig))
   {
     Serial.printf("AVRCP_SINK_INIT_FAILED %s:%s\n",
@@ -111,6 +123,10 @@ void setup()
     bluetooth.a2dpSink().onMedia({});
     Serial.println("A2DP_SINK_MEDIA_UNREGISTERED");
     teardownRequested = true;
+  });
+  bluetooth.a2dpSink().onDelay([](const EspBleClassicA2dpDelay &delay) {
+    Serial.printf("A2DP_SINK_DELAY success=%u value=%u\n",
+      delay.success ? 1 : 0, delay.tenthsOfMilliseconds);
   });
   bluetooth.a2dpSink().onCodecConfigured([](const EspBleClassicA2dpCodecConfig &event) {
     Serial.printf(
@@ -183,11 +199,69 @@ void loop()
     Serial.printf("A2DP_SINK_ENDED initialized=%u\n",
       bluetooth.a2dpSink().initialized() ? 1 : 0);
   }
-#if defined(ESPBLE_TEST_DUAL_A2DP)
   if (Serial.available())
   {
     const String command = Serial.readStringUntil('\n');
-    if (command == "z")
+    if (command.startsWith("d"))
+    {
+      // The Sink is the side that knows its own latency, so it is the side that
+      // reports it. The unit is tenths of a millisecond.
+      const uint16_t value = command.substring(1).toInt();
+      Serial.printf("A2DP_SINK_SET_DELAY requested=%u error=%s\n",
+        bluetooth.a2dpSink().setDelay(value) ? 1 : 0,
+        bluetooth.lastErrorName());
+    }
+    else if (command == "q")
+    {
+      // The backend fixes which notifications a Target may declare, so this
+      // reports what is actually available rather than what the profile lists.
+      EspBleClassicAvrcpNotification events[8];
+      const size_t count =
+        bluetooth.avrcp().supportedNotifications(events, 8);
+      Serial.printf("AVRCP_SINK_SUPPORTED count=%u", static_cast<unsigned>(count));
+      for (size_t index = 0; index < count; ++index)
+        Serial.printf(" %u", static_cast<unsigned>(events[index]));
+      Serial.println();
+    }
+    else if (command == "p")
+    {
+      // Declaring the capability is what makes a Controller ask at all.
+      const EspBleClassicAvrcpNotification events[] = {
+        EspBleClassicAvrcpNotification::VolumeChange,
+        EspBleClassicAvrcpNotification::PlayStatus,
+      };
+      Serial.printf("AVRCP_SINK_CAPABILITIES set=%u error=%s\n",
+        bluetooth.avrcp().setNotificationCapabilities(
+          events, sizeof(events) / sizeof(events[0])) ? 1 : 0,
+        bluetooth.lastErrorName());
+    }
+    else if (command == "v")
+    {
+      // The one notification this host build allows a Target to declare.
+      const EspBleClassicAvrcpNotification events[] = {
+        EspBleClassicAvrcpNotification::VolumeChange,
+      };
+      Serial.printf("AVRCP_SINK_CAPABILITIES set=%u error=%s\n",
+        bluetooth.avrcp().setNotificationCapabilities(events, 1) ? 1 : 0,
+        bluetooth.lastErrorName());
+    }
+    else if (command == "P")
+    {
+      // The value moved, so the Controller is told. This also ends its
+      // subscription, which is why it registers again afterwards.
+      EspBleClassicAvrcpNotificationValue value;
+      value.event = EspBleClassicAvrcpNotification::PlayStatus;
+      value.playbackStatus = EspBleClassicAvrcpPlaybackStatus::Paused;
+      Serial.printf("AVRCP_SINK_CHANGED sent=%u error=%s\n",
+        bluetooth.avrcp().sendNotificationChanged(value) ? 1 : 0,
+        bluetooth.lastErrorName());
+    }
+    else if (command == "g")
+      Serial.printf("A2DP_SINK_GET_DELAY requested=%u error=%s\n",
+        bluetooth.a2dpSink().requestDelay() ? 1 : 0,
+        bluetooth.lastErrorName());
+#if defined(ESPBLE_TEST_DUAL_A2DP)
+    else if (command == "z")
     {
       espble_hci_broker_diagnostics_t diagnostics = {};
       espble_hci_broker_get_diagnostics(&diagnostics);
@@ -212,7 +286,7 @@ void loop()
         static_cast<unsigned long>(diagnostics.command_queue_full),
         coexCommandSeen ? 1 : 0);
     }
-  }
 #endif
+  }
   delay(1);
 }

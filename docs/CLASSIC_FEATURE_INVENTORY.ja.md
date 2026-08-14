@@ -76,7 +76,7 @@
 | Source接続・start/suspend・encode済み送信 | 公開 | `WouldBlock`のbackpressureつき。20,000 packet soakを完走 |
 | codec configurationの公開 | 公開 | `codecConfig()`（sample rate、channel、bitpool、raw） |
 | Source endpoint | 部分 | SBC固定。`register_stream_endpoint`で別codecやendpointを増やせる |
-| delay reporting | 未公開 | `esp_a2d_sink_get_delay_value` / `set_delay_value`。動画再生のlip syncで効く |
+| delay reporting | 公開 | Sinkは`setDelay()` / `requestDelay()` / `onDelay()`、Sourceは`onSinkDelay()`。単位は1/10 ms |
 | SBC以外のcodec | 未公開 | archiveはexternal codec構成なので、negotiationを公開すればAAC等も扱えるがEspBleはencode/decodeを持たない方針 |
 
 ## AVRCP
@@ -85,11 +85,11 @@
 |---|---|---|
 | CT/TG接続、remote features | 公開 | |
 | passthrough送受信 | 公開 | `sendKey()` / `sendPassthrough()` / `onPassthrough()` |
-| metadata・play status要求と応答受信 | 公開 | 送信側はCT。応答は外部Targetとの相互運用確認が残る |
+| metadata・play status要求と応答受信 | 公開 | 送信側はCT。任意eventの購読は`registerNotifications()`。応答は外部Targetとの相互運用確認が残る |
 | absolute volume・volume notification | 公開 | one-shot再登録の扱いを含む |
 | TGのmetadata / play status応答送信 | 未実装（backend側にAPIなし） | ESP-IDF v5.5.5の公開TG APIに送信手段がない。EspBle側だけでは解消できない |
-| TGのnotification応答・capability設定 | 未公開 | `esp_avrc_tg_send_rn_rsp` / `set_rn_evt_cap` / `set_psth_cmd_filter` |
-| player setting（repeat・shuffle等） | 未公開 | `esp_avrc_ct_send_set_player_value_cmd` |
+| TGのnotification応答・capability設定 | 公開（backendの制限あり） | `setNotificationCapabilities()` / `onNotificationRegistered()` / `respondToNotification()` / `sendNotificationChanged()`。ただし**同梱hostがTargetに許すのはvolumeのみ**（実測: allowed event = `0x0d`だけ）。`supportedNotifications()`が許可集合を返し、許可外の宣言は理由付きで`InvalidArgument`になる |
+| player setting（repeat・shuffle等） | 公開 | `setPlayerSetting(attributeId, value)`。Controller側なのでTargetの制限を受けない |
 | browsing・cover art | 対象外 | archive生成時に無効化している |
 
 ## HFP Client
@@ -149,7 +149,11 @@
 8. **完了: SPPの複数server**。`startServer()`の繰り返しで最大4 serviceを公開する。channel単位の停止は
    意図的に持たない——`stopServer()`で全停止して必要な分を再startすれば足り、取り消す手段を2つに
    増やさないため。相手側から特定serviceへ届くよう`connectToChannel()`を用意した。
-9. **A2DP delay reporting、AVRCP TG notification応答**: 相互運用の作り込み段階で必要になる。
+9. **完了: A2DP delay reportingとAVRCPのnotification / player setting**。delayはSink側が設定して
+   Source側が受け取るところまで実機確認した。AVRCPはTargetのnotification応答とcapability宣言、
+   Controllerの任意event購読とplayer settingを公開した。**Targetが報告できるのはvolumeのみ**という
+   同梱hostの制限を実測で確認し、`supportedNotifications()`で可視化した——profileが許すかどうかとは
+   別に、このbuildでは到達できない。
 10. **完了: SDP照会と`read_remote_name`**。addressだけ分かっている相手に「何を提供しているか」「何と
     名乗るか」を問い合わせられるようにした。複数serviceを公開できるようになったので、接続先channelを
     決める材料としても対になる。scan中は応答が来ない点をAPI docと落とし穴へ記録した。

@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+- (EN) A2DP delay reporting and the AVRCP notification and player-setting
+  commands are available. A Sink tells the Source how long it takes to play what
+  it receives with `setDelay()`, reads it back with `requestDelay()`, and the
+  Source receives it through `onSinkDelay()` — a Source rendering video needs
+  that number to hold pictures back by the same amount. On AVRCP, a Target
+  declares which notifications it will answer, is told when a Controller
+  registers, and answers with `respondToNotification()` and
+  `sendNotificationChanged()`; a Controller subscribes to any event with
+  `registerNotifications()` and changes repeat or shuffle with
+  `setPlayerSetting()`. The bundled Classic host allows a Target to declare
+  volume changes only, which `supportedNotifications()` reports and which
+  declaring anything else refuses with a message saying so.
+- (JA) A2DPのdelay reportingと、AVRCPのnotification / player setting commandを
+  利用できるようにした。Sinkは`setDelay()`で「受け取った音を再生するまでの時間」をSourceへ
+  伝え、`requestDelay()`で読み戻す。Sourceは`onSinkDelay()`で受け取る——映像を出すSourceは
+  この値だけ絵を遅らせる必要がある。AVRCPではTargetが応答できるnotificationを宣言し、
+  Controllerの登録を通知され、`respondToNotification()`と`sendNotificationChanged()`で答える。
+  Controllerは`registerNotifications()`で任意のeventを購読し、`setPlayerSetting()`で
+  repeatやshuffleを変更する。同梱Classic hostがTargetに許すのはvolume changeのみで、
+  `supportedNotifications()`がそれを返し、許可外の宣言は理由を添えて拒否する。
+
 - (EN) A Classic peer can be asked what it offers and what it is called, given
   only its address. `inquiry().requestServices()` returns the peer's service
   UUIDs through `onRemoteServices()`, and `inquiry().requestName()` fetches the
