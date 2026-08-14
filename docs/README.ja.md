@@ -33,6 +33,7 @@ EspBleの開発ドキュメント一覧と、初見の人が状況を把握す�
 | 無印ESP32対応の方針・取得元・検証計画 | [PLAN_ESP32.ja.md](PLAN_ESP32.ja.md) |
 | 無印ESP32でNimBLEとClassicを共存させる調査・技術検証 | [TECHNICAL_VALIDATION_ESP32_CLASSIC.ja.md](TECHNICAL_VALIDATION_ESP32_CLASSIC.ja.md) |
 | 無印ESP32 Classic作業の引き継ぎ・未完了事項 | [HANDOFF_ESP32_CLASSIC.ja.md](HANDOFF_ESP32_CLASSIC.ja.md) |
+| Classicの公開API・未公開機能の棚卸し | [CLASSIC_FEATURE_INVENTORY.ja.md](CLASSIC_FEATURE_INVENTORY.ja.md) |
 | Classic-only Bluedroid `.a`の再生成 | [CLASSIC_HOST_BUILD.ja.md](CLASSIC_HOST_BUILD.ja.md) |
 | ESP32-P4 / ESP-Hostedの準備、対応version、C6更新 | [ESP_HOSTED_SETUP.ja.md](ESP_HOSTED_SETUP.ja.md) |
 | ESP32-P4 / ESP-Hostedの実機確認済み制限 | [ESP_HOSTED_LIMITATIONS.ja.md](ESP_HOSTED_LIMITATIONS.ja.md) |

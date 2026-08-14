@@ -111,13 +111,18 @@ PCMFlowBluetoothへは`badFrame`とraw lengthを失わず渡し、decoder側で5
 
 ### 今後の作業メモ
 
-1. **Classic機能の棚卸し。** 現在の公開APIはSPP server、generic HID Device/Host、A2DP Sink/Source、
+1. **完了: Classic機能の棚卸し。** 結果は[Classic機能の棚卸し](CLASSIC_FEATURE_INVENTORY.ja.md)にある。
+   公開APIとarchiveが持つAPIを突き合わせ、公開・部分・未公開へ分類した。優先度の上位は
+   inquiry / SDP照会、pairing制御、bond管理、Class of Deviceで、いずれもprofileではなくGAP層である。
+   旧メモ: 現在の公開APIはSPP server、generic HID Device/Host、A2DP Sink/Source、
    AVRCP CT/TG、HFP Client/AGだが、利用者から見た機能はまだ足りない。少なくともSPP client
    （`esp_spp_connect()`は内部で使用済み、公開APIが未整備）、SPP複数session、inquiry / device discovery、
    pairing UI（PIN・SSP確認）の公開度、HID Deviceのboot protocolとHID Hostのreport出力範囲、
    AVRCP TGのmetadata / play-status応答送信を洗い出し、実装済み・部分実装・未実装へ分類してから
    優先度を決める。棚卸し結果は[Feature Matrix](FEATURE_MATRIX.ja.md)と本書へ反映する。
-2. **core内蔵Bluedroid Classicとの相互接続Peer test。** 外部機器が揃うまでの相互運用確認として、
+2. **一部完了: core内蔵Bluedroid Classicとの相互接続Peer test。** SPPを`classic_core_host_spp`として
+   追加した（peerは`BluetoothSerial`だけを使いEspBleをlinkしない）。A2DP / AVRCP / HFPは同じ方式で
+   追加できるが未着手。旧メモ: 外部機器が揃うまでの相互運用確認として、
    peer boardをArduino-ESP32同梱のBluedroid（EspBleの独自hostを使わない別sketch）で動かし、
    独自host ⇄ core hostのpair testを追加する。core 3.3.11のesp32 sdkconfigは
    `CONFIG_BT_SPP_ENABLED` / `CONFIG_BT_A2DP_ENABLE` / `CONFIG_BT_HFP_ENABLE`
