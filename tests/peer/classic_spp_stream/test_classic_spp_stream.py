@@ -1,24 +1,7 @@
 import re
 
-import pexpect
 
-
-def probe(target, command, pattern, attempts=12, timeout=5):
-    """Ask until answered, instead of waiting for a banner printed once.
-
-    A sketch prints its ready line at boot, which is gone if the monitor attaches
-    after the reset. A command probe cannot be missed that way.
-    """
-    for _ in range(attempts):
-        target.write(command)
-        try:
-            return target.expect(pattern, timeout=timeout)
-        except pexpect.TIMEOUT:
-            continue
-    raise AssertionError(f"no answer to {command!r} matching {pattern!r}")
-
-
-def test_spp_stream_adapter_behaves_like_a_stream(dut, peers):
+def test_spp_stream_adapter_behaves_like_a_stream(dut, peers, probe):
     """SPP through the Arduino Stream adapter, measured by the session API.
 
     The peer opens the session and counts what arrives with the plain API, so

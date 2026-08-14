@@ -57,9 +57,20 @@ The exclusions and the frequency rule are in the [test plan](../tests/TEST_PLAN.
 If Classic is in scope, add the Classic-only and dual-host regressions on the same two original-ESP32 boards:
 
 ```sh
+# Suites with no peer sketch run on their own: passing --peer-profile to them is
+# rejected as an unknown peer.
 uv run --env-file .env pytest --clean -s \
-  peer/classic_spp_exclusive/ peer/classic_hid_profiles/ \
-  peer/classic_hid_report/ peer/classic_a2dp_media/ peer/classic_hfp_client/ \
+  peer/classic_hid_profiles/ peer/classic_a2dp_sink_profile/ \
+  peer/classic_radio_settings/ \
+  --profile esp32_peer_host
+
+uv run --env-file .env pytest --clean -s \
+  peer/classic_inquiry/ peer/classic_pairing/ \
+  peer/classic_spp_exclusive/ peer/classic_spp_stream/ \
+  peer/classic_core_host_spp/ \
+  peer/classic_hid_api/ peer/classic_hid_control/ \
+  peer/classic_hid_report/ peer/classic_hid_gamepad/ \
+  peer/classic_a2dp_media/ peer/classic_hfp_client/ \
   peer/classic_hfp_cvsd/ \
   peer/dual_host_smoke/ peer/dual_host_rpa/ peer/dual_host_hfp/ \
   peer/dual_host_a2dp/ \

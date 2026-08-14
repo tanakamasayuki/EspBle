@@ -26,8 +26,9 @@ Pick Classic only when one of these applies:
 | The peer only accepts Classic HID | Being recognised as a BR/EDR HID gamepad, keyboard or mouse |
 
 **Classic works on the original ESP32 only.** ESP32-S3/C3/C6/H2/P4 have no
-BR/EDR radio, so BLE is the only choice there. Classic is experimental and its
-public scope is not final.
+BR/EDR radio, so BLE is the only choice there. Classic ships without a support or
+compatibility guarantee, and each feature's state — hardware-verified, unverified
+or unimplemented — is documented rather than promised.
 
 Conversely, **if the peer accepts BLE there is almost no reason to choose
 Classic**: it is limited to the original ESP32, draws more current, and EspBle

@@ -309,6 +309,16 @@ Future candidates include two Centrals connected to one Peripheral, and BLE HID 
 
 The experimental `dual_host_smoke` concurrently issues Classic scan-mode changes from a separate task and NimBLE `Read RSSI` commands while Classic HID and encrypted LE GATT are connected on both boards. It verifies FIFO enqueue/physical-send equality, final RSSI completion, zero broker errors, then repeats encrypted GATT and bidirectional HID traffic after every contention cycle. `ESPBLE_DUAL_CONTENTION_CYCLES` controls the repetition. A test-only dispatch hold fills the FIFO, verifies excess rejection, then verifies GATT, HID, and lifecycle recovery after discarding the deliberately unsent commands. These commands never reach the controller and neither host receives a synthetic response. Inventories collected both while connected and after both links disconnect verify that every opcode, including conditional cleanup commands, has an explicit policy; unknown or wrong-host opcodes are rejected before physical transmission only in dual-host mode. Null and oversized HID Input/Output reports are rejected locally with `InvalidArgument`, while both connections and subsequent normal traffic remain live. Pairing first uses a wrong passkey and requires failure, no encryption, zero bonds, protected-GATT rejection, and uninterrupted Classic operation on both sides; an LE-only reconnect with the new correct passkey must then restore encryption, bonding, and GATT. The test next disconnects only Classic, requires the final asynchronous HID `onConnectionFailed` notification, verifies encrypted LE GATT remains live, and immediately reconnects Classic to the correct peer with bidirectional HID traffic. Bluedroid's public HID API cannot cancel paging, so the contract uses the backend's final OPEN result instead of pretending to implement an arbitrary timeout. The test then abruptly software-resets the peer, observes both LE and BR/EDR disconnects on the survivor, restores bonded LE encryption and Classic HID without restarting the surviving hosts, and revalidates encrypted GATT plus bidirectional HID. With the callback-target lifetime barrier enabled, the lifecycle phase covers Classic-first and BLE-first shutdown, Classic reattachment, stop/re-registration, and both destructor orders, requiring no panic, watchdog, or heap loss. Persistent-NVDS `Write Local Name` is deliberately excluded because repeated use as a stress stimulus triggers a controller assertion.
 
+## Do not wait for a startup banner
+
+A test that waits for a line a sketch prints once at boot misses it when the
+serial monitor attaches after the reset, and then fails for no reason of its own.
+That happened with `classic_hid_report` and `classic_spp_stream` — flash and reset
+timing, not a code defect. **Synchronise with a command probe instead**: the sketch
+answers the same line on a command such as `a` as well as at boot, and the test
+asks until it is answered. The `probe` fixture in `tests/conftest.py` does this; a test takes it as an
+argument.
+
 ## Pass Criteria
 
 - Test code generates every input and decides the result through serial assertions.

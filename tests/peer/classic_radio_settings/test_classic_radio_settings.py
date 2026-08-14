@@ -1,24 +1,7 @@
 import re
 
-import pexpect
 
-
-def probe(target, command, pattern, attempts=12, timeout=5):
-    """Ask until answered, instead of waiting for a banner printed once.
-
-    A sketch prints its ready line at boot, which is gone if the monitor attaches
-    after the reset. A command probe cannot be missed that way.
-    """
-    for _ in range(attempts):
-        target.write(command)
-        try:
-            return target.expect(pattern, timeout=timeout)
-        except pexpect.TIMEOUT:
-            continue
-    raise AssertionError(f"no answer to {command!r} matching {pattern!r}")
-
-
-def test_classic_radio_settings_apply_to_the_radio(dut):
+def test_classic_radio_settings_apply_to_the_radio(dut, probe):
     """Transmit power, page timeout and minimum encryption key size.
 
     Accepting a call proves nothing here, so the page timeout is checked by

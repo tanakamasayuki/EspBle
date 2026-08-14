@@ -7,8 +7,11 @@ EspBle is a general-purpose Bluetooth Low Energy library for ESP32 Arduino.
 component directly.** It does not go through Arduino-ESP32's `BLEDevice`,
 `BLEClient`, or `BLEServer` wrappers. Central and peripheral roles, GATT client
 and server operations, security, HID, and BLE MIDI share one `EspBle`
-foundation. On the original ESP32, experimental Bluetooth Classic support is
-available, including an opt-in dual-host validation mode alongside bundled NimBLE.
+foundation. On the original ESP32 it also offers Bluetooth Classic — SPP, HID
+device and host, A2DP, AVRCP and HFP — with an opt-in dual-host mode alongside
+bundled NimBLE that remains experimental. Which Classic features are
+hardware-verified, unverified or unimplemented is tracked per feature; see
+[BLE or Bluetooth Classic](docs/CLASSIC_VS_BLE.md).
 
 > [!IMPORTANT]
 > EspBle uses the NimBLE backend built into Arduino-ESP32. Native-controller
@@ -83,10 +86,15 @@ Its configuration is frozen to the values the other targets use, and overriding
 any of it is rejected.
 
 Support for the classic ESP32 is not on par with the other chips: EspBle carries
-the maintenance of the bundled hosts itself. Experimental Classic SPP, generic
-HID Device/Host, A2DP raw transport, and AVRCP CT/TG use a separately built
-Bluedroid host with those profiles enabled. A Classic-only sketch selects this
-host automatically when it uses `EspBleClassic`, with no `build_opt.h` required.
+the maintenance of the bundled hosts itself. Classic SPP (byte stream and Arduino
+`Stream`), generic HID Device/Host, A2DP raw transport, AVRCP CT/TG and HFP
+Client/Audio Gateway use a separately built Bluedroid host with those profiles
+enabled. Radio settings — transmit power, page timeout and the minimum
+encryption key size — are available too, and the composition limit of the HID
+Report Descriptor (214 bytes of descriptor plus device strings, shared with one
+SDP record) is checked before registering rather than failing silently.
+A Classic-only sketch selects this host automatically when it uses
+`EspBleClassic`, with no `build_opt.h` required.
 Classic HID has the same API shape as BLE HID: the device side offers
 `hidKeyboard()`, `hidMouse()`, `hidConsumerControl()`, `hidSystemControl()` and
 `hidGamepad()` under the same names and signatures, and the host side parses the

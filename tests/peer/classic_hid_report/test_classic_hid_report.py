@@ -1,7 +1,5 @@
 import re
 
-import pexpect
-
 
 def connect_and_exchange(dut, peer, address):
     peer.write(b"c" + address + b"\n")
@@ -33,24 +31,10 @@ def connect_and_exchange(dut, peer, address):
     assert outgoing.group(3) in (b"a500ff", b"02a500ff")
 
 
-def probe(target, command, pattern, attempts=12, timeout=5):
-    """Ask until answered, instead of waiting for a banner printed once.
 
-    A line printed at boot is gone if the serial monitor attaches after the
-    reset, which makes a test flaky rather than wrong.
-    """
-    for _ in range(attempts):
-        target.write(command)
-        try:
-            return target.expect(pattern, timeout=timeout)
-        except pexpect.TIMEOUT:
-            continue
-    raise AssertionError(f"no answer to {command!r} matching {pattern!r}")
-
-
-def test_classic_hid_device_to_host_report_and_output(dut, peers):
+def test_classic_hid_device_to_host_report_and_output(dut, peers, probe):
     peer = peers["device"]
-    peer.expect_exact("CLASSIC_HIDH_READY", timeout=20)
+    probe(peer, "a\n", re.compile(rb"CLASSIC_HIDH_READY"))
     ready = probe(dut, "a", re.compile(rb"CLASSIC_HIDD_READY address=([0-9a-f:]+)"))
     address = ready.group(1)
     connect_and_exchange(dut, peer, address)

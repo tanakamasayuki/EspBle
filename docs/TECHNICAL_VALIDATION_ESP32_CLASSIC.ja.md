@@ -634,3 +634,45 @@ dual-host fixtureの`build_opt.h`から自動選択済みの`ESPBLE_ENABLE_CLASS
 `ESPBLE_CLASSIC_CUSTOM_HOST`を除き、実験opt-inとfixture固有flagだけに縮小した。この状態でdual-host smokeを
 clean実機回帰し、Classic HID、誤passkey復旧、bond済み暗号化GATT、command競合、FIFO満杯復帰、Classic再attach、
 任意順停止・destructor、heap不変、broker異常0まで完走した。
+
+## 2026-08-14 HID SDP record上限 / 無線設定 / SPP Stream / HFP付随commandのcheckpoint
+
+**HID SDP recordの上限を確定した。**合成profileを増やしていくと、あるところからHostが
+deviceを見つけられなくなった。`esp_bt_hid_device_register_app()`は成功を返すが、logには
+`SDP_AddAttribute fail, length exceed maximum: ID 5: attr_len:0`が出ていた。原因はSDP record
+1件あたりのpad（`CONFIG_BT_SDP_PAD_LEN` = 300 byte）で、v5.5.5の`HID_DevAddRecord()`が書く
+固定属性が86 byteを占める（record handle 4、service class list 3、protocol list 13、language base 9、
+additional protocol list 15、profile descriptor list 8、HIDのintとboolean 20、language id base 8、
+browse group 3、descriptor listのheader 6、文字列3つのNUL 3）。したがってReport Descriptorと
+`name` / `description` / `provider`に使えるのは214 byteである。実機の境界も一致した——
+descriptor 144 + 文字列57 = 201は登録でき、158 + 57 = 215は失敗する。`begin()`が登録前に検査して
+`ResourceExhausted`で拒否するようにし、`Classic/HidComposite`はkeyboard + mouse + consumer
+（144 byte）へ、gamepadはkeyboardとの組（133 byte）へ分けた。gamepadのbyte列は新設した
+`classic_hid_gamepad`が直接照合する（`id=3 len=12`の軸・hat・buttonと、同じrecordから届く
+`id=1 len=9`のkeyboard）。
+
+**無線・link設定を公開し、反映を所要時間で検証した。**送信電力（`esp_bredr_tx_power_set`、
+-12〜+9 dBmの3 dB刻み、範囲指定）、page timeout（`esp_bt_gap_set/get_page_timeout`、0.625 ms単位）、
+暗号鍵の最小長を追加した。page timeoutは受理と反映が別なので、応答しないlocally administered
+addressへ`connect()`し、1000 msでは3秒以内に、既定5120 msではそれより1秒以上遅く失敗することを
+`classic_radio_settings`で確認した。`Read Page Timeout`（`0x0c17`）はbroker policyへ
+Classic radio scopeとして追加した——起動時に既定値を読むためdual-hostでも流れる。
+接続後RSSIは`read_rssi_delta`がgolden receive power rangeとの差分しか返さないため公開しない。
+
+**SPPのArduino `Stream` adapterを追加した。**`esp_spp_vfs_register`は使わず、既存のsession API上に
+`EspBleClassicSppStream`を実装した。`classic_spp_stream`では、peerがsession APIで数えた順序依存
+checksumで検証している。2500 byteを`write()`すると990 byte packetへ分割されるが順序と内容は保たれ、
+write timeout 0では8本のqueueに入る分だけを返して待たず（12 packet要求で必ず不足、200 ms未満）、
+`flush()`は`pendingWriteCount()`が0になるまで待つ。queueはbackendのwrite完了で減るため、
+`flush()`はupdate()を回さずに待てる（callbackへ再入しない）。
+
+**HFP Clientの付随commandとAGのin-band ring toneを追加した。**operator名、subscriber番号、
+memory dial、last voice tag、NREC、Apple拡張（XAPL / IPHONEACCEV）と、AG側の
+`setInBandRingTone()`である。memory dialはAGへ`DialMemory`として届き、位置を番号として掛けない。
+ここで**AGのunknown AT応答が交換を閉じていない**ことを実機検出した。`btc_hf_unat_response`は
+`ok_flag`を`BTA_AG_OK_CONTINUE`のままにするため、`esp_hf_ag_unknown_at_send()`は応答行だけを送り
+OKを送らない。`AT+XAPL`へ`+XAPL=...`だけを返した状態では、client側は応答待ちのまま次のAT commandを
+送らず、`AT+IPHONEACCEV`が消えた。`respondToUnknownAt()`が応答行の後にOKを送り、nullptrなら
+errorを返して必ず閉じるようにして解消した。CHLD / BTRHは、EspBleのAGが単一call modelで検証相手が
+無いため見送った。
+

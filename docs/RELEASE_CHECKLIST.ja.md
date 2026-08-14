@@ -57,13 +57,18 @@ uv run --env-file .env pytest --clean \
 Classicをrelease対象へ含める場合は、同じ無印ESP32 2台でClassic専用構成とdual-hostを追加実行します。
 
 ```sh
-# peerを持たないprofile初期化suiteは単独で実行する。
+# peer sketchを持たない単独suiteは分けて実行する。
 uv run --env-file .env pytest --clean -s \
-  peer/classic_hid_profiles/ \
+  peer/classic_hid_profiles/ peer/classic_a2dp_sink_profile/ \
+  peer/classic_radio_settings/ \
   --profile esp32_peer_host
 
 uv run --env-file .env pytest --clean -s \
-  peer/classic_spp_exclusive/ peer/classic_hid_report/ \
+  peer/classic_inquiry/ peer/classic_pairing/ \
+  peer/classic_spp_exclusive/ peer/classic_spp_stream/ \
+  peer/classic_core_host_spp/ \
+  peer/classic_hid_api/ peer/classic_hid_control/ \
+  peer/classic_hid_report/ peer/classic_hid_gamepad/ \
   peer/classic_a2dp_media/ peer/classic_hfp_client/ \
   peer/classic_hfp_cvsd/ \
   peer/dual_host_smoke/ peer/dual_host_rpa/ peer/dual_host_hfp/ \
@@ -71,8 +76,8 @@ uv run --env-file .env pytest --clean -s \
   --profile esp32_peer_host --peer-profile device:esp32_peer_device
 ```
 
-`classic_hid_profiles`へ`--peer-profile device:...`を渡すと、peer sketchを持たないためpytestが
-unknown peerとして拒否します。上記2 commandを一括化しないでください。
+`classic_hid_profiles`のようにpeer sketchを持たないsuiteへ`--peer-profile device:...`を渡すと、
+pytestがunknown peerとして拒否します。上記2 commandを一括化しないでください。
 
 数時間級soakは[引き継ぎ](HANDOFF_ESP32_CLASSIC.ja.md)の条件でコードfreeze前に完走させます。release
 candidateでは上記の通常回帰を再実行し、soak log、heap、broker diagnosticsを技術検証記録へ残します。

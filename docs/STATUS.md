@@ -36,7 +36,7 @@ For how to run them see [tests/TEST_PLAN.md](../tests/TEST_PLAN.md); for the rel
 
 ## Known limits
 
-- The Classic / dual-host APIs are experimental and carry no compatibility guarantee until their supported scope is settled. Classic-only needs no compiler flag; only the dual-host build flag remains as an explicit opt-in.
+- Classic is in scope for the next release and needs no compiler flag: whether a sketch uses `EspBleClassic` is what decides. As MIT-licensed software it carries no support or compatibility guarantee, so what matters is that each feature's state is stated — hardware-verified, unverified, or unimplemented — in the [Classic feature inventory](CLASSIC_FEATURE_INVENTORY.ja.md) (Japanese). Interoperability with external devices is unverified. Dual-host remains experimental, with its build flag as an explicit opt-in.
 - With Core 3.3.11 on P4/C6 ESP-Hosted, the TinyCrypt/ECC defect in the bundled
   IDF 5.5.5 makes LE Secure Connections fail with a DHKey check error, so
   Security, bonding, and dependent HID paths are not supported. ESP-IDF

@@ -117,10 +117,10 @@ EspUsbHost / EspUsbDeviceで扱っている機能のBLE版、およびBLEで一�
 | 切断理由の取得 | ✅ | `EspBleConnection::disconnectReason`（onDisconnectedでbackend/HCI理由コード）。Server/Client両パスをPeerで検証済み |
 | GATT Service Changed | ✅ | Server側`notifyServicesChanged()`で0x1801/0x2A05のindication送出、Client側は購読して受信・range decode。Peer検証済み（受信時の自動再Discoveryはアプリ判断） |
 
-## Bluetooth Classic（BR/EDR）— 無印ESP32限定・実験機能
+## Bluetooth Classic（BR/EDR）— 無印ESP32限定
 
 ESP32-S3/C3/C6/H2等はBluetooth Classicを搭載しないため利用できません。無印ESP32では`EspBleClassic`の利用時に
-独自buildしたClassic-only Bluedroid hostを自動選択します。dual-hostは技術検証段階で、正式なrelease scopeは未確定です。
+独自buildしたClassic-only Bluedroid hostを自動選択します。Classicは次回releaseの対象で、サポートや互換性の保証は掲げません。各⚠️行に書いてあるのが実機で確認した範囲であり、外部機器との相互運用は未検証です。dual-hostは技術検証段階です。
 
 | 機能 | 状況 | 備考 |
 |---|---|---|

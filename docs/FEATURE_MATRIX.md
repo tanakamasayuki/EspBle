@@ -117,10 +117,10 @@ An overview of what EspBle supports: the BLE equivalents of what EspUsbHost / Es
 | Reading the disconnect reason | ✅ | `EspBleConnection::disconnectReason` (the backend/HCI reason code, in onDisconnected). Both the server and client paths are peer-verified |
 | GATT Service Changed | ✅ | The server sends the 0x1801/0x2A05 indication with `notifyServicesChanged()`; a client can subscribe, receive it and decode the range. Peer-verified (rediscovery on receipt is the application's decision) |
 
-## Bluetooth Classic (BR/EDR) — experimental, original ESP32 only
+## Bluetooth Classic (BR/EDR) — original ESP32 only
 
 ESP32-S3/C3/C6/H2 and similar targets have no Bluetooth Classic radio. On the original ESP32, using `EspBleClassic`
-automatically selects the custom-built Classic-only Bluedroid host. Dual-host support remains experimental and its release scope is not final.
+automatically selects the custom-built Classic-only Bluedroid host. Classic is in scope for the next release with no support or compatibility guarantee; what each ⚠️ row states is what has been verified on hardware, and interoperability with external devices is unverified. Dual-host support remains experimental.
 
 | Feature | Status | Notes |
 |---|---|---|

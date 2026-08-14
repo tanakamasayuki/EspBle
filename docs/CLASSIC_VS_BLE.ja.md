@@ -22,8 +22,8 @@ Classicを選ぶのは、次のどれかに当てはまるときだけです。
 | 相手がClassicのHIDしか受けない | BR/EDR HIDのgamepad、keyboard、mouseとして認識させたい場合 |
 
 **Classicは無印ESP32でしか使えません。** ESP32-S3/C3/C6/H2/P4はBluetooth Classicの
-無線を持たないため、これらのSoCではBLEだけが選択肢です。Classicは実験扱いで、
-公開範囲は未確定です。
+無線を持たないため、これらのSoCではBLEだけが選択肢です。Classicはサポートや互換性の保証を
+掲げず、機能ごとの状態——実機検証済み / 未検証 / 未実装——を約束ではなく記録として示します。
 
 逆に、**相手がBLEを受け付けるならClassicを選ぶ理由はほぼありません。**
 Classicは無印ESP32限定で、消費電力が大きく、EspBleでは独自buildしたhostを同梱するため

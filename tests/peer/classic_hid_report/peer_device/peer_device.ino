@@ -67,6 +67,10 @@ void loop()
         "CLASSIC_HIDH_CONNECT_ACCEPTED %u\n",
         bluetooth.hidHost().connect(command.c_str() + 1) ? 1 : 0);
     }
+    else if (command == "a")
+      // Answered on demand as well as at boot: a banner printed once is lost if
+      // the serial monitor attaches after the reset.
+      Serial.println("CLASSIC_HIDH_READY");
     else if (command == "d")
     {
       Serial.printf(

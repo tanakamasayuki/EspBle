@@ -35,8 +35,10 @@ BLE MIDIはbackend非依存のpacket codec（timestamp・running status・複数
 
 ## 既知の制限
 
-- Classic / dual-host APIは実験扱いで、正式サポート範囲を確定するまでは互換性を保証しません。Classic-onlyは
-  compiler flag不要で、dual-hostのbuild flagだけが明示opt-inとして残ります。
+- Classicは次回releaseの対象で、compiler flagは不要です（`EspBleClassic`を使うかどうかだけで決まります）。
+  MITのOSSなのでサポートや互換性の保証は掲げません。そのぶん**機能ごとの状態——実機検証済み / 未検証 /
+  未実装——を[Classic機能の棚卸し](CLASSIC_FEATURE_INVENTORY.ja.md)に明記**します。外部機器との相互運用は
+  未検証です。dual-hostは実験扱いで、build flagが明示opt-inとして残ります。
 - Core 3.3.11のP4/C6 ESP-Hosted構成では、同梱ESP-IDF 5.5.5のTinyCrypt/ECC不具合で
   LE Secure ConnectionsがDHKey check failureとなるため、Security、bonding、それを
   前提とするHIDは未対応です。ESP-IDF `release/v5.5`では`9fd7cb7`で修正済みですが、
