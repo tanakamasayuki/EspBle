@@ -44,7 +44,6 @@ command `0xfc82`をClassic radio scopeへ分類した。
 | broker経由 ESP32 × ESP32-S3 `gatt_read_write` | HCI TX/RXをbroker経由にしてもGATT read/writeが成立 |
 | broker経由 ESP32 × ESP32-S3 `lifecycle_stress` | `begin()`/`end()`、再接続、event floodを含む反復 |
 | broker経由 ESP32 × ESP32-S3 `security_bond` | SMP、暗号化、bond保存経路 |
-| EspBleBluedroid ESP32 dual-mode `dual_mode_scan_spp` | active SPPとBLE scan/GATT/notificationの同時動作 |
 | ESP32 / ESP32-S3 compile smoke | target guardが両構成で成立 |
 | 独自Classic HID + NimBLE GATT同時Peer | 同じBTDM controllerでBR/EDR ACLとLE ACL、単発GATT readが共存 |
 | dual-host ACL反復 | GATT read反復後もClassic HID双方向が継続し、unknown handleなし |

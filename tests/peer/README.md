@@ -24,7 +24,7 @@ The profile names do not describe BLE roles. Sketches are flashed to and run on 
 
 ## Original ESP32
 
-The original ESP32 runs on the NimBLE host EspBle bundles for it (see [PLAN_ESP32.ja.md](../../docs/PLAN_ESP32.ja.md), Japanese). The two boards are permanently wired and shared with EspBleBluedroid; running both repositories' suites at the same time is fine, because pytest manages the port arbitration. Do not use `arduino-cli upload` or `esptool` directly -- they fail instead of waiting.
+The original ESP32 runs on the NimBLE host EspBle bundles for it (see [PLAN_ESP32.ja.md](../../docs/PLAN_ESP32.ja.md), Japanese). The two boards are permanently wired; running another repository's suite against the same ports at the same time is fine, because pytest manages the port arbitration. Do not use `arduino-cli upload` or `esptool` directly -- they fail instead of waiting.
 
 ```sh
 # original ESP32 as the parent (central), S3 as the peer

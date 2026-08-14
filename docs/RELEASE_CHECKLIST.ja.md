@@ -52,7 +52,7 @@ uv run --env-file .env pytest --clean \
   --profile esp32_peer_host --peer-profile device:s3_peer_device
 ```
 
-除外の理由と実行頻度は[テスト計画](../tests/TEST_PLAN.ja.md#無印esp32回帰)、方針と検証記録は[無印ESP32対応計画](PLAN_ESP32.ja.md)を参照します。無印ESP32の2台はEspBleBluedroidと共用のため、そちらのpytestと同時に走らせても構いません（ポートの調停はpytestが行います。`arduino-cli upload`や`esptool`を直接使うと待たずに失敗するので使わないでください）。
+除外の理由と実行頻度は[テスト計画](../tests/TEST_PLAN.ja.md#無印esp32回帰)、方針と検証記録は[無印ESP32対応計画](PLAN_ESP32.ja.md)を参照します。無印ESP32の2台は、同じportを使う別repositoryのpytestと同時に走らせても構いません（ポートの調停はpytestが行います。`arduino-cli upload`や`esptool`を直接使うと待たずに失敗するので使わないでください）。
 
 Classicをrelease対象へ含める場合は、同じ無印ESP32 2台でClassic専用構成とdual-hostを追加実行します。
 

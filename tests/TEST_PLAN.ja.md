@@ -121,8 +121,9 @@ profileを置いていないのは次の2種類だけです。
 実行してください。`local_identity`のようにService UUIDで対象を選ぶsuiteは、前の実行のPeer firmwareが
 載ったままのボードが広告していると意図しない側を観測します。
 
-無印ESP32の2台は`/dev/ttyUSB0` / `/dev/ttyUSB1`で常設です。EspBleBluedroidと機材を共用しますが、
-両repositoryのpytestを同時に走らせても構いません（ポートの調停はpytestが行います）。
+無印ESP32の2台は`/dev/ttyUSB0` / `/dev/ttyUSB1`で常設です。同じportを使う別repositoryのpytestと
+同時に走らせても構いません（ポートの調停はpytestが行います。`arduino-cli upload`や`esptool`を
+直接使うと待たずに失敗します）。
 
 | タイミング | 無印ESP32の実行 |
 |---|---|
@@ -147,16 +148,6 @@ profileを置いていないのは次の2種類だけです。
 - Securityテストは開始時と終了時のBond/NVS状態を明示する。
 - radio環境による一時的な遅延にtimeoutは許すが、無制限retryで不具合を隠さない。
 - 接続・切断理由、MTU、Security状態を可能な限り両側で照合する。
-
-## 他スタックとの相互接続テスト（予定）
-
-同梱NimBLEどうしの通信だけでは、EspBleが「NimBLEの癖に依存した実装」になっていても気づけません。兄弟ライブラリの**EspBleBluedroid**（ESP32のBluedroidスタック版）を相手にした相互接続テストを追加します。
-
-- 対象: GATTのServer/Client両方向、Notify/Indicate、MTU交換、Pairing/Bonding
-- 位置づけ: NimBLE ↔ Bluedroid の組み合わせで、wire形式と手続きが仕様どおりかを確認する
-- 実施時期: EspBleBluedroid側のGATTが動作するようになってから
-
-既存の「可能な範囲で一方をArduino-ESP32同梱BLE APIの直接実装にする」という原則の延長ですが、**スタックそのものが異なる**点でより強い検証になります。同梱wrapper由来の制約（同一UUIDの扱いなど）が、相手スタックでどう見えるかの確認にも使えます。
 
 ## 3台Peer（manual test）
 
@@ -440,6 +431,46 @@ profileを置いていないのは次の2種類だけです。
     （`coex=1`）と診断の異常0を確認する。
 
 実験用 `dual_host_smoke` は、まず両側のClassic bondを削除して**初回pairingから**接続する——bondが残っているとpairingのHCI経路（link key応答とSSP応答）が走らず、brokerのpolicyに穴があっても通ってしまうため。そのうえでClassic HIDと暗号化LE GATTを接続した両基板で、別taskのClassic scan mode切替とNimBLE `Read RSSI`を同時発行する。FIFO投入数＝物理送信数、最終RSSI成功、broker error 0を確認し、各競合サイクル直後に暗号化GATT readとHID双方向通信を再検証する。`ESPBLE_DUAL_CONTENTION_CYCLES`で反復数を変更できる。さらにtest-onlyのdispatch holdでFIFO満杯と超過拒否を作り、未送信command破棄後のGATT/HID/lifecycle復帰を確認する。偽commandはcontrollerへ送らず、hostへ偽応答も返さない。接続中と両transport切断後にinventoryを取得し、条件付きcleanup commandを含む全opcodeが明示policy内であることも検証する。未知／別host opcodeはdual-host時だけ物理送信前に拒否する。nullと上限超過のHID Input / Output reportを送信前に`InvalidArgument`で拒否し、両接続と直後の通常通信が維持されることも確認する。BLE pairingは最初に誤passkeyを入力して双方の失敗、未暗号化、bond 0、保護GATT拒否とClassic継続を確認し、LE再接続後の正しいpasskeyで暗号化・bond・GATTを復旧する。続いてClassicだけを切断し、最終OPEN失敗の非同期`onConnectionFailed`通知、暗号化LE GATTの継続、正しいpeerへのClassic再接続とHID双方向復旧を確認する。Bluedroid公開HID APIではpage中の接続試行を取り消せないため、独自timeoutによる疑似cancelは試験契約にせずbackendの最終OPEN結果を境界とする。その後peerをsoftware resetで突然消失させ、生存側でLE / BR-EDR双方の切断を検出し、保存bondからBLE暗号化とClassic HIDを再接続してGATT/HID通信を復旧する。lifecycle部はcallback targetの参照寿命barrierを有効にした状態でClassic先行／BLE先行停止、Classic再attach、停止・再登録、両destructor順を通し、panic、watchdog、heap低下がないことを確認する。永続NVDSへ触れる`Write Local Name`はcontroller assertionを起こすため、負荷刺激には使わない。
+
+## 別スタックとの相互接続テスト（方針）
+
+EspBle同士のPeerテストは、両側が同じ実装なので**同じ誤解を共有していても通ります**。それを抜ける
+ために、片側をArduino-ESP32同梱のclass（`BluetoothSerial`、`BLE`ラッパ）とESP-IDFのBluedroid API
+だけで書き、EspBleと相互接続させます。無印ESP32では同梱classがBluedroidになるので、
+**EspBleのNimBLE host / 独自Classic hostとは実装が完全に別**になります。
+
+規則:
+
+- **相手側sketchはEspBleをlinkしない。**同一controllerを2つのhostで共有できないためで、
+  `#error`で拒否されます。相手側は同梱classとESP-IDF APIだけで完結させます。
+- **相手側sketchにNimBLE固有のheaderを使わない。**現在の基準側sketchのいくつかは
+  `<host/ble_store.h>`のようなNimBLEのheaderでbondを消しているため、無印ESP32では動きません。
+  相互接続用の相手側は、bond削除もwrapperまたはBluedroid APIの手段に置き換えます。
+- **判定は両側から取る。** EspBle側の公開API（callbackとgetter）と、相手側のserial出力の両方を
+  assertします。片方の実装しか埋めないfieldは期待値にせず、**仕様が両者に要求する一致**だけを
+  判定します。
+- **相手側profileは無印ESP32に限る。** ESP32-S3では同梱wrapperがNimBLEになり、EspBleと同じstackに
+  なるので別スタック検証になりません。BLEのsuiteはDUTをS3、相手を無印ESP32にすると
+  「NimBLE ↔ Bluedroid」で最も強い組み合わせになります（`--profile s3_peer_host
+  --peer-profile device:esp32_peer_device`）。Classicは両側とも無印ESP32です。
+
+対象範囲と現在地:
+
+| 領域 | 相手側で使うもの | 状態 |
+|---|---|---|
+| Classic SPP | `BluetoothSerial` | ✅ `classic_core_host_spp`（service record解決、双方向binary、再接続、heap） |
+| BLE GAP / GATT | 同梱`BLE`ラッパ（無印ESP32＝Bluedroid） | 未実装。advertising / scanの観測、GATT read / write、notify / indicate、MTU、接続parameter |
+| BLE Security | 同梱`BLE`ラッパ + `BLESecurity` | 未実装。Just Works、passkey、bond再接続 |
+| BLE HID（HOGP） | 同梱`BLEHIDDevice` | 未実装。EspBleのHID HostがBluedroid製deviceのReport Mapを解析できるか |
+| BLE MIDI | 同梱`BLE`ラッパで手組み | 未実装。EspBleのMIDI Hostが別実装deviceを受けられるか |
+| Classic A2DP / AVRCP | `esp_a2d_*` / `esp_avrc_*`（wrapperは無い） | 未実装。codec negotiation、media転送、passthrough、absolute volume |
+| Classic HFP | `esp_hf_client_*` / `esp_hf_ag_*` | 未実装。SLC、発着信、SCO codec、AT応答 |
+| Classic HID | ― | **作れない。**同梱sdkconfigは`CONFIG_BT_HID_ENABLED`が無効。外部機器での確認に委ねる |
+
+suite名は`classic_core_host_spp`の形に揃え、相手側が同梱実装であることが名前から分かるようにします。
+着手はrelease後で、優先順位はBLE GATT → BLE Security → BLE HID → Classic A2DP/AVRCP → Classic HFP
+→ BLE MIDIとします。BLEを先に置くのは、同梱wrapperだけで書ける（C APIを直接叩く必要がない）ため
+1 suiteあたりの費用が最も小さいからです。
 
 ## 起動banner待ちを避ける
 

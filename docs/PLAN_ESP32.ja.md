@@ -10,17 +10,11 @@ ESP32-S3などと同じ形で使えるようにする。NimBLE hostをライブ�
 
 ## 位置づけと利用者向けの注意
 
-**無印ESP32では兄弟ライブラリ[EspBleBluedroid](https://github.com/tanakamasayuki/EspBleBluedroid)の利用を推奨する。**
-理由は次の3点で、EspBle側の対応は「NimBLEでも動かせるようにする特殊対応」として扱う。
-
-1. coreのプリビルドがBluedroidなので、EspBleBluedroidはEspressifが保守するhostをそのまま使う。
-   EspBleは自前でhostを同梱するため、hostのセキュリティ修正追随をライブラリ側が負う。
-2. Bluetooth Classic（SPP等）と同居できるのはBluedroid側だけ。EspBleのNimBLE hostを載せると
-   controllerをBLE専用で起動し、Classic用メモリを解放する。
-3. EspBleBluedroidは無印ESP32を常設機材で継続的にpeerテストしている。
-
-そのうえでEspBleを無印ESP32で使う場合、**他のEspBle対応チップと挙動が完全に一致するとは保証しない。**
-差はhostではなくcontrollerに由来する。
+無印ESP32はEspBleが**自前で同梱したhost**で動く。coreのプリビルドがBluedroidであるため、BLEは
+同梱NimBLE（`src/nimble_esp32/`）、Bluetooth Classicは名前空間化した独自archiveを使い、両方を
+`begin()`したときだけHCI brokerがroutingする。したがってこのchipでは、**hostのセキュリティ修正
+追随をライブラリ側が負う**点と、**他のEspBle対応チップと挙動が完全に一致するとは保証しない**点を
+利用者向けに明示する。挙動差はhostではなくcontrollerに由来する。
 
 | 項目 | 無印ESP32 | 他のEspBle対応チップ |
 |---|---|---|
@@ -33,9 +27,6 @@ ESP32-S3などと同じ形で使えるようにする。NimBLE hostをライブ�
 hostは他チップと同一スナップショットのNimBLEを使い、設定値も同一に揃えるため、GATT・security・
 bonding・MTUのAPI上の意味は一致させる。それでも**controller差でタイミング依存のテストが揺れる
 可能性があり、無印ESP32はPeerテストで確認できた範囲のみを対応済みとする。**
-
-EspBleBluedroidとの公開API差はEspBle側では管理せず、
-[EspBleBluedroid/docs/BLE_BACKEND_DIFFERENCES.ja.md](https://github.com/tanakamasayuki/EspBleBluedroid/blob/main/docs/BLE_BACKEND_DIFFERENCES.ja.md)を正本とする。
 
 ## 技術方針
 
@@ -148,7 +139,7 @@ src/
 
 ## 試験環境
 
-無印ESP32はEspBleBluedroid側の常設機材を共用する。
+無印ESP32は常設の2台を使う。
 
 | pytest上の位置 | ボード | profile | 環境変数 |
 |---|---|---|---|
@@ -157,18 +148,17 @@ src/
 | 既存の親側 | ESP32-S3 | `s3_peer_host` | `TEST_SERIAL_PORT_S3_PEER_HOST` |
 | 既存の2台目Peer | ESP32-S3 | `s3_peer_device` | `TEST_SERIAL_PORT_PEER_DEVICE_S3_PEER_DEVICE` |
 
-ポート名はEspBleBluedroid側の`tests/.env`と同一にし、1つの配線を両repositoryで共用する。
-EspBleとEspBleBluedroidのテストを同時に実行しても、シリアルポートは排他制御されるため
-転送が待たされるだけで、実行自体は問題ない。
+1つの配線を他のrepositoryと共用する場合もport名を揃えておく。pytestがシリアルポートを排他
+制御するので、同時に実行しても転送が待たされるだけで、実行自体は問題ない。
 
 確認する組み合わせ:
 
 1. **ESP32（EspBle）× ESP32-S3（EspBle）** — 標準構成。既存のS3同士の期待値と比較でき、
    controller差の影響を切り分けられる。
 2. **ESP32（EspBle）× ESP32（EspBle）** — 同梱hostどうし。無印ESP32単独環境の利用者の実態に近い。
-3. **ESP32（EspBle）× ESP32（EspBleBluedroid）** — 同一チップでhostだけを入れ替えた相互接続。
-   EspBleBluedroid側の`tests/interop`はEspBle側をS3で動かしているため、この組み合わせは新規に増える。
-   実装はEspBleBluedroid側のsuiteへ追加する。
+3. **ESP32（EspBle）× ESP32（Arduino-ESP32同梱class）** — 同一チップでhostだけを入れ替えた相互接続。
+   相手側はEspBleをlinkせず、同梱`BluetoothSerial` / `BLE`ラッパとESP-IDFのBluedroid APIだけで書く。
+   規則と対象範囲は[テスト計画](../tests/TEST_PLAN.ja.md)の「別スタックとの相互接続テスト」を正本とする。
 
 ## 合格条件
 
@@ -313,8 +303,8 @@ upstreamには存在しない問題。**vendorツールのパッチとして**`c
 
 - **実機作業はpytest経由に限る。** ポートの排他はpytest側で管理されており、
   `arduino-cli upload`や`esptool`を直接使うと**待機せずに失敗**する。実際に手動uploadを
-  試みてapp書き込み前に中断し（ボードが一時的に起動不能）、EspBleBluedroid側で実行中の
-  pytestを巻き込んだ。EspBleとEspBleBluedroidのpytestを同時に走らせるのは問題ない。
+  試みてapp書き込み前に中断し（ボードが一時的に起動不能）、同じportで実行中だったpytestを
+  巻き込んだ。pytest同士を同時に走らせるのは問題ない。
 - README / STATUS / FEATURE_MATRIX / `library.properties`への反映は完了済み。今後の対応範囲は
   実機で確認できた経路だけを「対応済み」とする。
 

@@ -122,9 +122,9 @@ When re-running the same suite with the roles swapped, **flash one of the boards
 first**. A suite that selects its target by service UUID, such as `local_identity`, otherwise observes
 the board still advertising the previous run's peer firmware.
 
-The two boards are permanently wired on `/dev/ttyUSB0` and `/dev/ttyUSB1`. They are shared with
-EspBleBluedroid, and running both repositories' suites at the same time is fine (pytest arbitrates
-the ports).
+The two boards are permanently wired on `/dev/ttyUSB0` and `/dev/ttyUSB1`. Running another
+repository's suite against the same ports at the same time is fine (pytest arbitrates them; using
+`arduino-cli upload` or `esptool` directly fails instead of waiting).
 
 | Trigger | Original-ESP32 run |
 |---|---|
@@ -149,16 +149,6 @@ so a full sweep every time is not required -- the table above is the granularity
 - Explicitly control bond/NVS state at the start and end of security tests.
 - Allow timeouts for temporary radio delays, but do not hide defects with unlimited retries.
 - Cross-check disconnect reasons, MTU, and security state on both sides where possible.
-
-## Cross-Stack Interoperability Tests (Planned)
-
-Bundled-NimBLE-to-bundled-NimBLE tests cannot reveal every accidental dependency on NimBLE-specific behavior. Add interoperability tests against the sibling **EspBleBluedroid** library, which uses the ESP32 Bluedroid stack.
-
-- Scope: GATT Server/Client in both directions, Notify/Indicate, MTU exchange, and Pairing/Bonding.
-- Purpose: verify wire formats and procedures with a NimBLE ↔ Bluedroid combination.
-- Timing: after the EspBleBluedroid GATT implementation is operational.
-
-This extends the principle of directly implementing one side with the bundled API, but provides stronger validation because the stack itself differs. It also shows how wrapper-specific constraints, such as duplicate UUID handling, appear to another stack.
 
 ## Three-Board Peers (Manual Tests)
 
@@ -318,6 +308,52 @@ Future candidates include two Centrals connected to one Peripheral, and BLE HID 
 83. ✅ `dual_host_a2dp`: likewise A2DP SBC media and AVRCP (Play, absolute volume) while a BLE GATT connection stays live — a successful GATT read during the audio link, 100 packets and 1300 bytes completed, coexistence active (`coex=1`) and no diagnostic anomalies.
 
 The experimental `dual_host_smoke` concurrently issues Classic scan-mode changes from a separate task and NimBLE `Read RSSI` commands while Classic HID and encrypted LE GATT are connected on both boards. It verifies FIFO enqueue/physical-send equality, final RSSI completion, zero broker errors, then repeats encrypted GATT and bidirectional HID traffic after every contention cycle. `ESPBLE_DUAL_CONTENTION_CYCLES` controls the repetition. A test-only dispatch hold fills the FIFO, verifies excess rejection, then verifies GATT, HID, and lifecycle recovery after discarding the deliberately unsent commands. These commands never reach the controller and neither host receives a synthetic response. Inventories collected both while connected and after both links disconnect verify that every opcode, including conditional cleanup commands, has an explicit policy; unknown or wrong-host opcodes are rejected before physical transmission only in dual-host mode. Null and oversized HID Input/Output reports are rejected locally with `InvalidArgument`, while both connections and subsequent normal traffic remain live. Pairing first uses a wrong passkey and requires failure, no encryption, zero bonds, protected-GATT rejection, and uninterrupted Classic operation on both sides; an LE-only reconnect with the new correct passkey must then restore encryption, bonding, and GATT. The test next disconnects only Classic, requires the final asynchronous HID `onConnectionFailed` notification, verifies encrypted LE GATT remains live, and immediately reconnects Classic to the correct peer with bidirectional HID traffic. Bluedroid's public HID API cannot cancel paging, so the contract uses the backend's final OPEN result instead of pretending to implement an arbitrary timeout. The test then abruptly software-resets the peer, observes both LE and BR/EDR disconnects on the survivor, restores bonded LE encryption and Classic HID without restarting the surviving hosts, and revalidates encrypted GATT plus bidirectional HID. With the callback-target lifetime barrier enabled, the lifecycle phase covers Classic-first and BLE-first shutdown, Classic reattachment, stop/re-registration, and both destructor orders, requiring no panic, watchdog, or heap loss. Persistent-NVDS `Write Local Name` is deliberately excluded because repeated use as a stress stimulus triggers a controller assertion.
+
+## Interop tests against another stack (policy)
+
+A peer test between two EspBle boards passes even when **both sides share the same
+misunderstanding**. To get past that, one side is written using only the classes
+bundled with Arduino-ESP32 (`BluetoothSerial`, the `BLE` wrapper) and the ESP-IDF
+Bluedroid APIs, and made to interoperate with EspBle. On the original ESP32 those
+bundled classes are Bluedroid, so the implementation on the other side is
+**entirely separate** from EspBle's NimBLE and custom Classic hosts.
+
+Rules:
+
+- **The other side must not link EspBle.** Two hosts cannot share one controller,
+  and the build rejects it with `#error`. That side is written with the bundled
+  classes and ESP-IDF APIs alone.
+- **The other side must not use NimBLE-specific headers.** Some of today's
+  reference-side sketches clear bonds through NimBLE headers such as
+  `<host/ble_store.h>`, which is why they cannot run on the original ESP32. An
+  interop peer clears bonds through the wrapper or a Bluedroid API instead.
+- **Assert on both sides**: EspBle's public callbacks and getters, and the other
+  side's serial output. A field only one implementation fills is not an expected
+  value; only what the specification requires of both is asserted.
+- **The other side runs on the original ESP32.** On the ESP32-S3 the bundled
+  wrapper is NimBLE, the same stack EspBle uses, so it proves nothing about stack
+  boundaries. For BLE, putting the DUT on an S3 and the peer on an original ESP32
+  gives the strongest pairing — NimBLE against Bluedroid (`--profile s3_peer_host
+  --peer-profile device:esp32_peer_device`). Classic runs on two original ESP32s.
+
+Scope and current state:
+
+| Area | What the other side uses | State |
+|---|---|---|
+| Classic SPP | `BluetoothSerial` | ✅ `classic_core_host_spp` (service-record resolution, bidirectional binary, reconnection, heap) |
+| BLE GAP / GATT | bundled `BLE` wrapper (Bluedroid on the original ESP32) | not implemented: observing advertising and scans, GATT read/write, notify/indicate, MTU, connection parameters |
+| BLE Security | bundled `BLE` wrapper plus `BLESecurity` | not implemented: Just Works, passkey, bonded reconnection |
+| BLE HID (HOGP) | bundled `BLEHIDDevice` | not implemented: whether EspBle's HID Host parses a Bluedroid device's Report Map |
+| BLE MIDI | hand-built on the bundled wrapper | not implemented: whether EspBle's MIDI Host accepts another implementation |
+| Classic A2DP / AVRCP | `esp_a2d_*` / `esp_avrc_*` (no wrapper exists) | not implemented: codec negotiation, media transfer, passthrough, absolute volume |
+| Classic HFP | `esp_hf_client_*` / `esp_hf_ag_*` | not implemented: service-level connection, calls, SCO codec, AT responses |
+| Classic HID | — | **cannot be built.** The bundled sdkconfig has `CONFIG_BT_HID_ENABLED` unset; this stays with external-device verification |
+
+Suite names follow `classic_core_host_spp`, so the name says that the other side is
+the bundled implementation. This work starts after the release, in the order BLE
+GATT → BLE Security → BLE HID → Classic A2DP/AVRCP → Classic HFP → BLE MIDI: BLE
+comes first because the bundled wrapper alone is enough to write it, with no raw C
+API, which makes it the cheapest per suite.
 
 ## Do not wait for a startup banner
 

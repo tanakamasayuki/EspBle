@@ -162,6 +162,18 @@ release前に未実装を減らす方針（[決定台帳](DECISIONS.ja.md)のス
 | 残: A2DP Sourceの追加endpoint・SBC以外のcodec | release後 | EspBleはencode/decodeを持たない方針 |
 | 残: AVRCP TGのmetadata / play status送信 | 不可 | v5.5.5の公開TG APIに送信手段が無い |
 
+## release後のTODO
+
+release作業とは独立に着手する。ここに書くのは「やると決めたが今回のreleaseの合否に含めない」もの。
+
+| 項目 | 内容 | 見積り |
+|---|---|---|
+| HID Host keyboard eventの`rawData` / `rawLength` | keyboard eventだけこの2つが空で配送される。mouse・consumer・system・gamepad・vendorは埋めているので、keyboardだけが例外。配送直前の代入2行で足り、`Event`は`state`と`raw`の両方を持っているので構造体の変更もbuffer追加も不要。**実機回帰の完走後に入れ、`hid_convenience`と`hid_keyboard_host`だけ再実行する** | 1作業単位 |
+| notification burstとdrop集計のPeerテスト | 購読中に64→128→256件と段階的にnotifyを積み、round別に配送数と`droppedEventCount()`を突き合わせる。現在この経路を触るのは`gatt_queue_purge`と`persistent_subscription_overflow`だけで、**event queue（8件）が溢れる側の契約**——lifecycle eventが最古のnotificationを追い出し、追い出せなければ新しいeventを落とし、どちらも数える——を固定するテストが無い | 1作業単位 |
+| 別スタックとの相互接続テストの拡充 | 現在はSPPのみ。BLE GATT → BLE Security → BLE HID → Classic A2DP/AVRCP → Classic HFP → BLE MIDIの順に、相手側をArduino-ESP32同梱classとESP-IDF Bluedroid APIで書いて追加する。規則と対象範囲は[テスト計画](../tests/TEST_PLAN.ja.md)の「別スタックとの相互接続テスト」を正本とする | BLE系は各1作業単位、Classic Audio系は各2作業単位 |
+| HID Hostの複数device同時接続 | 公開signatureがdevice単位のidを取る形へ変わるため、releaseを跨がせる | 未見積り |
+| A2DP Sourceの追加endpoint・SBC以外のcodec | EspBleはencode/decodeを持たない方針との整合を先に決める | 未見積り |
+
 ## 残作業の規模（概算）
 
 行数は作業量ではないため、性質ごとに分けて見積もる。実装と実機検証は概ね終わっており、

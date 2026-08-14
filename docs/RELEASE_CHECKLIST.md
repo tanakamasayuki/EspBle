@@ -52,7 +52,7 @@ uv run --env-file .env pytest --clean \
   --profile esp32_peer_host --peer-profile device:s3_peer_device
 ```
 
-The exclusions and the frequency rule are in the [test plan](../tests/TEST_PLAN.md#original-esp32-regression); the policy and verification record are in the Japanese [original-ESP32 plan](PLAN_ESP32.ja.md). The two boards are shared with EspBleBluedroid, and running both repositories' suites at the same time is fine (pytest arbitrates the ports). Do not use `arduino-cli upload` or `esptool` directly -- they fail instead of waiting.
+The exclusions and the frequency rule are in the [test plan](../tests/TEST_PLAN.md#original-esp32-regression); the policy and verification record are in the Japanese [original-ESP32 plan](PLAN_ESP32.ja.md). Running another repository's suite against the same two boards at the same time is fine (pytest arbitrates the ports). Do not use `arduino-cli upload` or `esptool` directly -- they fail instead of waiting.
 
 If Classic is in scope, add the Classic-only and dual-host regressions on the same two original-ESP32 boards:
 
