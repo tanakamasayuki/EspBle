@@ -184,3 +184,24 @@ size_t espble_hci_acl_credits_build_credits(
   output[4] = handles;
   return used;
 }
+
+void espble_hci_acl_credits_restore(
+  espble_hci_acl_credits_t *credits, const uint8_t *packet, size_t length)
+{
+  if (credits == NULL || packet == NULL || length < 9) return;
+  if (packet[0] != H4_COMMAND ||
+      read_le16(&packet[1]) != OPCODE_HOST_NUMBER_OF_COMPLETED_PACKETS)
+    return;
+  if ((size_t)packet[3] + 4u != length ||
+      (size_t)packet[3] != 1u + 4u * (size_t)packet[4])
+    return;
+
+  for (uint8_t i = 0; i < packet[4]; ++i)
+  {
+    const uint8_t *record = &packet[5u + 4u * i];
+    const uint16_t handle = read_le16(record) & HANDLE_MASK;
+    const uint16_t count = read_le16(&record[2]);
+    for (uint16_t remaining = count; remaining > 0; --remaining)
+      espble_hci_acl_credits_on_delivered(credits, handle);
+  }
+}

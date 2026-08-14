@@ -479,7 +479,7 @@ void loop()
         "DUAL_DIAG tx=%lu,%lu rx=%lu,%lu ncp=%lu,%lu unknown=%lu "
         "txh=%u,%u rxh=%u,%u pb=%u,%u mode=%u modes=%lu "
         "cmd=%lu,%lu/%lu,%lu qmax=%u qfull=%lu mismatch=%lu busy=%lu "
-        "masks=%lu/%lu\n",
+        "masks=%lu/%lu credits=%lu/%lu drop=%lu flow=%u\n",
         value.tx_acl[0], value.tx_acl[1], value.rx_acl[0], value.rx_acl[1],
         value.completed_acl[0], value.completed_acl[1], value.unknown_acl,
         value.last_tx_handle[0], value.last_tx_handle[1],
@@ -490,7 +490,9 @@ void loop()
         value.command_sent[0], value.command_sent[1],
         value.command_queue_high_water, value.command_queue_full,
         value.command_response_mismatch, value.command_unregister_busy,
-        value.event_mask_commands, value.event_mask_unions);
+        value.event_mask_commands, value.event_mask_unions,
+        value.acl_credit_commands, value.acl_credits_returned,
+        value.acl_credits_dropped, value.acl_flow_control_owned);
     }
     else if (command == 'v')
     {

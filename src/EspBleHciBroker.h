@@ -49,6 +49,11 @@ typedef struct
   uint32_t virtual_resets;
   uint32_t virtual_flow_control_commands;
   uint32_t virtual_completed_packets;
+  /* Broker-owned controller-to-host ACL flow control. */
+  uint32_t acl_credit_commands;
+  uint32_t acl_credits_returned;
+  uint32_t acl_credits_dropped;
+  uint8_t acl_flow_control_owned;
   uint32_t security_events[ESPBLE_HCI_HOST_COUNT];
   uint8_t last_security_event[ESPBLE_HCI_HOST_COUNT];
   uint8_t last_security_status[ESPBLE_HCI_HOST_COUNT];

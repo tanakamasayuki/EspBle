@@ -86,6 +86,12 @@ size_t espble_hci_acl_credits_build_credits(
   espble_hci_acl_credits_t *credits, bool force, uint8_t *output,
   size_t capacity);
 
+// Puts back the credits carried by a command that could not be sent. The
+// broker must never tell the controller about buffers it did not hand over,
+// so a build that is not followed by a send has to be undone.
+void espble_hci_acl_credits_restore(
+  espble_hci_acl_credits_t *credits, const uint8_t *packet, size_t length);
+
 #ifdef __cplusplus
 }
 #endif

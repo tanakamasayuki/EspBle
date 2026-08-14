@@ -5,6 +5,7 @@
   (!defined(ESPBLE_CLASSIC_ONLY) || defined(ESPBLE_CLASSIC_CUSTOM_HOST))
 
 #include "EspBleHciBroker.h"
+#include "EspBleHciAclCredits.h"
 #include "EspBleHciCommandScheduler.h"
 #include "EspBleHciControllerPolicy.h"
 #include "EspBleHciRouter.h"
@@ -32,6 +33,22 @@ static uint32_t command_generation;
 static espble_hci_controller_stop_callback_t controller_stop_callback;
 static uint8_t virtual_command_pending;
 static uint16_t virtual_command_opcode[ESPBLE_HCI_HOST_COUNT];
+static espble_hci_acl_credits_t acl_credits;
+/* Neither host can run controller-to-host flow control on a shared
+ * controller: Bluedroid credits only the packets routed to it, and the
+ * vendored NimBLE never credits at all.  Once two hosts share the controller
+ * the broker takes the loop over for both of them and keeps it until the last
+ * host leaves. */
+static bool credits_owned;
+static bool credits_enabled;
+static uint8_t credits_configured;
+/* Commands the broker issues for itself.  The scheduler keeps them in the same
+ * single-transaction discipline as host commands, but the router must not
+ * record ownership: no host is waiting for these responses. */
+#define ESPBLE_HCI_HOST_BROKER ESPBLE_HCI_HOST_COUNT
+#define ESPBLE_HCI_CREDIT_FLUSH_THRESHOLD 4
+#define ESPBLE_HCI_CREDIT_CONFIGURED_BUFFER_SIZE 0x01u
+#define ESPBLE_HCI_CREDIT_CONFIGURED_FLOW_CONTROL 0x02u
 #if defined(ESPBLE_HCI_BACKPRESSURE_TEST)
 static bool command_backpressure_hold;
 static espble_hci_broker_diagnostics_t backpressure_diagnostics;
@@ -137,6 +154,67 @@ static void command_task(void *argument)
         continue;
       }
 
+      /* Build and queue the broker's own flow-control traffic before looking
+       * at host commands, so returning controller buffers is never starved by
+       * a busy host. */
+      uint8_t credit_command[ESPBLE_HCI_ACL_CREDITS_MAX_COMMAND_LENGTH];
+      size_t credit_length = 0;
+      portENTER_CRITICAL(&broker_lock);
+      if (credits_owned && espble_hci_acl_credits_ready(&acl_credits) &&
+          command_scheduler.count < ESPBLE_HCI_COMMAND_SCHEDULER_CAPACITY)
+      {
+        uint8_t configured = 0;
+        if ((credits_configured & ESPBLE_HCI_CREDIT_CONFIGURED_BUFFER_SIZE) == 0)
+        {
+          credit_length = espble_hci_acl_credits_build_host_buffer_size(
+            &acl_credits, credit_command, sizeof(credit_command));
+          configured = ESPBLE_HCI_CREDIT_CONFIGURED_BUFFER_SIZE;
+        }
+        else if ((credits_configured &
+                  ESPBLE_HCI_CREDIT_CONFIGURED_FLOW_CONTROL) == 0)
+        {
+          credit_length = espble_hci_acl_credits_build_flow_control_enable(
+            &acl_credits, credit_command, sizeof(credit_command));
+          configured = ESPBLE_HCI_CREDIT_CONFIGURED_FLOW_CONTROL;
+        }
+        else if (credits_enabled)
+        {
+          /* Batch up to the threshold while commands are queued, but never
+           * leave credits behind once the queue has drained. */
+          credit_length = espble_hci_acl_credits_build_credits(
+            &acl_credits, command_scheduler.count == 0, credit_command,
+            sizeof(credit_command));
+        }
+        if (credit_length > 0 && espble_hci_command_scheduler_enqueue(
+              &command_scheduler, ESPBLE_HCI_HOST_BROKER, credit_command,
+              credit_length) == ESPBLE_HCI_COMMAND_SCHEDULER_OK)
+        {
+          credits_configured |= configured;
+          if (configured == 0)
+          {
+            ++diagnostics.acl_credit_commands;
+            /* Byte 4 counts handles; the returned buffers are the per-handle
+             * counts that follow. */
+            for (uint8_t entry = 0; entry < credit_command[4]; ++entry)
+            {
+              const uint8_t *record = &credit_command[5u + 4u * entry];
+              diagnostics.acl_credits_returned +=
+                (uint16_t)record[2] | ((uint16_t)record[3] << 8);
+            }
+          }
+        }
+        else if (credit_length > 0 && configured == 0)
+        {
+          /* The queue filled between the room check and the enqueue.  Put the
+           * credits back rather than telling the controller about buffers it
+           * never got. */
+          espble_hci_acl_credits_restore(
+            &acl_credits, credit_command, credit_length);
+          credit_length = 0;
+        }
+      }
+      portEXIT_CRITICAL(&broker_lock);
+
       uint8_t owner = 0;
       const uint8_t *queued_packet = NULL;
       size_t length = 0;
@@ -167,23 +245,28 @@ static void command_task(void *argument)
       const uint8_t *current_packet = NULL;
       size_t current_length = 0;
       const bool still_current = generation == command_generation &&
-        dual_host_active() && hosts[owner] != NULL &&
+        (dual_host_active() || credits_owned) &&
+        (owner == ESPBLE_HCI_HOST_BROKER || hosts[owner] != NULL) &&
         router.pending_count == 0 &&
         espble_hci_command_scheduler_peek(
           &command_scheduler, &current_owner, &current_packet,
           &current_length) == ESPBLE_HCI_COMMAND_SCHEDULER_OK &&
         current_owner == owner && current_length == length &&
         memcmp(current_packet, packet, length) == 0;
-      const espble_hci_router_result_t tracked = still_current ?
+      /* A broker command has no host waiting for its response, so it is not
+       * recorded in the router's ownership table; the response is consumed. */
+      const espble_hci_router_result_t tracked = !still_current ?
+        ESPBLE_HCI_ROUTER_INVALID_PACKET :
+        owner == ESPBLE_HCI_HOST_BROKER ? ESPBLE_HCI_ROUTER_OK :
         espble_hci_router_track_outgoing(
-          &router, host_route(owner), packet, length) :
-        ESPBLE_HCI_ROUTER_INVALID_PACKET;
+          &router, host_route(owner), packet, length);
       const espble_hci_command_scheduler_result_t sent =
         tracked == ESPBLE_HCI_ROUTER_OK ?
           espble_hci_command_scheduler_mark_sent(&command_scheduler) :
           ESPBLE_HCI_COMMAND_SCHEDULER_BLOCKED;
       if (tracked == ESPBLE_HCI_ROUTER_OK &&
-          sent == ESPBLE_HCI_COMMAND_SCHEDULER_OK)
+          sent == ESPBLE_HCI_COMMAND_SCHEDULER_OK &&
+          owner < ESPBLE_HCI_HOST_COUNT)
       {
         ++diagnostics.command_sent[owner];
       }
@@ -296,6 +379,42 @@ static int physical_receive(uint8_t *data, uint16_t length)
         data[1] == 0x08 ? data[6] : 0xff);
   }
 #endif
+  /* Watched in every mode: the Read Buffer Size response that carries the
+   * controller's buffer geometry is issued by the Classic host during its
+   * bootstrap, while it is still the only registered host. */
+  portENTER_CRITICAL(&broker_lock);
+  (void)espble_hci_acl_credits_observe_event(&acl_credits, data, length);
+  /* The controller debited one buffer for every ACL packet it handed over,
+   * whichever host it belongs to and whether or not the broker could route
+   * it.  Crediting only routed packets, or only routed mode, leaks buffers
+   * until the controller stops delivering ACL entirely. */
+  bool flush_credits = false;
+  if (credits_enabled && length >= 5 && data[0] == 0x02)
+  {
+    espble_hci_acl_credits_on_delivered(&acl_credits, h4_acl_handle(data));
+    /* Ask for a flush whenever anything is outstanding, not only at the
+     * threshold: a dispatch that finds the queue full must be retried, and
+     * credits left below the threshold when traffic stops would otherwise
+     * shrink the controller's pool for the rest of the session. */
+    flush_credits = acl_credits.pending_total > 0;
+  }
+  /* The controller debits a buffer only once it has accepted the enable
+   * command, so crediting starts at its response.  Counting earlier would
+   * return buffers the controller never took. */
+  if (credits_owned && !credits_enabled && length >= 7 && data[0] == 0x04 &&
+      data[1] == 0x0e && data[4] == 0x31 && data[5] == 0x0c && data[6] == 0x00)
+  {
+    credits_enabled = true;
+  }
+  /* The controller frees the buffers of a closed connection itself. */
+  if (length >= 7 && data[0] == 0x04 && data[1] == 0x05)
+  {
+    espble_hci_acl_credits_forget_handle(
+      &acl_credits, (uint16_t)data[4] | ((uint16_t)data[5] << 8));
+  }
+  portEXIT_CRITICAL(&broker_lock);
+  if (flush_credits) wake_command_task();
+
   if (registered_host_count() > 1)
   {
     uint8_t filtered[ESPBLE_HCI_HOST_COUNT][258];
@@ -445,6 +564,12 @@ esp_err_t espble_hci_broker_register(
     if (transport != ESP_OK) return transport;
     hosts[host] = callbacks;
     host_receive_enabled[host] = receive_enabled_on_register(host);
+    /* From here neither host can account for the other's ACL traffic.  The
+     * controller session itself is unchanged, so a host that re-attaches must
+     * not restart the configuration: the controller rejects enabling flow
+     * control that is already on, which would stop crediting while the
+     * controller keeps debiting. */
+    credits_owned = true;
     ESP_LOGW(TAG, "registered second host %d in routed mode", (int)host);
     wake_command_task();
     return ESP_OK;
@@ -457,6 +582,10 @@ esp_err_t espble_hci_broker_register(
   hosts[host] = callbacks;
   host_receive_enabled[host] = receive_enabled_on_register(host);
   espble_hci_router_init(&router);
+  espble_hci_acl_credits_init(&acl_credits, ESPBLE_HCI_CREDIT_FLUSH_THRESHOLD);
+  credits_owned = false;
+  credits_enabled = false;
+  credits_configured = 0;
   memset(&diagnostics, 0, sizeof(diagnostics));
   espble_hci_command_scheduler_init(&command_scheduler);
   espble_hci_controller_policy_init(&controller_policy);
@@ -495,6 +624,10 @@ void espble_hci_broker_unregister(espble_hci_host_t host)
     espble_hci_command_scheduler_init(&command_scheduler);
     espble_hci_controller_policy_init(&controller_policy);
     espble_hci_router_init(&router);
+    espble_hci_acl_credits_init(&acl_credits, ESPBLE_HCI_CREDIT_FLUSH_THRESHOLD);
+    credits_owned = false;
+    credits_enabled = false;
+    credits_configured = 0;
     stop_callback = controller_stop_callback;
     controller_stop_callback = NULL;
     virtual_command_pending = 0;
@@ -599,7 +732,7 @@ esp_err_t espble_hci_broker_send(
   portENTER_CRITICAL(&broker_lock);
   record_command_opcode(host, data, length);
   portEXIT_CRITICAL(&broker_lock);
-  if (dual_host_active() && data[0] == 0x01)
+  if ((dual_host_active() || credits_owned) && data[0] == 0x01)
   {
     const uint16_t opcode = length >= 3 ?
       (uint16_t)data[1] | ((uint16_t)data[2] << 8) : 0;
@@ -787,6 +920,8 @@ void espble_hci_broker_get_diagnostics(
   if (output == NULL) return;
   portENTER_CRITICAL(&broker_lock);
   *output = diagnostics;
+  output->acl_credits_dropped = acl_credits.dropped_credits;
+  output->acl_flow_control_owned = (uint8_t)(credits_enabled ? 1 : 0);
   portEXIT_CRITICAL(&broker_lock);
 }
 

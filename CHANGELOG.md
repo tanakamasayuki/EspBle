@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- (EN) The HCI broker now owns controller-to-host ACL flow control on the
+  original ESP32 instead of disabling it. It learns the controller's buffer
+  geometry from the Read Buffer Size response, configures the controller
+  itself, answers both hosts' flow-control commands virtually, and returns one
+  credit for every ACL packet it received. Neither host could run this loop on
+  a shared controller: Bluedroid credits only its own traffic and the bundled
+  NimBLE credits none, which drained the controller's host buffers and stalled
+  both transports.
+- (JA) 無印ESP32のHCI brokerがcontroller-to-host ACL flow controlを無効化せず
+  自分で所有するようにした。`Read Buffer Size`応答からcontrollerのbuffer geometryを学習し、
+  controllerの設定はbroker自身が行い、両hostのflow control commandは仮想完了で返し、
+  受信したACL 1 packetにつき1 creditを返す。共有controllerではどちらのhostもこのloopを
+  実行できず（Bluedroidは自分宛ての分しかcreditせず、同梱NimBLEは一切返さない）、
+  controllerのhost bufferが枯渇して双方の通信が停止していた。
+
 - (EN) Added randomized fault injection for the HCI router, command scheduler
   and controller policy. It builds them with AddressSanitizer and
   UndefinedBehaviorSanitizer and feeds truncated, oversized and mutated H4

@@ -58,7 +58,8 @@ dual-hostでもBLE GATT接続中のmSBC SCO双方向転送、A2DP encode済みme
 - 最後のlogical hostが外れたときだけbrokerがcontrollerを停止する。
 - HCI commandをhostから物理VHCIへ直接流さず、broker FIFOと単一transaction ownershipを通す。
 - event種別だけで配送せず、command owner、connection handle、LE Meta / BR-EDR event semanticsを使う。
-- Classicが要求するcontroller-to-host ACL flow controlは現在物理controller上で無効化している。
+- controller-to-host ACL flow controlはbrokerが所有する。2 host目の登録で有効化し、最後のhostが
+  外れるまで維持する。受信したACLは経路に関係なく必ず1 creditを返す。
 - test-only backpressure holdは`ESPBLE_HCI_BACKPRESSURE_TEST`時だけ存在し、通常buildには入らない。
 - `.a`のglobal defined symbolだけをprefixし、platform依存のundefined symbolはArduino coreから解決する。
 
@@ -90,7 +91,10 @@ PCMFlowBluetoothへは`badFrame`とraw lengthを失わず渡し、decoder側で5
 
 ### P1: 一般対応・upstream品質
 
-1. brokerがincoming ACL処理完了を一元管理し、controller-to-host flow controlを無効化せず両hostへcreditを返せる形を設計する。
+1. **実装済み・検証中:** brokerがincoming ACLを一元管理し、controller-to-host flow controlを
+   有効にしたまま両host分のcreditを返す。geometryは`Read Buffer Size`応答から学習し、
+   `Host Buffer Size`と`Set Controller To Host Flow Control`はbrokerが物理controllerへ送る。
+   hostの同commandは仮想完了で握り潰し、hostの`Host Number Of Completed Packets`も消費する。
 2. **完了:** HCI parser、transaction、handle table、credit分配へfuzz / fault injectionを追加した。
    sanitizer付きhost testで、3モジュールとも行カバレッジ100%と500 seed掃引を通した。
 3. Arduino依存を外したdirection-aware router componentの境界を定め、ESP-IDF upstreamへ出せる差分へ縮小する。
@@ -123,7 +127,7 @@ PCMFlowBluetoothへは`badFrame`とraw lengthを失わず渡し、decoder側で5
 
 - `Write Local Name`をsoak刺激として反復するとcontrollerのNVDSが`nvds.c:400`でassertする。永続設定を負荷生成に使わず、scan mode切替を使う。
 - logical hostごとの`can_send()` slot予約はBluedroidの先読みと両立せず、NimBLEをstarveさせるため採用しない。
-- Classicのcontroller-to-host flow controlをそのまま有効化すると、NimBLEへroutingしたLE ACLのcreditをClassicが返せず、共有bufferが枯渇する。
+- Classicのcontroller-to-host flow controlをそのまま有効化すると、NimBLEへroutingしたLE ACLのcreditをClassicが返せず、共有bufferが枯渇する。brokerが所有する場合も同じ枯渇が起きる条件が3つあり、いずれも実機でのみ再現した。geometryを学習する`Read Buffer Size`応答はClassic bootstrap中（single-host）に届くので観測はmodeを問わず行う。creditは routed modeだけでなく受信した全ACLに対して返す（片側hostを停止している間のLE ACLが無計上になる）。host再attach時にflow control設定をやり直してはならない（既に有効なcontrollerが再有効化を拒否し、flow controlは有効なままcreditだけ止まる）。
 - NimBLE停止を別taskから直接行うとNPL event queueと競合する。停止開始はNimBLE host task自身へ要求する。
 - 上流の`npl_freertos_eventq_remove()`はfunction-localのspinlockでcritical sectionを作るため、別coreのhost taskによるdequeueと競合してassertする。vendor patchで受信失敗時はassertせずloopを抜ける。
 - RPA更新はadvertising / scanをpreemptする。元の設定と有限deadlineを保持して再開しないと、処理が停止または期限延長する。
