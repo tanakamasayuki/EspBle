@@ -440,7 +440,12 @@ npl_freertos_eventq_remove(struct ble_npl_eventq *evq,
         count = uxQueueMessagesWaitingFromISR(eventq->q);
         for (i = 0; i < count; i++) {
             ret = xQueueReceiveFromISR(eventq->q, &tmp_ev, &woken2);
-            BLE_LL_ASSERT(ret == pdPASS);
+            /* The queue is only sampled, not locked against the host
+             * task on the other core, so it can drain between the
+             * count and this receive.  Removal is best effort. */
+            if (ret != pdPASS) {
+                break;
+            }
             woken |= woken2;
 
             if (tmp_ev == ev) {
@@ -462,7 +467,13 @@ npl_freertos_eventq_remove(struct ble_npl_eventq *evq,
         count = uxQueueMessagesWaiting(eventq->q);
         for (i = 0; i < count; i++) {
             ret = xQueueReceive(eventq->q, &tmp_ev, 0);
-            BLE_LL_ASSERT(ret == pdPASS);
+            /* ble_npl_mut is a function-local spinlock, so it does not
+             * serialize this rotation against the host task dequeuing
+             * on the other core.  A concurrent dequeue empties the
+             * queue early; stop instead of asserting. */
+            if (ret != pdPASS) {
+                break;
+            }
 
             if (tmp_ev == ev) {
                 continue;

@@ -622,6 +622,9 @@ void loop()
         if (!runHostModeCycle()) break;
         ++completed;
       }
+      // Sample the heap while both hosts are still stopped, so it compares
+      // against the pre-cycle sample taken in the same state.
+      const uint32_t after = ESP.getFreeHeap();
       const bool restarted = startDualStacks();
       espble_hci_broker_diagnostics_t value = {};
       espble_hci_broker_get_diagnostics(&value);
@@ -631,7 +634,7 @@ void loop()
         completed, restarted ? 1 : 0, value.command_unregister_busy,
         value.command_queue_full, value.command_response_mismatch,
         value.unknown_acl, static_cast<unsigned long>(before),
-        static_cast<unsigned long>(ESP.getFreeHeap()),
+        static_cast<unsigned long>(after),
         classic.lastErrorName(), ble.lastErrorName());
     }
     else if (command == "y")

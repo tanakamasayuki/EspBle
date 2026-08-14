@@ -551,6 +551,41 @@ PATCHES = [
         "do not reset the controller underneath an attached Classic host",
     ),
     (
+        "porting/npl/freertos/src/npl_os_freertos.c",
+        "        count = uxQueueMessagesWaitingFromISR(eventq->q);\n"
+        "        for (i = 0; i < count; i++) {\n"
+        "            ret = xQueueReceiveFromISR(eventq->q, &tmp_ev, &woken2);\n"
+        "            BLE_LL_ASSERT(ret == pdPASS);\n",
+        "        count = uxQueueMessagesWaitingFromISR(eventq->q);\n"
+        "        for (i = 0; i < count; i++) {\n"
+        "            ret = xQueueReceiveFromISR(eventq->q, &tmp_ev, &woken2);\n"
+        "            /* The queue is only sampled, not locked against the host\n"
+        "             * task on the other core, so it can drain between the\n"
+        "             * count and this receive.  Removal is best effort. */\n"
+        "            if (ret != pdPASS) {\n"
+        "                break;\n"
+        "            }\n",
+        "stop rotating instead of asserting when the ISR event queue drains early",
+    ),
+    (
+        "porting/npl/freertos/src/npl_os_freertos.c",
+        "        count = uxQueueMessagesWaiting(eventq->q);\n"
+        "        for (i = 0; i < count; i++) {\n"
+        "            ret = xQueueReceive(eventq->q, &tmp_ev, 0);\n"
+        "            BLE_LL_ASSERT(ret == pdPASS);\n",
+        "        count = uxQueueMessagesWaiting(eventq->q);\n"
+        "        for (i = 0; i < count; i++) {\n"
+        "            ret = xQueueReceive(eventq->q, &tmp_ev, 0);\n"
+        "            /* ble_npl_mut is a function-local spinlock, so it does not\n"
+        "             * serialize this rotation against the host task dequeuing\n"
+        "             * on the other core.  A concurrent dequeue empties the\n"
+        "             * queue early; stop instead of asserting. */\n"
+        "            if (ret != pdPASS) {\n"
+        "                break;\n"
+        "            }\n",
+        "stop rotating instead of asserting when the event queue drains early",
+    ),
+    (
         "nimble/host/src/ble_sm.c",
         "        ble_hs_unlock();\n\n"
         "        if (proc == NULL) {\n"

@@ -169,6 +169,14 @@ dequeueと競合し、FreeRTOS queue receive assertionを1回再現した。back
 停止開始をNimBLE event queueへ要求し、host task自身が`ble_hs_stop()`を実行するよう変更した後は、
 完全再ビルドの通常3サイクルと拡張20サイクルの両方が成功した。
 
+2026-08-14のdual-host smokeでは、同じ`npl_freertos_eventq_remove()`のassertionを停止経路以外でも観測した。
+backtraceはEspBleのGATT operation task → `ble_gattc_disc_all_svcs()` → `ble_hs_timer_reset()` →
+`ble_npl_callout_reset()`で、bond再接続直後のdiscovery中にpeerがabortした。原因は上流実装が
+`portMUX_TYPE ble_npl_mut = portMUX_INITIALIZER_UNLOCKED;`というfunction-localのspinlockでcritical
+sectionを作っている点にある。別coreのhost taskがdequeueすると、`uxQueueMessagesWaiting()`と
+`xQueueReceive()`の間でqueueが空になり、受信失敗でassertする。event削除は本来best effortなので、
+受信失敗時はassertせずloopを抜けるvendor patchを追加した。
+
 ## controller-wide event mask
 
 brokerの独立policy層はGeneral Event Mask（`0x0c01`）、Page 2（`0x0c63`）、LE Event Mask

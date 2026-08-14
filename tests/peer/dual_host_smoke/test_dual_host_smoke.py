@@ -646,7 +646,8 @@ def test_nimble_and_custom_classic_host_run_together(dut, peers):
         assert match.group(1) == b"5"
         assert match.group(2) == b"1"
         assert {match.group(index) for index in range(3, 7)} == {b"0"}
-        assert match.group(9) == b"None:None"
+        # EspBleClassic and EspBle spell their error names differently.
+        assert match.group(9) == b"None:NONE"
         mode_samples.append((int(match.group(7)), int(match.group(8))))
     for before, after in mode_samples:
         assert after >= before - 8192

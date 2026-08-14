@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- (EN) Fixed a crash in the bundled NimBLE port: removing an event from an
+  event queue sampled the queue depth under a function-local spinlock, so a
+  concurrent dequeue by the host task on the other core made the following
+  receive fail and abort the firmware. Hardware runs hit it through GATT
+  discovery issued from EspBle's operation task. Removal is now best effort and
+  stops when the queue drains early.
+- (JA) 同梱NimBLE portのcrashを修正した。event queueからのevent削除がqueue長を
+  function-localなspinlock下で読んでいたため、別coreのhost taskが先にdequeueすると
+  続く受信が失敗してfirmwareがabortしていた。実機ではEspBleのoperation taskから出す
+  GATT discoveryで発生した。削除をbest effortにし、queueが先に空になったら中断する。
+
 - (EN) Removed the `ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL` build flag on the
   original ESP32. The HCI broker now follows the hosts a sketch actually
   starts: one registered host stays a pass-through, and starting both `EspBle`

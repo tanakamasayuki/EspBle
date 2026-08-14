@@ -107,6 +107,7 @@ PCMFlowBluetoothへは`badFrame`とraw lengthを失わず渡し、decoder側で5
 - logical hostごとの`can_send()` slot予約はBluedroidの先読みと両立せず、NimBLEをstarveさせるため採用しない。
 - Classicのcontroller-to-host flow controlをそのまま有効化すると、NimBLEへroutingしたLE ACLのcreditをClassicが返せず、共有bufferが枯渇する。
 - NimBLE停止を別taskから直接行うとNPL event queueと競合する。停止開始はNimBLE host task自身へ要求する。
+- 上流の`npl_freertos_eventq_remove()`はfunction-localのspinlockでcritical sectionを作るため、別coreのhost taskによるdequeueと競合してassertする。vendor patchで受信失敗時はassertせずloopを抜ける。
 - RPA更新はadvertising / scanをpreemptする。元の設定と有限deadlineを保持して再開しないと、処理が停止または期限延長する。
 - Classic再attach時の物理HCI Resetは既存LE接続を破壊するため、Classicだけへ仮想Command Completeを返す。
 - Bluedroid公開HID Host APIにはpage中の接続試行を取り消す手段がない。未接続peerへの任意timeoutを
