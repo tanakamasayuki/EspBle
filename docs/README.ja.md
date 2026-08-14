@@ -27,6 +27,8 @@ EspBleの開発ドキュメント一覧と、初見の人が状況を把握す�
 | HIDの仕様（Device / Host） | [HID_DEVICE_SPEC.ja.md](HID_DEVICE_SPEC.ja.md) / [HID_HOST_SPEC.ja.md](HID_HOST_SPEC.ja.md) |
 | BLE通信の入門ガイド（GAP / セキュリティ / GATT / UUID / HID / BLE MIDI） | [GUIDE_BLE_BASICS.ja.md](GUIDE_BLE_BASICS.ja.md) |
 | BLEとClassicのどちらを使うか、両方にある機能の差 | [CLASSIC_VS_BLE.ja.md](CLASSIC_VS_BLE.ja.md)（英語版: [CLASSIC_VS_BLE.md](CLASSIC_VS_BLE.md)） |
+| 他のライブラリ（`BLEDevice`系 / NimBLE-Arduino / `BluetoothSerial`）からの移行 | [GUIDE_MIGRATION.ja.md](GUIDE_MIGRATION.ja.md)（英語版: [GUIDE_MIGRATION.md](GUIDE_MIGRATION.md)） |
+| EspBleの上級ガイド（実行model / 上限 / backpressure / 再接続 / dual-host内部 / size / 不具合の見取り図） | [GUIDE_ADVANCED.ja.md](GUIDE_ADVANCED.ja.md)（英語版: [GUIDE_ADVANCED.md](GUIDE_ADVANCED.md)） |
 | Classic通信の入門ガイド（inquiry / 無線設定 / SPP / security / HID / A2DP / HFP） | [GUIDE_CLASSIC_BASICS.ja.md](GUIDE_CLASSIC_BASICS.ja.md)（英語版: [GUIDE_CLASSIC_BASICS.md](GUIDE_CLASSIC_BASICS.md)） |
 | テスト方針・カバレッジ | [../tests/TEST_PLAN.ja.md](../tests/TEST_PLAN.ja.md) |
 | 次回リリースまでに残っている作業 | [PLAN_RELEASE_NEXT.ja.md](PLAN_RELEASE_NEXT.ja.md) |

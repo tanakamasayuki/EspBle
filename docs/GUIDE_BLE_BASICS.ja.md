@@ -948,3 +948,9 @@ APIは姉妹ライブラリのUSB版（[EspUsbDevice](https://github.com/tanakam
 |---|---|
 | [Midi/MidiDevice](../examples/Midi/MidiDevice/) | 楽器として音を送る |
 | [Midi/MidiHost](../examples/Midi/MidiHost/) | BLE MIDI機器へ接続してメッセージを受ける |
+
+## 8. 次に読むもの
+
+このガイドはBLEの各部分が何をするかを説明しました。負荷がかかったときや上限に達したときの
+振る舞い——callbackがどのtaskで動くか、queueの上限と満杯時の挙動、backpressure、再接続、
+size、不具合の見取り図——は[EspBleを深く使う](GUIDE_ADVANCED.ja.md)にあります。

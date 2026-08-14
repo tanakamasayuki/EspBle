@@ -322,3 +322,8 @@ dual-hostの検証はEspBle同士とcore内蔵host相手までで、**外部機�
 
 同梱hostの構成、archiveの生成手順、検証済み範囲は
 [引き継ぎ](HANDOFF_ESP32_CLASSIC.ja.md)と[Classic host archive再生成](CLASSIC_HOST_BUILD.ja.md)にあります。
+
+## 次に読むもの
+
+SDP recordの予算、SPP queueの構成、dual-hostの内部、既知の不具合の見取り図は
+[EspBleを深く使う](GUIDE_ADVANCED.ja.md)にあります。

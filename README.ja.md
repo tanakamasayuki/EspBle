@@ -157,9 +157,15 @@ void loop() {
 
 **BLEがはじめての方は[BLE通信の入門ガイド](docs/GUIDE_BLE_BASICS.ja.md)から** — 相手を探すところからデータのやり取りまで、何が起きているのかを説明し、話題ごとに対応するexampleへ案内します。
 
+**動くsketchができたあとは[EspBleを深く使う](docs/GUIDE_ADVANCED.ja.md)へ** — callbackがどのtaskで動くか、queueの上限と満杯時の挙動、backpressure、再接続、dual-hostの内部、sizeの測り方、既知の不具合の見取り図をまとめています。
+
 **特定の文書を探すときは[ドキュメント案内](docs/README.ja.md)へ** — 読む順序と各文書の役割をまとめています。「今どこまで進んでいるか」を最短で把握するには [docs/STATUS.ja.md](docs/STATUS.ja.md) → [docs/DECISIONS.ja.md](docs/DECISIONS.ja.md) の順です。
 
 - [BLE通信の入門ガイド](docs/GUIDE_BLE_BASICS.ja.md)
+- [Classic通信の入門ガイド](docs/GUIDE_CLASSIC_BASICS.ja.md)
+- [BLEとClassicの選び方](docs/CLASSIC_VS_BLE.ja.md)
+- [EspBleを深く使う（上級）](docs/GUIDE_ADVANCED.ja.md)
+- [他のライブラリからの移行](docs/GUIDE_MIGRATION.ja.md)
 - [開発状況とTODO](docs/STATUS.ja.md)
 - [要件](docs/REQUIREMENTS.ja.md)
 - [コア設計](docs/CORE_DESIGN.ja.md)

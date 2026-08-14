@@ -254,12 +254,25 @@
   example reads as a missing one. `Classic/HidGamepad` is the case BLE cannot
   replace: older consoles accept BR/EDR HID only. Every Classic example has a
   README in both languages saying which radio reaches which peers, and the Classic
-  beginner guide and the BLE-or-Classic comparison exist in both languages.
+  beginner guide and the BLE-or-Classic comparison exist in both languages. Two new
+  guides go past the basics, also in both languages: **EspBle in depth**
+  (`docs/GUIDE_ADVANCED.md`) documents which task each callback runs on and the four
+  that cannot wait for `update()`, every fixed capacity and what overflowing it
+  does, the accepted-versus-applied contract, backpressure, reconnection and
+  identity, the dual-host broker's internals and diagnostics, how to measure
+  footprint, and a playbook of known failure signatures; **Coming to EspBle from
+  another library** (`docs/GUIDE_MIGRATION.md`) maps `BLEDevice`, NimBLE-Arduino and
+  `BluetoothSerial` onto EspBle call by call.
 - (JA) Classic HIDのexampleをBLE HIDと同じ一覧にした——gamepad、mouse、メディアキー、NKRO、
   複合device。exampleが無い機能は無い機能として読まれるためである。`Classic/HidGamepad`はBLE
   で代替できない用途で、旧世代のゲーム機はBR/EDR HIDしか受け付けない。Classic exampleは全数が
   両言語のREADMEを持ち、「どちらの無線がどの相手に届くか」を書いた。Classicの入門ガイドと
-  BLE / Classicの選び方も日英とも用意した。
+  BLE / Classicの選び方も日英とも用意した。入門の先を扱うガイドも日英で2本追加した。
+  **EspBleを深く使う**（`docs/GUIDE_ADVANCED.ja.md`）は、callbackがどのtaskで動くかと
+  `update()`を待てない4つ、固定容量の一覧と満杯時の挙動、「受理」と「反映」の契約、
+  backpressure、再接続と素性、dual-host brokerの内部と診断、sizeの測り方、既知の不具合の
+  見取り図を書いた。**他のライブラリからEspBleへ**（`docs/GUIDE_MIGRATION.ja.md`）は
+  `BLEDevice`系・NimBLE-Arduino・`BluetoothSerial`との対応を1行ずつ示した。
 - (EN) Internals: the HCI layer is split into three dependency tiers checked by a
   host test (routing depends on the C library alone, the broker stops at ESP-IDF,
   only the integration layer reads Arduino headers); the router, command scheduler

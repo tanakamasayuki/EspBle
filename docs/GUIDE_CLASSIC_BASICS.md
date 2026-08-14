@@ -353,3 +353,8 @@ Dual-host is verified between EspBle boards and against the core's bundled host;
 The bundled host's configuration, how the archive is regenerated and what has
 been verified are in the [handover notes](HANDOFF_ESP32_CLASSIC.ja.md) and
 [Classic host archive rebuild](CLASSIC_HOST_BUILD.ja.md) (both Japanese).
+
+## Where to go next
+
+For the SDP record budget, the SPP queue geometry, dual-host internals and the
+known failure signatures, see [EspBle in depth](GUIDE_ADVANCED.md).

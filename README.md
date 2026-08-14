@@ -199,6 +199,8 @@ void loop() {
 
 **New to BLE? Start with the [beginner's guide to BLE](docs/GUIDE_BLE_BASICS.md)** — it explains what is actually happening, from finding a peer through to exchanging data, and links to the matching example for each topic.
 
+**Once you have a sketch that works, read [EspBle in depth](docs/GUIDE_ADVANCED.md)** — which task your callbacks run on, every capacity and what overflowing it does, backpressure, reconnection, dual-host internals, measuring footprint, and a playbook for known failure signatures.
+
 **Looking for a specific document? See the [documentation guide](docs/README.md)** — it shows the reading order and each document's role. The quickest path to "where does this project stand" is [docs/STATUS.md](docs/STATUS.md) then [docs/DECISIONS.ja.md](docs/DECISIONS.ja.md).
 
 The user-facing documents below are available in English; the remaining design documents are currently Japanese-only.
@@ -206,6 +208,8 @@ The user-facing documents below are available in English; the remaining design d
 - [A beginner's guide to BLE](docs/GUIDE_BLE_BASICS.md)
 - [A beginner's guide to Bluetooth Classic](docs/GUIDE_CLASSIC_BASICS.md)
 - [BLE or Bluetooth Classic](docs/CLASSIC_VS_BLE.md)
+- [EspBle in depth (advanced)](docs/GUIDE_ADVANCED.md)
+- [Coming from another library](docs/GUIDE_MIGRATION.md)
 - [Development status and TODO](docs/STATUS.md)
 - [Requirements](docs/REQUIREMENTS.ja.md)
 - [Core design](docs/CORE_DESIGN.ja.md)
