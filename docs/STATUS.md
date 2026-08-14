@@ -67,8 +67,8 @@ For how to run them see [tests/TEST_PLAN.md](../tests/TEST_PLAN.md); for the rel
 ## Remaining work before the next release
 
 1. Verify AVRCP metadata/play-status against an external Target and HFP against external devices.
-2. After code freeze, run all peer and unit tests with `--clean`, back to back, several times over, and pass the P4/C6 representative regression.
-3. Finish reconciling the READMEs, feature matrix, examples and specifications with the release scope, and audit the tree for stray artifacts.
+2. After code freeze, run all peer and unit tests with `--clean`, back to back, several times over. Each configuration has passed once — S3, both original-ESP32 roles, Classic, dual-host, and the P4/C6 representative suites — so what remains is the repetition on the release candidate.
+3. Reconciling the READMEs, feature matrix, examples and specifications with the release scope is done, as is the artifact audit; redo both if the scope moves.
 4. At release time, run the board/core matrix and example-compile workflows, then the release workflow, and verify Library Manager installation and compilation. These are workflow results rather than gates.
 
 The authoritative release gates are in [PLAN_RELEASE_NEXT.ja.md](PLAN_RELEASE_NEXT.ja.md), and the Classic work handoff is [HANDOFF_ESP32_CLASSIC.ja.md](HANDOFF_ESP32_CLASSIC.ja.md) (both Japanese). Unimplemented candidates are not promises; when one is adopted, its specification, example, and unit/build/peer tests are added at the same time. For future feature candidates, the "priority candidates" section of [DECISIONS.ja.md](DECISIONS.ja.md) is authoritative.

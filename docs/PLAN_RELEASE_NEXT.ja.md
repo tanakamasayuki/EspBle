@@ -68,7 +68,7 @@ Audioのscopeと段階は[Classic Audio拡張計画](PLAN_ESP32_CLASSIC_AUDIO.ja
 | 完了 | Classic専用回帰 | clean buildでSPP、HID profile初期化、HID双方向report・SPP併用・再接続が成功。2026-08-15の掃引は単独DUT 3 suiteが成功、2台構成は15 passed / 1 failed（`classic_spp_stream`）。失敗はtest側の競合——`write()`はpacketをqueueした時点で返るのに、peerへ状態を1回しか問い合わせていなかった——で、`probe`で届くまで問い合わせるよう修正し成功を確認 |
 | 完了 | Classic-only build UX | 独自hostを自動選択し、公開Classic exampleから`build_opt.h`を除去。flagなしSPPを実機確認 |
 | 完了 | dual-host回帰 | public address、RPA/bond、soak、HFP、A2DP/AVRCPが成功 |
-| 未完了 | P4/C6 Hosted代表回帰 | 2026-08-15の実行は6 suite全滅。DUTのlogは`sdmmc_init_ocr: send_op_cond (1) returned 0x107` / `sdmmc_card_init failed`の反復で、**P4↔C6のSDIO linkが立ち上がっていない**。libraryではなくfixture側の問題なので、配線・C6 firmware・電源を確認してから再実行する |
+| 完了 | P4/C6 Hosted代表回帰 | 2026-08-15の初回実行は6 suite全滅だったが、DUTのlogが`sdmmc_init_ocr: send_op_cond (1) returned 0x107` / `sdmmc_card_init failed`の反復で、**P4↔C6のSDIO linkが立ち上がっていない**fixture側の問題だった。C6が接続された別のP4 boardへ差し替えて`--clean`で再実行し、代表6 suite 7 passed（8分28秒）。同じ症状が出たらまずboard側のSDIO配線とC6 firmwareを疑う |
 
 具体的なcommandは[リリースチェックリスト](RELEASE_CHECKLIST.ja.md)を正とします。
 release対象board全体でのexample compileはworkflowが行うため、gateには含めません（後述）。

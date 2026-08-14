@@ -71,8 +71,10 @@ BLE MIDIはbackend非依存のpacket codec（timestamp・running status・複数
 
 1. AVRCP metadata/play-statusを外部Targetと相互運用確認し、HFPを外部機器と相互運用確認する。
    公開Client/AGの発信・着信・応答・終了とmSBC/CVSD raw transportは確認済み。
-2. コードfreeze後に全Peer + unit testを`--clean`で連続実行し、複数回反復する。P4/C6代表回帰も通す。
-3. README、Feature Matrix、example、仕様書とrelease scopeの照合を締め、意図しないartifactが無いか点検する。
+2. コードfreeze後に全Peer + unit testを`--clean`で連続実行し、複数回反復する。S3、無印ESP32の両role、
+   Classic、dual-host、P4/C6代表回帰はいずれも1回は通過しているので、残るのはrelease candidateでの反復である。
+3. README、Feature Matrix、example、仕様書とrelease scopeの照合と、意図しないartifactの点検は完了した。
+   scopeが動いたら両方やり直す。
 4. release時にboard / core matrixとexample compileのworkflow、続いてrelease workflowを回し、公開後の
    Library Manager取得・compileを確認する。これらはgateではなくworkflowの結果として記録する。
 

@@ -87,6 +87,7 @@ EspBleAdvertisingData	KEYWORD1
 EspBleAdvertisingFilterPolicy	KEYWORD1
 EspBleOwnAddressType	KEYWORD1
 EspBleServiceData	KEYWORD1
+EspBleIBeaconData	KEYWORD1
 
 
 # Bluetooth Classic

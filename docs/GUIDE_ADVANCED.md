@@ -374,4 +374,4 @@ The full inventory of what Classic exposes, what is verified, what is unverified
 and what is unimplemented — with the reason in each case — is
 [CLASSIC_FEATURE_INVENTORY.ja.md](CLASSIC_FEATURE_INVENTORY.ja.md) (Japanese).
 For the reasoning behind the API shapes, see
-[API_DESIGN.ja.md](API_DESIGN.ja.md) and [DECISIONS.ja.md](DECISIONS.ja.md).
+[API_DESIGN.md](API_DESIGN.md) and [DECISIONS.ja.md](DECISIONS.ja.md) (Japanese).

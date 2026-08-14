@@ -8,7 +8,8 @@
 
 無印ESP32では、独自buildしたClassic-only Bluedroid hostとEspBle同梱NimBLE hostを、単一BTDM
 controllerへ同時接続できます。Classic hostはcore内蔵archiveではなく、SPP、HID Device、HID Host、
-SMPを有効にした名前空間化済み`libespble_bluedroid_classic.a`を使います。
+A2DP Sink/Source、AVRCP CT/TG、HFP Client/Audio Gateway（いずれもexternal codec）、SMPを
+有効にした名前空間化済み`libespble_bluedroid_classic.a`を使います。
 
 host構成はsketchが`begin()`したhostだけで決まり、build flagはありません。1 hostならbrokerは
 pass-through、`EspBle`と`EspBleClassic`の両方をbeginすればbrokerがHCIをroutingします。

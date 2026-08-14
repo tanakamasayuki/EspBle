@@ -27,6 +27,8 @@ cd tests
 uv run --env-file .env pytest --clean
 ```
 
+`rpa_bond`は[テスト計画](../tests/TEST_PLAN.ja.md)に記録した理由で無印ESP32専用です。`--profile`を指定しないと各sketchの`default_profile`が使われるため、この実行ではS3ではなく無印ESP32ペアで動きます。ペアを外していればportが無いのでskipされます。
+
 次に無印ESP32の2台（`/dev/ttyUSB0` / `/dev/ttyUSB1`）で、同梱NimBLE host（`src/nimble_esp32/`）を役割ごとに掃引します。無印ESP32はhostがcore同梱ではなく**EspBleが持ち込んだもの**なので、`src/`へ変更が入るリリースでは必ず実行します。所要は各1時間程度です。
 
 ```sh

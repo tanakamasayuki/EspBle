@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- (EN) No breaking change: every public declaration of 1.2.0 is still present with
+  the same signature, so sketches written against 1.2.0 compile unchanged. The BLE
+  binaries of targets other than the original ESP32 are unaffected — Classic and the
+  bundled Classic host exist on the original ESP32 alone, and using
+  `EspBleClassic` is what pulls them in.
+- (JA) 破壊的変更なし。1.2.0のpublicな宣言はすべて同じsignatureで残っているので、1.2.0向けに
+  書いたsketchはそのままcompileできる。無印ESP32以外のtargetのBLE生成物も変わらない——Classicと
+  同梱Classic hostは無印ESP32にしか存在せず、`EspBleClassic`を使うかどうかで取り込みが決まる。
+
 ### Bluetooth Classic on the original ESP32 / 無印ESP32のBluetooth Classic
 
 - (EN) Added Bluetooth Classic (BR/EDR) through `EspBleClassic`, backed by a
