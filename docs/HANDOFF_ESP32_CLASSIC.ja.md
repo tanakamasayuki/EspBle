@@ -137,6 +137,16 @@ PCMFlowBluetoothへは`badFrame`とraw lengthを失わず渡し、decoder側で5
    生成されるdescriptorのbyte列はhost testで固定し、API形状の一致は
    Peer test `classic_hid_api`が両側から確認する。Get_Report / Set_Report / protocol modeは
    BLE側にも無いため、棚卸しの優先度に従って別途扱う。
+4. **未着手: ClassicのexampleをBLEと同じ一覧にする。** APIを揃えても、exampleが無い機能は
+   利用者から見て存在しない。HIDはgamepad、composite、mouse、consumer、NKRO、custom deviceが
+   Classicに無い（gamepadはBLE側にも無い）。Classic HIDの実際の接続先はBR/EDR HIDしか持たない
+   旧世代ゲーム機で、BLEでは代替できないためgamepadを最優先とする。あわせてSPP client、
+   A2DP Source、AVRCP Controllerもexampleが無い。一覧と完了条件は
+   [次回リリース前タスクリスト](PLAN_RELEASE_NEXT.ja.md)のGate Fを正とする。
+5. **未着手: Classic入門ガイドと、BLE / Classicの接続先の違いの明文化。** `GUIDE_BLE_BASICS`と対になる
+   `GUIDE_CLASSIC_BASICS`が無い。姉妹library`../EspBleBluedroid/docs/GUIDE_CLASSIC_BASICS.ja.md`の
+   構成を土台にできるが、API名・namespace・codecの扱い・Classic HIDの可否がEspBleと異なるため
+   そのまま持ち込まない。差分はGate Fに列挙してある。
 
 ## 既知の落とし穴
 

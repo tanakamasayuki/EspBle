@@ -93,16 +93,51 @@ Audioのscopeと段階は[Classic Audio拡張計画](PLAN_ESP32_CLASSIC_AUDIO.ja
 | 未完了 | release | bump preview、release workflow、branch/tag/GitHub release作成 |
 | 未完了 | 公開後確認 | Arduino Library Managerから取得し、最小exampleをcompile |
 
+## Gate F: Classic exampleと入門ガイド
+
+exampleに無い機能は「無い機能」として扱われる。BLEにあってClassicに無いexampleは、
+実装済みのClassic機能を利用者から見えなくしている。したがってHIDはBLEと同じ一覧を揃える。
+
+| 状態 | 項目 | 完了条件 |
+|---|---|---|
+| 未完了 | `Classic/HidGamepad` | **最優先。**BR/EDR HIDしか持たない旧世代ゲーム機が実際の接続先で、BLEでは代替できない。hat switchと39 fieldの作り方を示す |
+| 未完了 | `Classic/HidComposite` | keyboard + mouse + consumer + system + gamepadを1台で合成し、profileごとにreport IDが分かれることを示す（BLE `Hid/CompositeKeyboardMouse`と対） |
+| 未完了 | `Classic/HidMouse` | mouse単独。`wheel()`、`press()`の加算、`buttons()`（BLE `Hid/Mouse`と対） |
+| 未完了 | `Classic/HidConsumerControl` | 音量・再生操作。car audioやTVが接続先（BLE `Hid/ConsumerControl`と対） |
+| 未完了 | `Classic/HidKeyboardNkro` | NKRO。6KRO制限が無いこと（BLE `Hid/KeyboardNkro`と対） |
+| 未完了 | `Classic/HidCustomDevice` | 任意Report Descriptor。既存`HidVendorDevice`と重複するため、統合するかBLEと同名へ揃えるかを着手時に決める |
+| 未完了 | `Hid/Gamepad`（BLE側） | `hidGamepad()`はどのexampleでも呼ばれていない。Classic版と同じ内容をBLEでも示す |
+| 未完了 | `Classic/SppClient` | `spp().connect()`。相手のservice recordからchannelを解決する流れはserver exampleから分からない |
+| 未完了 | `Classic/A2dpSource` | Sourceは実装済みだがexampleはSinkだけ |
+| 未完了 | `Classic/AvrcpController` | `sendKey()` / `requestMetadata()` / `requestPlayStatus()` / `setAbsoluteVolume()` / `registerVolumeNotifications()`。既存exampleはTarget側のみ |
+| 未完了 | `Hosted/WifiCoexistence` | P4/C6でWi-FiとBLEが同一transportを共有し、`EspBle::end()`がWi-Fiを残すこと。peer testはあるがexampleが無い |
+| 未完了 | `Gap/MultiConnection` | 複数同時接続（上限3）。`AutoReconnectClient`は1接続の再接続のみ |
+| 未完了 | `docs/GUIDE_CLASSIC_BASICS.ja.md` / `.md` | Classicの概念とAPI境界の入門。`GUIDE_BLE_BASICS`と対にする。姉妹library`../EspBleBluedroid/docs/GUIDE_CLASSIC_BASICS.ja.md`の構成（BLEと別の通信モデル、Inquiry、SPP、Security、A2DP/AVRCP、HFP、同時利用）を土台に、EspBleのAPI名と範囲へ書き換える |
+| 未完了 | BLEとClassicの違いと接続先 | `examples/README`、README、Feature Matrix、各Classic exampleの冒頭へ、同じAPI形でも無線と接続先が変わることを明記。BLE = HOGPを持つ携帯・タブレット・PC、Classic = 旧世代ゲーム機、古いPC、car audio、headset。Classicは無印ESP32のみ |
+
+姉妹libraryのガイドをそのまま持ち込まない。次の点はEspBleと異なる。
+
+- `classic()` namespaceは無い。`EspBleClassic`が独立classで、profileは`spp()` / `hidKeyboard()` /
+  `a2dpSink()` / `avrcp()` / `hfpClient()`のように直下にある。
+- capability照会API（`profileSupport()`）は無い。
+- Classic HIDは有効。姉妹libraryは「Core buildで無効」と書いているが、EspBleは独自archiveで有効化している。
+- A2DP/HFPはexternal codecで、EspBleが扱うのはencode済みpayloadとraw SCOである。復号PCMは扱わない。
+- AVRCPはController/Targetを1つの`avrcp()`が持ち、別objectではない。
+- SPPのStream / Serial adapter（姉妹libraryの`EspBluedroidSppSerial`相当）は未実装。
+  ガイドに書く前に[棚卸し](CLASSIC_FEATURE_INVENTORY.ja.md)のVFS行を実装するか、書かないかを決める。
+
 ## 推奨実行順
 
 1. AVRCP metadata/play-statusの外部Target相互運用と、HFPの外部機器相互運用を行う。
 2. [PCMFlowBluetooth修正依頼](REQUEST_PCMFLOWBLUETOOTH_A2DP_VALIDATION.ja.md)のreset修正と正式E2E結果を受け取り、
    PCMFlowDevice等を接続した実出力と長時間負荷へ進む。
 3. A2DP/AVRCP/HFPの到達範囲を踏まえてClassicのrelease scopeを決める。
-4. scope確定後にCHANGELOGと利用者向け文書を更新する。
-5. Gate Bのboard/core matrixと他SoC非影響を確定する。
-6. コードfreeze後にGate Cのclean全回帰を複数回行う。
-7. Gate Dを並行実施し、最後にGate Eのmetadata・release操作へ進む。
+4. Gate FのexampleとClassic入門ガイドを揃える。scope決定を待つのはexampleの取捨だけで、
+   実装済み機能にexampleが無い状態（とくにHID）はscopeと独立に解消する。
+5. scope確定後にCHANGELOGと利用者向け文書を更新する。
+6. Gate Bのboard/core matrixと他SoC非影響を確定する。
+7. コードfreeze後にGate Cのclean全回帰を複数回行う。
+8. Gate Dを並行実施し、最後にGate Eのmetadata・release操作へ進む。
 
 コード変更後に全回帰を先行してもfreeze後に再実行が必要です。長時間作業の結果は、合否だけでなく
 条件とlog保存先を引き継ぎ文書・技術検証へ記録します。
