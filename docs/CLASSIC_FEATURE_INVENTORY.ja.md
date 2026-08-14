@@ -24,8 +24,12 @@
 | bond一覧・削除 | 公開 | `bondCount()` / `bond(index)` / `deleteBond()` / `deleteAllBonds()` |
 | pairing（SSP） | 公開 | `EspBleClassicSecurityConfig`でIO capabilityを選び、numeric comparisonとpasskey要求をアプリへ通知して`confirmNumericComparison()` / `providePasskey()`で応答する。無応答はtimeoutで拒否。設定を有効にするとservice側がMITMを要求する |
 | pairing（legacy PIN） | 未公開 | 応答経路が無いため拒否する。以前の固定PIN `1234`は廃止した |
-| 暗号鍵長・QoS・page timeout・AFH・EIR | 未公開 | `set_min_enc_key_size` / `set_qos` / `set_page_timeout` / `set_afh_channels` / `config_eir_data` |
-| RSSI・送信電力 | 未公開 | `read_rssi_delta` / `read_tx_pwr_lvl` |
+| page timeout | 公開 | `setPageTimeout()` / `pageTimeout()`。応答しない相手へのconnect()が諦めるまでの時間。14〜40959 ms、既定5120 ms。次のpageから効き、確定値はbackendのeventで届く |
+| 暗号鍵の最小長 | 公開 | `setMinimumEncryptionKeySize()`（7〜16 byte）。短い鍵を断れるのは自分側だけ。以降に確立するlinkに効く |
+| 送信電力 | 公開 | `setTxPower(dBm)` / `setTxPower(min, max)` / `txPower()`。-12〜+9 dBmの3 dB刻みで、間の値は丸める。BR/EDRの電力制御は範囲からpacketごとに選ぶためBLEと形が違う。`EspBle::setTxPower()`のLE側とは独立 |
+| RSSI | 未公開 | `read_rssi_delta`はgolden receive power rangeとの差分でdBmではないため採用していない。相手の信号強度はinquiry結果のRSSIで得られる |
+| QoS・AFH・ACL packet type | 未公開 | `set_qos` / `set_afh_channels` / `set_acl_pkt_types`。実用場面が思い当たらないため見送っている |
+| EIR | 未公開 | `config_eir_data`。inquiry応答へ独自dataを載せる経路。受信側の`resolve_eir_data`はinquiryのname取得で既に使っている |
 
 ## SPP
 
@@ -36,7 +40,8 @@
 | 複数session | 公開 | `sessionCount()` / session単位のread/write |
 | 送受信・queue・統計 | 公開 | `write()` / `read()` / `pendingWriteCount()` / `droppedWriteCount()` |
 | 複数serverの同時公開 | 公開 | `startServer()`を繰り返し呼ぶと最大4 serviceを公開する。`serverCount()` / `server(index)`で列挙し、`onServerStarted()`がchannelを渡す。停止は`stopServer()`（全停止）のみ |
-| VFS（Stream風API） | 未公開 | `esp_spp_vfs_register`。Arduino利用者には`BluetoothSerial`相当の使い勝手になる |
+| Stream adapter | 公開 | `EspBleClassicSppStream`。sessionを借りるArduino `Stream`で、`print()` / `readStringUntil()` / `parseInt()`が使える。write 1回が1 packet、送信queueが有限（`setWriteTimeout()`）という2点だけがSerialと異なる |
+| VFS（`esp_spp_vfs_register`） | 未公開 | Stream adapterで用途を満たしたため採用していない。VFSはbackendのfile descriptor経路を追加で抱えることになる |
 
 ## HID Device
 
@@ -44,6 +49,7 @@
 |---|---|---|
 | register / connect / disconnect | 公開 | 任意のReport Descriptorを渡せる |
 | profile API（keyboard / mouse / consumer / system / gamepad） | 公開 | `hidKeyboard()`などBLEと同名・同シグネチャ。configureした分だけReport Descriptorを合成する |
+| 合成できるprofile数 | 制限あり（検証済み） | descriptorと文字列3つでSDP recordの214 byteまで。既定文字列ならkeyboard + mouse + consumerが上限で、gamepadは別deviceかkeyboardとの組み合わせにする。超過は`begin()`が`ResourceExhausted`で拒否する（backendは報告しない） |
 | keyboard layout・NKRO | 公開 | `setLayout()` / `write()` / `pressKey()`。BLEと同じ変換表を共有する |
 | Input Report送信 | 公開 | `sendInputReport()` / `sendReport()` |
 | Output Report受信（LED） | 公開 | `onOutputReport()`。profile利用時は`EspBleClassicHidKeyboardLeds`へ展開する |
@@ -66,7 +72,7 @@
 | protocol mode取得・設定 | 公開 | `requestProtocolMode()` / `setProtocolMode()` / `onProtocolMode()` |
 | idle rate | 公開 | `requestIdleRate()` / `setIdleRate()` / `onIdleRate()` |
 | virtual cable unplug | 公開 | `virtualCableUnplug()` |
-| 複数device同時接続 | 未公開 | backendは複数を扱えるが公開APIは単一接続を前提にしている |
+| 複数device同時接続 | 未公開 | backendは複数を扱えるが、公開APIは単一接続を前提にしている。対応するとconnect / disconnect / report送受信 / 復号state のすべてがdevice単位のidを取る形になり、既存signatureが変わる。keyboardとmouseを同時に受けるadapterのような用途はあるため、release後の候補として扱う |
 
 ## A2DP
 
@@ -100,10 +106,11 @@
 | audio接続、CVSD/mSBC raw SCO送受信、packet統計 | 公開 | |
 | 音量・voice recognition | 公開 | |
 | 通話一覧（CLCC） | 公開 | `queryCurrentCalls()` |
-| 三者通話・保留（CHLD） | 未公開 | `esp_hf_client_send_chld_cmd` / `send_btrh_cmd` |
-| memory dial・last voice tag | 未公開 | `dial_memory` / `request_last_voice_tag_number` |
-| operator名・subscriber情報 | 未公開 | `query_current_operator_name` / `retrieve_subscriber_info` |
-| NREC・Apple拡張（XAPL / IPHONEACCEV） | 未公開 | `send_nrec` / `send_xapl` / `send_iphoneaccev` |
+| memory dial・last voice tag | 公開 | `dialMemory(location)` / `requestLastVoiceTagNumber()`。memory dialはAG側へ`DialMemory` commandとして届き、番号ではなく位置であることが区別できる。voice tagは記録が無いAGだとerror応答になる |
+| operator名・subscriber情報 | 公開 | `queryOperatorName()` / `requestSubscriberNumber()`と`onOperatorName()` / `onSubscriberNumber()`。どちらも要求してから届く。空文字も正当な応答 |
+| NREC | 公開 | `disableNoiseReduction()`。自前でDSPを持つ機器がAG側のNR/ECを止めるためのもので、戻す呼び出しは無い（接続内で有効） |
+| Apple拡張（XAPL / IPHONEACCEV） | 公開 | `enableAppleExtensions(identification, features)`と`reportBatteryLevel(level, docked)`。levelは0〜9。AG側には解釈するAPIが無く、unknown AT textとして届く |
+| 三者通話・保留（CHLD / BTRH） | 未公開 | `esp_hf_client_send_chld_cmd` / `send_btrh_cmd`。EspBleのAGが単一call modelなので相手側で検証できない。外部phone専用の未検証APIを増やさない判断 |
 
 ## HFP Audio Gateway
 
@@ -112,8 +119,9 @@
 | 自動SLC応答（CIND/COPS/CNUM/CLCC）、単一call model | 公開 | |
 | audio接続、CVSD/mSBC raw SCO、codec選択 | 公開 | |
 | network status、音量、voice recognition | 公開 | |
-| 任意ATへの応答 | 公開 | `respondToUnknownAt()` |
-| in-band ring tone | 未公開 | `esp_hf_ag_bsir` |
+| 任意ATへの応答 | 公開 | `respondToUnknownAt()`。Apple拡張（XAPL / IPHONEACCEV）もここへ届く。応答行の後にOKまで送って交換を閉じる——backendはOKを送らず、閉じないとclient側の次のAT commandが出ない（実測） |
+| memory dialの識別 | 公開 | `DialMemory` command。番号ではなく電話機内の位置なので、`Dial`と分けて配送する |
+| in-band ring tone | 公開 | `setInBandRingTone(provided)`。Client側は`onInBandRingTone()`で受ける。呼出音を鳴らすのがどちらかを機器に伝える。通話ごとに変えられるようconfigではなく呼び出しにした |
 | indicator個別通知 | 部分 | `setNetworkStatus()`が内部で使う。任意のCIEVを送る手段はない |
 | 複数call・保留・三者通話 | 未公開 | 単一call modelを意図的に選んでいる。拡張するならmodel/provider interfaceを足す |
 | 電話帳 | 対象外 | EspBleに電話網や電話帳は実装しない |
@@ -157,6 +165,17 @@
 10. **完了: SDP照会と`read_remote_name`**。addressだけ分かっている相手に「何を提供しているか」「何と
     名乗るか」を問い合わせられるようにした。複数serviceを公開できるようになったので、接続先channelを
     決める材料としても対になる。scan中は応答が来ない点をAPI docと落とし穴へ記録した。
+
+11. **完了: 無線・linkの設定**。送信電力（範囲指定と単一値、3 dB刻みへの丸め）、page timeout、
+    暗号鍵の最小長を公開した。page timeoutは「応答しない相手へのconnect()が諦めるまでの時間」で、
+    受理と実際の反映が別であることをPeer test `classic_radio_settings`が接続試行の所要時間で
+    検証している。RSSI（`read_rssi_delta`）は差分値でdBmではないため採用せず、QoS・AFH・ACL packet
+    typeは実用場面が無いため見送った——数を埋めるより、意味のある値だけを公開する。
+
+12. **完了: HFP Clientの残りcommand**。operator名、subscriber番号、memory dial、last voice tag、NREC、
+    Apple拡張（XAPL / IPHONEACCEV）を公開した。EspBle同士で検証できるものだけを採用し、CHLD / BTRHは
+    見送った——EspBleのAGが単一call modelのため相手側で確認できず、外部phoneでしか動かせない未検証APIに
+    なるためである。AG側はmemory dialを`Dial`と区別して配送するようにした（位置を番号として掛けないため）。
 
 外部機器との相互運用（Gate D）と、core内蔵Bluedroidとの相互接続Peer testは、
 [引き継ぎ](HANDOFF_ESP32_CLASSIC.ja.md)の作業メモにあるとおり別途進めます。

@@ -116,6 +116,34 @@ void setup()
       const bool ended = gateway.reportCallEnded();
       Serial.printf("HFP_AG_HANGUP ended=%u\n", ended ? 1 : 0);
     }
+    else if (command.type ==
+             EspBleClassicHfpAudioGatewayCommandType::DialMemory)
+    {
+      // A position, not a number: this AG has no phone book, so it acknowledges
+      // the request and starts no call rather than dialling the digits.
+      Serial.printf("HFP_AG_DIAL_MEMORY location=%s\n", command.value.c_str());
+      Serial.printf("HFP_AG_DIAL_MEMORY_RESPONSE accepted=%u\n",
+        gateway.respondToCommand(true) ? 1 : 0);
+    }
+    else if (command.type ==
+             EspBleClassicHfpAudioGatewayCommandType::NoiseReduction)
+    {
+      Serial.printf("HFP_AG_NREC enabled=%u\n", command.enabled ? 1 : 0);
+    }
+    else if (command.type == EspBleClassicHfpAudioGatewayCommandType::UnknownAt)
+    {
+      // The Apple extensions arrive here: nothing in the AG API decodes them,
+      // so an AG that wants them has to read the AT text itself.
+      Serial.printf("HFP_AG_UNAT value=%s\n", command.value.c_str());
+      // A phone that understands the Apple extensions answers AT+XAPL with its
+      // own +XAPL line, and the accessory's battery report follows only after
+      // that answer. Anything else gets a bare acknowledgement.
+      const bool apple = command.value.indexOf("XAPL") >= 0;
+      Serial.printf("HFP_AG_UNAT_RESPONSE accepted=%u apple=%u\n",
+        gateway.respondToUnknownAt(
+          apple ? "+XAPL=0505-1995-0610,2" : "") ? 1 : 0,
+        apple ? 1 : 0);
+    }
   });
   gateway.onPacketStatistics(
     [](const EspBleClassicHfpPacketStatistics &statistics) {
@@ -181,7 +209,11 @@ void loop()
   if (Serial.available())
   {
     const String command = Serial.readStringUntil('\n');
-    if (command == "i")
+    if (command == "b" || command == "B")
+      Serial.printf("HFP_AG_INBAND set=%u provided=%u\n",
+        bluetooth.hfpAudioGateway().setInBandRingTone(command == "b") ? 1 : 0,
+        command == "b" ? 1 : 0);
+    else if (command == "i")
       Serial.printf("HFP_AG_INCOMING reported=%u\n",
         bluetooth.hfpAudioGateway().reportIncomingCall("54321") ? 1 : 0);
 #if defined(ESPBLE_TEST_DUAL_HFP)

@@ -192,6 +192,8 @@ void loop() {
 The user-facing documents below are available in English; the remaining design documents are currently Japanese-only.
 
 - [A beginner's guide to BLE](docs/GUIDE_BLE_BASICS.md)
+- [A beginner's guide to Bluetooth Classic](docs/GUIDE_CLASSIC_BASICS.md)
+- [BLE or Bluetooth Classic](docs/CLASSIC_VS_BLE.md)
 - [Development status and TODO](docs/STATUS.md)
 - [Requirements](docs/REQUIREMENTS.ja.md)
 - [Core design](docs/CORE_DESIGN.ja.md)

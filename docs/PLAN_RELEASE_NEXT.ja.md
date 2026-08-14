@@ -101,7 +101,7 @@ exampleに無い機能は「無い機能」として扱われる。BLEにあっ�
 | 状態 | 項目 | 完了条件 |
 |---|---|---|
 | 完了 | `Classic/HidGamepad` | **最優先。**BR/EDR HIDしか持たない旧世代ゲーム機が実際の接続先で、BLEでは代替できない。hat switchと39 fieldの作り方を示す |
-| 完了 | `Classic/HidComposite` | keyboard + mouse + consumer + system + gamepadを1台で合成し、profileごとにreport IDが分かれることを示す（BLE `Hid/CompositeKeyboardMouse`と対） |
+| 完了 | `Classic/HidComposite` | keyboard + mouse + consumerを1台で合成し、profileごとにreport IDが分かれることを示す（BLE `Hid/CompositeKeyboardMouse`と対）。合成数はSDP recordの214 byte（descriptor + 文字列）で決まるため、gamepadを加えた構成は登録できない。上限とその理由をsketchとREADMEに書き、`begin()`が超過を拒否する |
 | 完了 | `Classic/HidMouse` | mouse単独。`wheel()`、`press()`の加算、`buttons()`（BLE `Hid/Mouse`と対） |
 | 完了 | `Classic/HidConsumerControl` | 音量・再生操作。car audioやTVが接続先（BLE `Hid/ConsumerControl`と対） |
 | 完了 | `Classic/HidKeyboardNkro` | NKRO。6KRO制限が無いこと（BLE `Hid/KeyboardNkro`と対） |
@@ -111,10 +111,13 @@ exampleに無い機能は「無い機能」として扱われる。BLEにあっ�
 | 完了 | `Classic/A2dpSource` | Sourceは実装済みだがexampleはSinkだけ |
 | 完了 | `Classic/AvrcpController` | `sendKey()` / `requestMetadata()` / `requestPlayStatus()` / `setAbsoluteVolume()` / `registerVolumeNotifications()`。既存exampleはTarget側のみ |
 | 完了 | `Hosted/WifiCoexistence` | P4/C6でWi-FiとBLEが同一transportを共有し、`EspBle::end()`がWi-Fiを残すこと。peer testはあるがexampleが無い |
+| 完了 | `Classic/RadioSettings` | 送信電力・page timeout・暗号鍵の最小長。無線設定を公開したので、受理と反映が別であることを含めて示す |
+| 完了 | `Classic/SppStream` | SPPをArduino `Stream`として使う。`Serial`向けcodeの移行先で、write 1回が1 packet・送信queueが有限という差を示す |
+| 完了 | Classic example全数のREADME | READMEが無かった9本（Inquiry、SppServer、SppPairing、HidVendor×2、A2dpSink×2、Hfp×2）へ両言語のREADMEを追加。「どちらの無線がどの相手に届くか」を各READMEに書いた |
 | 完了 | `Gap/MultiConnection` | 複数同時接続（上限3）。`AutoReconnectClient`は1接続の再接続のみ |
-| 一部完了 | `docs/GUIDE_CLASSIC_BASICS.ja.md` / `.md` | Classicの概念とAPI境界の入門。`GUIDE_BLE_BASICS`と対にする。日本語版を作成した（BLEと別の通信モデル、起動と可視性、inquiry、SPP、security、HID、A2DP/AVRCP、HFP、BLEとの同時利用）。英語版が残る |
+| 完了 | `docs/GUIDE_CLASSIC_BASICS.ja.md` / `.md` | Classicの概念とAPI境界の入門。`GUIDE_BLE_BASICS`と対にする。日英とも作成した（BLEと別の通信モデル、起動と可視性、無線設定、inquiry、SPP、security、HID、A2DP/AVRCP、HFP、BLEとの同時利用） |
 | 完了 | BLEとClassicの選び方 | [CLASSIC_VS_BLE.ja.md](CLASSIC_VS_BLE.ja.md)。どちらを選ぶか、Classicの用途が実質SPP・音声・旧世代HIDの3つであること、HIDとSPPの同時利用が可能であること、両方にある機能（HID / Security / 探索 / データ転送）の差を記述。docs索引とREADME.ja.mdから参照 |
-| 一部完了 | BLEとClassicの違いの周知 | 上記文書は作成済み。残りは英語版`CLASSIC_VS_BLE.md`、`examples/README`両言語、`README.md`（英語）、Feature Matrix、各Classic exampleの冒頭コメントへの反映 |
+| 完了 | BLEとClassicの違いの周知 | 上記文書と`examples/README`両言語、Feature Matrix両言語、各Classic exampleのREADMEへ反映し、英語版`CLASSIC_VS_BLE.md`を作成して`README.md`（英語）とdocs索引から参照した |
 
 姉妹libraryのガイドをそのまま持ち込まない。次の点はEspBleと異なる。
 
@@ -127,6 +130,23 @@ exampleに無い機能は「無い機能」として扱われる。BLEにあっ�
 - SPPのStream / Serial adapter（姉妹libraryの`EspBluedroidSppSerial`相当）は未実装。
   ガイドに書く前に[棚卸し](CLASSIC_FEATURE_INVENTORY.ja.md)のVFS行を実装するか、書かないかを決める。
 
+## 未実装項目の削減（release前）
+
+release前に未実装を減らす方針（[決定台帳](DECISIONS.ja.md)のスコープ6）で、次を実装・実機検証した。
+判断の記録は[Classic機能の棚卸し](CLASSIC_FEATURE_INVENTORY.ja.md)の優先度欄が正本である。
+
+| 項目 | 状態 | 備考 |
+|---|---|---|
+| 無線・link設定（送信電力・page timeout・暗号鍵最小長） | 完了 | `classic_radio_settings`。page timeoutは所要時間で反映を確認 |
+| SPPのArduino `Stream` adapter | 完了 | `classic_spp_stream`。VFSは採用しない |
+| HFP Clientのoperator名・subscriber番号・memory dial・NREC・Apple拡張 | 完了 | `classic_hfp_client`へ追加 |
+| HFP AGのin-band ring tone | 完了 | 同上。鳴らす側の取り違えは実害があるため対応した |
+| HID合成の上限検査 | 完了 | SDP record 214 byteを`begin()`が検査。`classic_hid_gamepad`を新設 |
+| 見送り: RSSI（接続後）・QoS・AFH・ACL packet type・EIR・VFS・CHLD/BTRH | 判断済み | 実用場面が無い、値の意味が薄い、または検証相手が無い。理由は棚卸しに記載 |
+| 残: HID Hostの複数device同時接続 | release後 | 公開signatureがdevice単位idを取る形へ変わるため |
+| 残: A2DP Sourceの追加endpoint・SBC以外のcodec | release後 | EspBleはencode/decodeを持たない方針 |
+| 残: AVRCP TGのmetadata / play status送信 | 不可 | v5.5.5の公開TG APIに送信手段が無い |
+
 ## 残作業の規模（概算）
 
 行数は作業量ではないため、性質ごとに分けて見積もる。実装と実機検証は概ね終わっており、
@@ -135,13 +155,14 @@ exampleに無い機能は「無い機能」として扱われる。BLEにあっ�
 | 区分 | 残り | 性質 | 目安 |
 |---|---|---|---|
 | 実装・実機検証（Gate A・B の機能行） | ほぼ完了 | — | Classic / dual-hostの機能検証は完了。残るのはscope決定という判断 |
-| Gate F: example 12本 | 12 | 執筆。既存exampleの構成（sketch + README両言語 + `sketch.yaml`）に沿う | 1本あたり1作業単位。合計で数日規模 |
-| Gate F: Classic入門ガイド | 2（ja / en） | 執筆。姉妹libraryの構成を土台にAPI名と範囲を書き換える | 1〜2作業日 |
+| Gate F: example | 完了（15本） | 執筆。既存exampleの構成（sketch + README両言語 + `sketch.yaml`）に沿う | 12本＋`Classic/RadioSettings`＋`Classic/SppStream`。あわせてREADMEが無かったClassic example 9本へ両言語のREADMEを追加し、Classic exampleは全数がREADME付きになった。全数がesp32 / esp32s3でcompile通過 |
+| Gate F: Classic入門ガイド | 完了（ja / en） | 執筆 | — |
 | Gate F: 違いの周知（残り） | 1 | 既存文書への反映と英語版 | 1作業単位 |
 | Gate A・E: 利用者向け文書とCHANGELOG整合 | 4 | scope決定の後でなければ確定しない | 1作業日 |
 | Gate C: 最終回帰 | 4 | ほぼ機械時間。code freeze後にやり直しが必要 | S3全Peer cleanを複数回で数時間×回数、無印ESP32掃引、P4/C6、example compile workflow |
 | Gate B: board / core matrix | 2 | CI（`workflow_dispatch`）実行と生成物確認 | 1作業単位＋CI時間 |
 | Gate D＋Gate Bの一部完了2件 | 6 | **外部機器が必要でblockしている。**市販BLE keyboard、外部Host 2種以上、外部Classic HID/SPP/A2DP/AVRCP機器、外部HFP機器 | 機材の準備待ち。準備後は各1作業単位 |
+| Gate E: `keywords.txt`のClassic分 | 1 | 機械作業。`EspBleClassic`系のclass名とmethod名が未登録で、editorの色分けに出ない | 1作業単位 |
 | Gate E: release操作 | 2 | metadata確認、release workflow、公開後確認 | 1作業単位 |
 
 したがってblockしているのは次の2つだけである。

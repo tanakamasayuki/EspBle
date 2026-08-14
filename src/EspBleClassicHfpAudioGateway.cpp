@@ -23,6 +23,7 @@
 #define esp_hf_ag_cind_response espble_bd_esp_hf_ag_cind_response
 #define esp_hf_ag_clcc_response espble_bd_esp_hf_ag_clcc_response
 #define esp_hf_ag_cmee_send espble_bd_esp_hf_ag_cmee_send
+#define esp_hf_ag_bsir espble_bd_esp_hf_ag_bsir
 #define esp_hf_ag_cnum_response espble_bd_esp_hf_ag_cnum_response
 #define esp_hf_ag_cops_response espble_bd_esp_hf_ag_cops_response
 #define esp_hf_ag_deinit espble_bd_esp_hf_ag_deinit
@@ -380,7 +381,12 @@ void hfpAgCallback(esp_hf_cb_event_t event, esp_hf_cb_param_t *parameter)
     return;
   }
   if (event == ESP_HF_DIAL_EVT)
-    enqueueHfpAgCommand(impl, EspBleClassicHfpAudioGatewayCommandType::Dial,
+    // A memory dial carries a position rather than a number, and dialling the
+    // position as if it were a number would call the wrong party.
+    enqueueHfpAgCommand(impl,
+      parameter->out_call.type == ESP_HF_DIAL_MEM
+        ? EspBleClassicHfpAudioGatewayCommandType::DialMemory
+        : EspBleClassicHfpAudioGatewayCommandType::Dial,
       parameter->out_call.num_or_loc);
   else if (event == ESP_HF_ATA_RESPONSE_EVT)
     enqueueHfpAgCommand(impl, EspBleClassicHfpAudioGatewayCommandType::Answer);
@@ -813,6 +819,30 @@ bool EspBleClassicHfpAudioGateway::setNetworkStatus(
   owner_->clearError(); return true;
 }
 
+bool EspBleClassicHfpAudioGateway::setInBandRingTone(bool provided)
+{
+#if !ESPBLE_CLASSIC_HFP_AG_BACKEND_AVAILABLE
+  (void)provided; return false;
+#else
+  esp_bd_addr_t address;
+  if (!serviceLevelConnected() || !currentHfpAgAddress(connection(), address))
+  {
+    owner_->setError(EspBleError::InvalidState,
+      "HFP service-level connection is not established");
+    return false;
+  }
+  if (esp_hf_ag_bsir(address,
+        provided ? ESP_HF_IN_BAND_RINGTONE_PROVIDED
+                 : ESP_HF_IN_BAND_RINGTONE_NOT_PROVIDED) != ESP_OK)
+  {
+    owner_->setError(EspBleError::BackendFailure,
+      "failed to set the in-band ring tone state");
+    return false;
+  }
+  owner_->clearError(); return true;
+#endif
+}
+
 bool EspBleClassicHfpAudioGateway::respondToCommand(
   bool accepted, uint16_t extendedError)
 {
@@ -852,11 +882,35 @@ bool EspBleClassicHfpAudioGateway::respondToUnknownAt(const char *response)
       "HFP service-level connection is not established");
     return false;
   }
-  if (esp_hf_ag_unknown_at_send(
+  // A response line alone does not finish the exchange: the backend sends the
+  // text without a terminating OK, and the peer keeps waiting — its next AT
+  // command is queued behind the one it thinks is unanswered and never leaves.
+  // Measured with the Apple extensions: AT+XAPL answered with a +XAPL line and
+  // no OK made the following AT+IPHONEACCEV disappear. So the OK is sent here,
+  // and a null response refuses the command instead.
+  if (response == nullptr)
+  {
+    if (esp_hf_ag_cmee_send(
+          address, ESP_HF_AT_RESPONSE_CODE_ERR, ESP_HF_CME_AG_FAILURE) != ESP_OK)
+    {
+      owner_->setError(EspBleError::BackendFailure,
+        "failed to refuse the unknown HFP AT command");
+      return false;
+    }
+    owner_->clearError(); return true;
+  }
+  if (response[0] != '\0' && esp_hf_ag_unknown_at_send(
         address, const_cast<char *>(response)) != ESP_OK)
   {
     owner_->setError(EspBleError::BackendFailure,
       "failed to send unknown HFP AT response");
+    return false;
+  }
+  if (esp_hf_ag_cmee_send(
+        address, ESP_HF_AT_RESPONSE_CODE_OK, ESP_HF_CME_AG_FAILURE) != ESP_OK)
+  {
+    owner_->setError(EspBleError::BackendFailure,
+      "failed to complete the unknown HFP AT response");
     return false;
   }
   owner_->clearError(); return true;

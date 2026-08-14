@@ -525,6 +525,33 @@ struct EspBleClassicHfpAtResponse
   uint16_t extendedError = 0;
 };
 
+// What +CNUM says the number is for. The values are the AT ones, so an AG that
+// reports something else arrives as Unknown rather than as a guess.
+enum class EspBleClassicHfpSubscriberServiceType : uint8_t
+{
+  Unknown = 0,
+  Voice = 4,
+  Fax = 5,
+};
+
+struct EspBleClassicHfpSubscriberNumber
+{
+  String number;
+  EspBleClassicHfpSubscriberServiceType serviceType =
+    EspBleClassicHfpSubscriberServiceType::Unknown;
+};
+
+// What an accessory tells the phone it can do, sent with the Apple extension
+// (AT+XAPL). Apple defined it, but Android and Windows phones accept it too, and
+// it is what has to be enabled before a battery level is accepted.
+struct EspBleClassicHfpAppleFeatures
+{
+  bool batteryReporting = true;
+  bool docked = false;
+  bool siriStatus = false;
+  bool noiseReductionStatus = false;
+};
+
 struct EspBleClassicHfpPacketStatistics
 {
   uint32_t received = 0;
@@ -571,6 +598,9 @@ struct EspBleClassicHfpAudioGatewayConfig
 enum class EspBleClassicHfpAudioGatewayCommandType : uint8_t
 {
   Dial,
+  // A position in the phone's memory, not a number: value carries the position
+  // as the accessory sent it, and only the phone knows what is stored there.
+  DialMemory,
   Answer,
   Hangup,
   Dtmf,
@@ -596,6 +626,11 @@ enum class EspBleClassicHidReportType : uint8_t
 
 // Device identity for the composed HID Device. The Classic profile registers
 // one device record, so the first configured profile decides these.
+//
+// These strings share the SDP record with the composed Report Descriptor, and
+// the two together may total 214 bytes — a Classic-only limit the BLE side does
+// not have. begin() refuses a combination that does not fit rather than
+// registering a device no Host can reach.
 struct EspBleClassicHidProfileConfig
 {
   const char *name = "EspBle HID";
@@ -986,6 +1021,13 @@ public:
     std::function<void(const EspBleClassicHfpAtResponse &)>;
   using PacketStatisticsCallback =
     std::function<void(const EspBleClassicHfpPacketStatistics &)>;
+  using OperatorNameCallback = std::function<void(const String &)>;
+  using SubscriberNumberCallback =
+    std::function<void(const EspBleClassicHfpSubscriberNumber &)>;
+  using VoiceTagNumberCallback = std::function<void(const String &)>;
+  // true when the phone sends the ring tone over the audio link, false when the
+  // accessory has to make its own sound.
+  using InBandRingToneCallback = std::function<void(bool)>;
   // Runs in the Bluetooth host callback context. Copy view.data before return.
   using AudioCallback =
     std::function<void(const EspBleClassicHfpEncodedAudioView &)>;
@@ -1021,6 +1063,36 @@ public:
   bool stopVoiceRecognition();
   EspBleClassicHfpCallState callState() const;
 
+  // Ask the phone about its network and its own number. Both are requests: the
+  // answers arrive at onOperatorName() and onSubscriberNumber(), and a phone is
+  // free to answer with an empty string.
+  bool queryOperatorName();
+  bool requestSubscriberNumber();
+
+  // Dial from the phone's own memory, by position. The number never reaches the
+  // accessory, which is the point: a speed-dial key needs no phone book here.
+  bool dialMemory(int location);
+  // The number behind the last voice tag the phone recorded, answered at
+  // onVoiceTagNumber(). Phones that never recorded one answer with an error.
+  bool requestLastVoiceTagNumber();
+
+  // Ask the phone to stop its own noise reduction and echo cancelling, for an
+  // accessory that does its own: two of them in series sound worse than one. The
+  // phone may ignore it, and there is no call to turn it back on — the setting
+  // lasts for this connection only.
+  bool disableNoiseReduction();
+
+  // The Apple extension, which Android and Windows phones also accept. It has to
+  // be enabled before reportBatteryLevel() is accepted, and identification is
+  // "vendorId-productId-version" in hex without 0x, such as "0505-1995-0610".
+  bool enableAppleExtensions(
+    const char *identification,
+    const EspBleClassicHfpAppleFeatures &features =
+      EspBleClassicHfpAppleFeatures());
+  // Battery level 0 to 9, as Apple defines it: 0 is empty and 9 is full. docked
+  // means the accessory is powered rather than running on the battery.
+  bool reportBatteryLevel(uint8_t level, bool docked = false);
+
   void onConnectionChanged(ConnectionCallback callback);
   void onAudioConnectionChanged(AudioConnectionCallback callback);
   void onCallStateChanged(CallStateCallback callback);
@@ -1030,6 +1102,12 @@ public:
   void onVolumeChanged(VolumeCallback callback);
   void onAtResponse(AtResponseCallback callback);
   void onPacketStatistics(PacketStatisticsCallback callback);
+  void onOperatorName(OperatorNameCallback callback);
+  void onSubscriberNumber(SubscriberNumberCallback callback);
+  void onVoiceTagNumber(VoiceTagNumberCallback callback);
+  // Whether the phone provides the ring tone itself. An accessory that beeps on
+  // its own has to know, or an incoming call either rings twice or not at all.
+  void onInBandRingTone(InBandRingToneCallback callback);
   // Replacement and removal wait for callbacks already in progress. Do not
   // call onAudio() or end() from inside the audio callback.
   void onAudio(AudioCallback callback);
@@ -1054,6 +1132,10 @@ private:
   VolumeCallback volumeCallback_;
   AtResponseCallback atResponseCallback_;
   PacketStatisticsCallback packetStatisticsCallback_;
+  OperatorNameCallback operatorNameCallback_;
+  SubscriberNumberCallback subscriberNumberCallback_;
+  VoiceTagNumberCallback voiceTagNumberCallback_;
+  InBandRingToneCallback inBandRingToneCallback_;
 };
 
 class EspBleClassicHfpAudioGateway
@@ -1097,7 +1179,16 @@ public:
   bool setNetworkStatus(
     bool available, uint8_t signalStrength,
     bool roaming, uint8_t batteryLevel);
+  // Tells the accessory whether this side sends the ring tone over the audio
+  // link. An accessory that makes its own sound needs to know, and the answer
+  // can change between calls, so it is a call rather than a config field.
+  bool setInBandRingTone(bool provided);
   bool respondToCommand(bool accepted, uint16_t extendedError = 0);
+  // Answers an AT command the backend does not decode, such as the Apple
+  // extensions. A response line is sent when the string is not empty, and the
+  // exchange is always finished — with OK for any string, or with an error when
+  // response is null. Leaving it unfinished stops the peer's next AT command
+  // from being sent at all, so there is no way to answer halfway.
   bool respondToUnknownAt(const char *response);
   bool reportIncomingCall(const char *number);
   bool reportOutgoingCall(const char *number);
@@ -1230,6 +1321,54 @@ private:
   DataCallback dataCallback_;
   WriteCompletedCallback writeCompletedCallback_;
   ConnectionFailureCallback connectionFailureCallback_;
+};
+
+// An Arduino Stream over one SPP session, for code written against Serial. It
+// owns no connection: the session is opened with EspBleClassicSpp and this only
+// borrows it, so the same session can still be used through the session API.
+//
+// Two things differ from Serial and are not hidden. A write becomes one SPP
+// packet, so single-byte writes are wasteful where print("text") is not; and the
+// outgoing queue is finite, so a write with no room waits up to the write
+// timeout (1000 ms by default, 0 to never wait) and then reports how much it
+// took. flush() waits for what was queued to reach the peer, which Serial's
+// flush() also means.
+class EspBleClassicSppStream : public Stream
+{
+public:
+  EspBleClassicSppStream() = default;
+  EspBleClassicSppStream(
+    EspBleClassicSpp &spp, EspBleClassicSppSessionId sessionId);
+
+  void attach(EspBleClassicSpp &spp, EspBleClassicSppSessionId sessionId);
+  void detach();
+  // True once attached, whether or not the session is still open.
+  bool attached() const;
+  // True while the session this is attached to is still open.
+  bool connected() const;
+  EspBleClassicSppSessionId session() const;
+
+  // How long write() waits for room in the outgoing queue. Zero makes it return
+  // immediately with what fitted, which is what a sketch that must not stall in
+  // loop() wants.
+  void setWriteTimeout(uint32_t milliseconds);
+  uint32_t writeTimeout() const;
+
+  int available() override;
+  int read() override;
+  int peek() override;
+  size_t write(uint8_t value) override;
+  size_t write(const uint8_t *buffer, size_t size) override;
+  int availableForWrite() override;
+  // Waits for the queued writes to be delivered, bounded by the write timeout.
+  void flush() override;
+
+  using Print::write;
+
+private:
+  EspBleClassicSpp *spp_ = nullptr;
+  EspBleClassicSppSessionId sessionId_ = 0;
+  uint32_t writeTimeoutMs_ = 1000;
 };
 
 class EspBleClassicHidDevice
@@ -1767,6 +1906,32 @@ public:
   // the previous value.
   bool setClassOfDevice(const EspBleClassicClassOfDevice &classOfDevice);
   bool classOfDevice(EspBleClassicClassOfDevice &classOfDevice) const;
+
+  // Transmit power in dBm. The radio supports -12..+9 dBm in 3 dB steps and
+  // both calls round to the nearest one. BR/EDR power control differs from BLE
+  // here: the controller picks a level per packet from a range, so the range
+  // overload keeps that freedom while the single-value form pins the power by
+  // setting both ends. Returns false before begin(). The BR/EDR level is
+  // independent of EspBle::setTxPower(), which sets the LE one.
+  bool setTxPower(int8_t dBm);
+  bool setTxPower(int8_t minimumDbm, int8_t maximumDbm);
+  // The maximum of the current range, or INT8_MIN when it cannot be read.
+  int8_t txPower() const;
+  bool txPower(int8_t &minimumDbm, int8_t &maximumDbm) const;
+
+  // How long a connection attempt pages a peer that does not answer, which is
+  // how long connect() takes to fail when the peer is off or out of range. The
+  // default is 5120 ms; the valid range is 14 to 40959 ms. Applies from the next
+  // page onwards, so set it before connecting. true means the request was
+  // accepted: the backend confirms it on its own task, and pageTimeout() reports
+  // the confirmed value, or 0 until one arrives.
+  bool setPageTimeout(uint16_t milliseconds);
+  uint16_t pageTimeout() const;
+
+  // Refuse an encryption key shorter than this many bytes (7 to 16). A peer
+  // that negotiates a short key weakens the link for both sides, and only the
+  // local side can insist. Applies to links established afterwards.
+  bool setMinimumEncryptionKeySize(uint8_t bytes);
 
   EspBleError lastError() const;
   const char *lastErrorName() const;

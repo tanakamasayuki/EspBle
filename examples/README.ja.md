@@ -55,15 +55,17 @@ arduino-cli compile --profile esp32s3 examples/<path>
 | Example | Role | 説明 |
 |---|---|---|
 | [Classic/Inquiry](Classic/Inquiry/) | GAP | device discovery。addressの入手経路 |
+| [Classic/RadioSettings](Classic/RadioSettings/) | GAP | 送信電力・page timeout・暗号鍵の最小長 |
 | [Classic/SppServer](Classic/SppServer/) | SPP Server | binary-safeなSPP echo server |
 | [Classic/SppClient](Classic/SppClient/) | SPP Client | address指定で接続し、RFCOMM channelを解決または指定する |
+| [Classic/SppStream](Classic/SppStream/) | SPP Server | SPPをArduinoの`Stream`として扱う。`Serial`向けのcodeがそのまま動く |
 | [Classic/SppPairing](Classic/SppPairing/) | SPP Server / GAP | applicationが制御するpairingとbond管理 |
 | [Classic/HidKeyboard](Classic/HidKeyboard/) | HID Device | BLE exampleと同じprofile APIによるkeyboard / mouse |
 | [Classic/HidMouse](Classic/HidMouse/) | HID Device | 移動・クリック・wheel・ドラッグ |
 | [Classic/HidGamepad](Classic/HidGamepad/) | HID Device | 軸・hat・button。BLEでは代替できない用途 |
 | [Classic/HidConsumerControl](Classic/HidConsumerControl/) | HID Device | メディアキーとシステム要求 |
 | [Classic/HidKeyboardNkro](Classic/HidKeyboardNkro/) | HID Device | N-key rollover。6キー制限が無い |
-| [Classic/HidComposite](Classic/HidComposite/) | HID Device | keyboard・mouse・メディアキー・gamepadを1台で兼ねる |
+| [Classic/HidComposite](Classic/HidComposite/) | HID Device | keyboard・mouse・メディアキーを1台で兼ねる。合成数のSDP record上限も示す |
 | [Classic/HidKeyboardHost](Classic/HidKeyboardHost/) | HID Host | 相手のReport Descriptorから復号したkeyboard / mouse event |
 | [Classic/HidVendorDevice](Classic/HidVendorDevice/) | HID Device | 任意Report DescriptorのClassic HID Device |
 | [Classic/HidVendorHost](Classic/HidVendorHost/) | HID Host | アドレス指定で接続しraw Input Reportを受信 |

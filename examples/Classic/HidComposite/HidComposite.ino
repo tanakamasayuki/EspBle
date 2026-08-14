@@ -4,18 +4,20 @@
 //     report ID. Mirrors examples/Hid/CompositeKeyboardMouse on the BLE side.
 //
 //     How many profiles fit is limited here in a way it is not on BLE: the
-//     record has to fit a 300-byte SDP pad shared with the device strings, and
-//     these three come to 144 descriptor bytes. Adding the gamepad makes 212,
-//     which does not register — see examples/Classic/HidGamepad for that one on
-//     its own.
+//     Report Descriptor and the three profile strings share one SDP record and
+//     may total 214 bytes. These three come to 144 descriptor bytes and the
+//     strings below to 57, so 201 fits. Adding the gamepad makes the descriptor
+//     212 and nothing registers — see examples/Classic/HidGamepad for that one
+//     on its own.
 // ja: keyboard、mouse、メディアキーを兼ねる1台のBluetooth Classic（BR/EDR）
 //     HID device。Classicはdevice recordを1つ登録するため、すべてが1つの合成
 //     Report Descriptorに入り、profileごとにreport IDが分かれる。
 //     BLE側のexamples/Hid/CompositeKeyboardMouseと対になる。
 //
-//     合成できるprofile数にはBLEには無い上限がある。recordはdevice名などと共有する
-//     300 byteのSDP padに収まる必要があり、この3つでdescriptorは144 byteになる。
-//     gamepadを加えると212 byteで登録できない——単独の例は
+//     合成できるprofile数にはBLEには無い上限がある。Report Descriptorとprofileの
+//     文字列3つは1つのSDP recordを共有し、合計214 byteまで。この3つでdescriptorは
+//     144 byte、下の文字列が57 byteなので201 byteで収まる。gamepadを加えると
+//     descriptorが212 byteになり何も登録されない——単独の例は
 //     examples/Classic/HidGamepadにある。
 #include <EspBleClassic.h>
 

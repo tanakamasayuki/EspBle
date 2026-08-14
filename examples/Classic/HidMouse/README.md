@@ -1,7 +1,7 @@
 # HidMouse (Classic)
 
 > 日本語版: [README.ja.md](README.ja.md)
-> Choosing between the two radios: [BLE and Classic](../../../docs/CLASSIC_VS_BLE.ja.md)
+> Choosing between the two radios: [BLE and Classic](../../../docs/CLASSIC_VS_BLE.md)
 
 A Bluetooth Classic (BR/EDR) HID mouse. The calls are the same ones
 [Hid/Mouse](../../Hid/Mouse/) uses over BLE; only the radio differs. **Classic

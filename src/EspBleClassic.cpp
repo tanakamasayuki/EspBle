@@ -18,6 +18,9 @@
 #define ESPBLE_CLASSIC_BACKEND_AVAILABLE 1
 #include <esp32-hal-alloc-bt-classic-mem.h>
 #include <esp32-hal-bt.h>
+// Transmit power is a controller setting, so it comes from the controller header
+// and needs no namespacing: only the host archive is built separately.
+#include <esp_bt.h>
 #if defined(ESPBLE_CLASSIC_CUSTOM_HOST)
 // The independently built Classic-only Bluedroid host is namespaced so it can
 // coexist at link time with Arduino-ESP32's built-in Bluedroid archive.
@@ -53,6 +56,10 @@
 #define esp_bt_gap_get_bond_device_list \
   espble_bd_esp_bt_gap_get_bond_device_list
 #define esp_bt_gap_remove_bond_device espble_bd_esp_bt_gap_remove_bond_device
+#define esp_bt_gap_set_page_timeout espble_bd_esp_bt_gap_set_page_timeout
+#define esp_bt_gap_get_page_timeout espble_bd_esp_bt_gap_get_page_timeout
+#define esp_bt_gap_set_min_enc_key_size \
+  espble_bd_esp_bt_gap_set_min_enc_key_size
 #define esp_spp_connect espble_bd_esp_spp_connect
 #define esp_spp_deinit espble_bd_esp_spp_deinit
 #define esp_spp_disconnect espble_bd_esp_spp_disconnect
@@ -99,6 +106,14 @@ constexpr uint32_t ClassOfDeviceRequested = 0x80000000u;
 std::atomic<bool> classOfDevicePending{false};
 std::atomic<uint32_t> classOfDeviceDeadlineMs{0};
 constexpr uint32_t ClassOfDeviceSettleTimeoutMs = 3000;
+
+// The page timeout the controller confirmed, in units of 0.625 ms, or zero while
+// unknown. Both the set and the get are answered on the backend's task, so the
+// confirmed value is kept here rather than returned from the call.
+std::atomic<uint16_t> classicPageTimeoutSlots{0};
+// What setPageTimeout() asked for, so the confirmation event — which carries a
+// status and no value — can be turned into the confirmed value.
+std::atomic<uint16_t> classicRequestedPageTimeoutSlots{0};
 
 uint32_t packClassOfDevice(const EspBleClassicClassOfDevice &value)
 {
@@ -974,6 +989,21 @@ void classicGapCallback(
       }
       esp_bt_gap_ssp_passkey_reply(parameter->key_req.bda, false, 0);
     }
+  }
+  else if (event == ESP_BT_GAP_GET_PAGE_TO_EVT)
+  {
+    if (parameter->get_page_timeout.stat == ESP_BT_STATUS_SUCCESS)
+      classicPageTimeoutSlots.store(
+        parameter->get_page_timeout.page_to, std::memory_order_release);
+  }
+  else if (event == ESP_BT_GAP_SET_PAGE_TO_EVT)
+  {
+    // The confirmation carries a status only, so the value that was asked for is
+    // what became current.
+    if (parameter->set_page_timeout.stat == ESP_BT_STATUS_SUCCESS)
+      classicPageTimeoutSlots.store(
+        classicRequestedPageTimeoutSlots.load(std::memory_order_acquire),
+        std::memory_order_release);
   }
   else if (event == ESP_BT_GAP_PIN_REQ_EVT)
   {
@@ -2437,6 +2467,11 @@ bool EspBleClassic::begin(const EspBleClassicConfig &config)
       ? 0u : packClassOfDevice(config.classOfDevice),
     std::memory_order_release);
   (void)EspBleClassicVisibilityOwner::apply();
+  // Asked for once at startup so pageTimeout() can report the controller's
+  // default without a sketch having to set one first. The answer arrives on the
+  // backend's task, so it is not available immediately.
+  classicPageTimeoutSlots.store(0, std::memory_order_release);
+  (void)esp_bt_gap_get_page_timeout();
   // Inquiry shares the GAP callback the stack just registered, so it can only
   // be armed once the stack is up.
   (void)inquiry_.begin();
@@ -2455,6 +2490,8 @@ void EspBleClassic::end()
     static_cast<uint32_t>(ESP_SPP_SEC_NONE), std::memory_order_release);
   classicClassOfDevice.store(0, std::memory_order_release);
   classOfDevicePending.store(false, std::memory_order_release);
+  classicPageTimeoutSlots.store(0, std::memory_order_release);
+  classicRequestedPageTimeoutSlots.store(0, std::memory_order_release);
 #endif
   inquiry_.end();
   hfpAudioGateway_.end();
@@ -2797,6 +2834,183 @@ bool EspBleClassic::classOfDevice(
   classOfDevice.majorDeviceClass = static_cast<uint8_t>(cod.major);
   classOfDevice.minorDeviceClass = static_cast<uint8_t>(cod.minor);
   classOfDevice.serviceClass = static_cast<uint16_t>(cod.service);
+  return true;
+#endif
+}
+
+#if ESPBLE_CLASSIC_BACKEND_AVAILABLE
+namespace
+{
+// The radio's levels, low to high. The controller takes an index, so a dBm value
+// is rounded to the nearest one rather than refused.
+struct ClassicTxPowerLevel
+{
+  int8_t dBm;
+  esp_power_level_t level;
+};
+
+constexpr ClassicTxPowerLevel ClassicTxPowerLevels[] = {
+  {-12, ESP_PWR_LVL_N12}, {-9, ESP_PWR_LVL_N9}, {-6, ESP_PWR_LVL_N6},
+  {-3, ESP_PWR_LVL_N3}, {0, ESP_PWR_LVL_N0}, {3, ESP_PWR_LVL_P3},
+  {6, ESP_PWR_LVL_P6}, {9, ESP_PWR_LVL_P9},
+};
+
+const ClassicTxPowerLevel &nearestClassicTxPowerLevel(int8_t dBm)
+{
+  const ClassicTxPowerLevel *nearest = &ClassicTxPowerLevels[0];
+  for (const ClassicTxPowerLevel &candidate : ClassicTxPowerLevels)
+  {
+    if (abs(candidate.dBm - dBm) < abs(nearest->dBm - dBm)) nearest = &candidate;
+  }
+  return *nearest;
+}
+
+int8_t classicTxPowerDbm(esp_power_level_t level)
+{
+  for (const ClassicTxPowerLevel &candidate : ClassicTxPowerLevels)
+  {
+    if (candidate.level == level) return candidate.dBm;
+  }
+  return INT8_MIN;
+}
+}  // namespace
+#endif
+
+bool EspBleClassic::setTxPower(int8_t dBm)
+{
+  return setTxPower(dBm, dBm);
+}
+
+bool EspBleClassic::setTxPower(int8_t minimumDbm, int8_t maximumDbm)
+{
+#if !ESPBLE_CLASSIC_BACKEND_AVAILABLE
+  (void)minimumDbm;
+  (void)maximumDbm;
+  setError(
+    EspBleError::BackendFailure,
+    "Classic is supported only by the original ESP32 build");
+  return false;
+#else
+  if (!initialized())
+  {
+    setError(EspBleError::InvalidState, "Classic stack is not started");
+    return false;
+  }
+  if (minimumDbm > maximumDbm)
+  {
+    setError(
+      EspBleError::InvalidArgument, "the minimum power exceeds the maximum");
+    return false;
+  }
+  const ClassicTxPowerLevel &minimum = nearestClassicTxPowerLevel(minimumDbm);
+  const ClassicTxPowerLevel &maximum = nearestClassicTxPowerLevel(maximumDbm);
+  if (esp_bredr_tx_power_set(minimum.level, maximum.level) != ESP_OK)
+  {
+    setError(EspBleError::BackendFailure, "failed to set the transmit power");
+    return false;
+  }
+  clearError();
+  return true;
+#endif
+}
+
+int8_t EspBleClassic::txPower() const
+{
+  int8_t minimumDbm = INT8_MIN;
+  int8_t maximumDbm = INT8_MIN;
+  if (!txPower(minimumDbm, maximumDbm)) return INT8_MIN;
+  return maximumDbm;
+}
+
+bool EspBleClassic::txPower(int8_t &minimumDbm, int8_t &maximumDbm) const
+{
+#if !ESPBLE_CLASSIC_BACKEND_AVAILABLE
+  (void)minimumDbm;
+  (void)maximumDbm;
+  return false;
+#else
+  if (!initialized()) return false;
+  esp_power_level_t minimum = ESP_PWR_LVL_N0;
+  esp_power_level_t maximum = ESP_PWR_LVL_P3;
+  if (esp_bredr_tx_power_get(&minimum, &maximum) != ESP_OK) return false;
+  minimumDbm = classicTxPowerDbm(minimum);
+  maximumDbm = classicTxPowerDbm(maximum);
+  return minimumDbm != INT8_MIN && maximumDbm != INT8_MIN;
+#endif
+}
+
+bool EspBleClassic::setPageTimeout(uint16_t milliseconds)
+{
+#if !ESPBLE_CLASSIC_BACKEND_AVAILABLE
+  (void)milliseconds;
+  setError(
+    EspBleError::BackendFailure,
+    "Classic is supported only by the original ESP32 build");
+  return false;
+#else
+  if (!initialized())
+  {
+    setError(EspBleError::InvalidState, "Classic stack is not started");
+    return false;
+  }
+  // The controller counts in 0.625 ms slots and accepts 0x0016 to 0xffff, so a
+  // request is converted and then checked against what can be represented.
+  const uint32_t slots = (static_cast<uint32_t>(milliseconds) * 1000u) / 625u;
+  if (slots < 0x0016u || slots > 0xffffu)
+  {
+    setError(
+      EspBleError::InvalidArgument,
+      "the page timeout must be between 14 and 40959 milliseconds");
+    return false;
+  }
+  classicRequestedPageTimeoutSlots.store(
+    static_cast<uint16_t>(slots), std::memory_order_release);
+  if (esp_bt_gap_set_page_timeout(static_cast<uint16_t>(slots)) != ESP_OK)
+  {
+    setError(EspBleError::BackendFailure, "failed to set the page timeout");
+    return false;
+  }
+  clearError();
+  return true;
+#endif
+}
+
+uint16_t EspBleClassic::pageTimeout() const
+{
+  const uint32_t slots = classicPageTimeoutSlots.load(std::memory_order_acquire);
+  if (slots == 0) return 0;
+  return static_cast<uint16_t>((slots * 625u) / 1000u);
+}
+
+bool EspBleClassic::setMinimumEncryptionKeySize(uint8_t bytes)
+{
+#if !ESPBLE_CLASSIC_BACKEND_AVAILABLE
+  (void)bytes;
+  setError(
+    EspBleError::BackendFailure,
+    "Classic is supported only by the original ESP32 build");
+  return false;
+#else
+  if (!initialized())
+  {
+    setError(EspBleError::InvalidState, "Classic stack is not started");
+    return false;
+  }
+  if (bytes < 7 || bytes > 16)
+  {
+    setError(
+      EspBleError::InvalidArgument,
+      "the minimum encryption key size must be between 7 and 16 bytes");
+    return false;
+  }
+  if (esp_bt_gap_set_min_enc_key_size(bytes) != ESP_OK)
+  {
+    setError(
+      EspBleError::BackendFailure,
+      "failed to set the minimum encryption key size");
+    return false;
+  }
+  clearError();
   return true;
 #endif
 }

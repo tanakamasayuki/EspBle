@@ -56,8 +56,8 @@ constexpr size_t MaximumHidReportLength =
   EspBleClassicHidDevice::MaximumReportLength;
 
 // Report Descriptor plus the device strings, as they share the SDP record's pad.
-// See the check in EspBleClassicHidDevice::begin() for how this was measured.
-constexpr size_t MaximumSdpRecordPayload = 200;
+// See the check in EspBleClassicHidDevice::begin() for where this comes from.
+constexpr size_t MaximumSdpRecordPayload = 214;
 
 #if ESPBLE_CLASSIC_HID_BACKEND_AVAILABLE
 String hidAddress(const esp_bd_addr_t address)
@@ -789,10 +789,15 @@ bool EspBleClassicHidDevice::begin(
   // Checked here instead, because a silent "started" is worse than a refusal.
   //
   // The record holds the Report Descriptor and the three strings inside a
-  // 300-byte pad (CONFIG_BT_SDP_PAD_LEN) shared with the standard attributes.
-  // Measured on hardware: descriptor 144 + strings 57 = 201 registers, and
-  // 158 + 57 = 215 does not, which puts the fixed attributes at roughly 90 to
-  // 99 bytes. 200 is therefore the largest total that is known to work.
+  // 300-byte pad (CONFIG_BT_SDP_PAD_LEN) shared with every other attribute,
+  // each of which consumes its encoded length. Adding up what the bundled host
+  // writes for a HID device record — record handle 4, service class list 3,
+  // protocol list 13, language base 9, additional protocol list 15, profile
+  // descriptor list 8, the HID integers and booleans 20, language id base 8,
+  // browse group 3, the descriptor list's own header 6 and a NUL for each of
+  // the three strings — leaves 300 - 86 = 214 bytes for the descriptor and the
+  // strings together. Hardware agrees: 144 + 57 = 201 registers, 158 + 57 =
+  // 215 does not.
   const size_t recordBudget =
     impl_->descriptorLength + impl_->name.length() +
     impl_->description.length() + impl_->provider.length();

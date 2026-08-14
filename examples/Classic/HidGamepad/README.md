@@ -1,7 +1,7 @@
 # HidGamepad (Classic)
 
 > 日本語版: [README.ja.md](README.ja.md)
-> Choosing between the two radios: [BLE and Classic](../../../docs/CLASSIC_VS_BLE.ja.md)
+> Choosing between the two radios: [BLE and Classic](../../../docs/CLASSIC_VS_BLE.md)
 
 A Bluetooth Classic (BR/EDR) HID gamepad. This is the example Classic exists
 for: older game consoles and PCs accept Classic HID only, and BLE is not an

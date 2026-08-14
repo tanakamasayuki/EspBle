@@ -88,6 +88,22 @@ void setup()
       Serial.printf("HFP_CLIENT_AT code=%u cme=%u\n",
         event.code, event.extendedError);
     });
+  // The phone answers these only when asked, and an empty answer is a legal
+  // answer, so the values are printed exactly as they arrive.
+  bluetooth.hfpClient().onOperatorName([](const String &name) {
+    Serial.printf("HFP_CLIENT_OPERATOR name=%s\n", name.c_str());
+  });
+  bluetooth.hfpClient().onSubscriberNumber(
+    [](const EspBleClassicHfpSubscriberNumber &event) {
+      Serial.printf("HFP_CLIENT_SUBSCRIBER number=%s type=%u\n",
+        event.number.c_str(), static_cast<unsigned>(event.serviceType));
+    });
+  bluetooth.hfpClient().onInBandRingTone([](bool provided) {
+    Serial.printf("HFP_CLIENT_INBAND provided=%u\n", provided ? 1 : 0);
+  });
+  bluetooth.hfpClient().onVoiceTagNumber([](const String &number) {
+    Serial.printf("HFP_CLIENT_VOICETAG number=%s\n", number.c_str());
+  });
   bluetooth.hfpClient().onPacketStatistics(
     [](const EspBleClassicHfpPacketStatistics &event) {
       Serial.printf("HFP_CLIENT_STATS rx=%lu ok=%lu bad=%lu tx=%lu drop=%lu\n",
@@ -184,6 +200,39 @@ void loop()
   else if (command == "h")
     Serial.printf("HFP_CLIENT_HANGUP requested=%u\n",
       bluetooth.hfpClient().rejectOrEndCall() ? 1 : 0);
+  else if (command == "o")
+    Serial.printf("HFP_CLIENT_OPERATOR_REQUEST requested=%u\n",
+      bluetooth.hfpClient().queryOperatorName() ? 1 : 0);
+  else if (command == "u")
+    Serial.printf("HFP_CLIENT_SUBSCRIBER_REQUEST requested=%u\n",
+      bluetooth.hfpClient().requestSubscriberNumber() ? 1 : 0);
+  else if (command == "m")
+    Serial.printf("HFP_CLIENT_DIAL_MEMORY requested=%u\n",
+      bluetooth.hfpClient().dialMemory(3) ? 1 : 0);
+  else if (command == "M")
+    Serial.printf("HFP_CLIENT_DIAL_MEMORY_INVALID requested=%u error=%s\n",
+      bluetooth.hfpClient().dialMemory(-1) ? 1 : 0,
+      bluetooth.lastErrorName());
+  else if (command == "e")
+    Serial.printf("HFP_CLIENT_NREC requested=%u\n",
+      bluetooth.hfpClient().disableNoiseReduction() ? 1 : 0);
+  else if (command == "A")
+    Serial.printf("HFP_CLIENT_XAPL requested=%u\n",
+      bluetooth.hfpClient().enableAppleExtensions("0505-1995-0610") ? 1 : 0);
+  else if (command == "J")
+    Serial.printf("HFP_CLIENT_XAPL_INVALID requested=%u error=%s\n",
+      bluetooth.hfpClient().enableAppleExtensions("") ? 1 : 0,
+      bluetooth.lastErrorName());
+  else if (command == "B")
+    Serial.printf("HFP_CLIENT_BATTERY requested=%u\n",
+      bluetooth.hfpClient().reportBatteryLevel(7) ? 1 : 0);
+  else if (command == "K")
+    Serial.printf("HFP_CLIENT_BATTERY_INVALID requested=%u error=%s\n",
+      bluetooth.hfpClient().reportBatteryLevel(10) ? 1 : 0,
+      bluetooth.lastErrorName());
+  else if (command == "V")
+    Serial.printf("HFP_CLIENT_VOICETAG_REQUEST requested=%u\n",
+      bluetooth.hfpClient().requestLastVoiceTagNumber() ? 1 : 0);
 #if defined(ESPBLE_TEST_DUAL_HFP)
   else if (command == "z")
   {

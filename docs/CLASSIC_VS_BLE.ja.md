@@ -76,6 +76,7 @@ Report Descriptorとreport packingは両transportで同じmoduleを共有して�
 |---|---|---|
 | 接続の始め方 | advertisingを見つけて接続。HID Service `0x1812`で絞り込める | addressを指定して接続。相手を探すのはinquiryで、advertisingのような絞り込みは無い |
 | Report Descriptorの受け取り | GATTのReport Map characteristic | SDP（`ESP_HIDH_GET_DSCP_EVT`） |
+| 合成できるprofile数 | 実質制限なし（Report Mapはcharacteristicとして読まれる） | **descriptor + profile文字列3つで214 byteまで**（SDP recordのpad 300 byteのうち固定属性が86 byte）。超える組み合わせは`begin()`が`ResourceExhausted`で拒否する |
 | Report IDの位置 | characteristicが分かれるのでpayloadに含まれない | payloadの先頭に付く。`onInputReport()`のraw値も同じ |
 | Host側で復号できる範囲 | keyboard、mouse、consumer、system、gamepad | keyboard、mouseのみ。それ以外は`onInputReport()`のrawで受ける |
 | Battery level | HID Host側で取得できる | 取得しない |
@@ -84,6 +85,11 @@ Report Descriptorとreport packingは両transportで同じmoduleを共有して�
 | 自動再接続 | `setAutoReconnect()` / persistent subscription / `setAutoRediscover()` | 相当APIは無い。再接続はsketchが`connect()`を呼ぶ |
 | LED送信 | `setKeyboardLeds(connectionId, ...)` | `setKeyboardLeds(...)`。1接続なのでID引数が無い。report IDは相手のdescriptor由来 |
 | 暗号化の要求 | 市販keyboardはHID属性へ暗号化を要求するのが普通 | pairingしてlink keyを持つことが前提 |
+
+合成の上限は実機で確認しています。既定の文字列（合計57 byte）なら
+keyboard + mouse + consumer（descriptor 144 byte）は登録でき、gamepadを加えた212 byteは
+登録できません。gamepadはkeyboardと組めば133 byteで収まります。BLE側にこの制限は無く、
+同じprofileの組み合わせをそのまま合成できます。
 
 keyboard layout（`setLayout()` / `setKeyboardLayout()`）、NKRO、`pressKey()` / `tapKey()` /
 `write()`、mouseの`wheel()` / `click()` / `press()`の加算、consumer / system / gamepadの
@@ -112,7 +118,17 @@ keyboard layout（`setLayout()` / `setKeyboardLayout()`）、NKRO、`pressKey()`
 |---|---|---|
 | 汎用の転送路 | GATT（Characteristic、notify / indicate、MTU） | SPPのRFCOMM byte stream |
 | 境界 | Characteristic単位。MTUで上限が決まる | byte stream。`0x00`で終端しないbinary-safe |
-| Serial互換のAPI | なし（GATT上に自分で作る） | 未実装。`write()` / `read()`のsession APIを使う |
+| Serial互換のAPI | なし（GATT上に自分で作る） | `EspBleClassicSppStream`がArduinoの`Stream`としてsessionを包む。write 1回が1 packetになる点と送信queueが有限な点だけがSerialと違う |
+
+### 4.5 無線・linkの設定
+
+| | BLE | Classic |
+|---|---|---|
+| 送信電力 | `EspBle::setTxPower(dBm)` / `txPower()`。1つのlevelを設定する | `setTxPower(dBm)`と`setTxPower(min, max)` / `txPower()`。BR/EDRの電力制御は範囲の中からpacketごとに選ぶため範囲指定がある。どちらも-12〜+9 dBmの3 dB刻み |
+| 電力の独立性 | LE側だけに効く | BR/EDR側だけに効く。dual-hostでは両方を別々に設定する |
+| 接続失敗までの時間 | connect()のtimeout引数で決める | `setPageTimeout()`（14〜40959 ms、既定5120 ms）。pagingに応答しない相手を諦めるまでの時間で、次のpageから効く |
+| 暗号鍵の最小長 | 指定するAPIは無い | `setMinimumEncryptionKeySize()`（7〜16 byte） |
+| 相手の信号強度 | scan結果のRSSI、接続後も取得できる | inquiry結果のRSSIのみ。接続後のRSSIはbackendが差分値しか返さないため公開していない |
 
 ## 5. 制限の出どころ
 

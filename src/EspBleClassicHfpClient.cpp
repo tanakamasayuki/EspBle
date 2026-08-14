@@ -20,6 +20,17 @@
 #define esp_hf_client_connect_audio espble_bd_esp_hf_client_connect_audio
 #define esp_hf_client_deinit espble_bd_esp_hf_client_deinit
 #define esp_hf_client_dial espble_bd_esp_hf_client_dial
+#define esp_hf_client_dial_memory espble_bd_esp_hf_client_dial_memory
+#define esp_hf_client_query_current_operator_name \
+  espble_bd_esp_hf_client_query_current_operator_name
+#define esp_hf_client_retrieve_subscriber_info \
+  espble_bd_esp_hf_client_retrieve_subscriber_info
+#define esp_hf_client_request_last_voice_tag_number \
+  espble_bd_esp_hf_client_request_last_voice_tag_number
+#define esp_hf_client_send_nrec espble_bd_esp_hf_client_send_nrec
+#define esp_hf_client_send_xapl espble_bd_esp_hf_client_send_xapl
+#define esp_hf_client_send_iphoneaccev \
+  espble_bd_esp_hf_client_send_iphoneaccev
 #define esp_hf_client_disconnect espble_bd_esp_hf_client_disconnect
 #define esp_hf_client_disconnect_audio espble_bd_esp_hf_client_disconnect_audio
 #define esp_hf_client_init espble_bd_esp_hf_client_init
@@ -101,6 +112,10 @@ struct EspBleClassicHfpClientImpl
     Volume,
     AtResponse,
     PacketStatistics,
+    OperatorName,
+    SubscriberNumber,
+    VoiceTagNumber,
+    InBandRingTone,
   };
 
   struct Event
@@ -114,6 +129,9 @@ struct EspBleClassicHfpClientImpl
     EspBleClassicHfpVolume volume;
     EspBleClassicHfpAtResponse atResponse;
     EspBleClassicHfpPacketStatistics packetStatistics;
+    String text;
+    EspBleClassicHfpSubscriberNumber subscriberNumber;
+    bool flag = false;
   };
 
   bool enqueue(Event event)
@@ -363,6 +381,48 @@ void hfpClientCallback(
     queued.atResponse.code = static_cast<uint8_t>(parameter->at_response.code);
     queued.atResponse.extendedError =
       static_cast<uint16_t>(parameter->at_response.cme);
+    impl->enqueue(std::move(queued));
+    return;
+  }
+  if (event == ESP_HF_CLIENT_COPS_CURRENT_OPERATOR_EVT)
+  {
+    EspBleClassicHfpClientImpl::Event queued;
+    queued.type = EspBleClassicHfpClientImpl::EventType::OperatorName;
+    queued.text = String(parameter->cops.name ? parameter->cops.name : "");
+    impl->enqueue(std::move(queued));
+    return;
+  }
+  if (event == ESP_HF_CLIENT_CNUM_EVT)
+  {
+    EspBleClassicHfpClientImpl::Event queued;
+    queued.type = EspBleClassicHfpClientImpl::EventType::SubscriberNumber;
+    queued.subscriberNumber.number =
+      String(parameter->cnum.number ? parameter->cnum.number : "");
+    // Kept as the AT value: an AG reporting something outside the two known
+    // service types arrives as Unknown rather than as a guess.
+    queued.subscriberNumber.serviceType =
+      parameter->cnum.type == ESP_HF_SUBSCRIBER_SERVICE_TYPE_VOICE
+        ? EspBleClassicHfpSubscriberServiceType::Voice
+        : (parameter->cnum.type == ESP_HF_SUBSCRIBER_SERVICE_TYPE_FAX
+            ? EspBleClassicHfpSubscriberServiceType::Fax
+            : EspBleClassicHfpSubscriberServiceType::Unknown);
+    impl->enqueue(std::move(queued));
+    return;
+  }
+  if (event == ESP_HF_CLIENT_BSIR_EVT)
+  {
+    EspBleClassicHfpClientImpl::Event queued;
+    queued.type = EspBleClassicHfpClientImpl::EventType::InBandRingTone;
+    queued.flag = parameter->bsir.state ==
+      ESP_HF_CLIENT_IN_BAND_RINGTONE_PROVIDED;
+    impl->enqueue(std::move(queued));
+    return;
+  }
+  if (event == ESP_HF_CLIENT_BINP_EVT)
+  {
+    EspBleClassicHfpClientImpl::Event queued;
+    queued.type = EspBleClassicHfpClientImpl::EventType::VoiceTagNumber;
+    queued.text = String(parameter->binp.number ? parameter->binp.number : "");
     impl->enqueue(std::move(queued));
     return;
   }
@@ -816,6 +876,130 @@ bool EspBleClassicHfpClient::queryCurrentCalls()
 #endif
 }
 
+bool EspBleClassicHfpClient::queryOperatorName()
+{
+#if !ESPBLE_CLASSIC_HFP_CLIENT_BACKEND_AVAILABLE
+  return false;
+#else
+  if (!serviceLevelConnected())
+    return finishCommand(false, false, "");
+  return finishCommand(true,
+    esp_hf_client_query_current_operator_name() == ESP_OK,
+    "failed to query the network operator name");
+#endif
+}
+
+bool EspBleClassicHfpClient::requestSubscriberNumber()
+{
+#if !ESPBLE_CLASSIC_HFP_CLIENT_BACKEND_AVAILABLE
+  return false;
+#else
+  if (!serviceLevelConnected())
+    return finishCommand(false, false, "");
+  return finishCommand(true,
+    esp_hf_client_retrieve_subscriber_info() == ESP_OK,
+    "failed to request the subscriber number");
+#endif
+}
+
+bool EspBleClassicHfpClient::dialMemory(int location)
+{
+#if !ESPBLE_CLASSIC_HFP_CLIENT_BACKEND_AVAILABLE
+  (void)location;
+  return false;
+#else
+  if (location < 0)
+  {
+    owner_->setError(
+      EspBleError::InvalidArgument, "memory location must not be negative");
+    return false;
+  }
+  if (!serviceLevelConnected())
+    return finishCommand(false, false, "");
+  return finishCommand(true, esp_hf_client_dial_memory(location) == ESP_OK,
+    "failed to dial from memory");
+#endif
+}
+
+bool EspBleClassicHfpClient::requestLastVoiceTagNumber()
+{
+#if !ESPBLE_CLASSIC_HFP_CLIENT_BACKEND_AVAILABLE
+  return false;
+#else
+  if (!serviceLevelConnected())
+    return finishCommand(false, false, "");
+  return finishCommand(true,
+    esp_hf_client_request_last_voice_tag_number() == ESP_OK,
+    "failed to request the last voice tag number");
+#endif
+}
+
+bool EspBleClassicHfpClient::disableNoiseReduction()
+{
+#if !ESPBLE_CLASSIC_HFP_CLIENT_BACKEND_AVAILABLE
+  return false;
+#else
+  if (!serviceLevelConnected())
+    return finishCommand(false, false, "");
+  return finishCommand(true, esp_hf_client_send_nrec() == ESP_OK,
+    "failed to ask the phone to disable noise reduction");
+#endif
+}
+
+bool EspBleClassicHfpClient::enableAppleExtensions(
+  const char *identification, const EspBleClassicHfpAppleFeatures &features)
+{
+#if !ESPBLE_CLASSIC_HFP_CLIENT_BACKEND_AVAILABLE
+  (void)identification;
+  (void)features;
+  return false;
+#else
+  if (identification == nullptr || identification[0] == '\0')
+  {
+    owner_->setError(
+      EspBleError::InvalidArgument,
+      "the Apple identification must be vendorId-productId-version");
+    return false;
+  }
+  if (!serviceLevelConnected())
+    return finishCommand(false, false, "");
+  uint32_t bits = 0;
+  if (features.batteryReporting) bits |= ESP_HF_CLIENT_XAPL_FEAT_BATTERY_REPORT;
+  if (features.docked) bits |= ESP_HF_CLIENT_XAPL_FEAT_DOCKED;
+  if (features.siriStatus) bits |= ESP_HF_CLIENT_XAPL_FEAT_SIRI_STATUS_REPORT;
+  if (features.noiseReductionStatus)
+    bits |= ESP_HF_CLIENT_XAPL_NR_STATUS_REPORT;
+  // The backend takes a non-const pointer but only reads it, and the copy keeps
+  // the caller's string safe from a backend that might not.
+  String copy(identification);
+  return finishCommand(true,
+    esp_hf_client_send_xapl(
+      const_cast<char *>(copy.c_str()), bits) == ESP_OK,
+    "failed to enable the Apple extensions");
+#endif
+}
+
+bool EspBleClassicHfpClient::reportBatteryLevel(uint8_t level, bool docked)
+{
+#if !ESPBLE_CLASSIC_HFP_CLIENT_BACKEND_AVAILABLE
+  (void)level;
+  (void)docked;
+  return false;
+#else
+  if (level > 9)
+  {
+    owner_->setError(
+      EspBleError::InvalidArgument, "battery level must be between 0 and 9");
+    return false;
+  }
+  if (!serviceLevelConnected())
+    return finishCommand(false, false, "");
+  return finishCommand(true,
+    esp_hf_client_send_iphoneaccev(level, docked) == ESP_OK,
+    "failed to report the battery level");
+#endif
+}
+
 bool EspBleClassicHfpClient::sendDtmf(char code)
 {
 #if !ESPBLE_CLASSIC_HFP_CLIENT_BACKEND_AVAILABLE
@@ -907,6 +1091,19 @@ void EspBleClassicHfpClient::onVolumeChanged(VolumeCallback callback)
 { volumeCallback_ = std::move(callback); }
 void EspBleClassicHfpClient::onAtResponse(AtResponseCallback callback)
 { atResponseCallback_ = std::move(callback); }
+void EspBleClassicHfpClient::onOperatorName(OperatorNameCallback callback)
+{ operatorNameCallback_ = std::move(callback); }
+
+void EspBleClassicHfpClient::onSubscriberNumber(
+  SubscriberNumberCallback callback)
+{ subscriberNumberCallback_ = std::move(callback); }
+
+void EspBleClassicHfpClient::onVoiceTagNumber(VoiceTagNumberCallback callback)
+{ voiceTagNumberCallback_ = std::move(callback); }
+
+void EspBleClassicHfpClient::onInBandRingTone(InBandRingToneCallback callback)
+{ inBandRingToneCallback_ = std::move(callback); }
+
 void EspBleClassicHfpClient::onPacketStatistics(
   PacketStatisticsCallback callback)
 { packetStatisticsCallback_ = std::move(callback); }
@@ -983,5 +1180,20 @@ void EspBleClassicHfpClient::update()
                EspBleClassicHfpClientImpl::EventType::PacketStatistics &&
              packetStatisticsCallback_)
       packetStatisticsCallback_(event.packetStatistics);
+    else if (event.type == EspBleClassicHfpClientImpl::EventType::OperatorName &&
+             operatorNameCallback_)
+      operatorNameCallback_(event.text);
+    else if (event.type ==
+               EspBleClassicHfpClientImpl::EventType::SubscriberNumber &&
+             subscriberNumberCallback_)
+      subscriberNumberCallback_(event.subscriberNumber);
+    else if (event.type ==
+               EspBleClassicHfpClientImpl::EventType::VoiceTagNumber &&
+             voiceTagNumberCallback_)
+      voiceTagNumberCallback_(event.text);
+    else if (event.type ==
+               EspBleClassicHfpClientImpl::EventType::InBandRingTone &&
+             inBandRingToneCallback_)
+      inBandRingToneCallback_(event.flag);
   }
 }

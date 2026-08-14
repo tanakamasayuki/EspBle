@@ -28,6 +28,23 @@ void printHex(const String &value)
     Serial.printf("%02x", static_cast<uint8_t>(value[index]));
 }
 
+// Printed at startup and on demand: a line printed once at boot is lost if the
+// serial monitor attaches after the reset, which makes the test flaky rather than
+// wrong.
+bool printReady()
+{
+  uint8_t address[6] = {};
+  if (esp_read_mac(address, ESP_MAC_BT) != ESP_OK)
+  {
+    Serial.println("CLASSIC_HIDD_ADDRESS_FAILED");
+    return false;
+  }
+  Serial.printf(
+    "CLASSIC_HIDD_READY address=%02x:%02x:%02x:%02x:%02x:%02x\n",
+    address[0], address[1], address[2], address[3], address[4], address[5]);
+  return true;
+}
+
 bool startDevice()
 {
   inputSent = false;
@@ -55,16 +72,7 @@ bool startDevice()
     Serial.printf("CLASSIC_HIDD_SPP_FAILED %s\n", bluetooth.lastErrorDetail().c_str());
     return false;
   }
-  uint8_t address[6] = {};
-  if (esp_read_mac(address, ESP_MAC_BT) != ESP_OK)
-  {
-    Serial.println("CLASSIC_HIDD_ADDRESS_FAILED");
-    return false;
-  }
-  Serial.printf(
-    "CLASSIC_HIDD_READY address=%02x:%02x:%02x:%02x:%02x:%02x\n",
-    address[0], address[1], address[2], address[3], address[4], address[5]);
-  return true;
+  return printReady();
 }
 
 void setup()
@@ -117,6 +125,10 @@ void loop()
     else if (command == 'i')
     {
       inputSent = false;
+    }
+    else if (command == 'a')
+    {
+      (void)printReady();
     }
   }
   delay(1);

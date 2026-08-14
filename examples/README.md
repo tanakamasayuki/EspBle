@@ -54,20 +54,22 @@ headsets — and it is the only way to offer a serial port (SPP) or to carry aud
 (A2DP, HFP). The HID examples come in pairs, one per radio, with the same calls
 on both sides; pick the pair that matches the peer you have. Which to choose, and
 what differs between the two where both exist, is in
-[BLE and Classic](../docs/CLASSIC_VS_BLE.ja.md).
+[BLE and Classic](../docs/CLASSIC_VS_BLE.md).
 
 | Example | Role | Description |
 |---|---|---|
 | [Classic/Inquiry](Classic/Inquiry/) | GAP | Device discovery: where an address comes from |
+| [Classic/RadioSettings](Classic/RadioSettings/) | GAP | Transmit power, page timeout and minimum encryption key size |
 | [Classic/SppServer](Classic/SppServer/) | SPP Server | Binary-safe SPP echo server |
 | [Classic/SppClient](Classic/SppClient/) | SPP Client | Dial an address, resolve or name the RFCOMM channel |
+| [Classic/SppStream](Classic/SppStream/) | SPP Server | SPP as an Arduino `Stream`, for code written against `Serial` |
 | [Classic/SppPairing](Classic/SppPairing/) | SPP Server / GAP | Application-controlled pairing and bond management |
 | [Classic/HidKeyboard](Classic/HidKeyboard/) | HID Device | Keyboard and mouse through the same profile API the BLE examples use |
 | [Classic/HidMouse](Classic/HidMouse/) | HID Device | Motion, clicks, wheel and drag |
 | [Classic/HidGamepad](Classic/HidGamepad/) | HID Device | Axes, hat and buttons — the case BLE cannot replace |
 | [Classic/HidConsumerControl](Classic/HidConsumerControl/) | HID Device | Media keys and system requests |
 | [Classic/HidKeyboardNkro](Classic/HidKeyboardNkro/) | HID Device | N-key rollover, with no six-key limit |
-| [Classic/HidComposite](Classic/HidComposite/) | HID Device | Keyboard, mouse, media keys and gamepad in one device |
+| [Classic/HidComposite](Classic/HidComposite/) | HID Device | Keyboard, mouse and media keys in one device, and the SDP record limit on how many fit |
 | [Classic/HidKeyboardHost](Classic/HidKeyboardHost/) | HID Host | Decoded key and mouse events from the peer's Report Descriptor |
 | [Classic/HidVendorDevice](Classic/HidVendorDevice/) | HID Device | Classic HID Device with an arbitrary Report Descriptor |
 | [Classic/HidVendorHost](Classic/HidVendorHost/) | HID Host | Connect by address and receive raw Input Reports |

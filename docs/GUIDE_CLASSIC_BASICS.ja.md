@@ -85,6 +85,28 @@ config.classOfDevice.minorDeviceClass = 0x10;  // keyboard
 `setClassOfDevice()`は**要求が受理されたこと**を返し、反映は非同期です。直後の
 `classOfDevice()`はまだ前の値を返すため、反映を確認するなら一致するまで読み直します。
 
+### 2.3 無線・linkの設定
+
+profileの動作ではなく無線の振る舞いを変える設定が3つあります。
+
+| 設定 | 呼び出し | trade-off |
+|---|---|---|
+| 送信電力 | `setTxPower(dBm)` / `setTxPower(min, max)` | 距離と消費電流 |
+| page timeout | `setPageTimeout(milliseconds)` | 接続失敗までの速さと、応答が遅い相手を諦めること |
+| 暗号鍵の最小長 | `setMinimumEncryptionKeySize(bytes)` | 弱いlinkを断ることと、一部の相手を断ること |
+
+BR/EDRの電力制御は範囲の中からpacketごとにlevelを選ぶため、範囲を渡す形があります。
+1つだけ渡す形は上下限を同じ値に固定します。levelは-12〜+9 dBmの3 dB刻みで、間の値は
+丸められるため、`txPower()`は無線が適用した値を返します。BR/EDRの送信電力は
+`EspBle::setTxPower()`のLE側とは独立です。
+
+page timeoutは「何も応答しない相手をpageし続ける時間」で、相手の電源が入っていない、
+あるいは圏外のときに`connect()`が失敗するまでの時間です。既定は5120 msです。次のpageから
+効くため接続の前に設定します。`setPageTimeout()`の`true`は要求が受理されたという意味で、
+`pageTimeout()`はbackendが確定させた値——確定するまでは0——を返します。
+
+関連example: [RadioSettings](../examples/Classic/RadioSettings/)
+
 ## 3. Inquiry
 
 inquiryはClassic機器の探索で、BLEのscanとは別です。結果にはaddress、remote name、
@@ -136,10 +158,16 @@ Clientの`connect()`はSDPとRFCOMM接続を非同期に開始します。要求
 `true`はqueueへ入ったことを示します。peerへの送信完了は`onWriteCompleted()`です。
 捨てた分は`droppedWriteCount()` / `droppedReceiveByteCount()`で観測します。
 
-Arduinoの`Stream`互換adapterは**未実装**です。
+`EspBleClassicSppStream`は1 sessionをArduinoの`Stream`として扱うadapterで、`Serial`向けに
+書かれたcode——`print()`、`readStringUntil()`、`parseInt()`——がそのまま動きます。session
+自体は所有せず借りるだけなので、sessionが開いたら`attach()`し、閉じたら`detach()`します。
+`Serial`と違う点は2つです。write 1回が1 SPP packetになるため、文字単位ではなく行単位で
+書きます。もう1つは送信queueが有限なことで、空きが無いwriteは`setWriteTimeout()`の時間
+（既定1000 ms、0なら待たない）まで待ち、書けた分を返します。
 
 関連example: [SppServer](../examples/Classic/SppServer/)、
-[SppClient](../examples/Classic/SppClient/)
+[SppClient](../examples/Classic/SppClient/)、
+[SppStream](../examples/Classic/SppStream/)
 
 ## 5. Securityとbond
 
@@ -179,6 +207,13 @@ bluetooth.hidGamepad().send(0, 0, 0, 0, 0, 0, ESP_BLE_HID_GAMEPAD_HAT_UP, 1);
 
 Classicはdevice recordを1つ登録するため、configureした全profileが1つの合成
 Report Descriptorに入り、profileごとにreport IDが分かれます。
+
+**合成できるprofile数には上限があります。**descriptorと`name` / `description` /
+`provider`の3つは1つのSDP recordを共有し、合計214 byteまでです。既定の文字列
+（57 byte）ならkeyboard + mouse + consumer（144 byte）は入り、gamepadを加えた
+212 byteは入りません。backendはこの失敗を報告せず、recordが無いまま「起動した」
+deviceになるため、`begin()`が登録前に検査して`ResourceExhausted`で拒否します。
+BLEにこの制限はありません。
 
 ### 6.1 Host側
 
@@ -246,6 +281,26 @@ mSBCは16 kHzです。
 SCO payloadもencode済みのraw viewで受け渡します。実機ではmSBCの57 byte送信が受信側で
 58/60 byteのpadding付きになり、bad frameも60 byteで届きます。長さとbad frame情報を
 失わずにdecoder側へ渡します。
+
+通話以外に、電話機へ問い合わせたり自分のことを伝えたりできます。
+`queryOperatorName()`と`requestSubscriberNumber()`は要求で、答えは
+`onOperatorName()`と`onSubscriberNumber()`へ届きます。空文字も正当な応答です。
+`disableNoiseReduction()`は電話機側のnoise reductionを止めるよう頼むもので、自前で
+DSPを持つ機器のためにあります——2段重ねは1段より悪くなります。電池残量を電話機へ
+伝えるには`enableAppleExtensions()`の後に`reportBatteryLevel()`を呼びます。Appleが
+定めた拡張ですがAndroidやWindowsも受け付け、levelは0〜9です。
+
+`dialMemory(location)`は電話機内の位置を指定して発信します。Audio Gateway側では
+`Dial`ではなく`DialMemory`として届きます——位置は番号ではないため、桁として掛けると
+別の相手に繋がります。Apple拡張はAG側では`UnknownAt`のtextとして届きます。backendに
+解釈するAPIが無いためです。
+
+Audio Gateway側の`setInBandRingTone()`は「呼出音を鳴らすのはどちらか」を機器へ伝え、
+機器側は`onInBandRingTone()`で受け取ります。誤って伝えると、二重に鳴るか、来ない呼出音を
+待ち続けます。
+
+通話待ち・三者通話（CHLD、BTRH）は**未実装**です。このlibraryのAudio Gatewayが単一call
+modelのため相手側で検証できず、外部phoneでしか動かせないAPIを未検証のまま出さない判断です。
 
 関連example: [HfpClientRaw](../examples/Classic/HfpClientRaw/)、
 [HfpAudioGatewayRaw](../examples/Classic/HfpAudioGatewayRaw/)

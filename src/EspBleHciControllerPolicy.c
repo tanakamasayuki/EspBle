@@ -97,6 +97,7 @@ espble_hci_command_scope_t espble_hci_controller_policy_classify_opcode(
     case 0x0c12: // Delete Stored Link Key
     case 0x0c13: // Write Local Name
     case 0x0c14: // Read Local Name
+    case 0x0c17: // Read Page Timeout
     case 0x0c18: // Write Page Timeout
     case 0x0c1a: // Write Scan Enable
     case 0x0c1e: // Write Authentication Enable

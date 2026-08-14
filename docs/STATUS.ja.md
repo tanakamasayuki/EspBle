@@ -28,6 +28,7 @@ BLE MIDIはbackend非依存のpacket codec（timestamp・running status・複数
 - Manual test（3台目board前提、未接続時は自動skip）: `multi_connection`で複数同時接続・接続ごとのnotify routing・auto-reconnect（`setAutoReconnect`）・再接続時のpersistent subscription復元を実機検証
 - Unit test: keymap変換、HID Report Map parser、BLE MIDI codec、IEEE-11073 medical float codec、CGM E2E-CRC codec、iBeacon codec、HCI router、HCI command scheduler
 - 追加RPA Peer test: 無印ESP32 2台でhost-based RPAの初回pairing、両端再起動後のbond/LTK復元、暗号化GATT、復元bond削除、再pairingが成功。さらにClassic HID ACLを維持したまま両roleのRPAをhost timerでrotationし、preemptされたadvertisingとscanを再開して新RPAからbond済みLEへ再接続する。両dual-host stackの再起動後にもClassicとbond済みRPA/LEを復元する試験が成功
+- Classic Peer test（無印ESP32 2台）: inquiryとSDP照会、pairing、SPP（複数server・channel指定・binary往復）、HIDのAPI形状・制御チャネル・report、gamepadのraw report byte列、無線設定（送信電力・page timeout・暗号鍵最小長。page timeoutは接続試行の所要時間で反映を確認）、SPPのStream adapter（分割送信の順序、write timeout 0の非待機、`flush()`の送信完了待ち）、A2DP・AVRCP・HFPを実機検証
 - Example compile: 公開exampleをESP32-S3向けに検証。Classic exampleは無印ESP32専用条件で検証
 
 実行方法は[tests/TEST_PLAN.ja.md](../tests/TEST_PLAN.ja.md)、リリース時の確認項目は[RELEASE_CHECKLIST.ja.md](RELEASE_CHECKLIST.ja.md)を参照してください。

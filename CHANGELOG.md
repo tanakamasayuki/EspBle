@@ -2,6 +2,103 @@
 
 ## Unreleased
 
+- (EN) The HFP Client can now ask the phone about itself and report itself to the
+  phone: `queryOperatorName()`, `requestSubscriberNumber()`, `dialMemory()`,
+  `requestLastVoiceTagNumber()`, `disableNoiseReduction()`,
+  `enableAppleExtensions()` and `reportBatteryLevel()`. Battery reporting is the
+  one most accessories need, and it only works after the Apple extensions are
+  enabled. On the Audio Gateway side a memory dial now arrives as `DialMemory`
+  rather than `Dial`, because a memory position is not a number and dialling the
+  digits would call the wrong party; the Apple extensions arrive as `UnknownAt`
+  text, which is all the backend gives. Call waiting and three-way calling (CHLD,
+  BTRH) stay unimplemented: this library's Audio Gateway has a single-call model,
+  so there is nothing to verify them against here, and shipping an API that only
+  an external phone can exercise would mean shipping it unverified.
+- (EN) An Audio Gateway can say who makes the ring sound with
+  `setInBandRingTone()`, and an accessory hears it at `onInBandRingTone()`. An
+  accessory told the wrong thing either rings twice or waits for ring audio that
+  never arrives, and the answer can differ per call, so it is a call rather than a
+  configuration field.
+- (JA) Audio Gatewayが`setInBandRingTone()`で「呼出音を鳴らすのはどちら側か」を伝えられる
+  ようにした。機器側は`onInBandRingTone()`で受け取る。誤って伝えると二重に鳴るか、来ない
+  呼出音を待ち続ける。通話ごとに変わりうるためconfigではなく呼び出しにした。
+- (EN) Fixed: an Audio Gateway answering an undecoded AT command left the exchange
+  open. The backend sends the response line without the terminating OK, and the
+  peer then waits — its next AT command stays queued and is never sent. Found on
+  hardware with the Apple extensions: `AT+XAPL` answered with a `+XAPL` line and
+  no OK made the following `AT+IPHONEACCEV` disappear. `respondToUnknownAt()` now
+  finishes the exchange, with OK for a string and an error for null.
+- (JA) HFP Clientから電話機へ問い合わせ、また自分のことを伝えられるようにした。
+  `queryOperatorName()`、`requestSubscriberNumber()`、`dialMemory()`、
+  `requestLastVoiceTagNumber()`、`disableNoiseReduction()`、
+  `enableAppleExtensions()`、`reportBatteryLevel()`である。多くの機器が必要とするのは
+  電池残量の通知で、Apple拡張を有効にした後でなければ受け付けられない。Audio Gateway側は
+  memory dialを`Dial`ではなく`DialMemory`として配送するようにした——memoryの位置は番号では
+  なく、桁として掛けると別の相手に繋がるためである。Apple拡張は`UnknownAt`のtextとして
+  届く（backendが渡すのはそれだけである）。通話待ち・三者通話（CHLD、BTRH）は未実装のまま
+  とした。このlibraryのAudio Gatewayが単一call modelで検証相手が居らず、外部phoneでしか
+  動かせないAPIを未検証のまま出すことになるためである。
+- (JA) 修正: Audio Gatewayがbackendの解釈しないAT commandへ応答したとき、交換が閉じないまま
+  だった。backendは応答行を送るが終端のOKを送らないため、相手は待ち続け、次のAT commandが
+  queueから出ない。Apple拡張で実機検出した——`AT+XAPL`へ`+XAPL`行だけを返すと、続く
+  `AT+IPHONEACCEV`が消える。`respondToUnknownAt()`が交換を閉じるようにした（文字列ならOK、
+  nullptrならerror）。
+- (EN) SPP can be used as an Arduino `Stream`. `EspBleClassicSppStream` borrows a
+  session — the SPP API still opens and closes it — so `print()`,
+  `readStringUntil()` and `parseInt()` work over Bluetooth while the session
+  events keep arriving. Two things differ from `Serial` and are documented rather
+  than hidden: a write becomes one SPP packet, so lines are cheaper than
+  characters, and the outgoing queue is finite, so a write with no room waits up
+  to `setWriteTimeout()` (1000 ms by default, 0 to never wait) and reports how
+  much it took. `esp_spp_vfs_register()` stays unused: this covers the same need
+  without adding a file-descriptor path. New example `Classic/SppStream`.
+- (JA) SPPをArduinoの`Stream`として使えるようにした。`EspBleClassicSppStream`は
+  sessionを借りるだけ——開閉は従来どおりSPPのAPI——なので、`print()`や
+  `readStringUntil()`、`parseInt()`をBluetooth越しに使いながらsessionのeventも
+  受け取れる。`Serial`と違う点は隠さず書いた。write 1回が1 SPP packetになるため
+  文字単位より行単位が安く、送信queueは有限なので空きが無いwriteは
+  `setWriteTimeout()`（既定1000 ms、0なら待たない）まで待って書けた分を返す。
+  `esp_spp_vfs_register()`は使わない。同じ用途をfile descriptor経路を増やさずに
+  満たせるためである。example `Classic/SppStream`を追加した。
+- (EN) Classic can now choose its transmit power, its page timeout and the
+  minimum encryption key size it accepts. `setTxPower()` takes either a range,
+  because BR/EDR power control picks a level per packet from within one, or a
+  single value that pins both ends; it is independent of `EspBle::setTxPower()`,
+  which sets the LE power. `setPageTimeout()` decides how long a connection
+  attempt pages a peer that answers nothing, which is how long `connect()` takes
+  to fail when the peer is off — verified on hardware by timing the attempt, not
+  only by the call being accepted. `setMinimumEncryptionKeySize()` refuses a
+  short key, which only the local side can insist on. RSSI, QoS, AFH and ACL
+  packet types stay unexposed: the backend's RSSI is a delta from the golden
+  receive power range rather than dBm, and inquiry results already carry a real
+  one. New example `Classic/RadioSettings`.
+- (JA) Classicの送信電力、page timeout、受け入れる暗号鍵の最小長を設定できるように
+  した。`setTxPower()`は範囲でも単一値でも渡せる——BR/EDRの電力制御は範囲の中から
+  packetごとにlevelを選ぶためで、単一値は上下限を同じ値に固定する。LE側の
+  `EspBle::setTxPower()`とは独立である。`setPageTimeout()`は何も応答しない相手を
+  pageし続ける時間、つまり相手の電源が入っていないときに`connect()`が失敗するまでの
+  時間を決める。受理されたかではなく試行の所要時間で実機検証した。
+  `setMinimumEncryptionKeySize()`は短い鍵を拒否する——断れるのは自分側だけである。
+  RSSI・QoS・AFH・ACL packet typeは公開しない。backendのRSSIはgolden receive power
+  rangeとの差分でdBmではなく、実際の値はinquiry結果が既に持っている。
+  example `Classic/RadioSettings`を追加した。
+- (EN) A Classic HID device that would not fit its SDP record is now refused at
+  `begin()` with `ResourceExhausted` instead of coming up as a device no Host can
+  find. The composed Report Descriptor and the `name`, `description` and
+  `provider` strings share a 300-byte SDP pad with the standard attributes, which
+  leaves 214 bytes for them; the backend logs the overflow but still reports the
+  registration as successful. With the default strings that means keyboard +
+  mouse + consumer fits and adding the gamepad does not, so
+  `Classic/HidComposite` is those three and `Classic/HidGamepad` pairs the
+  gamepad with a keyboard. BLE has no such limit.
+- (JA) SDP recordに収まらないClassic HID deviceを`begin()`が`ResourceExhausted`で
+  拒否するようにした。以前はHostから見えないdeviceとして起動していた。合成した
+  Report Descriptorと`name` / `description` / `provider`は、標準属性と共有する
+  300 byteのSDP padのうち214 byteに収まる必要がある。backendは溢れをlogに出すだけで
+  登録は成功として返すためである。既定の文字列ではkeyboard + mouse + consumerが上限で
+  gamepadは加えられないため、`Classic/HidComposite`はその3つ、`Classic/HidGamepad`は
+  gamepadとkeyboardの組み合わせにした。BLEにこの制限は無い。
+
 - (EN) Added the examples for features that already worked but had none, so they
   are visible as features. Classic HID now has the same set as BLE HID —
   gamepad, mouse, media keys, NKRO and a composite device — because an
@@ -12,7 +109,7 @@
   selection), `Classic/A2dpSource`, `Classic/AvrcpController`,
   `Gap/MultiConnection` and `Hosted/WifiCoexistence`. Every Classic example
   README now says which radio reaches which peers, and a Classic beginner guide
-  covers the concepts (Japanese; the English version is still to come).
+  covers the concepts in both languages.
 - (JA) 実装済みなのにexampleが無かった機能へexampleを追加した。exampleが無い機能は
   無い機能として読まれるためである。Classic HIDはBLE HIDと同じ一覧になった——gamepad、
   mouse、メディアキー、NKRO、複合device。`Classic/HidGamepad`はBLEで代替できない
@@ -21,7 +118,7 @@
   （接続とchannel選択）、`Classic/A2dpSource`、`Classic/AvrcpController`、
   `Gap/MultiConnection`、`Hosted/WifiCoexistence`を追加した。各Classic exampleの
   READMEに「どちらの無線がどの相手に届くか」を書き、Classicの入門ガイドで概念を
-  説明した（日本語版。英語版は未作成）。
+  説明した（日英とも作成）。
 
 - (EN) A2DP delay reporting and the AVRCP notification and player-setting
   commands are available. A Sink tells the Source how long it takes to play what

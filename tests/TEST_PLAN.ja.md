@@ -372,6 +372,48 @@ profileを置いていないのは次の2種類だけです。
     確認する。**scan完了を待ってから照会する**——inquiryとSDPは両方が無線を使い、scan中の照会は
     受理されるのに応答が来ない。不正なaddressは送信前に`InvalidArgument`で拒否することも確認する。
 
+75. ✅ `classic_hid_gamepad`: Classicのgamepadを実機で検証する。BLE側と同じpackingを共有して
+    いても、Hostがrawで受けるのはClassicだけなので、byte列そのものを照合できるのはここである。
+    deviceはkeyboardとgamepadをconfigureし（この2つで133 byteなのでSDP recordに収まる）、
+    hostは`onInputReport()`のrawを16進で出す。軸の負値が符号付きのまま、hatとbutton bit fieldが
+    宣言どおりの位置に入り、gamepadのreport IDがkeyboardのそれと混ざらないことを確認する
+    （`id=3 len=12`のgamepadと`id=1 len=9`のkeyboardが同じrecordから届く）。releaseで全byteが
+    0に戻ることも見る。合成の上限（descriptor + 文字列で214 byte）を超える組み合わせを
+    `begin()`が拒否することは、`Classic/HidComposite` exampleの構成として固定してある。
+
+76. ✅ `classic_radio_settings`: Classicの無線・link設定を1基板で検証する。受理されたことは
+    反映を意味しないため、page timeoutは**接続試行の所要時間で**確かめる。誰も応答しない
+    locally administered addressへ`connect()`し、1000 msでは3秒以内に失敗し、既定の5120 msでは
+    それより1秒以上長くかかることを見る。起動時にlibraryがcontrollerへ照会するため、何も
+    設定しない状態で既定値5120 msが読めることも確認する。範囲外（5 msと50000 ms）は送信前に
+    `InvalidArgument`で拒否する。送信電力は範囲指定（-12〜9）、単一値（0）、対応levelの間の値
+    （-5→-6へ丸め）を設定して読み戻し、最小が最大を超える指定を拒否する。暗号鍵の最小長は
+    16を受理し、6と17を拒否する。
+
+77. ✅ `classic_spp_stream`: SPPのArduino `Stream` adapterを2基板で検証する。sessionを開くのは
+    peer側のsession APIで、届いたbyteを数えて順序に依存するchecksum（Adler方式）へ畳み込むため、
+    adapterが自分を検証する形にならない。`println()`が`write(buffer, size)`経由でCR LF込み
+    14 byteになること、1 packet（990 byte）を超える2500 byteが分割されても順序と内容が保たれること
+    （checksumが一致する）、`flush()`が送信完了まで待って`pendingWriteCount()`が0になること、
+    write timeoutを0にすると入り切らないwriteが待たずに「書けた分」を返すこと（queueは8本なので
+    12 packet要求は必ず不足する。所要時間も200 ms未満であることを見る）を確認する。読み側は
+    `readStringUntil()`（終端は含まない）と`parseInt()`——`read()` / `peek()`だけで動くStreamの
+    機能なので、adapterが本物のStreamであることの確認になる。`detach()`後はsessionが開いたままでも
+    write 0・available 0になり、peer側に何も届かないことも確認する。
+
+78. ✅ `classic_hfp_client`（`ESPBLE_TEST_HFP_CVSD`付きの`classic_hfp_cvsd`、dual-host版の
+    `ESPBLE_TEST_DUAL_HFP`を含む）: HFP ClientとAudio Gatewayを2基板で組み合わせる。role排他
+    （同一processでClientとAGの両方は`InvalidState`）、SLC確立、発信・着信・応答・終了、
+    SCO確立とencode済みpayloadの双方向、packet統計を確認する。あわせてClient側の付随command
+    ——operator名（`+COPS`）、subscriber番号（`+CNUM`、service type 4 = voice）、memory dial、
+    NREC、Apple拡張——を確認する。memory dialはAG側が`Dial`ではなく`DialMemory`として受け、
+    位置`3`が番号として扱われないことを見る。Apple拡張はAG側にdecoderが無いためunknown AT text
+    として届き、`XAPL`と`IPHONEACCEV`が含まれることを確認する。範囲外の引数（memory位置の負値、
+    空のidentification、battery level 10）は送信前に`InvalidArgument`で拒否する。AGが満たせない
+    last voice tag要求の後もSLCが生き、続く発信が通ることも確認する。in-band ring toneは
+    AG側の`setInBandRingTone()`の真偽が両方Client側の`onInBandRingTone()`へ届くことを見る
+    ——鳴らす側を誤って伝えると、二重に鳴るか呼出音が鳴らない。
+
 実験用 `dual_host_smoke` は、まず両側のClassic bondを削除して**初回pairingから**接続する——bondが残っているとpairingのHCI経路（link key応答とSSP応答）が走らず、brokerのpolicyに穴があっても通ってしまうため。そのうえでClassic HIDと暗号化LE GATTを接続した両基板で、別taskのClassic scan mode切替とNimBLE `Read RSSI`を同時発行する。FIFO投入数＝物理送信数、最終RSSI成功、broker error 0を確認し、各競合サイクル直後に暗号化GATT readとHID双方向通信を再検証する。`ESPBLE_DUAL_CONTENTION_CYCLES`で反復数を変更できる。さらにtest-onlyのdispatch holdでFIFO満杯と超過拒否を作り、未送信command破棄後のGATT/HID/lifecycle復帰を確認する。偽commandはcontrollerへ送らず、hostへ偽応答も返さない。接続中と両transport切断後にinventoryを取得し、条件付きcleanup commandを含む全opcodeが明示policy内であることも検証する。未知／別host opcodeはdual-host時だけ物理送信前に拒否する。nullと上限超過のHID Input / Output reportを送信前に`InvalidArgument`で拒否し、両接続と直後の通常通信が維持されることも確認する。BLE pairingは最初に誤passkeyを入力して双方の失敗、未暗号化、bond 0、保護GATT拒否とClassic継続を確認し、LE再接続後の正しいpasskeyで暗号化・bond・GATTを復旧する。続いてClassicだけを切断し、最終OPEN失敗の非同期`onConnectionFailed`通知、暗号化LE GATTの継続、正しいpeerへのClassic再接続とHID双方向復旧を確認する。Bluedroid公開HID APIではpage中の接続試行を取り消せないため、独自timeoutによる疑似cancelは試験契約にせずbackendの最終OPEN結果を境界とする。その後peerをsoftware resetで突然消失させ、生存側でLE / BR-EDR双方の切断を検出し、保存bondからBLE暗号化とClassic HIDを再接続してGATT/HID通信を復旧する。lifecycle部はcallback targetの参照寿命barrierを有効にした状態でClassic先行／BLE先行停止、Classic再attach、停止・再登録、両destructor順を通し、panic、watchdog、heap低下がないことを確認する。永続NVDSへ触れる`Write Local Name`はcontroller assertionを起こすため、負荷刺激には使わない。
 
 ## 合格条件

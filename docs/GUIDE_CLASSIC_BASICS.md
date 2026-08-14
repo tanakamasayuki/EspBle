@@ -5,7 +5,7 @@
 This guide explains the concepts of Bluetooth Classic (BR/EDR) and where the API
 boundaries are. The code lives in the [Classic examples](../examples/README.md).
 For BLE see the [BLE communication beginner guide](GUIDE_BLE_BASICS.md); for
-deciding between the two radios see [BLE and Classic](CLASSIC_VS_BLE.ja.md).
+deciding between the two radios see [BLE and Classic](CLASSIC_VS_BLE.md).
 
 **Classic works on the original ESP32 only.** ESP32-S3/C3/C6/H2/P4 have no
 BR/EDR radio. Which features are hardware-verified, unverified or unimplemented
@@ -92,6 +92,29 @@ change is applied asynchronously, so `classOfDevice()` read immediately still
 returns the previous value. To confirm it took effect, read it back until it
 matches.
 
+### 2.3 Radio and link settings
+
+Three settings change how the radio behaves rather than what a profile does:
+
+| Setting | Call | What it trades |
+|---|---|---|
+| transmit power | `setTxPower(dBm)` / `setTxPower(min, max)` | range against current draw |
+| page timeout | `setPageTimeout(milliseconds)` | how fast a connection attempt fails against giving up on a slow peer |
+| minimum encryption key size | `setMinimumEncryptionKeySize(bytes)` | refusing weak links against refusing some peers |
+
+BR/EDR power control picks a level per packet from a range, which is why there is
+a range form; a single value pins both ends. Levels are 3 dB apart between -12
+and +9 dBm and a value in between is rounded, so `txPower()` reports what the
+radio applied. The BR/EDR power is independent of `EspBle::setTxPower()`.
+
+The page timeout is how long paging a peer that answers nothing lasts, which is
+how long `connect()` takes to fail when the peer is off or out of range. The
+default is 5120 ms. It applies from the next page, so set it before connecting,
+and `setPageTimeout()` returning true means the request was accepted —
+`pageTimeout()` reports the value the backend confirmed, or 0 until it does.
+
+Related example: [RadioSettings](../examples/Classic/RadioSettings/)
+
 ## 3. Inquiry
 
 Inquiry is Classic device discovery, and it is not BLE scanning. A result may
@@ -146,10 +169,17 @@ terminate anything. A write request is queued, and true means queued — deliver
 is reported at `onWriteCompleted()`. What had to be dropped is counted by
 `droppedWriteCount()` and `droppedReceiveByteCount()`.
 
-An Arduino `Stream` adapter is **not implemented**.
+`EspBleClassicSppStream` is an Arduino `Stream` over one session, so code written
+against `Serial` — `print()`, `readStringUntil()`, `parseInt()` — works. It
+borrows a session rather than owning one: attach it when a session opens, detach
+it when the session closes. Two things differ from `Serial`. A write becomes one
+SPP packet, so write lines rather than characters; and the outgoing queue is
+finite, so a write with no room waits up to `setWriteTimeout()` (1000 ms by
+default, 0 to never wait) and then reports how much it took.
 
 Related examples: [SppServer](../examples/Classic/SppServer/),
-[SppClient](../examples/Classic/SppClient/)
+[SppClient](../examples/Classic/SppClient/),
+[SppStream](../examples/Classic/SppStream/)
 
 ## 5. Security and bonds
 
@@ -192,6 +222,14 @@ bluetooth.hidGamepad().send(0, 0, 0, 0, 0, 0, ESP_BLE_HID_GAMEPAD_HAT_UP, 1);
 
 Classic registers one device record, so every configured profile goes into one
 composed Report Descriptor and each keeps its own report ID.
+
+**How many profiles fit is limited.** The descriptor and the `name`,
+`description` and `provider` strings share one SDP record and may total 214
+bytes. With the default strings (57 bytes) keyboard + mouse + consumer (144
+bytes) fits and adding the gamepad, at 212, does not. The backend does not report
+that failure — the device comes up "started" with no record at all — so
+`begin()` checks before registering and refuses with `ResourceExhausted`. BLE has
+no such limit.
 
 ### 6.1 The host side
 
@@ -268,6 +306,29 @@ SCO payloads are handed over as already-encoded raw views. On hardware a 57-byte
 mSBC transmission arrives as a padded 58 or 60-byte view, and bad frames arrive as
 60 bytes too. Pass the length and the bad-frame flag through to the decoder rather
 than discarding them.
+
+Beyond calls, an accessory can ask the phone about itself and tell the phone
+about itself. `queryOperatorName()` and `requestSubscriberNumber()` are requests,
+answered at `onOperatorName()` and `onSubscriberNumber()`; an empty answer is a
+legal answer. `disableNoiseReduction()` asks the phone to stop its own noise
+reduction, for an accessory that does its own — two in series sound worse than
+one. `enableAppleExtensions()` followed by `reportBatteryLevel()` is how a
+battery level reaches a phone; Apple defined it and Android and Windows accept
+it, and the level runs from 0 to 9.
+
+`dialMemory(location)` dials from the phone's memory by position. On the Audio
+Gateway side that arrives as `DialMemory` rather than `Dial`, because a position
+is not a number and dialling the digits would call the wrong party. The Apple
+extensions arrive there as `UnknownAt` text: nothing in the backend decodes them.
+
+`setInBandRingTone()` on the Audio Gateway tells the accessory who makes the ring
+sound, and the accessory hears it at `onInBandRingTone()`. An accessory told the
+wrong thing either rings twice or waits for ring audio that never arrives.
+
+Call waiting and three-way calling (CHLD, BTRH) are **not implemented**. This
+library's Audio Gateway has a single-call model, so there is nothing here to test
+them against, and an API that can only be exercised against an external phone
+would ship unverified.
 
 Related examples: [HfpClientRaw](../examples/Classic/HfpClientRaw/),
 [HfpAudioGatewayRaw](../examples/Classic/HfpAudioGatewayRaw/)

@@ -197,6 +197,21 @@ PCMFlowBluetoothへは`badFrame`とraw lengthを失わず渡し、decoder側で5
 - Classic HIDのInput Reportはreport IDを先頭に付けて配送されるが、Report Descriptorのfield offsetは
   payload起点である。descriptorから復号するときはID分をずらす。剥がす条件は「先頭byteが当該reportのID」かつ
   「剥がすと宣言長と一致する」の両方にする——長さだけで判断すると、たまたま同じ値で始まるpayloadを削ってしまう。
+- HID deviceのSDP recordは`CONFIG_BT_SDP_PAD_LEN` = 300 byteのpadに全属性の値を詰める。
+  `HID_DevAddRecord()`が書く固定属性（record handle 4、service class list 3、protocol list 13、
+  language base 9、additional protocol list 15、profile descriptor list 8、HIDのintとboolean 20、
+  language id base 8、browse group 3、descriptor listのheader 6、文字列3つのNUL 3）で86 byteを使うため、
+  Report Descriptorと`name` / `description` / `provider`に残るのは214 byteである。
+  超えると`SDP_AddAttribute`が`attr_len:0`で失敗し（logに`length exceed maximum: ID 5`が出る）、
+  それでも`esp_bt_hid_device_register_app()`は成功を返す——recordの無いdeviceが起動し、
+  Hostからは見えない。`begin()`が登録前に検査して`ResourceExhausted`で拒否する。
+  実機でも一致を確認した（144 + 57 = 201は登録でき、158 + 57 = 215は失敗する）。
+  なおdescriptor長はv5.5.5では1 byte長で符号化されるため、pad以前に255 byteが上限である。
+- AG側の`esp_hf_ag_unknown_at_send()`は応答行を送るだけで、終端のOKを送らない
+  （`btc_hf_unat_response`が`ok_flag`を`BTA_AG_OK_CONTINUE`のままにする）。OKを送らないと
+  client側は同じcommandの応答を待ち続け、**次のAT commandがqueueから出ない**。Apple拡張で
+  実測した: `AT+XAPL`へ`+XAPL=...`だけを返すと、続く`AT+IPHONEACCEV`が消える。
+  `respondToUnknownAt()`が応答行の後にOKを送り、nullptrならerrorを返して必ず交換を閉じる。
 - Bluedroid公開HID Host APIにはpage中の接続試行を取り消す手段がない。未接続peerへの任意timeoutを
   `esp_bt_hid_host_disconnect()`で実装すると内部のconnecting状態が残り、次の接続を拒否するため採用しない。
   APIはbackendの最終`OPEN`失敗を`onConnectionFailed()`で非同期通知する。

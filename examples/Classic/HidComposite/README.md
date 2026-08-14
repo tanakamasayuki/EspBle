@@ -6,10 +6,10 @@ One Bluetooth Classic (BR/EDR) HID device that is a keyboard, a mouse and media
 keys at once. Classic registers a single device record, so all of it goes into
 one composed Report Descriptor and each profile keeps its own report ID.
 
-**How many profiles fit is limited here in a way it is not on BLE.** The record
-has to fit a 300-byte SDP pad shared with the device strings; these three profiles
-come to 144 descriptor bytes, and adding the gamepad makes 212, which does not
-register. `begin()` refuses such a combination rather than starting a device no
+**How many profiles fit is limited here in a way it is not on BLE.** The Report
+Descriptor and the three profile strings share one SDP record and may total 214
+bytes; these three profiles come to 144 descriptor bytes and the strings to 57,
+so 201 fits. Adding the gamepad makes the descriptor 212 and nothing registers. `begin()` refuses such a combination rather than starting a device no
 Host can reach. For a gamepad, use [HidGamepad](../HidGamepad/) on its own. Mirrors [Hid/CompositeKeyboardMouse](../../Hid/CompositeKeyboardMouse/) on
 the BLE side. **Classic works on the original ESP32 only.**
 

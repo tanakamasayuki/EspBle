@@ -26,6 +26,9 @@ The design documents are written in Japanese. This guide lists them and shows th
 | Settled decisions and their rationale | [DECISIONS.ja.md](DECISIONS.ja.md) |
 | HID spec (Device / Host) | [HID_DEVICE_SPEC.ja.md](HID_DEVICE_SPEC.ja.md) / [HID_HOST_SPEC.ja.md](HID_HOST_SPEC.ja.md) |
 | BLE communication beginner guide: GAP / security / GATT / UUID / HID / BLE MIDI | [GUIDE_BLE_BASICS.md](GUIDE_BLE_BASICS.md) |
+| Bluetooth Classic beginner guide: inquiry / SPP / HID / A2DP / HFP (original ESP32 only) | [GUIDE_CLASSIC_BASICS.md](GUIDE_CLASSIC_BASICS.md) |
+| Choosing between BLE and Classic, and what differs where both exist | [CLASSIC_VS_BLE.md](CLASSIC_VS_BLE.md) |
+| What Classic exposes, and what is verified, unverified or unimplemented (Japanese) | [CLASSIC_FEATURE_INVENTORY.ja.md](CLASSIC_FEATURE_INVENTORY.ja.md) |
 | Test strategy and coverage | [../tests/TEST_PLAN.md](../tests/TEST_PLAN.md) |
 | Release checks | [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) |
 | Remaining gates for the next release (Japanese) | [PLAN_RELEASE_NEXT.ja.md](PLAN_RELEASE_NEXT.ja.md) |

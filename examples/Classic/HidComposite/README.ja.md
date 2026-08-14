@@ -6,9 +6,10 @@ keyboard、mouse、メディアキーを兼ねる1台のBluetooth Classic（BR/E
 Classicはdevice recordを1つ登録するため、すべてが1つの合成Report Descriptorに入り、
 profileごとにreport IDが分かれます。
 
-**合成できるprofile数にはBLEには無い上限があります。**recordはdevice名などと共有する
-300 byteのSDP padに収まる必要があり、この3つでdescriptorは144 byte、gamepadを加えると
-212 byteで登録できません。`begin()`はそうした組み合わせを拒否します——誰も到達できない
+**合成できるprofile数にはBLEには無い上限があります。**Report Descriptorとprofileの
+文字列3つは1つのSDP recordを共有し、合計214 byteまでです。この3つでdescriptorは
+144 byte、文字列が57 byteなので201 byteで収まります。gamepadを加えるとdescriptorが
+212 byteになり、何も登録されません。`begin()`はそうした組み合わせを拒否します——誰も到達できない
 deviceを起動しないためです。gamepadは[HidGamepad](../HidGamepad/)を単独で使ってください。BLE側の
 [Hid/CompositeKeyboardMouse](../../Hid/CompositeKeyboardMouse/)と対になります。
 **Classicは無印ESP32のみ**で動きます。

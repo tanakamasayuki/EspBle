@@ -15,9 +15,15 @@ void setup()
   }
 
   auto &gateway = bluetooth.hfpAudioGateway();
-  gateway.onConnectionChanged([](const EspBleClassicHfpConnection &event) {
+  gateway.onConnectionChanged([&gateway](
+    const EspBleClassicHfpConnection &event) {
     Serial.printf("SLC state=%u peer=%s\n",
       static_cast<unsigned>(event.state), event.peerAddress.c_str());
+    // Tell the accessory who makes the ring sound. This gateway sends no ring
+    // tone of its own, so the headset has to beep — an accessory told the
+    // opposite waits for audio that never arrives.
+    if (gateway.serviceLevelConnected())
+      (void)gateway.setInBandRingTone(false);
   });
   gateway.onCommand([&gateway](
     const EspBleClassicHfpAudioGatewayCommand &command) {
