@@ -41,7 +41,7 @@ Examples are grouped by area. Each standard-service directory holds a matching
 | [Hosted/CustomPins](Hosted/CustomPins/) | P4 Host | Override ESP-Hosted SDIO pins before `ble.begin()` when they differ from the board variant |
 | [Hosted/WifiCoexistence](Hosted/WifiCoexistence/) | P4 Host | Wi-Fi and BLE over one shared ESP-Hosted transport, and the order they stop in |
 
-### Bluetooth Classic (original ESP32, experimental)
+### Bluetooth Classic (original ESP32 only)
 
 Using `EspBleClassic` selects the separately built Classic host automatically.
 There is no build flag: starting both `EspBle` and `EspBleClassic` is what makes

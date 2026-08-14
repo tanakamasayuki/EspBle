@@ -132,7 +132,7 @@ automatically selects the custom-built Classic-only Bluedroid host. Classic is i
 | Classic HID (BT HID) | ⚠️ | Classic-only generic Device/Host and the control channel (Get_Report / Set_Report / protocol mode / idle rate / virtual cable unplug) verified on hardware. How many profiles can be composed is capped by the SDP record at 214 bytes of descriptor plus strings, and the host side decodes keyboard and mouse only. Use HOGP on BLE |
 | Classic device discovery / pairing / bond | ⚠️ | Inquiry (name, Class of Device, RSSI), SDP queries, IO capability selection, application answers for numeric comparison and passkey, and bond listing and removal verified on hardware; legacy PIN pairing is refused |
 | Classic radio and link settings | ⚠️ | Transmit power (range or single value), page timeout and minimum encryption key size verified on hardware; connected RSSI, QoS, AFH and EIR composition stay unexposed |
-| Simultaneous Classic / BLE (dual host) | ⚠️ | Experimental opt-in; HID/security/lifecycle, bidirectional HFP mSBC SCO, A2DP encoded-media streaming, AVRCP control, and GATT reads during and after each audio link are hardware-verified |
+| Simultaneous Classic / BLE (dual host) | ⚠️ | Experimental, with no build flag — which hosts a sketch starts decides it; HID/security/lifecycle, bidirectional HFP mSBC SCO, A2DP encoded-media streaming, AVRCP control, and GATT reads during and after each audio link are hardware-verified |
 
 ## Notes
 

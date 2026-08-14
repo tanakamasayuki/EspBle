@@ -132,7 +132,7 @@ ESP32-S3/C3/C6/H2等はBluetooth Classicを搭載しないため利用できま�
 | Classic HID（BT HID） | ⚠️ | generic Device/HostとBLE同形のprofile API（keyboard / mouse / consumer / system / gamepad）、host側のReport Descriptor解析、制御チャネル（Get_Report / Set_Report / protocol mode / idle rate / virtual cable unplug）を実機確認。合成できるprofile数はSDP recordの214 byte（descriptor + 文字列）が上限で、超過は`begin()`が拒否する。host側の復号はkeyboardとmouseのみ |
 | Classic device discovery / pairing / bond | ⚠️ | inquiry（name・Class of Device・RSSI）、SDP照会、IO capability選択、numeric comparison / passkeyのapplication応答、bond一覧・削除を実機確認。legacy PINは拒否 |
 | Classicの無線・link設定 | ⚠️ | 送信電力（範囲・単一値）、page timeout、暗号鍵の最小長を実機確認。RSSI（接続後）・QoS・AFH・EIR設定は未公開 |
-| Classic / BLE同時利用（Dual-host） | ⚠️ | opt-inの実験機能。HID/security/lifecycle、HFP mSBC SCO双方向通信、A2DP encode済みmedia転送、AVRCP操作と、各audio link中・切断後のGATT readを実機確認済み |
+| Classic / BLE同時利用（Dual-host） | ⚠️ | 実験扱い（build flagは無く、`begin()`したhostで決まる）。HID/security/lifecycle、HFP mSBC SCO双方向通信、A2DP encode済みmedia転送、AVRCP操作と、各audio link中・切断後のGATT readを実機確認済み |
 
 ## 補足
 

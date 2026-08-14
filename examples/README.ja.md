@@ -40,7 +40,7 @@ arduino-cli compile --profile esp32s3 examples/<path>
 | [Hosted/CustomPins](Hosted/CustomPins/) | P4 Host | board variantと異なるESP-Hosted SDIO pinを`ble.begin()`前に上書き |
 | [Hosted/WifiCoexistence](Hosted/WifiCoexistence/) | P4 Host | 1つの共有ESP-Hosted transportでWi-FiとBLEを同時利用し、停止順序を示す |
 
-### Bluetooth Classic（無印ESP32・実験対応）
+### Bluetooth Classic（無印ESP32のみ）
 
 `EspBleClassic`を使うと独自buildしたClassic hostが自動選択されます。build flagはありません。
 `EspBle`と`EspBleClassic`の両方を開始すればdual-host、片方だけなら単一hostになります。

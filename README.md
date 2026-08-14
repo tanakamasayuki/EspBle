@@ -8,8 +8,8 @@ component directly.** It does not go through Arduino-ESP32's `BLEDevice`,
 `BLEClient`, or `BLEServer` wrappers. Central and peripheral roles, GATT client
 and server operations, security, HID, and BLE MIDI share one `EspBle`
 foundation. On the original ESP32 it also offers Bluetooth Classic — SPP, HID
-device and host, A2DP, AVRCP and HFP — with an opt-in dual-host mode alongside
-bundled NimBLE that remains experimental. Which Classic features are
+device and host, A2DP, AVRCP and HFP — and running it alongside bundled NimBLE
+(dual-host) remains experimental. Which Classic features are
 hardware-verified, unverified or unimplemented is tracked per feature; see
 [BLE or Bluetooth Classic](docs/CLASSIC_VS_BLE.md).
 

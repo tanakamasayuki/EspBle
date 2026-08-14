@@ -33,6 +33,11 @@ EspBleの開発ドキュメント一覧と、初見の人が状況を把握す�
 | リリース前の確認手順 | [RELEASE_CHECKLIST.ja.md](RELEASE_CHECKLIST.ja.md) |
 | ボード / coreビルド対応表（CI生成） | `BOARDS.<version>.md` / `COMPATIBILITY.<version>.md` |
 | 無印ESP32対応の方針・取得元・検証計画 | [PLAN_ESP32.ja.md](PLAN_ESP32.ja.md) |
+| 無印ESP32 Classicの実装計画（配布形式・段階） | [PLAN_ESP32_CLASSIC.ja.md](PLAN_ESP32_CLASSIC.ja.md) |
+| Classic Audio（A2DP / AVRCP / HFP）の拡張計画 | [PLAN_ESP32_CLASSIC_AUDIO.ja.md](PLAN_ESP32_CLASSIC_AUDIO.ja.md) |
+| ESP32-P4 / ESP-Hosted対応の計画 | [PLAN_ESP_HOSTED.ja.md](PLAN_ESP_HOSTED.ja.md) |
+| PCMFlowBluetoothへのA2DP検証・修正依頼 | [REQUEST_PCMFLOWBLUETOOTH_A2DP_VALIDATION.ja.md](REQUEST_PCMFLOWBLUETOOTH_A2DP_VALIDATION.ja.md) |
+| 1.0.0リリース時の作業計画（履歴） | [PLAN_RELEASE_1_0_0.ja.md](PLAN_RELEASE_1_0_0.ja.md) |
 | 無印ESP32でNimBLEとClassicを共存させる調査・技術検証 | [TECHNICAL_VALIDATION_ESP32_CLASSIC.ja.md](TECHNICAL_VALIDATION_ESP32_CLASSIC.ja.md) |
 | 無印ESP32 Classic作業の引き継ぎ・未完了事項 | [HANDOFF_ESP32_CLASSIC.ja.md](HANDOFF_ESP32_CLASSIC.ja.md) |
 | Classicの公開API・未公開機能の棚卸し | [CLASSIC_FEATURE_INVENTORY.ja.md](CLASSIC_FEATURE_INVENTORY.ja.md) |
@@ -51,4 +56,4 @@ EspBleの開発ドキュメント一覧と、初見の人が状況を把握す�
 
 ## 現在の一言サマリ
 
-**BLE共通基盤と複合HID Device / Hostは公開済み**です。無印ESP32のClassic / dual-hostは実験実装と実機検証が進み、長時間soakと公開範囲の確定を次に行います。
+**BLE共通基盤と複合HID Device / Hostは公開済み**です。無印ESP32のClassicは次回リリースの対象で、機能ごとの検証状態を[棚卸し](CLASSIC_FEATURE_INVENTORY.ja.md)に明記しています。BLEとClassicの同時利用（dual-host）は実機検証済みですが実験扱いのままです。残っているのは最終回帰と外部機器との相互運用です。

@@ -7,7 +7,7 @@ CoreへESP-IDF componentとして組み込まれているNimBLE Host APIを直�
 Arduino-ESP32同梱の`BLEDevice` / `BLEClient` / `BLEServer`などのラッパを経由せず、
 Central / Peripheral、GATT Client / Server、Security、HID、BLE MIDIを1つの
 `EspBle`基盤上で扱います。無印ESP32ではBluetooth Classic——SPP、HID device / host、
-A2DP、AVRCP、HFP——も利用でき、opt-inのdual-host構成（同梱NimBLEとの同時利用）は実験扱いです。
+A2DP、AVRCP、HFP——も利用でき、同梱NimBLEとの同時利用（dual-host）は実験扱いです。
 Classicは機能ごとに実機検証済み / 未検証 / 未実装を明記しています。
 [BLEとClassicの選び方](docs/CLASSIC_VS_BLE.ja.md)を参照してください。
 

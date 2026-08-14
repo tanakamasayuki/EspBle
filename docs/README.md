@@ -34,6 +34,12 @@ The design documents are written in Japanese. This guide lists them and shows th
 | Remaining gates for the next release (Japanese) | [PLAN_RELEASE_NEXT.ja.md](PLAN_RELEASE_NEXT.ja.md) |
 | Board / core build matrices (CI-generated) | `BOARDS.<version>.md` / `COMPATIBILITY.<version>.md` |
 | Original-ESP32 support: policy, upstream sources, verification plan (Japanese) | [PLAN_ESP32.ja.md](PLAN_ESP32.ja.md) |
+| Original-ESP32 Classic implementation plan: distribution form and stages (Japanese) | [PLAN_ESP32_CLASSIC.ja.md](PLAN_ESP32_CLASSIC.ja.md) |
+| Classic Audio (A2DP / AVRCP / HFP) expansion plan (Japanese) | [PLAN_ESP32_CLASSIC_AUDIO.ja.md](PLAN_ESP32_CLASSIC_AUDIO.ja.md) |
+| ESP32-P4 / ESP-Hosted support plan (Japanese) | [PLAN_ESP_HOSTED.ja.md](PLAN_ESP_HOSTED.ja.md) |
+| Coexistence research and hardware validation record for NimBLE plus Classic (Japanese) | [TECHNICAL_VALIDATION_ESP32_CLASSIC.ja.md](TECHNICAL_VALIDATION_ESP32_CLASSIC.ja.md) |
+| A2DP validation and fix request sent to PCMFlowBluetooth (Japanese) | [REQUEST_PCMFLOWBLUETOOTH_A2DP_VALIDATION.ja.md](REQUEST_PCMFLOWBLUETOOTH_A2DP_VALIDATION.ja.md) |
+| Work plan for the 1.0.0 release (history, Japanese) | [PLAN_RELEASE_1_0_0.ja.md](PLAN_RELEASE_1_0_0.ja.md) |
 | Original-ESP32 Classic handoff and remaining work (Japanese) | [HANDOFF_ESP32_CLASSIC.ja.md](HANDOFF_ESP32_CLASSIC.ja.md) |
 | Rebuilding the Classic-only Bluedroid archive (Japanese) | [CLASSIC_HOST_BUILD.ja.md](CLASSIC_HOST_BUILD.ja.md) |
 | ESP32-P4 / ESP-Hosted setup, versions, and C6 update (Japanese) | [ESP_HOSTED_SETUP.ja.md](ESP_HOSTED_SETUP.ja.md) |
@@ -49,4 +55,4 @@ The design documents are written in Japanese. This guide lists them and shows th
 
 ## One-line status
 
-The **BLE foundation and composite HID Device / Host are released and covered by peer/unit tests**. Original-ESP32 Classic / dual-host support is experimental; an hours-long soak and a release-scope decision are next.
+The **BLE foundation and composite HID Device / Host are released and covered by peer/unit tests**. Original-ESP32 Classic is part of the next release, with each feature's state written down in the [feature inventory](CLASSIC_FEATURE_INVENTORY.ja.md) (Japanese). Running BLE and Classic together is hardware-verified but stays experimental. What remains is the final regression and interoperability with external devices.
