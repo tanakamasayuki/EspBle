@@ -100,19 +100,19 @@ exampleに無い機能は「無い機能」として扱われる。BLEにあっ�
 
 | 状態 | 項目 | 完了条件 |
 |---|---|---|
-| 未完了 | `Classic/HidGamepad` | **最優先。**BR/EDR HIDしか持たない旧世代ゲーム機が実際の接続先で、BLEでは代替できない。hat switchと39 fieldの作り方を示す |
-| 未完了 | `Classic/HidComposite` | keyboard + mouse + consumer + system + gamepadを1台で合成し、profileごとにreport IDが分かれることを示す（BLE `Hid/CompositeKeyboardMouse`と対） |
-| 未完了 | `Classic/HidMouse` | mouse単独。`wheel()`、`press()`の加算、`buttons()`（BLE `Hid/Mouse`と対） |
-| 未完了 | `Classic/HidConsumerControl` | 音量・再生操作。car audioやTVが接続先（BLE `Hid/ConsumerControl`と対） |
-| 未完了 | `Classic/HidKeyboardNkro` | NKRO。6KRO制限が無いこと（BLE `Hid/KeyboardNkro`と対） |
-| 未完了 | `Classic/HidCustomDevice` | 任意Report Descriptor。既存`HidVendorDevice`と重複するため、統合するかBLEと同名へ揃えるかを着手時に決める |
-| 未完了 | `Hid/Gamepad`（BLE側） | `hidGamepad()`はどのexampleでも呼ばれていない。Classic版と同じ内容をBLEでも示す |
-| 未完了 | `Classic/SppClient` | `spp().connect()`。相手のservice recordからchannelを解決する流れはserver exampleから分からない |
-| 未完了 | `Classic/A2dpSource` | Sourceは実装済みだがexampleはSinkだけ |
-| 未完了 | `Classic/AvrcpController` | `sendKey()` / `requestMetadata()` / `requestPlayStatus()` / `setAbsoluteVolume()` / `registerVolumeNotifications()`。既存exampleはTarget側のみ |
-| 未完了 | `Hosted/WifiCoexistence` | P4/C6でWi-FiとBLEが同一transportを共有し、`EspBle::end()`がWi-Fiを残すこと。peer testはあるがexampleが無い |
-| 未完了 | `Gap/MultiConnection` | 複数同時接続（上限3）。`AutoReconnectClient`は1接続の再接続のみ |
-| 未完了 | `docs/GUIDE_CLASSIC_BASICS.ja.md` / `.md` | Classicの概念とAPI境界の入門。`GUIDE_BLE_BASICS`と対にする。姉妹library`../EspBleBluedroid/docs/GUIDE_CLASSIC_BASICS.ja.md`の構成（BLEと別の通信モデル、Inquiry、SPP、Security、A2DP/AVRCP、HFP、同時利用）を土台に、EspBleのAPI名と範囲へ書き換える |
+| 完了 | `Classic/HidGamepad` | **最優先。**BR/EDR HIDしか持たない旧世代ゲーム機が実際の接続先で、BLEでは代替できない。hat switchと39 fieldの作り方を示す |
+| 完了 | `Classic/HidComposite` | keyboard + mouse + consumer + system + gamepadを1台で合成し、profileごとにreport IDが分かれることを示す（BLE `Hid/CompositeKeyboardMouse`と対） |
+| 完了 | `Classic/HidMouse` | mouse単独。`wheel()`、`press()`の加算、`buttons()`（BLE `Hid/Mouse`と対） |
+| 完了 | `Classic/HidConsumerControl` | 音量・再生操作。car audioやTVが接続先（BLE `Hid/ConsumerControl`と対） |
+| 完了 | `Classic/HidKeyboardNkro` | NKRO。6KRO制限が無いこと（BLE `Hid/KeyboardNkro`と対） |
+| 見送り | `Classic/HidCustomDevice` | 既存の`Classic/HidVendorDevice`が任意Report Descriptorを示しており、内容が重複する。BLEの`Hid/CustomDevice`に対応するものとしてvendor版を案内すれば足りる |
+| 完了 | `Hid/Gamepad`（BLE側） | `hidGamepad()`はどのexampleでも呼ばれていない。Classic版と同じ内容をBLEでも示す |
+| 完了 | `Classic/SppClient` | `spp().connect()`。相手のservice recordからchannelを解決する流れはserver exampleから分からない |
+| 完了 | `Classic/A2dpSource` | Sourceは実装済みだがexampleはSinkだけ |
+| 完了 | `Classic/AvrcpController` | `sendKey()` / `requestMetadata()` / `requestPlayStatus()` / `setAbsoluteVolume()` / `registerVolumeNotifications()`。既存exampleはTarget側のみ |
+| 完了 | `Hosted/WifiCoexistence` | P4/C6でWi-FiとBLEが同一transportを共有し、`EspBle::end()`がWi-Fiを残すこと。peer testはあるがexampleが無い |
+| 完了 | `Gap/MultiConnection` | 複数同時接続（上限3）。`AutoReconnectClient`は1接続の再接続のみ |
+| 一部完了 | `docs/GUIDE_CLASSIC_BASICS.ja.md` / `.md` | Classicの概念とAPI境界の入門。`GUIDE_BLE_BASICS`と対にする。日本語版を作成した（BLEと別の通信モデル、起動と可視性、inquiry、SPP、security、HID、A2DP/AVRCP、HFP、BLEとの同時利用）。英語版が残る |
 | 完了 | BLEとClassicの選び方 | [CLASSIC_VS_BLE.ja.md](CLASSIC_VS_BLE.ja.md)。どちらを選ぶか、Classicの用途が実質SPP・音声・旧世代HIDの3つであること、HIDとSPPの同時利用が可能であること、両方にある機能（HID / Security / 探索 / データ転送）の差を記述。docs索引とREADME.ja.mdから参照 |
 | 一部完了 | BLEとClassicの違いの周知 | 上記文書は作成済み。残りは英語版`CLASSIC_VS_BLE.md`、`examples/README`両言語、`README.md`（英語）、Feature Matrix、各Classic exampleの冒頭コメントへの反映 |
 

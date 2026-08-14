@@ -2,7 +2,8 @@
 
 EspBleはBLE（`EspBle`）とBluetooth Classic（`EspBleClassic`）の両方を提供します。
 HIDのように両方にある機能もあるため、この文書は「どちらを選ぶか」と
-「同じ機能でも何が違うか」を扱います。API別の対応状況は
+「同じ機能でも何が違うか」を扱います。Classicの概念とAPI境界は
+[Classic通信の入門ガイド](GUIDE_CLASSIC_BASICS.ja.md)にあります。API別の対応状況は
 [Feature Matrix](FEATURE_MATRIX.ja.md)、Classic側の細かい公開範囲は
 [Classic機能の棚卸し](CLASSIC_FEATURE_INVENTORY.ja.md)を参照してください。
 

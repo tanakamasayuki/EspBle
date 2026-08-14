@@ -55,6 +55,10 @@ constexpr size_t HidEventQueueCapacity = 12;
 constexpr size_t MaximumHidReportLength =
   EspBleClassicHidDevice::MaximumReportLength;
 
+// Report Descriptor plus the device strings, as they share the SDP record's pad.
+// See the check in EspBleClassicHidDevice::begin() for how this was measured.
+constexpr size_t MaximumSdpRecordPayload = 200;
+
 #if ESPBLE_CLASSIC_HID_BACKEND_AVAILABLE
 String hidAddress(const esp_bd_addr_t address)
 {
@@ -777,6 +781,30 @@ bool EspBleClassicHidDevice::begin(
     deactivateCallbackTarget(
       activeHidDevice, hidDeviceCallbackTargetMutex, impl_);
     owner_->setError(EspBleError::BackendFailure, "failed to initialize HID device profile");
+    return false;
+  }
+  // The backend does not report this failure: when the SDP record does not fit,
+  // HID_DevAddRecord logs it, register_app still reports success, and the device
+  // ends up registered with no record — so no Host can find or connect to it.
+  // Checked here instead, because a silent "started" is worse than a refusal.
+  //
+  // The record holds the Report Descriptor and the three strings inside a
+  // 300-byte pad (CONFIG_BT_SDP_PAD_LEN) shared with the standard attributes.
+  // Measured on hardware: descriptor 144 + strings 57 = 201 registers, and
+  // 158 + 57 = 215 does not, which puts the fixed attributes at roughly 90 to
+  // 99 bytes. 200 is therefore the largest total that is known to work.
+  const size_t recordBudget =
+    impl_->descriptorLength + impl_->name.length() +
+    impl_->description.length() + impl_->provider.length();
+  if (recordBudget > MaximumSdpRecordPayload)
+  {
+    deactivateCallbackTarget(
+      activeHidDevice, hidDeviceCallbackTargetMutex, impl_);
+    esp_bt_hid_device_deinit();
+    owner_->setError(
+      EspBleError::ResourceExhausted,
+      "the HID Report Descriptor and names do not fit the SDP record; "
+      "use fewer profiles or shorter names");
     return false;
   }
   if (
@@ -2082,7 +2110,7 @@ bool EspBleClassicHidGamepad::ready() const
   return configured_ && owner_->hidDevice().connected();
 }
 
-bool EspBleClassicHidGamepad::send(const EspBleHidGamepadReport &report)
+bool EspBleClassicHidGamepad::sendReport(const EspBleHidGamepadReport &report)
 {
   const uint8_t value[11] = {
     static_cast<uint8_t>(report.x), static_cast<uint8_t>(report.y),
@@ -2097,10 +2125,26 @@ bool EspBleClassicHidGamepad::send(const EspBleHidGamepadReport &report)
     ESPBLE_HID_REPORT_ID_GAMEPAD, value, sizeof(value));
 }
 
+bool EspBleClassicHidGamepad::send(
+  int8_t x, int8_t y, int8_t z, int8_t rz, int8_t rx, int8_t ry,
+  uint8_t hat, uint32_t buttons)
+{
+  EspBleHidGamepadReport report;
+  report.x = x;
+  report.y = y;
+  report.z = z;
+  report.rz = rz;
+  report.rx = rx;
+  report.ry = ry;
+  report.hat = hat;
+  report.buttons = buttons;
+  return sendReport(report);
+}
+
 bool EspBleClassicHidGamepad::releaseAll()
 {
   EspBleHidGamepadReport report;
-  return send(report);
+  return sendReport(report);
 }
 
 // --- Classic HID Host decoding --------------------------------------------

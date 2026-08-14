@@ -33,8 +33,11 @@ void setup()
   });
   bluetooth.hidHost().onInputReport(
     [](const EspBleClassicHidReport &report) {
-      Serial.printf("HOST_RAW id=%u len=%u\n", report.reportId,
+      Serial.printf("HOST_RAW id=%u len=%u hex=", report.reportId,
         static_cast<unsigned>(report.value.length()));
+      for (size_t index = 0; index < report.value.length(); ++index)
+        Serial.printf("%02x", static_cast<uint8_t>(report.value[index]));
+      Serial.println();
     });
 
   EspBleClassicConfig config;

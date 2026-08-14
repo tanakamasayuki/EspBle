@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+- (EN) Added the examples for features that already worked but had none, so they
+  are visible as features. Classic HID now has the same set as BLE HID —
+  gamepad, mouse, media keys, NKRO and a composite device — because an
+  implemented feature with no example reads as a missing one. `Classic/HidGamepad`
+  is the case that has no BLE alternative: older consoles accept BR/EDR HID only.
+  `Hid/Gamepad` fills the same gap on the BLE side, where `hidGamepad()` had no
+  example either. Also added `Classic/SppClient` (dialling and channel
+  selection), `Classic/A2dpSource`, `Classic/AvrcpController`,
+  `Gap/MultiConnection` and `Hosted/WifiCoexistence`. Every Classic example
+  README now says which radio reaches which peers, and a Classic beginner guide
+  covers the concepts (Japanese; the English version is still to come).
+- (JA) 実装済みなのにexampleが無かった機能へexampleを追加した。exampleが無い機能は
+  無い機能として読まれるためである。Classic HIDはBLE HIDと同じ一覧になった——gamepad、
+  mouse、メディアキー、NKRO、複合device。`Classic/HidGamepad`はBLEで代替できない
+  用途で、旧世代のゲーム機はBR/EDR HIDしか受け付けない。BLE側も`hidGamepad()`の
+  exampleが無かったため`Hid/Gamepad`を追加した。あわせて`Classic/SppClient`
+  （接続とchannel選択）、`Classic/A2dpSource`、`Classic/AvrcpController`、
+  `Gap/MultiConnection`、`Hosted/WifiCoexistence`を追加した。各Classic exampleの
+  READMEに「どちらの無線がどの相手に届くか」を書き、Classicの入門ガイドで概念を
+  説明した（日本語版。英語版は未作成）。
+
 - (EN) A2DP delay reporting and the AVRCP notification and player-setting
   commands are available. A Sink tells the Source how long it takes to play what
   it receives with `setDelay()`, reads it back with `requestDelay()`, and the

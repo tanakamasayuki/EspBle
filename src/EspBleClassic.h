@@ -1434,7 +1434,13 @@ public:
       EspBleClassicHidProfileConfig());
   bool configured() const;
   bool ready() const;
-  bool send(const EspBleHidGamepadReport &report);
+  bool sendReport(const EspBleHidGamepadReport &report);
+  // The axes in the order the report declares them, so a sketch can send a
+  // whole stick position without building a report first. Same signature as the
+  // BLE side.
+  bool send(
+    int8_t x, int8_t y, int8_t z, int8_t rz, int8_t rx, int8_t ry,
+    uint8_t hat, uint32_t buttons);
   bool releaseAll();
 
 private:

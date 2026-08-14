@@ -100,7 +100,7 @@ def test_classic_hid_profiles_match_the_ble_api(dut, peers):
     # report ID byte in front of the two-byte payload.
     dut.write("u")
     dut.expect_exact("DEVICE_CONSUMER sent=1", timeout=10)
-    peer.expect(re.compile(rb"HOST_RAW id=4 len=3"), timeout=20)
+    peer.expect(re.compile(rb"HOST_RAW id=4 len=3 hex=04e900"), timeout=20)
 
     # LEDs travel the other way, and the host has to name the report ID the
     # peer's descriptor declared rather than a fixed one. The device reports
