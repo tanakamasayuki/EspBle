@@ -76,7 +76,7 @@ def test_hid_keyboard_host_discovery_state_and_leds(dut, peers):
     keyboard_device.write("t")
     keyboard_device.expect_exact("DEVICE_LAYOUT_KEY_SENT success=1", timeout=10)
     dut.expect_exact(
-        "HOST_KEY usage=31 ascii=64 pressed=1 released=0 modifiers=2 context=loop",
+        "HOST_KEY usage=31 ascii=64 pressed=1 released=0 modifiers=2 raw=8:021f context=loop",
         timeout=20,
     )
     keyboard_device.write("r")
@@ -85,13 +85,13 @@ def test_hid_keyboard_host_discovery_state_and_leds(dut, peers):
     keyboard_device.write("m")
     keyboard_device.expect_exact("DEVICE_MODIFIER_SENT success=1", timeout=10)
     dut.expect_exact(
-        "HOST_KEY usage=225 ascii=0 pressed=1 released=0 modifiers=2 context=loop",
+        "HOST_KEY usage=225 ascii=0 pressed=1 released=0 modifiers=2 raw=8:0200 context=loop",
         timeout=20,
     )
     keyboard_device.write("r")
     keyboard_device.expect_exact("DEVICE_RELEASE_SENT success=1", timeout=10)
     dut.expect_exact(
-        "HOST_KEY usage=225 ascii=0 pressed=0 released=1 modifiers=0 context=loop",
+        "HOST_KEY usage=225 ascii=0 pressed=0 released=1 modifiers=0 raw=8:0000 context=loop",
         timeout=20,
     )
 
@@ -100,7 +100,7 @@ def test_hid_keyboard_host_discovery_state_and_leds(dut, peers):
     keyboard_device.write("t")
     keyboard_device.expect_exact("DEVICE_LAYOUT_KEY_SENT success=1", timeout=10)
     dut.expect_exact(
-        "HOST_KEY usage=31 ascii=34 pressed=1 released=0 modifiers=2 context=loop",
+        "HOST_KEY usage=31 ascii=34 pressed=1 released=0 modifiers=2 raw=8:021f context=loop",
         timeout=20,
     )
     keyboard_device.write("r")
@@ -111,7 +111,7 @@ def test_hid_keyboard_host_discovery_state_and_leds(dut, peers):
     keyboard_device.write("y")
     keyboard_device.expect_exact("DEVICE_Y_POSITION_SENT success=1", timeout=10)
     dut.expect_exact(
-        "HOST_KEY usage=28 ascii=122 pressed=1 released=0 modifiers=0 context=loop",
+        "HOST_KEY usage=28 ascii=122 pressed=1 released=0 modifiers=0 raw=8:001c context=loop",
         timeout=20,
     )
     keyboard_device.write("r")
@@ -122,7 +122,7 @@ def test_hid_keyboard_host_discovery_state_and_leds(dut, peers):
     keyboard_device.write("a")
     keyboard_device.expect_exact("DEVICE_A_POSITION_SENT success=1", timeout=10)
     dut.expect_exact(
-        "HOST_KEY usage=4 ascii=113 pressed=1 released=0 modifiers=0 context=loop",
+        "HOST_KEY usage=4 ascii=113 pressed=1 released=0 modifiers=0 raw=8:0004 context=loop",
         timeout=20,
     )
     keyboard_device.write("r")
@@ -133,7 +133,7 @@ def test_hid_keyboard_host_discovery_state_and_leds(dut, peers):
     keyboard_device.write("t")
     keyboard_device.expect_exact("DEVICE_LAYOUT_KEY_SENT success=1", timeout=10)
     dut.expect_exact(
-        "HOST_KEY usage=31 ascii=34 pressed=1 released=0 modifiers=2 context=loop",
+        "HOST_KEY usage=31 ascii=34 pressed=1 released=0 modifiers=2 raw=8:021f context=loop",
         timeout=20,
     )
     keyboard_device.write("r")

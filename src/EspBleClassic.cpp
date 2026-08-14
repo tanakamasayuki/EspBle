@@ -34,6 +34,9 @@
 #define esp_bt_gap_set_device_name espble_bd_esp_bt_gap_set_device_name
 #define esp_bt_gap_set_pin espble_bd_esp_bt_gap_set_pin
 #define esp_bt_gap_set_scan_mode espble_bd_esp_bt_gap_set_scan_mode
+#define esp_bt_gap_start_discovery espble_bd_esp_bt_gap_start_discovery
+#define esp_bt_gap_cancel_discovery espble_bd_esp_bt_gap_cancel_discovery
+#define esp_bt_gap_resolve_eir_data espble_bd_esp_bt_gap_resolve_eir_data
 #define esp_bt_gap_set_security_param \
   espble_bd_esp_bt_gap_set_security_param
 #define esp_bt_gap_ssp_confirm_reply \
@@ -184,6 +187,35 @@ bool parseAddress(const char *value, esp_bd_addr_t address)
 #endif
 } // namespace
 
+constexpr size_t InquiryQueueCapacity = 16;
+
+struct EspBleClassicInquiryImpl
+{
+  bool enqueue(EspBleClassicInquiryResult result)
+  {
+    std::lock_guard<std::mutex> lock(mutex);
+    if (count == InquiryQueueCapacity)
+    {
+      // Report the loss instead of pretending the peer was never in range.
+      ++dropped;
+      return false;
+    }
+    queue[(head + count) % InquiryQueueCapacity] = std::move(result);
+    ++count;
+    return true;
+  }
+
+  mutable std::mutex mutex;
+  EspBleClassicInquiryResult queue[InquiryQueueCapacity];
+  size_t head = 0;
+  size_t count = 0;
+  size_t dropped = 0;
+  bool running = false;
+  bool stopRequested = false;
+  bool completionPending = false;
+  bool completionCancelled = false;
+};
+
 struct EspBleClassicImpl
 {
   bool initialized = false;
@@ -265,6 +297,9 @@ struct EspBleClassicSppImpl
 namespace
 {
 std::atomic<EspBleClassic *> activeClassic{nullptr};
+// The GAP callback runs on Bluedroid's task, so it reaches the inquiry
+// state through this pointer rather than through the owning object.
+std::atomic<EspBleClassicInquiryImpl *> activeInquiry{nullptr};
 std::atomic<EspBleClassicSppImpl *> activeSpp{nullptr};
 std::mutex sppCallbackTargetMutex;
 
@@ -400,6 +435,70 @@ void classicGapCallback(
   esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *parameter)
 {
   if (parameter == nullptr) return;
+  EspBleClassicInquiryImpl *inquiry =
+    activeInquiry.load(std::memory_order_acquire);
+  if (inquiry != nullptr && event == ESP_BT_GAP_DISC_RES_EVT)
+  {
+    EspBleClassicInquiryResult result;
+    result.address = formatAddress(parameter->disc_res.bda);
+    uint8_t *eir = nullptr;
+    for (int index = 0; index < parameter->disc_res.num_prop; ++index)
+    {
+      const esp_bt_gap_dev_prop_t &property = parameter->disc_res.prop[index];
+      if (property.val == nullptr) continue;
+      if (property.type == ESP_BT_GAP_DEV_PROP_BDNAME)
+      {
+        // Bluedroid may or may not include the terminator in the length.
+        const char *text = static_cast<const char *>(property.val);
+        const size_t length = property.len > 0 && text[property.len - 1] == '\0'
+          ? static_cast<size_t>(property.len) - 1
+          : static_cast<size_t>(property.len);
+        result.name = String(text, length);
+      }
+      else if (property.type == ESP_BT_GAP_DEV_PROP_COD &&
+               property.len >= static_cast<int>(sizeof(uint32_t)))
+      {
+        memcpy(&result.classOfDevice, property.val, sizeof(result.classOfDevice));
+        result.hasClassOfDevice = true;
+      }
+      else if (property.type == ESP_BT_GAP_DEV_PROP_RSSI &&
+               property.len >= static_cast<int>(sizeof(int8_t)))
+      {
+        int8_t rssi = 0;
+        memcpy(&rssi, property.val, sizeof(rssi));
+        result.rssi = rssi;
+        result.hasRssi = true;
+      }
+      else if (property.type == ESP_BT_GAP_DEV_PROP_EIR)
+      {
+        eir = static_cast<uint8_t *>(property.val);
+      }
+    }
+    // A peer that answers the inquiry without a name property often still
+    // carries one in its extended inquiry response.
+    if (result.name.isEmpty() && eir != nullptr)
+    {
+      uint8_t length = 0;
+      uint8_t *name = esp_bt_gap_resolve_eir_data(
+        eir, ESP_BT_EIR_TYPE_CMPL_LOCAL_NAME, &length);
+      if (name == nullptr)
+        name = esp_bt_gap_resolve_eir_data(
+          eir, ESP_BT_EIR_TYPE_SHORT_LOCAL_NAME, &length);
+      if (name != nullptr && length > 0)
+        result.name = String(reinterpret_cast<const char *>(name), length);
+    }
+    inquiry->enqueue(std::move(result));
+  }
+  else if (inquiry != nullptr && event == ESP_BT_GAP_DISC_STATE_CHANGED_EVT &&
+           parameter->disc_st_chg.state == ESP_BT_GAP_DISCOVERY_STOPPED)
+  {
+    std::lock_guard<std::mutex> lock(inquiry->mutex);
+    inquiry->running = false;
+    inquiry->completionCancelled = inquiry->stopRequested;
+    inquiry->stopRequested = false;
+    inquiry->completionPending = true;
+  }
+
   if (event == ESP_BT_GAP_CFM_REQ_EVT)
   {
     esp_bt_gap_ssp_confirm_reply(parameter->cfm_req.bda, true);
@@ -1191,8 +1290,197 @@ void EspBleClassicSpp::update()
   }
 }
 
+EspBleClassicInquiry::EspBleClassicInquiry(EspBleClassic *owner) :
+  owner_(owner) {}
+
+EspBleClassicInquiry::~EspBleClassicInquiry()
+{
+  end();
+  delete impl_;
+}
+
+bool EspBleClassicInquiry::begin()
+{
+#if !ESPBLE_CLASSIC_BACKEND_AVAILABLE
+  return false;
+#else
+  if (impl_ == nullptr) impl_ = new (std::nothrow) EspBleClassicInquiryImpl();
+  if (impl_ == nullptr) return false;
+  activeInquiry.store(impl_, std::memory_order_release);
+  return true;
+#endif
+}
+
+void EspBleClassicInquiry::end()
+{
+  if (impl_ == nullptr) return;
+#if ESPBLE_CLASSIC_BACKEND_AVAILABLE
+  // Stop the callback path before cancelling, so a result that is already in
+  // flight cannot land in a queue nobody will drain.
+  activeInquiry.store(nullptr, std::memory_order_release);
+  bool running = false;
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    running = impl_->running;
+  }
+  if (running) (void)esp_bt_gap_cancel_discovery();
+#endif
+  std::lock_guard<std::mutex> lock(impl_->mutex);
+  impl_->head = 0;
+  impl_->count = 0;
+  impl_->dropped = 0;
+  impl_->running = false;
+  impl_->stopRequested = false;
+  impl_->completionPending = false;
+  impl_->completionCancelled = false;
+}
+
+bool EspBleClassicInquiry::start(const EspBleClassicInquiryConfig &config)
+{
+#if !ESPBLE_CLASSIC_BACKEND_AVAILABLE
+  (void)config;
+  owner_->setError(
+    EspBleError::BackendFailure,
+    "Classic is supported only by the original ESP32 build");
+  return false;
+#else
+  if (!owner_->initialized() || impl_ == nullptr)
+  {
+    owner_->setError(EspBleError::InvalidState, "Classic stack is not started");
+    return false;
+  }
+  // The controller encodes the duration in 1.28 s units and one byte, so 61
+  // seconds is the longest scan it can be asked for.
+  if (config.durationSeconds == 0 || config.durationSeconds > 61)
+  {
+    owner_->setError(
+      EspBleError::InvalidArgument,
+      "inquiry duration must be between 1 and 61 seconds");
+    return false;
+  }
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    if (impl_->running)
+    {
+      owner_->setError(EspBleError::InvalidState, "inquiry is already running");
+      return false;
+    }
+    impl_->head = 0;
+    impl_->count = 0;
+    impl_->dropped = 0;
+    impl_->stopRequested = false;
+    impl_->completionPending = false;
+    impl_->completionCancelled = false;
+    impl_->running = true;
+  }
+  const uint8_t durationUnits = static_cast<uint8_t>(
+    (static_cast<uint64_t>(config.durationSeconds) * 100 + 127) / 128);
+  if (esp_bt_gap_start_discovery(
+        ESP_BT_INQ_MODE_GENERAL_INQUIRY, durationUnits,
+        config.maxResponses) != ESP_OK)
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    impl_->running = false;
+    owner_->setError(EspBleError::BackendFailure, "failed to start inquiry");
+    return false;
+  }
+  owner_->clearError();
+  return true;
+#endif
+}
+
+bool EspBleClassicInquiry::stop()
+{
+#if !ESPBLE_CLASSIC_BACKEND_AVAILABLE
+  owner_->setError(
+    EspBleError::BackendFailure,
+    "Classic is supported only by the original ESP32 build");
+  return false;
+#else
+  if (!owner_->initialized() || impl_ == nullptr)
+  {
+    owner_->setError(EspBleError::InvalidState, "Classic stack is not started");
+    return false;
+  }
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    if (!impl_->running)
+    {
+      owner_->setError(EspBleError::InvalidState, "inquiry is not running");
+      return false;
+    }
+    // Remembered so the completion event can say it was cancelled rather than
+    // that the duration elapsed.
+    impl_->stopRequested = true;
+  }
+  if (esp_bt_gap_cancel_discovery() != ESP_OK)
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    impl_->stopRequested = false;
+    owner_->setError(EspBleError::BackendFailure, "failed to stop inquiry");
+    return false;
+  }
+  owner_->clearError();
+  return true;
+#endif
+}
+
+bool EspBleClassicInquiry::running() const
+{
+  if (impl_ == nullptr) return false;
+  std::lock_guard<std::mutex> lock(impl_->mutex);
+  return impl_->running;
+}
+
+void EspBleClassicInquiry::onResult(ResultCallback callback)
+{
+  resultCallback_ = std::move(callback);
+}
+
+void EspBleClassicInquiry::onComplete(CompleteCallback callback)
+{
+  completeCallback_ = std::move(callback);
+}
+
+size_t EspBleClassicInquiry::droppedResultCount() const
+{
+  if (impl_ == nullptr) return 0;
+  std::lock_guard<std::mutex> lock(impl_->mutex);
+  return impl_->dropped;
+}
+
+void EspBleClassicInquiry::update()
+{
+  if (impl_ == nullptr) return;
+  for (;;)
+  {
+    EspBleClassicInquiryResult result;
+    {
+      std::lock_guard<std::mutex> lock(impl_->mutex);
+      if (impl_->count == 0) break;
+      result = std::move(impl_->queue[impl_->head]);
+      impl_->head = (impl_->head + 1) % InquiryQueueCapacity;
+      --impl_->count;
+    }
+    if (resultCallback_) resultCallback_(result);
+  }
+
+  bool completed = false;
+  EspBleClassicInquiryComplete completion;
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    if (impl_->completionPending)
+    {
+      impl_->completionPending = false;
+      completion.cancelled = impl_->completionCancelled;
+      completed = true;
+    }
+  }
+  if (completed && completeCallback_) completeCallback_(completion);
+}
+
 EspBleClassic::EspBleClassic() :
-  spp_(this), hidDevice_(this), hidHost_(this), a2dpSink_(this),
+  inquiry_(this), spp_(this), hidDevice_(this), hidHost_(this), a2dpSink_(this),
   a2dpSource_(this), avrcp_(this), hfpClient_(this),
   hfpAudioGateway_(this) {}
 
@@ -1359,6 +1647,9 @@ bool EspBleClassic::begin(const EspBleClassicConfig &config)
   }
   impl_->deviceName = deviceName;
   impl_->initialized = true;
+  // Inquiry shares the GAP callback the stack just registered, so it can only
+  // be armed once the stack is up.
+  (void)inquiry_.begin();
   clearError();
   return true;
 #endif
@@ -1367,6 +1658,7 @@ bool EspBleClassic::begin(const EspBleClassicConfig &config)
 void EspBleClassic::end()
 {
   if (!initialized()) return;
+  inquiry_.end();
   hfpAudioGateway_.end();
   hfpClient_.end();
   avrcp_.end();
@@ -1399,6 +1691,7 @@ void EspBleClassic::end()
 
 void EspBleClassic::update()
 {
+  inquiry_.update();
   spp_.update();
   hidDevice_.update();
   hidHost_.update();
@@ -1412,6 +1705,11 @@ void EspBleClassic::update()
 bool EspBleClassic::initialized() const
 {
   return impl_ != nullptr && impl_->initialized;
+}
+
+EspBleClassicInquiry &EspBleClassic::inquiry()
+{
+  return inquiry_;
 }
 
 EspBleClassicSpp &EspBleClassic::spp()

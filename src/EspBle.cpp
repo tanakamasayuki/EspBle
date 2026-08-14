@@ -4249,6 +4249,11 @@ struct EspBleHidKeyboardHostImpl
     event.type = EventType::State;
     event.state.connectionId = connectionId;
     event.state.reportId = reportId;
+    // Keep the report that produced this state, so keyboard events carry the
+    // same raw view the other report kinds already deliver. One report can
+    // produce several key events; they all point at the report they came from.
+    event.rawLength = length > sizeof(event.raw) ? sizeof(event.raw) : length;
+    memcpy(event.raw, data, event.rawLength);
     if (format.keyboardBitmap)
     {
       if (format.keyboardHasModifiers)
@@ -8799,6 +8804,8 @@ void EspBleHidHost::dispatchPendingEvents()
             EspBleHidKeyboardEvent keyboardEvent;
             keyboardEvent.connectionId = event.state.connectionId;
             keyboardEvent.reportId = event.state.reportId;
+            keyboardEvent.rawData = event.raw;
+            keyboardEvent.rawLength = event.rawLength;
             keyboardEvent.usage = usage;
             keyboardEvent.modifiers = event.state.modifiers;
             keyboardEvent.pressed = pressed;

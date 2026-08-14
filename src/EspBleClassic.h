@@ -471,7 +471,37 @@ struct EspBleClassicHidReport
   String value;
 };
 
+// Inquiry is how a sketch finds a peer it has no address for. Every profile
+// here takes a Bluetooth address to connect to, so without this the address has
+// to come from outside the device.
+struct EspBleClassicInquiryConfig
+{
+  // The controller counts inquiry time in 1.28 s units, so the requested
+  // seconds are rounded up to the next unit. 0 responses means no limit.
+  uint32_t durationSeconds = 10;
+  uint8_t maxResponses = 0;
+};
+
+struct EspBleClassicInquiryResult
+{
+  String address;
+  // Empty when the peer answered without a name and published none in its EIR.
+  String name;
+  uint32_t classOfDevice = 0;
+  int rssi = 0;
+  bool hasClassOfDevice = false;
+  bool hasRssi = false;
+};
+
+struct EspBleClassicInquiryComplete
+{
+  // True when the scan ended because stop() was called rather than by the
+  // duration running out.
+  bool cancelled = false;
+};
+
 struct EspBleClassicImpl;
+struct EspBleClassicInquiryImpl;
 struct EspBleClassicSppImpl;
 struct EspBleClassicHidDeviceImpl;
 struct EspBleClassicHidHostImpl;
@@ -966,6 +996,39 @@ private:
   ReportCallback inputReportCallback_;
 };
 
+class EspBleClassicInquiry
+{
+public:
+  using ResultCallback =
+    std::function<void(const EspBleClassicInquiryResult &)>;
+  using CompleteCallback =
+    std::function<void(const EspBleClassicInquiryComplete &)>;
+
+  // One scan at a time. Results arrive from update() as the controller reports
+  // them, and the same peer can be reported more than once during a scan.
+  bool start(
+    const EspBleClassicInquiryConfig &config = EspBleClassicInquiryConfig());
+  bool stop();
+  bool running() const;
+
+  void onResult(ResultCallback callback);
+  void onComplete(CompleteCallback callback);
+  size_t droppedResultCount() const;
+
+private:
+  friend class EspBleClassic;
+  explicit EspBleClassicInquiry(EspBleClassic *owner);
+  ~EspBleClassicInquiry();
+  bool begin();
+  void end();
+  void update();
+
+  EspBleClassic *owner_;
+  EspBleClassicInquiryImpl *impl_ = nullptr;
+  ResultCallback resultCallback_;
+  CompleteCallback completeCallback_;
+};
+
 class EspBleClassic
 {
 public:
@@ -979,6 +1042,7 @@ public:
   void update();
   bool initialized() const;
 
+  EspBleClassicInquiry &inquiry();
   EspBleClassicSpp &spp();
   EspBleClassicHidDevice &hidDevice();
   EspBleClassicHidHost &hidHost();
@@ -993,6 +1057,7 @@ public:
   const String &lastErrorDetail() const;
 
 private:
+  friend class EspBleClassicInquiry;
   friend class EspBleClassicSpp;
   friend class EspBleClassicHidDevice;
   friend class EspBleClassicHidHost;
@@ -1006,6 +1071,7 @@ private:
   void setError(EspBleError error, const char *detail);
 
   EspBleClassicImpl *impl_ = nullptr;
+  EspBleClassicInquiry inquiry_;
   EspBleClassicSpp spp_;
   EspBleClassicHidDevice hidDevice_;
   EspBleClassicHidHost hidHost_;

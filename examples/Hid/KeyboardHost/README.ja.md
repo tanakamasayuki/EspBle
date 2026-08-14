@@ -35,6 +35,10 @@ HID Host（Central）としてBLE keyboardへ接続します。HID Service `0x18
 
 ```
 Keyboard ready: report=1 battery=73%
+Keyboard state: modifiers=0x00 A=1 pressed=1 released=0
 Key pressed: usage=0x04 ascii=0x61
-Keyboard state: modifiers=0x02 A=1 pressed=1 released=0
 ```
+
+同じreportについてはstate callbackが先に呼ばれ、そのあとusage単位のkey eventが届きます。
+`ascii`はそのreportのmodifiersに従うので、同じキーでもShiftなしなら`0x61`、Shiftありなら
+`0x41`になります。
