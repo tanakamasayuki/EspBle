@@ -18,8 +18,8 @@
 |---|---|---|
 | device name設定 | 公開 | `EspBleClassicConfig::deviceName` |
 | 接続可能・発見可能状態 | 公開 | `EspBleClassicConfig::visibility`と`setVisibility()` / `visibility()`（`Hidden` / `ConnectableOnly` / `ConnectableDiscoverable`）。所有者は`EspBleClassic`で、profileは値を決めず再適用のみ行う。A2DP Sinkはsource接続中だけ自分で隠し、復帰時は所有者の値へ戻す |
-| inquiry（周辺機器探索） | 公開 | `EspBleClassicInquiry`。address、name（EIR fallbackつき）、Class of Device、RSSIを返す。`read_remote_name`の個別照会は未公開 |
-| SDP（相手のservice照会） | 未公開 | `esp_bt_gap_get_remote_services` / `get_remote_service_record`。SPP clientの内部でchannel解決に使うだけ |
+| inquiry（周辺機器探索） | 公開 | `EspBleClassicInquiry`。address、name（EIR fallbackつき）、Class of Device、RSSIを返す。名前の個別照会は`requestName()` / `onRemoteName()` |
+| SDP（相手のservice照会） | 公開 | `inquiry().requestServices()` / `onRemoteServices()`。UUIDを文字列で最大12件返す。scan中は応答が来ないので完了後に照会する |
 | Class of Device | 公開 | `EspBleClassicConfig::classOfDevice`と`setClassOfDevice()` / `classOfDevice()`。反映は非同期で、profile登録による上書きとcontrollerのinquiry scan取り込みまでlibraryが面倒を見る |
 | bond一覧・削除 | 公開 | `bondCount()` / `bond(index)` / `deleteBond()` / `deleteAllBonds()` |
 | pairing（SSP） | 公開 | `EspBleClassicSecurityConfig`でIO capabilityを選び、numeric comparisonとpasskey要求をアプリへ通知して`confirmNumericComparison()` / `providePasskey()`で応答する。無応答はtimeoutで拒否。設定を有効にするとservice側がMITMを要求する |
@@ -150,7 +150,9 @@
    意図的に持たない——`stopServer()`で全停止して必要な分を再startすれば足り、取り消す手段を2つに
    増やさないため。相手側から特定serviceへ届くよう`connectToChannel()`を用意した。
 9. **A2DP delay reporting、AVRCP TG notification応答**: 相互運用の作り込み段階で必要になる。
-10. **SDP照会（`get_remote_services`）と`read_remote_name`**: 相手が何を提供しているかを接続前に知る手段。
+10. **完了: SDP照会と`read_remote_name`**。addressだけ分かっている相手に「何を提供しているか」「何と
+    名乗るか」を問い合わせられるようにした。複数serviceを公開できるようになったので、接続先channelを
+    決める材料としても対になる。scan中は応答が来ない点をAPI docと落とし穴へ記録した。
 
 外部機器との相互運用（Gate D）と、core内蔵Bluedroidとの相互接続Peer testは、
 [引き継ぎ](HANDOFF_ESP32_CLASSIC.ja.md)の作業メモにあるとおり別途進めます。

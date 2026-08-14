@@ -366,6 +366,12 @@ profileを置いていないのは次の2種類だけです。
     どのserviceへ繋ぎたいか表せない）、`stopServer()`が全serviceを止め、その後の再startで
     再び公開されることを確認する。client側は同時1接続なので、2つ目へ繋ぐ前に切断する。
 
+    `classic_inquiry`にはaddress指定の照会も含める。inquiryが「誰が居るか」を答えるのに対し、
+    SDP照会は「何のためのdeviceか」、name照会は「何と名乗るか」を答える。peerがSPP serverを
+    動かしているので、service一覧にSPPのUUID（0x1101）が含まれることと、名前が直接取得できることを
+    確認する。**scan完了を待ってから照会する**——inquiryとSDPは両方が無線を使い、scan中の照会は
+    受理されるのに応答が来ない。不正なaddressは送信前に`InvalidArgument`で拒否することも確認する。
+
 実験用 `dual_host_smoke` は、まず両側のClassic bondを削除して**初回pairingから**接続する——bondが残っているとpairingのHCI経路（link key応答とSSP応答）が走らず、brokerのpolicyに穴があっても通ってしまうため。そのうえでClassic HIDと暗号化LE GATTを接続した両基板で、別taskのClassic scan mode切替とNimBLE `Read RSSI`を同時発行する。FIFO投入数＝物理送信数、最終RSSI成功、broker error 0を確認し、各競合サイクル直後に暗号化GATT readとHID双方向通信を再検証する。`ESPBLE_DUAL_CONTENTION_CYCLES`で反復数を変更できる。さらにtest-onlyのdispatch holdでFIFO満杯と超過拒否を作り、未送信command破棄後のGATT/HID/lifecycle復帰を確認する。偽commandはcontrollerへ送らず、hostへ偽応答も返さない。接続中と両transport切断後にinventoryを取得し、条件付きcleanup commandを含む全opcodeが明示policy内であることも検証する。未知／別host opcodeはdual-host時だけ物理送信前に拒否する。nullと上限超過のHID Input / Output reportを送信前に`InvalidArgument`で拒否し、両接続と直後の通常通信が維持されることも確認する。BLE pairingは最初に誤passkeyを入力して双方の失敗、未暗号化、bond 0、保護GATT拒否とClassic継続を確認し、LE再接続後の正しいpasskeyで暗号化・bond・GATTを復旧する。続いてClassicだけを切断し、最終OPEN失敗の非同期`onConnectionFailed`通知、暗号化LE GATTの継続、正しいpeerへのClassic再接続とHID双方向復旧を確認する。Bluedroid公開HID APIではpage中の接続試行を取り消せないため、独自timeoutによる疑似cancelは試験契約にせずbackendの最終OPEN結果を境界とする。その後peerをsoftware resetで突然消失させ、生存側でLE / BR-EDR双方の切断を検出し、保存bondからBLE暗号化とClassic HIDを再接続してGATT/HID通信を復旧する。lifecycle部はcallback targetの参照寿命barrierを有効にした状態でClassic先行／BLE先行停止、Classic再attach、停止・再登録、両destructor順を通し、panic、watchdog、heap低下がないことを確認する。永続NVDSへ触れる`Write Local Name`はcontroller assertionを起こすため、負荷刺激には使わない。
 
 ## 合格条件

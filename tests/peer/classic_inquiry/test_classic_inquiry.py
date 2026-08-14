@@ -162,8 +162,14 @@ def test_inquiry_finds_the_peer_and_reports_completion(dut, peers):
     # it called". Both matter once a device publishes more than one service,
     # because an address alone does not say which service a sketch wants, and an
     # inquiry result can arrive with no name at all.
-    dut.write("u")
-    dut.write(peer_address + "\n")
+    #
+    # The scan has to finish first: an inquiry and an SDP query both need the
+    # radio, and a query issued during a scan gets no answer.
+    dut.expect(
+        re.compile(rb"INQUIRY_COMPLETE cancelled=0 results=\d+ dropped=0"),
+        timeout=40,
+    )
+    dut.write("u" + peer_address + "\n")
     dut.expect_exact("INQUIRY_QUERY kind=u requested=1 error=None", timeout=10)
     services = dut.expect(
         re.compile(
@@ -177,8 +183,7 @@ def test_inquiry_finds_the_peer_and_reports_completion(dut, peers):
     assert int(services.group(1)) >= 1
     assert b"1101" in services.group(3).lower(), services.group(3)
 
-    dut.write("n")
-    dut.write(peer_address + "\n")
+    dut.write("n" + peer_address + "\n")
     dut.expect_exact("INQUIRY_QUERY kind=n requested=1 error=None", timeout=10)
     dut.expect_exact(
         "INQUIRY_NAME peer=" + peer_address + " success=1 name=EspBle Inquiry Peer",

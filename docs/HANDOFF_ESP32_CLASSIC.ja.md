@@ -162,6 +162,9 @@ PCMFlowBluetoothへは`badFrame`とraw lengthを失わず渡し、decoder側で5
 - bondが残っているとpairingのHCI経路がまるごと走らない。link key応答とSSP応答をpolicyへ
   分類し忘れていても、bond済みのpeerとは正常に通信できるためtestが通ってしまう。dual-host testは
   接続前にbondを削除して初回pairingを必ず通す。
+- inquiry実行中のSDP照会（`get_remote_services`）と`read_remote_name`は受理されるが応答が来ない。
+  どちらも無線を使うため、scan完了を待ってから照会する。呼び出しが`true`を返すので、
+  待たずに投げると「成功したのにcallbackが来ない」形で詰まる。
 - HIDの制御チャネルは応答が必須で、返さないとHostは待ち続ける。Get_Reportには報告か拒否
   （`esp_bt_hid_device_send_report` / `report_error`）、Set_ReportにはHID handshakeを返す。
   handshakeの成功応答も`esp_bt_hid_device_report_error()`に`ESP_HID_PAR_HANDSHAKE_RSP_SUCCESS`を

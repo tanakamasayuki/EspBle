@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- (EN) A Classic peer can be asked what it offers and what it is called, given
+  only its address. `inquiry().requestServices()` returns the peer's service
+  UUIDs through `onRemoteServices()`, and `inquiry().requestName()` fetches the
+  name through `onRemoteName()` — an inquiry result may carry no name at all, and
+  the service list is what tells a sketch which channel to connect to now that a
+  device can publish several. Neither is answered while a scan is running,
+  because both need the radio; that is stated where the calls are declared.
+- (JA) addressだけ分かっているClassicの相手に「何を提供しているか」「何と名乗るか」を
+  問い合わせられるようにした。`inquiry().requestServices()`は相手のservice UUIDを
+  `onRemoteServices()`へ、`inquiry().requestName()`は名前を`onRemoteName()`へ返す。
+  inquiry結果には名前が入らないこともあり、deviceが複数serviceを公開できるようになった今、
+  service一覧はどのchannelへ接続するかを決める材料になる。どちらもscan実行中は応答が来ない
+  ——両方が無線を使うためで、宣言箇所に明記した。
+
 - (EN) A Classic device can publish several SPP services. `startServer()` may be
   called repeatedly, up to four services, each getting its own RFCOMM channel;
   `onServerStarted()` reports which channel a service received, and

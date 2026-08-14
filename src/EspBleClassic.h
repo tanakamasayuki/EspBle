@@ -1554,6 +1554,10 @@ public:
   // Both are round trips over SDP or a name request, so the answer arrives at
   // the matching callback rather than as a return value. One query of each kind
   // at a time; a second while one is outstanding is refused.
+  //
+  // Not while a scan runs: an inquiry and a query both need the radio, and a
+  // query issued during a scan is accepted but never answered. Wait for
+  // onComplete(), or stop() first.
   bool requestServices(const char *address);
   bool requestName(const char *address);
 
