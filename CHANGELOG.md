@@ -2,6 +2,43 @@
 
 ## Unreleased
 
+- (EN) Fixed dual-host pairing from scratch. The broker rejected the link key
+  and Secure Simple Pairing replies as unclassified, so the first pairing with
+  a peer timed out at the HCI layer while a peer that was already bonded worked
+  — the tests had never started from an empty bond list, which is why this
+  survived. The replies are classified now, the dual-host test drops both
+  bonds before connecting so pairing is always exercised, and two commands
+  that name a connection handle (Change Connection Packet Type, Read Clock
+  Offset) are checked against handle ownership instead of being treated as
+  address-scoped.
+- (JA) dual-hostでの初回pairingを修正した。brokerがlink key応答とSecure Simple
+  Pairing応答を未分類として拒否するため、bond済みのpeerとは通信できるのに、
+  初めてpairingする相手ではHCI層でtimeoutしていた。testがbondを空にした状態から
+  始めたことが無く、それで見逃されていた。これらの応答を分類し、dual-host testは
+  接続前に両側のbondを削除してpairingを必ず通すようにした。あわせてconnection handleを
+  指す2つのcommand（Change Connection Packet Type、Read Clock Offset）を
+  address scope扱いから外し、handle所有権の検査対象にした。
+- (EN) Fixed three Classic defects that hardware testing exposed. Classic
+  pairing settled on Just Works no matter which IO capability was configured,
+  because the SPP service asked for no security and Secure Simple Pairing only
+  involves the application when a service demands it; the service requirement
+  now follows the configured security, so a configured IO capability actually
+  reaches the peer. A failed pairing left the SPP connection attempt in flight
+  until its own timeout, with no notification and no way to retry in between;
+  the attempt now ends when the pairing fails, and the caller is told. The
+  Classic HID Host discarded every input report from a device that uses report
+  IDs: the transport delivers the report with its ID in front, while the
+  descriptor's field offsets are relative to the payload.
+- (JA) 実機テストで見つかったClassicの不具合3件を修正した。Classicのpairingは
+  IO capabilityを何に設定してもJust Worksになっていた——SPP serviceがsecurityを
+  要求しておらず、Secure Simple Pairingはserviceが要求したときだけapplicationを
+  介するため。service側の要求水準を設定したsecurityから導くようにし、設定した
+  IO capabilityが実際に相手へ伝わるようにした。pairingが失敗するとSPPの接続試行が
+  自前のtimeoutまで宙吊りになり、通知も無く再試行もできなかった。pairing失敗で
+  試行を終わらせ、呼び出し側へ通知するようにした。Classic HID Hostはreport IDを使う
+  deviceからのInput Reportをすべて捨てていた——transportはreport IDを先頭に付けて
+  渡すが、descriptorのfield offsetはpayload起点であるため。
+
 - (EN) Classic HID now uses the same API shape as BLE HID. The device side
   gained `hidKeyboard()`, `hidMouse()`, `hidConsumerControl()`,
   `hidSystemControl()` and `hidGamepad()`, with the same names, signatures and
@@ -12,7 +49,8 @@
   host events can consume Classic ones unchanged. Report Descriptors, report
   layouts and packing now live in one module shared by both transports, so the
   two cannot drift apart; the byte-for-byte descriptors are held in place by a
-  host test.
+  host test. The host also gained `setKeyboardLeds()` with the BLE signature,
+  which takes the report ID from the peer's descriptor instead of assuming one.
 - (JA) ClassicのHIDをBLEと同じAPI形状にした。device側に`hidKeyboard()`、
   `hidMouse()`、`hidConsumerControl()`、`hidSystemControl()`、`hidGamepad()`を
   追加し、名前・signature・keyboard layoutの扱いをBLE側と揃えた。Report Descriptorは
@@ -20,7 +58,8 @@
   解析し、keyboardのstate、usage単位のkeyboard event、mouse eventを配送するので、
   BLEのHID host eventを使っていたsketchはそのままClassicへ移せる。Report Descriptorと
   report構造・packingは両transportで同じmoduleを共有するようにし、片側だけずれないように
-  した。生成されるdescriptorのbyte列はhost testで固定している。
+  した。生成されるdescriptorのbyte列はhost testで固定している。host側にはBLEと同signatureの
+  `setKeyboardLeds()`も追加した。report IDは仮定せず相手のdescriptorから取る。
 
 - (EN) Added Classic device discovery, application-driven pairing and bond
   management on the original ESP32. `EspBleClassicInquiry` reports address,

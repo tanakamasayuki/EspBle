@@ -98,6 +98,15 @@ def test_numeric_comparison_pairing_and_bond_management(dut, peers):
     dut.write("b")
     dut.expect_exact("PAIR_BONDS count=0", timeout=10)
 
+    # The side that asked for the connection must be told it failed. The
+    # backend sends no SPP event when pairing is what failed, so without an
+    # explicit report the attempt would stay in flight until its own timeout
+    # and the retry below would be refused.
+    peer.expect(
+        re.compile(rb"PAIR_PEER_CONNECT_FAILED peer=[0-9a-f:]+ detail=\S"),
+        timeout=20,
+    )
+
     # After a rejection the stack must still pair normally, so the rejection
     # left no half-finished state behind.
     dut.write("y")

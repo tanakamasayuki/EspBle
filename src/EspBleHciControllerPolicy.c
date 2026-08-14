@@ -75,11 +75,26 @@ espble_hci_command_scope_t espble_hci_controller_policy_classify_opcode(
     // BR/EDR procedures and local state used by Classic-only Bluedroid.
     case 0x0405: // Create Connection
     case 0x0409: // Accept Connection Request
+    case 0x040a: // Reject Connection Request
+    // Every pairing reply names a peer address rather than a connection
+    // handle, so they belong with the other address-scoped Classic commands.
+    // Both answers of each pair occur: the application can refuse a pairing,
+    // and legacy PIN pairing is always refused.
     case 0x040b: // Link Key Request Reply
-    case 0x040f: // PIN Code Request Reply
+    case 0x040c: // Link Key Request Negative Reply
+    case 0x040d: // PIN Code Request Reply
+    case 0x040e: // PIN Code Request Negative Reply
     case 0x0419: // Remote Name Request
-    case 0x041f: // IO Capability Request Reply
+    case 0x042b: // IO Capability Request Reply
+    case 0x042c: // User Confirmation Request Reply
+    case 0x042d: // User Confirmation Request Negative Reply
+    case 0x042e: // User Passkey Request Reply
+    case 0x042f: // User Passkey Request Negative Reply
+    case 0x0430: // Remote OOB Data Request Reply
+    case 0x0433: // Remote OOB Data Request Negative Reply
+    case 0x0434: // IO Capability Request Negative Reply
     case 0x080f: // Write Default Link Policy Settings
+    case 0x0c12: // Delete Stored Link Key
     case 0x0c13: // Write Local Name
     case 0x0c14: // Read Local Name
     case 0x0c18: // Write Page Timeout
@@ -99,10 +114,12 @@ espble_hci_command_scope_t espble_hci_controller_policy_classify_opcode(
     case 0x0c5b: // Write Default Erroneous Data Reporting
     case 0xfc82: // ESP vendor: set/clear coexistence status (Classic A2DP)
       return ESPBLE_HCI_COMMAND_SCOPE_CLASSIC_RADIO;
+    case 0x040f: // Change Connection Packet Type
     case 0x0411: // Authentication Requested
     case 0x0413: // Set Connection Encryption
     case 0x041b: // Read Remote Supported Features
     case 0x041c: // Read Remote Extended Features
+    case 0x041f: // Read Clock Offset
     case 0x0428: // Setup Synchronous Connection
     case 0x0429: // Accept Synchronous Connection Request
     case 0x042a: // Reject Synchronous Connection Request
@@ -149,11 +166,13 @@ bool espble_hci_controller_policy_targets_handle(uint16_t opcode)
   switch (opcode)
   {
     case 0x0406: // Disconnect
+    case 0x040f: // Change Connection Packet Type
     case 0x0411: // Authentication Requested
     case 0x0413: // Set Connection Encryption
     case 0x041b: // Read Remote Supported Features
     case 0x041c: // Read Remote Extended Features
     case 0x041d: // Read Remote Version Information
+    case 0x041f: // Read Clock Offset
     case 0x0428: // Setup Synchronous Connection
     case 0x0803: // Sniff Mode
     case 0x0804: // Exit Sniff Mode

@@ -67,6 +67,11 @@ void setup()
     Serial.printf("PAIR_PEER_CONNECTED id=%u peer=%s\n",
       static_cast<unsigned>(session.id), session.peerAddress.c_str());
   });
+  bluetooth.spp().onConnectionFailed(
+    [](const EspBleClassicSppConnectionFailure &failure) {
+      Serial.printf("PAIR_PEER_CONNECT_FAILED peer=%s detail=%s\n",
+        failure.peerAddress.c_str(), failure.detail.c_str());
+    });
   bluetooth.spp().onDisconnected([](const EspBleClassicSppSession &session) {
     if (session.id == sessionId) sessionId = 0;
     Serial.printf("PAIR_PEER_DISCONNECTED id=%u\n",

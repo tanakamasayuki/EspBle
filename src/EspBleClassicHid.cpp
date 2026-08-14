@@ -1024,6 +1024,55 @@ bool EspBleClassicHidHost::sendOutputReport(
 #endif
 }
 
+bool EspBleClassicHidHost::setKeyboardLeds(
+  bool numLock, bool capsLock, bool scrollLock, bool compose, bool kana)
+{
+  if (impl_ == nullptr)
+  {
+    owner_->setError(EspBleError::InvalidState, "HID Host is not initialized");
+    return false;
+  }
+  bool keyboardFound = false;
+  bool hasReportId = false;
+  uint8_t reportId = 0;
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    if (impl_->reportMapValid)
+    {
+      for (size_t index = 0; index < impl_->reportMap.count; ++index)
+      {
+        const EspBleHidReportMapEntry &entry = impl_->reportMap.entries[index];
+        if (entry.kind != EspBleHidReportKind::Keyboard) continue;
+        keyboardFound = true;
+        hasReportId = entry.hasReportId;
+        reportId = entry.reportId;
+        break;
+      }
+    }
+  }
+  if (!keyboardFound)
+  {
+    // Guessing an ID would send the LED byte to whichever report happens to
+    // carry that number on this device.
+    owner_->setError(
+      EspBleError::NotFound, "the peer has no keyboard report to light");
+    return false;
+  }
+  const uint8_t leds = static_cast<uint8_t>(
+    (numLock ? 0x01 : 0) |
+    (capsLock ? 0x02 : 0) |
+    (scrollLock ? 0x04 : 0) |
+    (compose ? 0x08 : 0) |
+    (kana ? 0x10 : 0));
+  // The transport carries the report ID in front of the payload, so a device
+  // that declares one gets it here too.
+  uint8_t report[2];
+  size_t length = 0;
+  if (hasReportId) report[length++] = reportId;
+  report[length++] = leds;
+  return sendOutputReport(report, length);
+}
+
 void EspBleClassicHidHost::onConnected(ConnectionCallback callback)
 {
   connectedCallback_ = std::move(callback);
@@ -1523,7 +1572,19 @@ void EspBleClassicHidHost::deliverDecoded(const EspBleClassicHidReport &report)
   if (!found) return;
 
   const uint8_t *data = reinterpret_cast<const uint8_t *>(report.value.c_str());
-  const size_t length = report.value.length();
+  size_t length = report.value.length();
+  // The transport hands the report over exactly as it arrived, so a device
+  // that uses report IDs puts one in front of the payload. Descriptor field
+  // offsets are relative to the payload, so that byte is removed first — but
+  // only when it really is this report's ID and the rest then fits, so a
+  // payload that merely starts with the same value is not truncated.
+  if (
+    entry.hasReportId && length == entry.inputByteLength() + 1 &&
+    data[0] == entry.reportId)
+  {
+    ++data;
+    --length;
+  }
   if (entry.inputBitLength == 0 || length != entry.inputByteLength())
   {
     std::lock_guard<std::mutex> lock(impl_->mutex);

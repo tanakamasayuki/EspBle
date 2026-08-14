@@ -95,10 +95,26 @@ def test_classic_hid_profiles_match_the_ble_api(dut, peers):
     )
 
     # Consumer Control shares the same HID Device, so its report must reach the
-    # host as its own report ID rather than being decoded as a keyboard.
+    # host as its own report ID rather than being decoded as a keyboard. The
+    # raw report is delivered as it arrived, so its length counts the leading
+    # report ID byte in front of the two-byte payload.
     dut.write("u")
     dut.expect_exact("DEVICE_CONSUMER sent=1", timeout=10)
-    peer.expect(re.compile(rb"HOST_RAW id=4 len=2"), timeout=20)
+    peer.expect(re.compile(rb"HOST_RAW id=4 len=3"), timeout=20)
+
+    # LEDs travel the other way, and the host has to name the report ID the
+    # peer's descriptor declared rather than a fixed one. The device reports
+    # the lock bits it decoded, so a wrong ID or a wrong bit shows up here.
+    peer.write("e\n")
+    peer.expect_exact("HOST_LEDS sent=1", timeout=10)
+    dut.expect(
+        re.compile(rb"DEVICE_LEDS peer=[0-9a-f:]+ leds=2 caps=1 num=0"), timeout=20
+    )
+    peer.write("E\n")
+    peer.expect_exact("HOST_LEDS sent=1", timeout=10)
+    dut.expect(
+        re.compile(rb"DEVICE_LEDS peer=[0-9a-f:]+ leds=0 caps=0 num=0"), timeout=20
+    )
 
     # Nothing above should have looked malformed to the host.
     peer.write("?\n")

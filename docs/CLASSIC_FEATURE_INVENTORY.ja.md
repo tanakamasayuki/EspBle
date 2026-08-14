@@ -22,7 +22,7 @@
 | SDP（相手のservice照会） | 未公開 | `esp_bt_gap_get_remote_services` / `get_remote_service_record`。SPP clientの内部でchannel解決に使うだけ |
 | Class of Device | 未公開 | `esp_bt_gap_set_cod`。HIDやheadsetとして正しいiconと挙動で扱われるために必要 |
 | bond一覧・削除 | 公開 | `bondCount()` / `bond(index)` / `deleteBond()` / `deleteAllBonds()` |
-| pairing（SSP） | 公開 | `EspBleClassicSecurityConfig`でIO capabilityを選び、numeric comparisonとpasskey要求をアプリへ通知して`confirmNumericComparison()` / `providePasskey()`で応答する。無応答はtimeoutで拒否 |
+| pairing（SSP） | 公開 | `EspBleClassicSecurityConfig`でIO capabilityを選び、numeric comparisonとpasskey要求をアプリへ通知して`confirmNumericComparison()` / `providePasskey()`で応答する。無応答はtimeoutで拒否。設定を有効にするとservice側がMITMを要求する |
 | pairing（legacy PIN） | 未公開 | 応答経路が無いため拒否する。以前の固定PIN `1234`は廃止した |
 | 暗号鍵長・QoS・page timeout・AFH・EIR | 未公開 | `set_min_enc_key_size` / `set_qos` / `set_page_timeout` / `set_afh_channels` / `config_eir_data` |
 | RSSI・送信電力 | 未公開 | `read_rssi_delta` / `read_tx_pwr_lvl` |
@@ -60,7 +60,7 @@
 | connect / disconnect / Input Report受信 | 公開 | 1接続のみ |
 | Report Descriptor解析とkeyboard / mouse eventへの復号 | 公開 | `onKeyboardState()` / `onKeyboard()` / `onMouse()` / `setKeyboardLayout()`。SDPで受け取ったdescriptorを解析するので、独自layoutのdeviceも扱える |
 | 不正Input Reportの計上 | 公開 | `invalidInputReportCount()`。BLEと同じくrollover（usage 0x01〜0x03）は押下として配らない |
-| Output Report送信 | 公開 | `sendOutputReport()` |
+| Output Report送信 | 公開 | `sendOutputReport()`（raw）と`setKeyboardLeds()`（BLEと同名。report IDは相手のdescriptor由来） |
 | 非同期の接続失敗通知 | 公開 | `onConnectionFailed()` |
 | Get_Report / Set_Report | 未公開 | `esp_bt_hid_host_get_report` / `set_report`。LED状態の問い合わせなどに必要 |
 | protocol mode取得・設定 | 未公開 | `get_protocol` / `set_protocol` |

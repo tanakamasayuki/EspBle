@@ -381,6 +381,13 @@ void loop()
     if (command.startsWith("c"))
       Serial.printf("DUAL_PEER_CONNECT %u\n",
         classic.hidHost().connect(command.c_str() + 1) ? 1 : 0);
+    // Dropping the stored link key forces the next connection to pair from
+    // scratch. Without it a run inherits whichever bond the previous run left
+    // behind, and the whole pairing exchange stays untested.
+    else if (command == "B")
+      Serial.printf("DUAL_PEER_BONDS_CLEARED %u count=%u\n",
+        classic.deleteAllBonds() ? 1 : 0,
+        static_cast<unsigned>(classic.bondCount()));
 #if !defined(ESPBLE_TEST_DUAL_RPA)
     else if (command == "f")
     {

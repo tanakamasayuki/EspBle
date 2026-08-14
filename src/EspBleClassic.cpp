@@ -359,6 +359,18 @@ std::atomic<EspBleClassicImpl *> activeClassicImpl{nullptr};
 // state through this pointer rather than through the owning object.
 std::atomic<EspBleClassicInquiryImpl *> activeInquiry{nullptr};
 std::atomic<EspBleClassicSppImpl *> activeSpp{nullptr};
+// Secure Simple Pairing only asks the application to confirm when a service
+// demands it. With no demand the controllers settle on Just Works, the
+// configured IO capability never reaches the peer, and pairing completes
+// without anyone being asked. The mask therefore follows begin()'s security
+// configuration instead of being fixed.
+std::atomic<uint32_t> classicServiceSecurityMask{ESP_SPP_SEC_NONE};
+
+uint32_t sppSecurityMask()
+{
+  return classicServiceSecurityMask.load(std::memory_order_acquire);
+}
+
 std::mutex sppCallbackTargetMutex;
 
 class SppCallbackLease
@@ -482,7 +494,8 @@ void startPendingServer(EspBleClassicSppImpl *impl)
     esp_bt_gap_set_scan_mode(
       ESP_BT_CONNECTABLE, ESP_BT_GENERAL_DISCOVERABLE) != ESP_OK ||
     esp_spp_start_srv(
-      ESP_SPP_SEC_NONE, ESP_SPP_ROLE_SLAVE, channel, name.c_str()) != ESP_OK)
+      static_cast<esp_spp_sec_t>(sppSecurityMask()), ESP_SPP_ROLE_SLAVE,
+      channel, name.c_str()) != ESP_OK)
   {
     std::lock_guard<std::mutex> lock(impl->mutex);
     impl->serverStartPending = false;
@@ -580,6 +593,27 @@ void classicGapCallback(
         classic->passkeyPending = false;
         classic->passkeyAddress = "";
         classic->passkeyDeadlineMs = 0;
+      }
+    }
+    // A failed pairing ends the SPP connection attempt that triggered it: the
+    // backend sends no SPP event for it, so without this the attempt would sit
+    // until its own timeout and the caller could not retry in between.
+    if (parameter->auth_cmpl.stat != ESP_BT_STATUS_SUCCESS)
+    {
+      SppCallbackLease lease;
+      EspBleClassicSppImpl *spp = lease.get();
+      if (spp != nullptr)
+      {
+        bool matches = false;
+        {
+          std::lock_guard<std::mutex> lock(spp->mutex);
+          matches = spp->connecting &&
+            memcmp(spp->connectBackendAddress, parameter->auth_cmpl.bda,
+              ESP_BD_ADDR_LEN) == 0;
+        }
+        if (matches)
+          failConnection(
+            spp, EspBleError::BackendFailure, "pairing with the peer failed");
       }
     }
     EspBleClassicImpl::Event queued;
@@ -760,7 +794,7 @@ void sppCallback(esp_spp_cb_event_t event, esp_spp_cb_param_t *parameter)
     }
     else if (
       esp_spp_connect(
-        ESP_SPP_SEC_NONE, ESP_SPP_ROLE_MASTER,
+        static_cast<esp_spp_sec_t>(sppSecurityMask()), ESP_SPP_ROLE_MASTER,
         parameter->disc_comp.scn[0], address) != ESP_OK)
     {
       failConnection(
@@ -1801,6 +1835,16 @@ bool EspBleClassic::begin(const EspBleClassicConfig &config)
     return false;
   }
   esp_bt_io_cap_t ioCapability = ESP_BT_IO_CAP_NONE;
+  const bool authenticatedPairing = config.security.enabled &&
+    config.security.ioCapability != EspBleClassicSecurityIoCapability::None;
+  // MITM is what turns the IO capability into an actual exchange: without it
+  // the peers agree on Just Works no matter what they can display or type.
+  classicServiceSecurityMask.store(
+    authenticatedPairing
+      ? static_cast<uint32_t>(
+          ESP_SPP_SEC_AUTHENTICATE | ESP_SPP_SEC_ENCRYPT | ESP_SPP_SEC_MITM)
+      : static_cast<uint32_t>(ESP_SPP_SEC_NONE),
+    std::memory_order_release);
   if (config.security.enabled)
   {
     switch (config.security.ioCapability)
@@ -1889,6 +1933,8 @@ void EspBleClassic::end()
   if (!initialized()) return;
 #if ESPBLE_CLASSIC_BACKEND_AVAILABLE
   activeClassicImpl.store(nullptr, std::memory_order_release);
+  classicServiceSecurityMask.store(
+    static_cast<uint32_t>(ESP_SPP_SEC_NONE), std::memory_order_release);
 #endif
   inquiry_.end();
   hfpAudioGateway_.end();

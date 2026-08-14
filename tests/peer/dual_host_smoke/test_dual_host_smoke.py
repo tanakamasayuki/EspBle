@@ -36,6 +36,7 @@ CLASSIC_OPCODES = {
     0x0406,
     0x0409,
     0x040B,
+    0x040C,
     0x040F,
     0x0411,
     0x0413,
@@ -44,12 +45,18 @@ CLASSIC_OPCODES = {
     0x041C,
     0x041D,
     0x041F,
+    # Secure Simple Pairing replies, reached because the test pairs from
+    # scratch rather than reusing a stored link key.
+    0x042B,
+    0x042C,
     0x0803,
     0x0804,
     0x080D,
     0x080F,
     0x0C01,
     0x0C03,
+    # Dropping a bond reaches the controller's own key storage.
+    0x0C12,
     0x0C13,
     0x0C14,
     0x0C18,
@@ -96,6 +103,14 @@ def test_nimble_and_custom_classic_host_run_together(dut, peers):
     )
 
     assert ready.group(3) == b"0"
+    # Pair from scratch on both sides. A stored link key skips the pairing
+    # exchange entirely, and the HCI commands it needs — the link key and
+    # Secure Simple Pairing replies — then never reach the broker, so a gap in
+    # its policy would go unnoticed until a user pairs for the first time.
+    dut.write("B")
+    dut.expect(re.compile(rb"DUAL_CLASSIC_BONDS_CLEARED 1 count=0"), timeout=20)
+    peer.write("B\n")
+    peer.expect(re.compile(rb"DUAL_PEER_BONDS_CLEARED 1 count=0"), timeout=20)
     peer.write(b"c" + ready.group(1) + b"\n")
     peer.expect_exact("DUAL_PEER_CONNECT 1", timeout=10)
     dut.expect_exact("DUAL_CLASSIC_CONNECTED", timeout=30)

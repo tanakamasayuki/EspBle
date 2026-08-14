@@ -147,6 +147,18 @@ PCMFlowBluetoothへは`badFrame`とraw lengthを失わず渡し、decoder側で5
 - 上流の`npl_freertos_eventq_remove()`はfunction-localのspinlockでcritical sectionを作るため、別coreのhost taskによるdequeueと競合してassertする。vendor patchで受信失敗時はassertせずloopを抜ける。
 - RPA更新はadvertising / scanをpreemptする。元の設定と有限deadlineを保持して再開しないと、処理が停止または期限延長する。
 - Classic再attach時の物理HCI Resetは既存LE接続を破壊するため、Classicだけへ仮想Command Completeを返す。
+- bondが残っているとpairingのHCI経路がまるごと走らない。link key応答とSSP応答をpolicyへ
+  分類し忘れていても、bond済みのpeerとは正常に通信できるためtestが通ってしまう。dual-host testは
+  接続前にbondを削除して初回pairingを必ず通す。
+- Secure Simple Pairingはserviceが要求したときだけapplicationへ確認を求める。`esp_bt_gap_set_security_param`で
+  IO capabilityを設定しても、SPPを`ESP_SPP_SEC_NONE`で開いていると両端がJust Worksで合意し、
+  numeric comparisonもpasskeyも発生しないまま pairing が完了する。IO capabilityを設定に反映させるには
+  service側で`ESP_SPP_SEC_AUTHENTICATE | ESP_SPP_SEC_ENCRYPT | ESP_SPP_SEC_MITM`を要求する必要がある。
+- pairing失敗ではSPPのeventが来ない。接続を開始したSPP側は`ESP_BT_GAP_AUTH_CMPL_EVT`の失敗で
+  自分の接続試行を終わらせないと、自前のtimeoutまで再接続を拒否し続ける。
+- Classic HIDのInput Reportはreport IDを先頭に付けて配送されるが、Report Descriptorのfield offsetは
+  payload起点である。descriptorから復号するときはID分をずらす。剥がす条件は「先頭byteが当該reportのID」かつ
+  「剥がすと宣言長と一致する」の両方にする——長さだけで判断すると、たまたま同じ値で始まるpayloadを削ってしまう。
 - Bluedroid公開HID Host APIにはpage中の接続試行を取り消す手段がない。未接続peerへの任意timeoutを
   `esp_bt_hid_host_disconnect()`で実装すると内部のconnecting状態が残り、次の接続を拒否するため採用しない。
   APIはbackendの最終`OPEN`失敗を`onConnectionFailed()`で非同期通知する。

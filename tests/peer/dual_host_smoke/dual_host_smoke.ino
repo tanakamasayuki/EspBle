@@ -466,6 +466,10 @@ void loop()
         classic.lastErrorName(), classic.lastErrorDetail().c_str());
     }
 #endif
+    else if (command == 'B')
+      Serial.printf("DUAL_CLASSIC_BONDS_CLEARED %u count=%u\n",
+        classic.deleteAllBonds() ? 1 : 0,
+        static_cast<unsigned>(classic.bondCount()));
     else if (command == '?')
       Serial.printf("DUAL_STATE adv=%u classic=%u ble=%u\n",
         ble.advertising().isAdvertising() ? 1 : 0,

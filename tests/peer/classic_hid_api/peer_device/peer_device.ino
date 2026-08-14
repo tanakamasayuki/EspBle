@@ -59,6 +59,12 @@ void loop()
     if (command == 'c')
       Serial.printf("HOST_CONNECT requested=%u\n",
         bluetooth.hidHost().connect(line.substring(1).c_str()) ? 1 : 0);
+    else if (command == 'e')
+      Serial.printf("HOST_LEDS sent=%u\n",
+        bluetooth.hidHost().setKeyboardLeds(false, true, false) ? 1 : 0);
+    else if (command == 'E')
+      Serial.printf("HOST_LEDS sent=%u\n",
+        bluetooth.hidHost().setKeyboardLeds(false, false, false) ? 1 : 0);
     else if (command == 'j')
     {
       bluetooth.hidHost().setKeyboardLayout(EspBleKeyboardLayout::JaJp);

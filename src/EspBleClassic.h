@@ -1254,6 +1254,15 @@ public:
   String peerAddress() const;
 
   bool sendOutputReport(const uint8_t *data, size_t length);
+  // The LED report, named and ordered as on the BLE side. The report ID comes
+  // from the peer's Report Descriptor, so this needs the descriptor to have
+  // arrived; sendOutputReport() stays available for anything else.
+  bool setKeyboardLeds(
+    bool numLock,
+    bool capsLock,
+    bool scrollLock,
+    bool compose = false,
+    bool kana = false);
 
   using KeyboardStateCallback =
     std::function<void(const EspBleClassicHidKeyboardState &)>;

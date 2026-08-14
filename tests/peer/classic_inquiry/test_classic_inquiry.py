@@ -30,8 +30,10 @@ def test_inquiry_finds_the_peer_and_reports_completion(dut, peers):
 
     found = dut.expect(
         re.compile(
+            # The name is a device name, so it contains spaces; only the
+            # following key ends it.
             rb"INQUIRY_RESULT address=" + peer_address.encode() +
-            rb" name=(\S+) cod=(\d):([0-9a-f]+) rssi=(\d):(-?\d+)"
+            rb" name=(.+?) cod=(\d):([0-9a-f]+) rssi=(\d):(-?\d+)"
         ),
         timeout=40,
     )

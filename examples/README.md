@@ -47,7 +47,11 @@ use remains an explicit experimental opt-in.
 
 | Example | Role | Description |
 |---|---|---|
+| [Classic/Inquiry](Classic/Inquiry/) | GAP | Device discovery: where an address comes from |
 | [Classic/SppServer](Classic/SppServer/) | SPP Server | Binary-safe SPP echo server |
+| [Classic/SppPairing](Classic/SppPairing/) | SPP Server / GAP | Application-controlled pairing and bond management |
+| [Classic/HidKeyboard](Classic/HidKeyboard/) | HID Device | Keyboard and mouse through the same profile API the BLE examples use |
+| [Classic/HidKeyboardHost](Classic/HidKeyboardHost/) | HID Host | Decoded key and mouse events from the peer's Report Descriptor |
 | [Classic/HidVendorDevice](Classic/HidVendorDevice/) | HID Device | Classic HID Device with an arbitrary Report Descriptor |
 | [Classic/HidVendorHost](Classic/HidVendorHost/) | HID Host | Connect by address and receive raw Input Reports |
 | [Classic/A2dpSinkRaw](Classic/A2dpSinkRaw/) | A2DP Sink | Receive codec configuration and encoded SBC media callbacks |

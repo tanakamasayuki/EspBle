@@ -45,7 +45,11 @@ arduino-cli compile --profile esp32s3 examples/<path>
 
 | Example | Role | 説明 |
 |---|---|---|
+| [Classic/Inquiry](Classic/Inquiry/) | GAP | device discovery。addressの入手経路 |
 | [Classic/SppServer](Classic/SppServer/) | SPP Server | binary-safeなSPP echo server |
+| [Classic/SppPairing](Classic/SppPairing/) | SPP Server / GAP | applicationが制御するpairingとbond管理 |
+| [Classic/HidKeyboard](Classic/HidKeyboard/) | HID Device | BLE exampleと同じprofile APIによるkeyboard / mouse |
+| [Classic/HidKeyboardHost](Classic/HidKeyboardHost/) | HID Host | 相手のReport Descriptorから復号したkeyboard / mouse event |
 | [Classic/HidVendorDevice](Classic/HidVendorDevice/) | HID Device | 任意Report DescriptorのClassic HID Device |
 | [Classic/HidVendorHost](Classic/HidVendorHost/) | HID Host | アドレス指定で接続しraw Input Reportを受信 |
 | [Classic/A2dpSinkRaw](Classic/A2dpSinkRaw/) | A2DP Sink | codec設定とencode済みSBC mediaをcallbackで受信 |
