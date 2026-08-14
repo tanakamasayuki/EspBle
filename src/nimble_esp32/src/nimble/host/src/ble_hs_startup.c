@@ -27,6 +27,7 @@
 #include "nimble_esp32/include/host/ble_hs.h"
 #include "nimble_esp32/include/host/ble_hs_hci.h"
 #include "ble_hs_priv.h"
+#include "EspBleHciBroker.h"
 #include "nimble_esp32/include/host/ble_hs_log.h"
 #if MYNEWT_VAL(BLE_ISO)
 #include "nimble_esp32/include/host/ble_hs_iso.h"
@@ -509,12 +510,14 @@ ble_hs_startup_go(void)
     int key_rc;
     int rc;
 
-#if !defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
-    rc = ble_hs_startup_reset_tx();
-    if (rc != 0) {
-        return rc;
+    /* A physical HCI Reset would tear down the Classic host's controller
+     * state, so skip it whenever that host is already attached. */
+    if (!espble_hci_broker_host_registered(ESPBLE_HCI_HOST_CLASSIC)) {
+        rc = ble_hs_startup_reset_tx();
+        if (rc != 0) {
+            return rc;
+        }
     }
-#endif
 
     rc = ble_hs_startup_read_local_ver_tx();
     if (rc != 0) {

@@ -10,8 +10,7 @@ NimBLEとClassic-only BluedroidをHCI brokerへ接続する構成とする。
 
 ただし、VHCIのH4 byte streamをパケット種別だけで二分することはできない。command credit、
 command応答、connection handle、ACL credit、controller初期化をbrokerが一元管理する必要がある。
-single-host pass-throughを基準にした後、opt-inの
-`ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL`としてH4 routerまで実装した。Classic HIDの双方向通信を
+single-host pass-throughを基準にした後、2 host目の登録で有効になるH4 routerまで実装した。Classic HIDの双方向通信を
 維持したままLE接続、GATT read反復、負荷後のClassic HID双方向通信が成立している。command schedulerは
 broker所有FIFOとcontroller credit管理、最後のhostがcontrollerを停止するlifecycle、event maskのunion、
 Classic再attach時のflow-control command仮想化まで実装した。Classic HID接続中のBLE pairing、bond保存、
@@ -612,8 +611,8 @@ profile再初期化後の再接続まで成功した。
 
 公開Classic-only sketchに`ESPBLE_CLASSIC_ONLY`と`ESPBLE_CLASSIC_CUSTOM_HOST`を要求せず、無印ESP32向けの
 Classic実装TUが独自hostを自動選択する内部build設定へ変更した。通常はstatic archiveの未参照objectがlinkされない
-ため、BLEだけのsketchは従来経路を維持する。dual-hostは引き続き`ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL`による
-明示opt-inで、test instrumentationも個別flagのままとする。
+ため、BLEだけのsketchは従来経路を維持する。dual-hostも後にbuild flagを廃止し、登録host数で決まる
+runtime判定へ移した。test instrumentationだけが個別flagのまま残る。
 
 公開Classic exampleから`build_opt.h`を除去し、SPP、HID Device/Host、A2DP Sink/AVRCP、HFP Client/AGを
 Arduino-ESP32 3.3.11の無印ESP32 profileでclean compileした。flagなしSPP fixtureはESP32 2台でbinary echo、

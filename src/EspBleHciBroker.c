@@ -24,7 +24,6 @@ static espble_hci_router_t router;
 static espble_hci_broker_diagnostics_t diagnostics;
 static portMUX_TYPE broker_lock = portMUX_INITIALIZER_UNLOCKED;
 static uint8_t next_send_host;
-#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
 static espble_hci_command_scheduler_t command_scheduler;
 static espble_hci_controller_policy_t controller_policy;
 static SemaphoreHandle_t physical_send_mutex;
@@ -36,7 +35,6 @@ static uint16_t virtual_command_opcode[ESPBLE_HCI_HOST_COUNT];
 #if defined(ESPBLE_HCI_BACKPRESSURE_TEST)
 static bool command_backpressure_hold;
 static espble_hci_broker_diagnostics_t backpressure_diagnostics;
-#endif
 #endif
 
 static espble_hci_route_t host_route(size_t host)
@@ -55,7 +53,6 @@ static bool valid_host(espble_hci_host_t host)
   return host >= ESPBLE_HCI_HOST_NIMBLE && host < ESPBLE_HCI_HOST_COUNT;
 }
 
-#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
 static void record_command_opcode(
   espble_hci_host_t host, const uint8_t *data, uint16_t length)
 {
@@ -74,17 +71,11 @@ static void record_command_opcode(
   diagnostics.command_opcodes[host]
     [diagnostics.command_opcode_count[host]++] = opcode;
 }
-#endif
 
 static bool receive_enabled_on_register(espble_hci_host_t host)
 {
-#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
   /* NimBLE cannot consume controller events until ble_hs_start() completes. */
   return host != ESPBLE_HCI_HOST_NIMBLE;
-#else
-  (void)host;
-  return true;
-#endif
 }
 
 static size_t registered_host_count(void)
@@ -97,7 +88,6 @@ static size_t registered_host_count(void)
   return count;
 }
 
-#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
 static bool dual_host_active(void)
 {
   return registered_host_count() > 1;
@@ -226,13 +216,24 @@ static void command_task(void *argument)
   }
 }
 
-static esp_err_t ensure_command_transport(void)
+// The mutex serializes every physical VHCI send, so a single host needs it too.
+static esp_err_t ensure_physical_send_mutex(void)
 {
   if (physical_send_mutex == NULL)
   {
     physical_send_mutex = xSemaphoreCreateMutex();
     if (physical_send_mutex == NULL) return ESP_ERR_NO_MEM;
   }
+  return ESP_OK;
+}
+
+// Only routed mode schedules commands, so a single-host sketch never pays for
+// the dispatch task.  Once created it outlives the session; a later routed
+// session reuses it instead of recreating a task per registration.
+static esp_err_t ensure_command_transport(void)
+{
+  const esp_err_t result = ensure_physical_send_mutex();
+  if (result != ESP_OK) return result;
   if (command_task_handle == NULL)
   {
     if (xTaskCreate(command_task, "espble_hci_cmd", 3072, NULL,
@@ -243,13 +244,10 @@ static esp_err_t ensure_command_transport(void)
   }
   return ESP_OK;
 }
-#endif
 
 static void physical_send_available(void)
 {
-#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
   wake_command_task();
-#endif
   // Rotate the first notification. A busy logical host must not permanently
   // win every newly available physical VHCI slot.
   const uint8_t first = next_send_host;
@@ -298,7 +296,6 @@ static int physical_receive(uint8_t *data, uint16_t length)
         data[1] == 0x08 ? data[6] : 0xff);
   }
 #endif
-#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
   if (registered_host_count() > 1)
   {
     uint8_t filtered[ESPBLE_HCI_HOST_COUNT][258];
@@ -381,8 +378,6 @@ static int physical_receive(uint8_t *data, uint16_t length)
       wake_command_task();
     return result;
   }
-#endif
-#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
   // Even before the second host attaches, retain command and connection state.
   // Classic profile setup is asynchronous, so an outstanding response can
   // legitimately arrive after registration transitions from one host to two.
@@ -394,7 +389,6 @@ static int physical_receive(uint8_t *data, uint16_t length)
   if (length >= 2 && data[0] == 0x04 &&
       (data[1] == 0x0e || data[1] == 0x0f))
     wake_command_task();
-#endif
   for (size_t i = 0; i < ESPBLE_HCI_HOST_COUNT; ++i)
   {
     const espble_hci_host_callbacks_t *callbacks = hosts[i];
@@ -445,28 +439,25 @@ esp_err_t espble_hci_broker_register(
   }
   if (registered_host_count() != 0)
   {
-#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
+    // A second host turns the broker into routed mode, which needs the command
+    // dispatch task.  Refuse the second host rather than route without it.
+    const esp_err_t transport = ensure_command_transport();
+    if (transport != ESP_OK) return transport;
     hosts[host] = callbacks;
     host_receive_enabled[host] = receive_enabled_on_register(host);
-    ESP_LOGW(TAG, "registered second host %d in experimental routed mode", (int)host);
+    ESP_LOGW(TAG, "registered second host %d in routed mode", (int)host);
     wake_command_task();
     return ESP_OK;
-#else
-    return ESP_ERR_NOT_SUPPORTED;
-#endif
   }
 
   esp_err_t result;
-#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
-  result = ensure_command_transport();
+  result = ensure_physical_send_mutex();
   if (result != ESP_OK) return result;
-#endif
 
   hosts[host] = callbacks;
   host_receive_enabled[host] = receive_enabled_on_register(host);
   espble_hci_router_init(&router);
   memset(&diagnostics, 0, sizeof(diagnostics));
-#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
   espble_hci_command_scheduler_init(&command_scheduler);
   espble_hci_controller_policy_init(&controller_policy);
   virtual_command_pending = 0;
@@ -475,7 +466,6 @@ esp_err_t espble_hci_broker_register(
   command_backpressure_hold = false;
 #endif
   ++command_generation;
-#endif
   result = esp_vhci_host_register_callback(&physical_callbacks);
   if (result != ESP_OK)
   {
@@ -489,7 +479,6 @@ esp_err_t espble_hci_broker_register(
 void espble_hci_broker_unregister(espble_hci_host_t host)
 {
   if (!valid_host(host)) return;
-#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
   espble_hci_controller_stop_callback_t stop_callback = NULL;
   portENTER_CRITICAL(&broker_lock);
   const espble_hci_command_scheduler_result_t removed =
@@ -525,25 +514,22 @@ void espble_hci_broker_unregister(espble_hci_host_t host)
   wake_command_task();
   if (removed == ESPBLE_HCI_COMMAND_SCHEDULER_BLOCKED)
     ESP_LOGW(TAG, "unregistered host %d with a command response pending", (int)host);
-#else
-  hosts[host] = NULL;
-  host_receive_enabled[host] = false;
-  const bool no_hosts = registered_host_count() == 0;
-#endif
   if (no_hosts)
   {
     esp_vhci_host_register_callback(&dummy_callbacks);
   }
-#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
   if (stop_callback != NULL && !stop_callback())
     ESP_LOGE(TAG, "failed to stop the adopted controller");
-#endif
+}
+
+bool espble_hci_broker_host_registered(espble_hci_host_t host)
+{
+  return valid_host(host) && hosts[host] != NULL;
 }
 
 esp_err_t espble_hci_broker_adopt_controller(
   espble_hci_controller_stop_callback_t stop_callback)
 {
-#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
   if (stop_callback == NULL) return ESP_ERR_INVALID_ARG;
   portENTER_CRITICAL(&broker_lock);
   const bool conflict = controller_stop_callback != NULL &&
@@ -551,15 +537,10 @@ esp_err_t espble_hci_broker_adopt_controller(
   if (!conflict) controller_stop_callback = stop_callback;
   portEXIT_CRITICAL(&broker_lock);
   return conflict ? ESP_ERR_INVALID_STATE : ESP_OK;
-#else
-  (void)stop_callback;
-  return ESP_ERR_NOT_SUPPORTED;
-#endif
 }
 
 esp_err_t espble_hci_broker_shutdown_controller(void)
 {
-#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
   espble_hci_controller_stop_callback_t stop_callback = NULL;
   portENTER_CRITICAL(&broker_lock);
   const bool hosts_active = registered_host_count() != 0;
@@ -572,22 +553,15 @@ esp_err_t espble_hci_broker_shutdown_controller(void)
   if (hosts_active) return ESP_ERR_INVALID_STATE;
   if (stop_callback == NULL) return ESP_OK;
   return stop_callback() ? ESP_OK : ESP_FAIL;
-#else
-  return ESP_ERR_NOT_SUPPORTED;
-#endif
 }
 
 bool espble_hci_broker_has_adopted_controller(void)
 {
-#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
   portENTER_CRITICAL(&broker_lock);
   const bool adopted = controller_stop_callback != NULL &&
     registered_host_count() != 0;
   portEXIT_CRITICAL(&broker_lock);
   return adopted;
-#else
-  return false;
-#endif
 }
 
 bool espble_hci_broker_can_send(espble_hci_host_t host)
@@ -603,9 +577,7 @@ void espble_hci_broker_set_receive_enabled(
   portENTER_CRITICAL(&broker_lock);
   if (hosts[host] != NULL) host_receive_enabled[host] = enabled;
   portEXIT_CRITICAL(&broker_lock);
-#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
   if (enabled) wake_command_task();
-#endif
 }
 
 esp_err_t espble_hci_broker_send(
@@ -624,7 +596,6 @@ esp_err_t espble_hci_broker_send(
     ESP_LOGE(TAG, "TRACE TX host=%d command opcode=0x%02x%02x",
       (int)host, data[2], data[1]);
 #endif
-#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
   portENTER_CRITICAL(&broker_lock);
   record_command_opcode(host, data, length);
   portEXIT_CRITICAL(&broker_lock);
@@ -765,20 +736,14 @@ esp_err_t espble_hci_broker_send(
     wake_command_task();
     return ESP_OK;
   }
-#endif
 
-#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
   if (xSemaphoreTake(physical_send_mutex, portMAX_DELAY) != pdTRUE)
     return ESP_ERR_INVALID_STATE;
-#endif
   if (!esp_vhci_host_check_send_available())
   {
-#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
     xSemaphoreGive(physical_send_mutex);
-#endif
     return ESP_ERR_INVALID_STATE;
   }
-#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
   if (registered_host_count() > 0)
   {
     portENTER_CRITICAL(&broker_lock);
@@ -801,15 +766,9 @@ esp_err_t espble_hci_broker_send(
         ESP_ERR_INVALID_ARG;
     }
   }
-#endif
   esp_vhci_host_send_packet(
-#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
     (uint8_t *)physical_data,
-#else
-    (uint8_t *)data,
-#endif
     length);
-#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
   xSemaphoreGive(physical_send_mutex);
   if (length >= 5 && data[0] == 0x02)
   {
@@ -819,7 +778,6 @@ esp_err_t espble_hci_broker_send(
     diagnostics.last_tx_pb[host] = (data[2] >> 4) & 0x03;
     portEXIT_CRITICAL(&broker_lock);
   }
-#endif
   return ESP_OK;
 }
 
@@ -832,8 +790,7 @@ void espble_hci_broker_get_diagnostics(
   portEXIT_CRITICAL(&broker_lock);
 }
 
-#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL) && \
-    defined(ESPBLE_HCI_BACKPRESSURE_TEST)
+#if defined(ESPBLE_HCI_BACKPRESSURE_TEST)
 esp_err_t espble_hci_broker_test_begin_backpressure(void)
 {
   portENTER_CRITICAL(&broker_lock);

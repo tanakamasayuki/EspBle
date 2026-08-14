@@ -100,10 +100,8 @@ ble_hs_stop_done(int status)
 
     ble_hs_unlock();
 
-#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
     espble_hci_broker_set_receive_enabled(
         ESPBLE_HCI_HOST_NIMBLE, false);
-#endif
 
     SLIST_FOREACH(listener, &slist, link) {
         listener->fn(status, listener->arg);

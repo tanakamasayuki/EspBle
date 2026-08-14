@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+- (EN) Removed the `ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL` build flag on the
+  original ESP32. The HCI broker now follows the hosts a sketch actually
+  starts: one registered host stays a pass-through, and starting both `EspBle`
+  and `EspBleClassic` routes HCI between them. Whichever host starts the
+  controller hands its shutdown to the broker, and a linked Classic host keeps
+  the controller in dual mode so BLE and Classic can be started, stopped and
+  restarted in either order. Dual-host stays experimental; stop one host to fall
+  back to a single-host path.
+- (JA) 無印ESP32の`ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL` build flagを廃止した。
+  HCI brokerはsketchが実際に開始したhostに従い、1 hostならpass-through、
+  `EspBle`と`EspBleClassic`の両方を開始した場合だけHCIをroutingする。controllerを
+  起動したhostが停止責任をbrokerへ委譲し、Classic hostがlinkされていればcontrollerを
+  dual modeで起動するため、BLEとClassicを任意の順で開始・停止・再開できる。
+  dual-hostは実験扱いのままで、一方を停止すれば単一host経路へ戻る。
+
+- (EN) Fixed the example compile workflow, which built every sketch with the
+  `esp32s3` profile and therefore always failed on the original-ESP32-only
+  Classic examples. Each sketch now builds with the profile it actually ships.
+- (JA) example compile workflowが全sketchを`esp32s3` profileでbuildしていたため、
+  無印ESP32専用のClassic exampleが必ず失敗していた問題を修正した。各sketchが持つ
+  profileでbuildする。
+
 - (EN) Original-ESP32 Classic-only sketches now select EspBle's custom host
   automatically; published Classic examples no longer need `build_opt.h`.
   Only experimental dual-host and test-only instrumentation keep explicit flags.

@@ -10,12 +10,13 @@
 controllerへ同時接続できます。Classic hostはcore内蔵archiveではなく、SPP、HID Device、HID Host、
 SMPを有効にした名前空間化済み`libespble_bluedroid_classic.a`を使います。
 
-dual-hostは`ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL`によるopt-inです。通常buildはsingle-hostのままで、
-無印ESP32以外はcore同梱NimBLE経路を変更しません。現段階は技術検証済みの実験機能であり、一般対応へ
-昇格していません。
+host構成はsketchが`begin()`したhostだけで決まり、build flagはありません。1 hostならbrokerは
+pass-through、`EspBle`と`EspBleClassic`の両方をbeginすればbrokerがHCIをroutingします。
+無印ESP32以外はcore同梱NimBLE経路を変更しません。dual-hostは技術検証済みの実験機能であり、
+一般対応へ昇格していません。不安定な場合は一方を`end()`して単一hostで使います。
 
 Classic-onlyは`EspBleClassic`を使うだけで独自hostを自動選択し、公開exampleに`build_opt.h`はありません。
-明示flagを残すのはdual-hostとtest instrumentationだけです。
+明示flagはtest instrumentationにだけ残ります。
 
 Classic-only A2DP Sink / Source、AVRCP CT/TG、HFP Client / Audio Gatewayの公開APIと実機転送まで完了しました。
 dual-hostでもBLE GATT接続中のmSBC SCO双方向転送、A2DP encode済みmedia転送、AVRCP操作と、各link切断後のGATT継続まで確認済みです。EspBleはBluetooth profile、codec negotiation、encode済みmedia/SCO payloadの受け渡し
@@ -52,7 +53,8 @@ dual-hostでもBLE GATT接続中のmSBC SCO双方向転送、A2DP encode済みme
 
 ## 重要な設計境界
 
-- ClassicがBTDM controllerを先に起動し、NimBLEはcontrollerを再初期化せずhostだけattachする。
+- controllerを先に起動したhostが停止責任をbrokerへ委譲し、後から入るhostは再初期化せずhostだけattachする。
+  両hostがlinkされたsketchはどちらの順でも起動でき、controllerはBTDMで起動する。
 - 最後のlogical hostが外れたときだけbrokerがcontrollerを停止する。
 - HCI commandをhostから物理VHCIへ直接流さず、broker FIFOと単一transaction ownershipを通す。
 - event種別だけで配送せず、command owner、connection handle、LE Meta / BR-EDR event semanticsを使う。

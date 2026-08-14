@@ -101,7 +101,6 @@ void detachClassicHost()
   (void)esp_bluedroid_detach_hci_driver();
 }
 
-#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
 bool stopAdoptedController()
 {
   return btStop();
@@ -111,7 +110,16 @@ void shutdownAdoptedController()
 {
   (void)espble_hci_broker_shutdown_controller();
 }
-#endif
+
+// Classic starts the controller, so it picks the mode both hosts have to live
+// with.  BT_MODE_CLASSIC_BT releases the BLE controller memory for the rest of
+// the boot, which would make a later ble.begin() impossible.  Choose it only
+// when no BLE host is linked into the sketch; otherwise run the dual-mode
+// controller so the sketch can start BLE before, after, or alongside Classic.
+bt_mode controllerStartMode()
+{
+  return bleInUse() ? BT_MODE_BTDM : BT_MODE_CLASSIC_BT;
+}
 #endif
 
 const char *errorName(EspBleError error)
@@ -1215,8 +1223,9 @@ bool EspBleClassic::begin(const EspBleClassicConfig &config)
     return false;
   }
   const bool controllerStarted = btStarted();
-#if defined(ESPBLE_CLASSIC_CUSTOM_HOST) && \
-    defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
+#if defined(ESPBLE_CLASSIC_CUSTOM_HOST)
+  // A running controller the broker already owns belongs to a BLE host that
+  // started first; attach to it instead of refusing to start.
   const bool attachAdoptedController = controllerStarted &&
     espble_hci_broker_has_adopted_controller();
 #else
@@ -1229,13 +1238,11 @@ bool EspBleClassic::begin(const EspBleClassicConfig &config)
     setError(EspBleError::InvalidState, "another Bluetooth stack is active");
     return false;
   }
-  if (!attachAdoptedController &&
-#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
-      !btStartMode(BT_MODE_BTDM)
+#if defined(ESPBLE_CLASSIC_CUSTOM_HOST)
+  if (!attachAdoptedController && !btStartMode(controllerStartMode()))
 #else
-      !btStartMode(BT_MODE_CLASSIC_BT)
+  if (!attachAdoptedController && !btStartMode(BT_MODE_CLASSIC_BT))
 #endif
-     )
   {
     activeClassic.store(nullptr, std::memory_order_release);
     setError(
@@ -1243,8 +1250,7 @@ bool EspBleClassic::begin(const EspBleClassicConfig &config)
       "failed to start the Classic controller; Classic memory may already be released");
     return false;
   }
-#if defined(ESPBLE_CLASSIC_CUSTOM_HOST) && \
-    defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
+#if defined(ESPBLE_CLASSIC_CUSTOM_HOST)
   if (!attachAdoptedController &&
       espble_hci_broker_adopt_controller(stopAdoptedController) != ESP_OK)
   {
@@ -1257,7 +1263,7 @@ bool EspBleClassic::begin(const EspBleClassicConfig &config)
 #if defined(ESPBLE_CLASSIC_CUSTOM_HOST)
   if (!attachClassicHost())
   {
-#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
+#if defined(ESPBLE_CLASSIC_CUSTOM_HOST)
     shutdownAdoptedController();
 #else
     btStop();
@@ -1276,8 +1282,7 @@ bool EspBleClassic::begin(const EspBleClassicConfig &config)
 #if defined(ESPBLE_CLASSIC_CUSTOM_HOST)
     detachClassicHost();
 #endif
-#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL) && \
-    defined(ESPBLE_CLASSIC_CUSTOM_HOST)
+#if defined(ESPBLE_CLASSIC_CUSTOM_HOST)
     shutdownAdoptedController();
 #else
     btStop();
@@ -1295,8 +1300,7 @@ bool EspBleClassic::begin(const EspBleClassicConfig &config)
 #if defined(ESPBLE_CLASSIC_CUSTOM_HOST)
     detachClassicHost();
 #endif
-#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL) && \
-    defined(ESPBLE_CLASSIC_CUSTOM_HOST)
+#if defined(ESPBLE_CLASSIC_CUSTOM_HOST)
     shutdownAdoptedController();
 #else
     btStop();
@@ -1315,8 +1319,7 @@ bool EspBleClassic::begin(const EspBleClassicConfig &config)
 #if defined(ESPBLE_CLASSIC_CUSTOM_HOST)
     detachClassicHost();
 #endif
-#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL) && \
-    defined(ESPBLE_CLASSIC_CUSTOM_HOST)
+#if defined(ESPBLE_CLASSIC_CUSTOM_HOST)
     shutdownAdoptedController();
 #else
     btStop();
@@ -1335,8 +1338,7 @@ bool EspBleClassic::begin(const EspBleClassicConfig &config)
 #if defined(ESPBLE_CLASSIC_CUSTOM_HOST)
     detachClassicHost();
 #endif
-#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL) && \
-    defined(ESPBLE_CLASSIC_CUSTOM_HOST)
+#if defined(ESPBLE_CLASSIC_CUSTOM_HOST)
     shutdownAdoptedController();
 #else
     btStop();
@@ -1371,8 +1373,7 @@ void EspBleClassic::end()
 #if defined(ESPBLE_CLASSIC_CUSTOM_HOST)
   detachClassicHost();
 #endif
-#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL) && \
-    defined(ESPBLE_CLASSIC_CUSTOM_HOST)
+#if defined(ESPBLE_CLASSIC_CUSTOM_HOST)
   // The broker stops the adopted controller now if Classic was the final
   // host, or defers it until NimBLE unregisters.
   shutdownAdoptedController();

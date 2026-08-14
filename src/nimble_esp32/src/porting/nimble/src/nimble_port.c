@@ -44,6 +44,10 @@
 #include "freertos/task.h"
 #if CONFIG_BT_CONTROLLER_ENABLED
 #include "esp_bt.h"
+/* btClassicInUse() reports whether a Classic host is linked into the sketch;
+ * the broker owns the shared controller once either host starts it. */
+#include "esp32-hal-bt.h"
+#include "EspBleHciBroker.h"
 #endif
 #if !SOC_ESP_NIMBLE_CONTROLLER && CONFIG_BT_CONTROLLER_ENABLED
 #include "nimble_esp32/include/esp_nimble_hci.h"
@@ -302,6 +306,32 @@ esp_err_t esp_nimble_deinit(void)
 }
 
 /**
+ * @brief nimble_port_stop_controller - Stop the controller this host started
+ *
+ * Registered with the broker so the controller outlives a NimBLE-only stop
+ * whenever a Classic host is still attached.
+ *
+ * @return bool
+ */
+#if CONFIG_BT_CONTROLLER_ENABLED
+static bool
+nimble_port_stop_controller(void)
+{
+    if (esp_bt_controller_disable() != ESP_OK) {
+        ESP_LOGE(NIMBLE_PORT_LOG_TAG, "controller disable failed\n");
+        return false;
+    }
+
+    if (esp_bt_controller_deinit() != ESP_OK) {
+        ESP_LOGE(NIMBLE_PORT_LOG_TAG, "controller deinit failed\n");
+        return false;
+    }
+
+    return true;
+}
+#endif
+
+/**
  * @brief nimble_port_init - Initialize controller and NimBLE host stack
  *
  * @return esp_err_t
@@ -318,28 +348,33 @@ nimble_port_init(void)
     ble_npl_reset_deinit_flag();
 #endif
 
-#if CONFIG_IDF_TARGET_ESP32 && CONFIG_BT_CONTROLLER_ENABLED && \
-    !defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
-    esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);
+#if CONFIG_IDF_TARGET_ESP32 && CONFIG_BT_CONTROLLER_ENABLED
+    /* Releasing Classic controller memory cannot be undone for the rest of the
+     * boot, so keep it whenever a Classic host is linked into the sketch. */
+    if (!btClassicInUse()) {
+        esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);
+    }
 #endif
 #if CONFIG_BT_CONTROLLER_ENABLED
-#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
-    /* Classic starts BTDM, then delegates its shutdown to the broker.
-     * NimBLE attaches only its host and HCI transport. */
-    if (esp_bt_controller_get_status() != ESP_BT_CONTROLLER_STATUS_ENABLED) {
-        ESP_LOGE(NIMBLE_PORT_LOG_TAG, "dual-host controller is not running\n");
-        return ESP_ERR_INVALID_STATE;
-    }
-#else
+    if (esp_bt_controller_get_status() == ESP_BT_CONTROLLER_STATUS_ENABLED) {
+        /* The Classic host started the controller and handed its shutdown to
+         * the broker.  Attach only the NimBLE host and HCI transport. */
+        if (!espble_hci_broker_has_adopted_controller()) {
+            ESP_LOGE(NIMBLE_PORT_LOG_TAG, "another stack owns the controller\n");
+            return ESP_ERR_INVALID_STATE;
+        }
+    } else {
     esp_bt_controller_config_t config_opts = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
 #if CONFIG_IDF_TARGET_ESP32
     /* EspBle: Arduino-ESP32 builds the prebuilt libraries with Bluedroid, so
      * BT_CONTROLLER_INIT_CONFIG_DEFAULT() describes the dual-mode controller
-     * (CONFIG_BTDM_CTRL_MODE_BTDM). esp_bt_controller_enable(ESP_BT_MODE_BLE)
-     * below requires the enabled mode to match the initialised one, so select
-     * BLE here and size the controller for the host's connection count. An
+     * (CONFIG_BTDM_CTRL_MODE_BTDM). esp_bt_controller_enable() below requires
+     * the enabled mode to match the initialised one, so select the mode here
+     * and size the controller for the host's connection count.  A linked
+     * Classic host needs BR/EDR too, so start the dual-mode controller on its
+     * behalf; otherwise BLE alone keeps the radio configuration minimal.  An
      * ESP-IDF build with NimBLE enabled gets both from its own sdkconfig. */
-    config_opts.mode = ESP_BT_MODE_BLE;
+    config_opts.mode = btClassicInUse() ? ESP_BT_MODE_BTDM : ESP_BT_MODE_BLE;
     config_opts.ble_max_conn = CONFIG_BT_NIMBLE_MAX_CONNECTIONS;
 #endif
 
@@ -349,7 +384,11 @@ nimble_port_init(void)
         return ret;
     }
 
+#if CONFIG_IDF_TARGET_ESP32
+    ret = esp_bt_controller_enable(config_opts.mode);
+#else
     ret = esp_bt_controller_enable(ESP_BT_MODE_BLE);
+#endif
     if (ret != ESP_OK) {
         // Deinit to free any memory the controller is using.
         if(esp_bt_controller_deinit() != ESP_OK) {
@@ -359,21 +398,24 @@ nimble_port_init(void)
         ESP_LOGE(NIMBLE_PORT_LOG_TAG, "controller enable failed\n");
         return ret;
     }
-#endif
+
+    /* The broker stops the controller only after the last logical host leaves,
+     * so a Classic host attaching later keeps this controller running. */
+    if (espble_hci_broker_adopt_controller(nimble_port_stop_controller) != ESP_OK) {
+        ESP_LOGE(NIMBLE_PORT_LOG_TAG, "controller ownership transfer failed\n");
+        (void)nimble_port_stop_controller();
+        return ESP_ERR_INVALID_STATE;
+    }
+    }
 #endif
 
     ret = esp_nimble_init();
     if (ret != ESP_OK) {
 
-#if CONFIG_BT_CONTROLLER_ENABLED && \
-    !defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
-	// Disable and deinit controller to free memory
-        if(esp_bt_controller_disable() != ESP_OK) {
-            ESP_LOGE(NIMBLE_PORT_LOG_TAG, "controller disable failed\n");
-        }
-
-	if(esp_bt_controller_deinit() != ESP_OK) {
-            ESP_LOGE(NIMBLE_PORT_LOG_TAG, "controller deinit failed\n");
+#if CONFIG_BT_CONTROLLER_ENABLED
+	// Free the controller memory unless another host still uses it.
+        if(espble_hci_broker_shutdown_controller() == ESP_ERR_INVALID_STATE) {
+            ESP_LOGD(NIMBLE_PORT_LOG_TAG, "controller kept for the other host\n");
         }
 #endif
 
@@ -401,17 +443,15 @@ nimble_port_deinit(void)
         return ret;
     }
 
-#if CONFIG_BT_CONTROLLER_ENABLED && \
-    !defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
-    ret = esp_bt_controller_disable();
-    if(ret != ESP_OK) {
-        ESP_LOGE(NIMBLE_PORT_LOG_TAG, "controller disable failed\n");
-        return ret;
+#if CONFIG_BT_CONTROLLER_ENABLED
+    /* The broker runs the stop callback registered at init, but only once the
+     * last logical host has left.  A still-attached Classic host keeps it. */
+    ret = espble_hci_broker_shutdown_controller();
+    if(ret == ESP_ERR_INVALID_STATE) {
+        ret = ESP_OK;
     }
-
-    ret = esp_bt_controller_deinit();
     if(ret != ESP_OK) {
-        ESP_LOGE(NIMBLE_PORT_LOG_TAG, "controller deinit failed\n");
+        ESP_LOGE(NIMBLE_PORT_LOG_TAG, "controller shutdown failed\n");
         return ret;
     }
 #endif

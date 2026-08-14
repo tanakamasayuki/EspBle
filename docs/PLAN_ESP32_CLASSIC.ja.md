@@ -45,13 +45,14 @@ core内蔵Bluedroidとリンク時に衝突せず、独自hostの公開APIが誤
   Bluedroidへの未解決参照を一切生成しない。
 - 共通の`EspBleError`だけを`EspBleTypes.h`へ置き、Classic公開headerはBLE公開headerへ依存しない。
 
-通常buildのbrokerはhostを1つだけ受け付ける。`ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL`を定義した
-無印ESP32だけは2 hostを受け付け、純粋Cの`EspBleHciRouter`でH4 command応答、LE / BR-EDR
-connection handle、ACL、切断、Number Of Completed Packetsを振り分ける。実験flagを付けない
-無印ESP32と他SoCの経路は変更しない。
+brokerは登録されたlogical hostの数だけでmodeを決める。1 hostならpass-throughで、
+2 host目が登録された時だけ純粋Cの`EspBleHciRouter`がH4 command応答、LE / BR-EDR connection handle、
+ACL、切断、Number Of Completed Packetsを振り分ける。build flagはなく、他SoCの経路も変更しない。
 
-共存時はClassicがBTDM controllerを起動した直後に停止責任をbrokerへ委譲する。NimBLEはcontrollerを
-再初期化せずhostだけをattachし、Resetを省略する。最後のlogical hostを解除したbrokerだけが
+controllerを起動したhostが停止責任をbrokerへ委譲する。Classicが先ならBTDMで起動し、BLEが先でも
+Classicがlinkされていれば同じくBTDMで起動する。後から入るhostはcontrollerを再初期化せず
+hostだけをattachし、Resetを省略する。BLEだけがlinkされたsketchでは従来どおりBLE専用modeで起動し、
+Classicだけのsketchは`BT_MODE_CLASSIC_BT`のままBLE側controller memoryを解放する。最後のlogical hostを解除したbrokerだけが
 controllerを停止する。Set Event Mask / Page 2 / LE Set Event Maskはhost別に要求値をcacheし、
 brokerがORしたmaskを物理controllerへ送る。現在のGeneral Event MaskはClassic要求とNimBLE要求から
 HCI wire順`ff ff ff ff ff ff bf 3d`になり、Classic eventを維持したままLE Metaを有効化する。

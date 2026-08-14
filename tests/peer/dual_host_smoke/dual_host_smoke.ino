@@ -2,7 +2,7 @@
 #include <EspBleClassic.h>
 #include <EspBleHciBroker.h>
 #include <esp_mac.h>
-#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL) && defined(CONFIG_IDF_TARGET_ESP32)
+#if defined(CONFIG_IDF_TARGET_ESP32)
 #include <nimble_esp32/include/host/ble_gap.h>
 #include <esp_gap_bt_api.h>
 extern "C" esp_err_t espble_bd_esp_bt_gap_set_scan_mode(
@@ -32,7 +32,7 @@ EspBleConnectionId bleConnectionId;
 uint8_t inputSequence;
 bool advertisingConfigured;
 
-#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL) && defined(CONFIG_IDF_TARGET_ESP32)
+#if defined(CONFIG_IDF_TARGET_ESP32)
 struct CommandContentionContext
 {
   volatile uint32_t accepted = 0;
@@ -225,10 +225,8 @@ bool startClassicStack()
   return classic.begin(classicConfig) && classic.hidDevice().begin(hidConfig);
 }
 
-bool startDualStacks()
+bool startBleStack()
 {
-  if (!startClassicStack()) return false;
-
   if (!service.valid())
   {
     EspBleGattCharacteristicConfig characteristicConfig;
@@ -259,6 +257,39 @@ bool startDualStacks()
     advertisingConfigured = true;
   }
   return ble.advertising().start();
+}
+
+bool startDualStacks()
+{
+  return startClassicStack() && startBleStack();
+}
+
+// Walks every host combination the broker can be in, in both start orders, so a
+// sketch can move between BLE-only, Classic-only and both without rebooting.
+bool runHostModeCycle()
+{
+  ble.end();
+  classic.end();
+
+  if (!startBleStack()) return false;
+  if (!ble.initialized() || classic.initialized()) return false;
+  if (!startClassicStack()) return false;
+  if (!ble.initialized() || !classic.initialized()) return false;
+
+  ble.end();
+  if (ble.initialized() || !classic.initialized()) return false;
+  classic.end();
+  if (classic.initialized()) return false;
+
+  if (!startClassicStack()) return false;
+  if (ble.initialized() || !classic.initialized()) return false;
+  if (!startBleStack()) return false;
+  if (!ble.initialized() || !classic.initialized()) return false;
+
+  classic.end();
+  if (!ble.initialized() || classic.initialized()) return false;
+  ble.end();
+  return !ble.initialized() && !classic.initialized();
 }
 
 bool runDestructorCycle(bool classicFirst)
@@ -385,7 +416,7 @@ void loop()
         nullRejected ? 1 : 0, oversizedRejected ? 1 : 0,
         classic.lastErrorName(), classic.hidDevice().connected() ? 1 : 0);
     }
-#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL) && defined(CONFIG_IDF_TARGET_ESP32)
+#if defined(CONFIG_IDF_TARGET_ESP32)
     else if (command == 'j')
       runCommandContention("DUAL");
 #if defined(ESPBLE_HCI_BACKPRESSURE_TEST)
@@ -510,6 +541,27 @@ void loop()
       Serial.printf(
         "DUAL_DESTRUCT classic_first=%u ble_first=%u restarted=%u\n",
         classicFirst ? 1 : 0, bleFirst ? 1 : 0, restarted ? 1 : 0);
+    }
+    else if (command == 'M')
+    {
+      const uint32_t before = ESP.getFreeHeap();
+      unsigned completed = 0;
+      for (unsigned cycle = 0; cycle < 5; ++cycle)
+      {
+        if (!runHostModeCycle()) break;
+        ++completed;
+      }
+      const bool restarted = startDualStacks();
+      espble_hci_broker_diagnostics_t value = {};
+      espble_hci_broker_get_diagnostics(&value);
+      Serial.printf(
+        "DUAL_MODES completed=%u restarted=%u busy=%lu qfull=%lu "
+        "mismatch=%lu unknown=%lu heap_before=%lu heap_after=%lu error=%s:%s\n",
+        completed, restarted ? 1 : 0, value.command_unregister_busy,
+        value.command_queue_full, value.command_response_mismatch,
+        value.unknown_acl, static_cast<unsigned long>(before),
+        static_cast<unsigned long>(ESP.getFreeHeap()),
+        classic.lastErrorName(), ble.lastErrorName());
     }
     else if (command == 'y')
     {

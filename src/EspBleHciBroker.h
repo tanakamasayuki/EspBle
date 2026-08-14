@@ -59,13 +59,16 @@ typedef struct
   uint32_t command_opcode_overflow[ESPBLE_HCI_HOST_COUNT];
 } espble_hci_broker_diagnostics_t;
 
-// Register a logical host with the broker. Production builds remain single-host.
-// Defining ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL admits both hosts through the H4
-// ownership router; this switch remains explicit until lifecycle, queued send
-// arbitration, and sustained-load tests have passed.
+// Register a logical host with the broker.  One registered host is a
+// pass-through; the broker only routes when a second host registers, so the
+// mode follows what the sketch actually starts instead of a build flag.
 esp_err_t espble_hci_broker_register(
   espble_hci_host_t host, const espble_hci_host_callbacks_t *callbacks);
 void espble_hci_broker_unregister(espble_hci_host_t host);
+
+// True while the given logical host holds a registration.  A host uses it to
+// tell whether the other one is already sharing the controller.
+bool espble_hci_broker_host_registered(espble_hci_host_t host);
 
 // Transfers shutdown responsibility for an already-running controller to the
 // broker.  The callback is invoked once, after the final logical host leaves.

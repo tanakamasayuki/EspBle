@@ -625,6 +625,71 @@ def test_nimble_and_custom_classic_host_run_together(dut, peers):
         peer_heap.append(read_heap(peer, "h\n", rb"DUAL_PEER_HEAP"))
         dut_heap.append(read_heap(dut, "h", rb"DUAL_HEAP"))
 
+    # Move through every host combination the broker supports, in both start
+    # orders, several times without rebooting: BLE alone, BLE plus Classic,
+    # Classic alone, Classic plus BLE. Each sketch leaves both hosts running.
+    mode_samples = []
+    for prefix, device, command in (
+        (rb"DUAL_PEER_MODES", peer, "M\n"),
+        (rb"DUAL_MODES", dut, "M"),
+    ):
+        device.write(command)
+        match = device.expect(
+            re.compile(
+                prefix
+                + rb" completed=(\d+) restarted=(\d+) busy=(\d+) qfull=(\d+) "
+                rb"mismatch=(\d+) unknown=(\d+) heap_before=(\d+) "
+                rb"heap_after=(\d+) error=(\S+)"
+            ),
+            timeout=120,
+        )
+        assert match.group(1) == b"5"
+        assert match.group(2) == b"1"
+        assert {match.group(index) for index in range(3, 7)} == {b"0"}
+        assert match.group(9) == b"None:None"
+        mode_samples.append((int(match.group(7)), int(match.group(8))))
+    for before, after in mode_samples:
+        assert after >= before - 8192
+
+    # The radios must still work after the churn, on both transports.
+    peer.write(b"c" + ready.group(1) + b"\n")
+    peer.expect_exact("DUAL_PEER_CONNECT 1", timeout=10)
+    dut.expect_exact("DUAL_CLASSIC_CONNECTED", timeout=30)
+    peer.expect_exact("DUAL_PEER_CONNECTED", timeout=30)
+    dut.write("a")
+    dut.expect_exact("DUAL_BLE_ADVERTISING 1", timeout=10)
+    peer.write("g\n")
+    peer.expect_exact("DUAL_BLE_SCAN 1", timeout=10)
+    peer.expect_exact("DUAL_BLE_CONNECT 1", timeout=20)
+    peer.expect_exact("DUAL_BLE_CLIENT_CONNECTED", timeout=20)
+    dut.expect_exact("DUAL_BLE_SERVER_CONNECTED", timeout=20)
+    peer.expect_exact("DUAL_BLE_READ_REQUESTED 1", timeout=20)
+    peer.expect_exact(
+        "DUAL_BLE_READ success=1 value=dual-ready classic=1", timeout=30
+    )
+    dut.write("i")
+    dut.expect_exact("DUAL_CLASSIC_INPUT 1", timeout=10)
+    peer.expect(
+        re.compile(rb"DUAL_PEER_INPUT hex=(01)?007f80[0-9a-f]{2}"), timeout=20
+    )
+    peer.expect_exact("DUAL_PEER_OUTPUT 1", timeout=10)
+
+    peer.write("q\n")
+    peer.expect_exact("DUAL_PEER_DUAL_DISCONNECT ble=1 classic=1", timeout=10)
+    for device, pattern in (
+        (peer, rb"DUAL_(?:BLE_CLIENT_DISCONNECTED|PEER_DISCONNECTED)"),
+        (dut, rb"DUAL_(?:BLE_SERVER_DISCONNECTED|CLASSIC_DISCONNECTED)"),
+    ):
+        for _ in range(2):
+            device.expect(re.compile(pattern), timeout=20)
+
+    peer.write("e\n")
+    peer.expect_exact("DUAL_PEER_ENDED ble=0 classic=0 busy=0", timeout=20)
+    dut.write("e")
+    dut.expect_exact("DUAL_ENDED ble=0 classic=0 busy=0", timeout=20)
+    peer_heap.append(read_heap(peer, "h\n", rb"DUAL_PEER_HEAP"))
+    dut_heap.append(read_heap(dut, "h", rb"DUAL_HEAP"))
+
     # Exercise the actual C++ destructors in both object orders, then prove the
     # controller was fully released by starting the long-lived instances again.
     peer.write("z\n")

@@ -805,10 +805,8 @@ ble_hs_start(void)
         return rc;
     }
 
-#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)
     espble_hci_broker_set_receive_enabled(
         ESPBLE_HCI_HOST_NIMBLE, true);
-#endif
 
     ble_hs_parent_task = ble_npl_get_current_task_id();
 

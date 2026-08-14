@@ -73,9 +73,11 @@ EspBleがNimBLE Host（`src/nimble_esp32/`、esp-idfがpinするesp-nimbleと同
 無印ESP32の対応は他のチップと同格ではありません。EspBleがhostを同梱するため
 そのhostの保守をライブラリ側で負います。実験的Classic SPP、generic HID Device/Host、
 A2DP raw transport、AVRCP CT/TGは、必要なprofileを有効にして独自ビルドした別のBluedroid hostを使います。
-`EspBleClassic`を使うClassic-only sketchはこのhostを自動選択し、`build_opt.h`を必要としません。既定は
-実行時の排他動作です。`ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL`ではClassicを先にBTDMで起動し、
-同梱NimBLEを後からattachする同時構成を選べます。Classic HID通信中のLE接続、GATT read反復、
+`EspBleClassic`を使うClassic-only sketchはこのhostを自動選択し、`build_opt.h`を必要としません。
+どちらのhostで動くかはsketchが何を`begin()`したかだけで決まります。片方だけを`begin()`すれば
+brokerはpass-throughの単一host、`EspBle`と`EspBleClassic`の両方を`begin()`すればbrokerがHCIを
+routingするdual-hostになります。build flagはありません。dual-hostは実験扱いなので、
+不安定な場合は一方を`end()`してもう一方だけを使ってください。Classic HID通信中のLE接続、GATT read反復、
 HID双方向通信、BLE接続を維持したClassic host再attach、Classic接続中のBLE pairing・bond再接続・暗号化必須GATT readまで実機検証済みです。Classic-onlyではA2DP Sink/Sourceのencode済みmedia転送、AVRCPの再生操作・absolute volume、HFP Client/Audio Gatewayの単一call controlとraw mSBC/CVSD SCO transportも確認済みです。Audio Gatewayの`preferredAudioCodec`でmSBCまたはCVSDを選べます。dual-hostでもBLE GATT接続を維持したmSBC SCO双方向通信に加え、A2DP encode済みmedia転送とAVRCP操作を行い、各audio linkの接続中・切断後にGATTが継続することを確認しました。外部HFP機器との相互運用確認は残します。HFPの2 roleはprocess-wideで排他です。共有command scheduler、host要求event maskのunion、再attach時のHCI Resetとflow-control設定の仮想完了、最後のhostがcontrollerを停止するlifecycleを実装し、観測commandの分類と長時間負荷試験も完了しています。誤passkeyとHID接続失敗からの復旧、backend callback解除時の参照寿命barrierも検証済みです。一般公開するClassic範囲とACL credit管理は未確定です。詳細は
 [Classic実装計画](docs/PLAN_ESP32_CLASSIC.ja.md)にあります。
 加えて無印ESP32はBLE 4.2 controllerのため**LE 2M / Coded PHYが使えず**、

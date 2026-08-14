@@ -308,10 +308,8 @@ PATCHES = [
         "    if (rc != 0) {\n"
         "        return rc;\n"
         "    }\n\n"
-        "#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)\n"
         "    espble_hci_broker_set_receive_enabled(\n"
-        "        ESPBLE_HCI_HOST_NIMBLE, true);\n"
-        "#endif\n\n"
+        "        ESPBLE_HCI_HOST_NIMBLE, true);\n\n"
         "    ble_hs_parent_task = ble_npl_get_current_task_id();\n",
         "open NimBLE receive delivery only after the host enters ON state",
     ),
@@ -326,10 +324,8 @@ PATCHES = [
         "    ble_hs_unlock();\n\n"
         "    SLIST_FOREACH(listener, &slist, link) {\n",
         "    ble_hs_unlock();\n\n"
-        "#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)\n"
         "    espble_hci_broker_set_receive_enabled(\n"
-        "        ESPBLE_HCI_HOST_NIMBLE, false);\n"
-        "#endif\n\n"
+        "        ESPBLE_HCI_HOST_NIMBLE, false);\n\n"
         "    SLIST_FOREACH(listener, &slist, link) {\n",
         "close NimBLE receive delivery as soon as the host reaches OFF state",
     ),
@@ -344,11 +340,72 @@ PATCHES = [
         "#if CONFIG_IDF_TARGET_ESP32 && CONFIG_BT_CONTROLLER_ENABLED\n"
         "    esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);\n"
         "#endif\n",
-        "#if CONFIG_IDF_TARGET_ESP32 && CONFIG_BT_CONTROLLER_ENABLED && \\\n"
-        "    !defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)\n"
-        "    esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);\n"
+        "#if CONFIG_IDF_TARGET_ESP32 && CONFIG_BT_CONTROLLER_ENABLED\n"
+        "    /* Releasing Classic controller memory cannot be undone for the rest of the\n"
+        "     * boot, so keep it whenever a Classic host is linked into the sketch. */\n"
+        "    if (!btClassicInUse()) {\n"
+        "        esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);\n"
+        "    }\n"
         "#endif\n",
-        "retain Classic controller memory in the opt-in dual-host experiment",
+        "keep Classic controller memory whenever a Classic host is linked",
+    ),
+    (
+        "porting/nimble/src/nimble_port.c",
+        "#if CONFIG_BT_CONTROLLER_ENABLED\n"
+        "#include \"esp_bt.h\"\n"
+        "#endif\n",
+        "#if CONFIG_BT_CONTROLLER_ENABLED\n"
+        "#include \"esp_bt.h\"\n"
+        "/* btClassicInUse() reports whether a Classic host is linked into the sketch;\n"
+        " * the broker owns the shared controller once either host starts it. */\n"
+        "#include \"esp32-hal-bt.h\"\n"
+        "#include \"EspBleHciBroker.h\"\n"
+        "#endif\n",
+        "reach the broker and the core's linked-host flags from the NimBLE port",
+    ),
+    (
+        "porting/nimble/src/nimble_port.c",
+        " * @brief nimble_port_init - Initialize controller and NimBLE host stack\n"
+        " *\n"
+        " * @return esp_err_t\n"
+        " */\n"
+        "esp_err_t\n"
+        "nimble_port_init(void)\n"
+        "{\n",
+        " * @brief nimble_port_stop_controller - Stop the controller this host started\n"
+        " *\n"
+        " * Registered with the broker so the controller outlives a NimBLE-only stop\n"
+        " * whenever a Classic host is still attached.\n"
+        " *\n"
+        " * @return bool\n"
+        " */\n"
+        "#if CONFIG_BT_CONTROLLER_ENABLED\n"
+        "static bool\n"
+        "nimble_port_stop_controller(void)\n"
+        "{\n"
+        "    if (esp_bt_controller_disable() != ESP_OK) {\n"
+        "        ESP_LOGE(NIMBLE_PORT_LOG_TAG, \"controller disable failed\\n\");\n"
+        "        return false;\n"
+        "    }\n"
+        "\n"
+        "    if (esp_bt_controller_deinit() != ESP_OK) {\n"
+        "        ESP_LOGE(NIMBLE_PORT_LOG_TAG, \"controller deinit failed\\n\");\n"
+        "        return false;\n"
+        "    }\n"
+        "\n"
+        "    return true;\n"
+        "}\n"
+        "#endif\n"
+        "\n"
+        "/**\n"
+        " * @brief nimble_port_init - Initialize controller and NimBLE host stack\n"
+        " *\n"
+        " * @return esp_err_t\n"
+        " */\n"
+        "esp_err_t\n"
+        "nimble_port_init(void)\n"
+        "{\n",
+        "give the broker a stop callback for a controller NimBLE started",
     ),
     (
         "porting/nimble/src/nimble_port.c",
@@ -359,65 +416,123 @@ PATCHES = [
         "#if CONFIG_IDF_TARGET_ESP32\n"
         "    /* EspBle: Arduino-ESP32 builds the prebuilt libraries with Bluedroid, so\n"
         "     * BT_CONTROLLER_INIT_CONFIG_DEFAULT() describes the dual-mode controller\n"
-        "     * (CONFIG_BTDM_CTRL_MODE_BTDM). esp_bt_controller_enable(ESP_BT_MODE_BLE)\n"
-        "     * below requires the enabled mode to match the initialised one, so select\n"
-        "     * BLE here and size the controller for the host's connection count. An\n"
+        "     * (CONFIG_BTDM_CTRL_MODE_BTDM). esp_bt_controller_enable() below requires\n"
+        "     * the enabled mode to match the initialised one, so select the mode here\n"
+        "     * and size the controller for the host's connection count.  A linked\n"
+        "     * Classic host needs BR/EDR too, so start the dual-mode controller on its\n"
+        "     * behalf; otherwise BLE alone keeps the radio configuration minimal.  An\n"
         "     * ESP-IDF build with NimBLE enabled gets both from its own sdkconfig. */\n"
-        "    config_opts.mode = ESP_BT_MODE_BLE;\n"
+        "    config_opts.mode = btClassicInUse() ? ESP_BT_MODE_BTDM : ESP_BT_MODE_BLE;\n"
         "    config_opts.ble_max_conn = CONFIG_BT_NIMBLE_MAX_CONNECTIONS;\n"
         "#endif\n"
         "\n"
         "    ret = esp_bt_controller_init(&config_opts);\n",
-        "the prebuilt controller is configured for dual mode, but the host runs BLE only",
+        "size the prebuilt dual-mode controller for the hosts the sketch links",
     ),
     (
         "porting/nimble/src/nimble_port.c",
         "#if CONFIG_BT_CONTROLLER_ENABLED\n"
         "    esp_bt_controller_config_t config_opts = BT_CONTROLLER_INIT_CONFIG_DEFAULT();\n",
         "#if CONFIG_BT_CONTROLLER_ENABLED\n"
-        "#if defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)\n"
-        "    /* Classic starts BTDM, then delegates its shutdown to the broker.\n"
-        "     * NimBLE attaches only its host and HCI transport. */\n"
-        "    if (esp_bt_controller_get_status() != ESP_BT_CONTROLLER_STATUS_ENABLED) {\n"
-        "        ESP_LOGE(NIMBLE_PORT_LOG_TAG, \"dual-host controller is not running\\n\");\n"
+        "    if (esp_bt_controller_get_status() == ESP_BT_CONTROLLER_STATUS_ENABLED) {\n"
+        "        /* The Classic host started the controller and handed its shutdown to\n"
+        "         * the broker.  Attach only the NimBLE host and HCI transport. */\n"
+        "        if (!espble_hci_broker_has_adopted_controller()) {\n"
+        "            ESP_LOGE(NIMBLE_PORT_LOG_TAG, \"another stack owns the controller\\n\");\n"
+        "            return ESP_ERR_INVALID_STATE;\n"
+        "        }\n"
+        "    } else {\n"
+        "    esp_bt_controller_config_t config_opts = BT_CONTROLLER_INIT_CONFIG_DEFAULT();\n",
+        "attach to a running controller the Classic host already owns",
+    ),
+    (
+        "porting/nimble/src/nimble_port.c",
+        "    ret = esp_bt_controller_enable(ESP_BT_MODE_BLE);\n",
+        "#if CONFIG_IDF_TARGET_ESP32\n"
+        "    ret = esp_bt_controller_enable(config_opts.mode);\n"
+        "#else\n"
+        "    ret = esp_bt_controller_enable(ESP_BT_MODE_BLE);\n"
+        "#endif\n",
+        "enable the controller in the mode it was initialised with",
+    ),
+    (
+        "porting/nimble/src/nimble_port.c",
+        "        return ret;\n"
+        "    }\n"
+        "#endif\n"
+        "\n"
+        "    ret = esp_nimble_init();\n",
+        "        return ret;\n"
+        "    }\n"
+        "\n"
+        "    /* The broker stops the controller only after the last logical host leaves,\n"
+        "     * so a Classic host attaching later keeps this controller running. */\n"
+        "    if (espble_hci_broker_adopt_controller(nimble_port_stop_controller) != ESP_OK) {\n"
+        "        ESP_LOGE(NIMBLE_PORT_LOG_TAG, \"controller ownership transfer failed\\n\");\n"
+        "        (void)nimble_port_stop_controller();\n"
         "        return ESP_ERR_INVALID_STATE;\n"
         "    }\n"
-        "#else\n"
-        "    esp_bt_controller_config_t config_opts = BT_CONTROLLER_INIT_CONFIG_DEFAULT();\n",
-        "attach NimBLE to the Classic-owned BTDM controller in dual-host mode",
-    ),
-    (
-        "porting/nimble/src/nimble_port.c",
-        "        return ret;\n"
         "    }\n"
         "#endif\n"
         "\n"
         "    ret = esp_nimble_init();\n",
+        "hand a NimBLE-started controller to the broker and close the branch",
+    ),
+    (
+        "porting/nimble/src/nimble_port.c",
+        "#if CONFIG_BT_CONTROLLER_ENABLED\n"
+        "\t// Disable and deinit controller to free memory\n"
+        "        if(esp_bt_controller_disable() != ESP_OK) {\n"
+        "            ESP_LOGE(NIMBLE_PORT_LOG_TAG, \"controller disable failed\\n\");\n"
+        "        }\n"
+        "\n"
+        "\tif(esp_bt_controller_deinit() != ESP_OK) {\n"
+        "            ESP_LOGE(NIMBLE_PORT_LOG_TAG, \"controller deinit failed\\n\");\n"
+        "        }\n"
+        "#endif\n",
+        "#if CONFIG_BT_CONTROLLER_ENABLED\n"
+        "\t// Free the controller memory unless another host still uses it.\n"
+        "        if(espble_hci_broker_shutdown_controller() == ESP_ERR_INVALID_STATE) {\n"
+        "            ESP_LOGD(NIMBLE_PORT_LOG_TAG, \"controller kept for the other host\\n\");\n"
+        "        }\n"
+        "#endif\n",
+        "do not tear down a shared controller after NimBLE init failure",
+    ),
+    (
+        "porting/nimble/src/nimble_port.c",
+        "#if CONFIG_BT_CONTROLLER_ENABLED\n"
+        "    ret = esp_bt_controller_disable();\n"
+        "    if(ret != ESP_OK) {\n"
+        "        ESP_LOGE(NIMBLE_PORT_LOG_TAG, \"controller disable failed\\n\");\n"
         "        return ret;\n"
         "    }\n"
-        "#endif\n"
-        "#endif\n"
         "\n"
-        "    ret = esp_nimble_init();\n",
-        "close the dual-host controller-lifecycle branch",
+        "    ret = esp_bt_controller_deinit();\n"
+        "    if(ret != ESP_OK) {\n"
+        "        ESP_LOGE(NIMBLE_PORT_LOG_TAG, \"controller deinit failed\\n\");\n"
+        "        return ret;\n"
+        "    }\n"
+        "#endif\n",
+        "#if CONFIG_BT_CONTROLLER_ENABLED\n"
+        "    /* The broker runs the stop callback registered at init, but only once the\n"
+        "     * last logical host has left.  A still-attached Classic host keeps it. */\n"
+        "    ret = espble_hci_broker_shutdown_controller();\n"
+        "    if(ret == ESP_ERR_INVALID_STATE) {\n"
+        "        ret = ESP_OK;\n"
+        "    }\n"
+        "    if(ret != ESP_OK) {\n"
+        "        ESP_LOGE(NIMBLE_PORT_LOG_TAG, \"controller shutdown failed\\n\");\n"
+        "        return ret;\n"
+        "    }\n"
+        "#endif\n",
+        "leave the shared controller running when only the NimBLE host stops",
     ),
     (
-        "porting/nimble/src/nimble_port.c",
-        "#if CONFIG_BT_CONTROLLER_ENABLED\n"
-        "\t// Disable and deinit controller to free memory\n",
-        "#if CONFIG_BT_CONTROLLER_ENABLED && \\\n"
-        "    !defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)\n"
-        "\t// Disable and deinit controller to free memory\n",
-        "do not tear down a Classic-owned controller after NimBLE init failure",
-    ),
-    (
-        "porting/nimble/src/nimble_port.c",
-        "#if CONFIG_BT_CONTROLLER_ENABLED\n"
-        "    ret = esp_bt_controller_disable();\n",
-        "#if CONFIG_BT_CONTROLLER_ENABLED && \\\n"
-        "    !defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)\n"
-        "    ret = esp_bt_controller_disable();\n",
-        "leave the shared controller running when the NimBLE host stops",
+        "nimble/host/src/ble_hs_startup.c",
+        "#include \"ble_hs_priv.h\"\n",
+        "#include \"ble_hs_priv.h\"\n"
+        "#include \"EspBleHciBroker.h\"\n",
+        "ask the broker whether the Classic host already shares the controller",
     ),
     (
         "nimble/host/src/ble_hs_startup.c",
@@ -425,13 +540,15 @@ PATCHES = [
         "    if (rc != 0) {\n"
         "        return rc;\n"
         "    }\n",
-        "#if !defined(ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL)\n"
-        "    rc = ble_hs_startup_reset_tx();\n"
-        "    if (rc != 0) {\n"
-        "        return rc;\n"
-        "    }\n"
-        "#endif\n",
-        "do not reset the controller underneath an initialized Classic host",
+        "    /* A physical HCI Reset would tear down the Classic host's controller\n"
+        "     * state, so skip it whenever that host is already attached. */\n"
+        "    if (!espble_hci_broker_host_registered(ESPBLE_HCI_HOST_CLASSIC)) {\n"
+        "        rc = ble_hs_startup_reset_tx();\n"
+        "        if (rc != 0) {\n"
+        "            return rc;\n"
+        "        }\n"
+        "    }\n",
+        "do not reset the controller underneath an attached Classic host",
     ),
     (
         "nimble/host/src/ble_sm.c",

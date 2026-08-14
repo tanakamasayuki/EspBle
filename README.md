@@ -87,8 +87,10 @@ the maintenance of the bundled hosts itself. Experimental Classic SPP, generic
 HID Device/Host, A2DP raw transport, and AVRCP CT/TG use a separately built
 Bluedroid host with those profiles enabled. A Classic-only sketch selects this
 host automatically when it uses `EspBleClassic`, with no `build_opt.h` required.
-Runtime exclusion remains the default. `ESPBLE_HCI_DUAL_HOST_EXPERIMENTAL` starts
-Classic first on a BTDM controller and then attaches bundled NimBLE. Classic HID
+Which hosts run follows only what the sketch calls `begin()` on: one host makes
+the broker a pass-through, and starting both `EspBle` and `EspBleClassic` makes
+it route HCI between them. There is no build flag. Dual-host is experimental, so
+`end()` one of them and keep a single host if it misbehaves. Classic HID
 traffic together with an LE connection, repeated GATT reads, and bidirectional HID
 traffic afterwards has passed hardware tests. In Classic-only mode, encoded A2DP
 Sink/Source media transport, AVRCP playback/absolute-volume control, and HFP
