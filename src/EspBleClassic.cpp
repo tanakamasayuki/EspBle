@@ -1671,7 +1671,9 @@ void EspBleClassicInquiry::update()
 }
 
 EspBleClassic::EspBleClassic() :
-  inquiry_(this), spp_(this), hidDevice_(this), hidHost_(this), a2dpSink_(this),
+  inquiry_(this), hidKeyboard_(this), hidMouse_(this),
+  hidConsumerControl_(this), hidSystemControl_(this), hidGamepad_(this),
+  spp_(this), hidDevice_(this), hidHost_(this), a2dpSink_(this),
   a2dpSource_(this), avrcp_(this), hfpClient_(this),
   hfpAudioGateway_(this) {}
 
@@ -1876,6 +1878,7 @@ bool EspBleClassic::begin(const EspBleClassicConfig &config)
   // Inquiry shares the GAP callback the stack just registered, so it can only
   // be armed once the stack is up.
   (void)inquiry_.begin();
+  if (!startComposedHidDevice()) return false;
   clearError();
   return true;
 #endif
@@ -2216,6 +2219,104 @@ void EspBleClassic::update()
 bool EspBleClassic::initialized() const
 {
   return impl_ != nullptr && impl_->initialized;
+}
+
+bool EspBleClassic::configureHidProfile(
+  uint8_t profile, const EspBleClassicHidProfileConfig &config)
+{
+  if (initialized())
+  {
+    // The descriptor is part of the registered device record, so adding a
+    // profile afterwards would describe a device the Host never saw.
+    setError(
+      EspBleError::InvalidState,
+      "configure HID profiles before EspBleClassic::begin()");
+    return false;
+  }
+  if (hidProfileMask_ == 0) hidProfileConfig_ = config;
+  if (profile == ESPBLE_HID_PROFILE_MOUSE)
+  {
+    if (config.mouseButtonCount == 0 || config.mouseButtonCount > 8)
+    {
+      setError(
+        EspBleError::InvalidArgument, "mouse button count must be 1 to 8");
+      return false;
+    }
+    hidMouseButtonCount_ = config.mouseButtonCount;
+  }
+  hidProfileMask_ |= static_cast<uint8_t>(1u << profile);
+  clearError();
+  return true;
+}
+
+void EspBleClassic::setHidKeyboardNkro(bool enable)
+{
+  hidKeyboardNkro_ = enable;
+}
+
+bool EspBleClassic::startComposedHidDevice()
+{
+  if (hidProfileMask_ == 0) return true;
+
+  EspBleHidDescriptorSelection selection;
+  selection.profileMask = hidProfileMask_;
+  selection.keyboardNkro = hidKeyboardNkro_;
+  selection.mouseButtonCount = hidMouseButtonCount_;
+  hidProfileDescriptorLength_ = espBleHidComposeDescriptor(
+    selection, hidProfileDescriptor_, sizeof(hidProfileDescriptor_));
+  if (hidProfileDescriptorLength_ == 0)
+  {
+    setError(
+      EspBleError::ResourceExhausted, "HID report descriptor does not fit");
+    return false;
+  }
+
+  EspBleClassicHidDeviceConfig config;
+  config.name = hidProfileConfig_.name;
+  config.description = hidProfileConfig_.description;
+  config.provider = hidProfileConfig_.provider;
+  config.reportDescriptor = hidProfileDescriptor_;
+  config.reportDescriptorLength = hidProfileDescriptorLength_;
+  return hidDevice_.begin(config);
+}
+
+void EspBleClassic::deliverHidKeyboardLeds(
+  const EspBleClassicHidReport &report)
+{
+  // The keyboard LED report is the only output report the built-in profiles
+  // define, so it is routed to the keyboard rather than to the raw callback.
+  if ((hidProfileMask_ & (1u << ESPBLE_HID_PROFILE_KEYBOARD)) == 0) return;
+  if (report.reportId != ESPBLE_HID_REPORT_ID_KEYBOARD) return;
+  if (report.value.isEmpty()) return;
+  hidKeyboard_.ledState_.peerAddress = report.peerAddress;
+  hidKeyboard_.ledState_.setLeds(static_cast<uint8_t>(report.value[0]));
+  if (hidKeyboard_.outputReportCallback_)
+    hidKeyboard_.outputReportCallback_(hidKeyboard_.ledState_);
+}
+
+EspBleClassicHidKeyboard &EspBleClassic::hidKeyboard()
+{
+  return hidKeyboard_;
+}
+
+EspBleClassicHidMouse &EspBleClassic::hidMouse()
+{
+  return hidMouse_;
+}
+
+EspBleClassicHidConsumerControl &EspBleClassic::hidConsumerControl()
+{
+  return hidConsumerControl_;
+}
+
+EspBleClassicHidSystemControl &EspBleClassic::hidSystemControl()
+{
+  return hidSystemControl_;
+}
+
+EspBleClassicHidGamepad &EspBleClassic::hidGamepad()
+{
+  return hidGamepad_;
 }
 
 EspBleClassicInquiry &EspBleClassic::inquiry()

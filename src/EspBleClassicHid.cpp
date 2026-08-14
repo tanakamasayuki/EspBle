@@ -773,9 +773,13 @@ void EspBleClassicHidDevice::update()
       disconnectedCallback_)
       disconnectedCallback_(event.connection);
     else if (
-      event.type == EspBleClassicHidDeviceImpl::EventType::OutputReport &&
-      outputReportCallback_)
-      outputReportCallback_(event.report);
+      event.type == EspBleClassicHidDeviceImpl::EventType::OutputReport)
+    {
+      // A composed keyboard turns the LED report into keyboard state; the raw
+      // callback still sees every output report, custom descriptors included.
+      owner_->deliverHidKeyboardLeds(event.report);
+      if (outputReportCallback_) outputReportCallback_(event.report);
+    }
   }
 }
 
@@ -1052,4 +1056,375 @@ void EspBleClassicHidHost::update()
       inputReportCallback_)
       inputReportCallback_(event.report);
   }
+}
+
+// --- Classic HID Device profiles ------------------------------------------
+//
+// These mirror the BLE profile classes call for call. They build their reports
+// with the shared packers and hand them to the HID Device transport, so the
+// bytes a Host receives are the same over either radio.
+
+EspBleClassicHidKeyboard::EspBleClassicHidKeyboard(EspBleClassic *owner) :
+  owner_(owner) {}
+EspBleClassicHidMouse::EspBleClassicHidMouse(EspBleClassic *owner) :
+  owner_(owner) {}
+EspBleClassicHidConsumerControl::EspBleClassicHidConsumerControl(
+  EspBleClassic *owner) : owner_(owner) {}
+EspBleClassicHidSystemControl::EspBleClassicHidSystemControl(
+  EspBleClassic *owner) : owner_(owner) {}
+EspBleClassicHidGamepad::EspBleClassicHidGamepad(EspBleClassic *owner) :
+  owner_(owner) {}
+
+bool EspBleClassicHidKeyboard::configure(
+  const EspBleClassicHidProfileConfig &config)
+{
+  configured_ = owner_->configureHidProfile(ESPBLE_HID_PROFILE_KEYBOARD, config);
+  return configured_;
+}
+
+bool EspBleClassicHidKeyboard::configured() const { return configured_; }
+
+void EspBleClassicHidKeyboard::enableNkro(bool enable)
+{
+  nkroEnabled_ = enable;
+  owner_->setHidKeyboardNkro(enable);
+}
+
+bool EspBleClassicHidKeyboard::nkroEnabled() const { return nkroEnabled_; }
+
+bool EspBleClassicHidKeyboard::ready() const
+{
+  return configured_ && owner_->hidDevice().connected();
+}
+
+bool EspBleClassicHidKeyboard::sendReport(
+  const EspBleHidKeyboardInputReport &report)
+{
+  if (nkroEnabled_)
+  {
+    // A 6KRO report carries modifiers in its own byte, so key slots holding a
+    // modifier usage are dropped rather than routed, as on the BLE side.
+    nkroState_.clear();
+    nkroState_.modifiers = report.modifiers;
+    for (uint8_t usage : report.keys)
+      if (usage != 0 && usage <= EspBleHidKeyboardNkroReport::MaxBitmapUsage)
+        nkroState_.press(usage);
+    return sendHeldNkroState();
+  }
+  uint8_t value[8];
+  const size_t length = espBleHidPackKeyboardReport(
+    report.modifiers, report.keys, value, sizeof(value));
+  return owner_->hidDevice().sendInputReport(
+    ESPBLE_HID_REPORT_ID_KEYBOARD, value, length);
+}
+
+bool EspBleClassicHidKeyboard::sendReport(
+  const EspBleHidKeyboardNkroReport &report)
+{
+  if (!nkroEnabled_)
+  {
+    owner_->setError(
+      EspBleError::InvalidState,
+      "NKRO reports need enableNkro() before configure()");
+    return false;
+  }
+  nkroState_ = report;
+  return sendHeldNkroState();
+}
+
+bool EspBleClassicHidKeyboard::sendHeldNkroState()
+{
+  uint8_t value[1 + EspBleHidKeyboardNkroReport::BitmapSize];
+  const size_t length = espBleHidPackNkroKeyboardReport(
+    nkroState_.modifiers, nkroState_.bitmap,
+    EspBleHidKeyboardNkroReport::BitmapSize, value, sizeof(value));
+  return owner_->hidDevice().sendInputReport(
+    ESPBLE_HID_REPORT_ID_KEYBOARD, value, length);
+}
+
+const EspBleHidKeyboardNkroReport &EspBleClassicHidKeyboard::heldState() const
+{
+  return nkroState_;
+}
+
+bool EspBleClassicHidKeyboard::pressUsage(
+  uint8_t usage, uint8_t modifiers, uint32_t)
+{
+  if (nkroEnabled_)
+  {
+    nkroState_.modifiers = static_cast<uint8_t>(nkroState_.modifiers | modifiers);
+    nkroState_.press(usage);
+    return sendHeldNkroState();
+  }
+  EspBleHidKeyboardInputReport report;
+  report.modifiers = modifiers;
+  report.keys[0] = usage;
+  return sendReport(report);
+}
+
+bool EspBleClassicHidKeyboard::releaseUsage(uint8_t usage)
+{
+  if (nkroEnabled_)
+  {
+    nkroState_.release(usage);
+    return sendHeldNkroState();
+  }
+  // Without a bitmap there is no per-usage state to keep, so releasing one key
+  // releases the report, exactly as the BLE side does.
+  return releaseAll();
+}
+
+bool EspBleClassicHidKeyboard::tapUsage(
+  uint8_t usage, uint8_t modifiers, uint32_t holdMs)
+{
+  if (!pressUsage(usage, modifiers)) return false;
+  delay(holdMs);
+  return nkroEnabled_ ? releaseUsage(usage) : releaseAll();
+}
+
+bool EspBleClassicHidKeyboard::pressKey(char key, uint32_t)
+{
+  const uint8_t modifiers[] = {0, EspBleHidKeyboardInputReport::LeftShift,
+    EspBleHidKeyboardInputReport::RightAlt,
+    static_cast<uint8_t>(EspBleHidKeyboardInputReport::LeftShift |
+                         EspBleHidKeyboardInputReport::RightAlt)};
+  for (uint8_t modifier : modifiers)
+  {
+    for (uint16_t usage = 1; usage < 256; ++usage)
+    {
+      if (espBleUsageToUnicode(
+            static_cast<uint8_t>(usage), modifier, layout_, false, false) ==
+          static_cast<uint8_t>(key))
+      {
+        return pressUsage(static_cast<uint8_t>(usage), modifier);
+      }
+    }
+  }
+  owner_->setError(
+    EspBleError::InvalidArgument, "character is not available in keyboard layout");
+  return false;
+}
+
+bool EspBleClassicHidKeyboard::tapKey(char key, uint32_t holdMs)
+{
+  if (!pressKey(key)) return false;
+  delay(holdMs);
+  return releaseAll();
+}
+
+bool EspBleClassicHidKeyboard::write(const char *text, uint32_t interKeyDelayMs)
+{
+  if (text == nullptr)
+  {
+    owner_->setError(EspBleError::InvalidArgument, "text must not be null");
+    return false;
+  }
+  for (const char *cursor = text; *cursor != '\0'; ++cursor)
+  {
+    if (!tapKey(*cursor)) return false;
+    if (interKeyDelayMs != 0) delay(interKeyDelayMs);
+  }
+  return true;
+}
+
+bool EspBleClassicHidKeyboard::releaseAll()
+{
+  if (nkroEnabled_)
+  {
+    nkroState_.clear();
+    return sendHeldNkroState();
+  }
+  EspBleHidKeyboardInputReport report;
+  return sendReport(report);
+}
+
+void EspBleClassicHidKeyboard::setLayout(EspBleKeyboardLayout layout)
+{
+  layout_ = layout;
+}
+
+EspBleKeyboardLayout EspBleClassicHidKeyboard::layout() const { return layout_; }
+
+void EspBleClassicHidKeyboard::onOutputReport(OutputReportCallback callback)
+{
+  outputReportCallback_ = std::move(callback);
+}
+
+EspBleClassicHidKeyboardLeds EspBleClassicHidKeyboard::ledState() const
+{
+  return ledState_;
+}
+
+bool EspBleClassicHidMouse::configure(
+  const EspBleClassicHidProfileConfig &config)
+{
+  configured_ = owner_->configureHidProfile(ESPBLE_HID_PROFILE_MOUSE, config);
+  return configured_;
+}
+
+bool EspBleClassicHidMouse::configured() const { return configured_; }
+
+bool EspBleClassicHidMouse::ready() const
+{
+  return configured_ && owner_->hidDevice().connected();
+}
+
+bool EspBleClassicHidMouse::sendReport(const EspBleHidMouseReport &report)
+{
+  buttons_ = report.buttons;
+  uint8_t value[4];
+  const size_t length = espBleHidPackMouseReport(
+    report.buttons, report.x, report.y, report.wheel, value, sizeof(value));
+  return owner_->hidDevice().sendInputReport(
+    ESPBLE_HID_REPORT_ID_MOUSE, value, length);
+}
+
+bool EspBleClassicHidMouse::move(
+  int8_t x, int8_t y, int8_t wheelAmount, uint8_t buttonMask)
+{
+  EspBleHidMouseReport report;
+  report.buttons = buttonMask != 0 ? buttonMask : buttons_;
+  report.x = x;
+  report.y = y;
+  report.wheel = wheelAmount;
+  return sendReport(report);
+}
+
+bool EspBleClassicHidMouse::wheel(int8_t amount)
+{
+  // Wheel only: the pointer must not drift and the held buttons must stay.
+  return move(0, 0, amount, buttons_);
+}
+
+bool EspBleClassicHidMouse::press(uint8_t buttonMask)
+{
+  EspBleHidMouseReport report;
+  report.buttons = static_cast<uint8_t>(buttons_ | buttonMask);
+  return sendReport(report);
+}
+
+bool EspBleClassicHidMouse::release(uint8_t buttonMask)
+{
+  EspBleHidMouseReport report;
+  report.buttons = static_cast<uint8_t>(buttons_ & ~buttonMask);
+  return sendReport(report);
+}
+
+bool EspBleClassicHidMouse::click(uint8_t button, uint32_t holdMs)
+{
+  if (!press(button)) return false;
+  delay(holdMs);
+  return release(button);
+}
+
+bool EspBleClassicHidMouse::releaseAll()
+{
+  EspBleHidMouseReport report;
+  return sendReport(report);
+}
+
+uint8_t EspBleClassicHidMouse::buttons() const { return buttons_; }
+
+bool EspBleClassicHidConsumerControl::configure(
+  const EspBleClassicHidProfileConfig &config)
+{
+  configured_ = owner_->configureHidProfile(ESPBLE_HID_PROFILE_CONSUMER, config);
+  return configured_;
+}
+
+bool EspBleClassicHidConsumerControl::configured() const { return configured_; }
+
+bool EspBleClassicHidConsumerControl::ready() const
+{
+  return configured_ && owner_->hidDevice().connected();
+}
+
+bool EspBleClassicHidConsumerControl::sendUsage(uint16_t usage)
+{
+  usage_ = usage;
+  uint8_t value[2];
+  const size_t length =
+    espBleHidPackConsumerReport(usage, value, sizeof(value));
+  return owner_->hidDevice().sendInputReport(
+    ESPBLE_HID_REPORT_ID_CONSUMER, value, length);
+}
+
+bool EspBleClassicHidConsumerControl::release() { return sendUsage(0); }
+
+bool EspBleClassicHidConsumerControl::click(uint16_t usage, uint32_t holdMs)
+{
+  if (!sendUsage(usage)) return false;
+  delay(holdMs);
+  return release();
+}
+
+uint16_t EspBleClassicHidConsumerControl::usage() const { return usage_; }
+
+bool EspBleClassicHidSystemControl::configure(
+  const EspBleClassicHidProfileConfig &config)
+{
+  configured_ = owner_->configureHidProfile(ESPBLE_HID_PROFILE_SYSTEM, config);
+  return configured_;
+}
+
+bool EspBleClassicHidSystemControl::configured() const { return configured_; }
+
+bool EspBleClassicHidSystemControl::ready() const
+{
+  return configured_ && owner_->hidDevice().connected();
+}
+
+bool EspBleClassicHidSystemControl::sendUsage(uint8_t usage)
+{
+  usage_ = usage;
+  uint8_t value[1];
+  const size_t length = espBleHidPackSystemReport(usage, value, sizeof(value));
+  return owner_->hidDevice().sendInputReport(
+    ESPBLE_HID_REPORT_ID_SYSTEM, value, length);
+}
+
+bool EspBleClassicHidSystemControl::release() { return sendUsage(0); }
+
+bool EspBleClassicHidSystemControl::click(uint8_t usage, uint32_t holdMs)
+{
+  if (!sendUsage(usage)) return false;
+  delay(holdMs);
+  return release();
+}
+
+uint8_t EspBleClassicHidSystemControl::usage() const { return usage_; }
+
+bool EspBleClassicHidGamepad::configure(
+  const EspBleClassicHidProfileConfig &config)
+{
+  configured_ = owner_->configureHidProfile(ESPBLE_HID_PROFILE_GAMEPAD, config);
+  return configured_;
+}
+
+bool EspBleClassicHidGamepad::configured() const { return configured_; }
+
+bool EspBleClassicHidGamepad::ready() const
+{
+  return configured_ && owner_->hidDevice().connected();
+}
+
+bool EspBleClassicHidGamepad::send(const EspBleHidGamepadReport &report)
+{
+  const uint8_t value[11] = {
+    static_cast<uint8_t>(report.x), static_cast<uint8_t>(report.y),
+    static_cast<uint8_t>(report.z), static_cast<uint8_t>(report.rz),
+    static_cast<uint8_t>(report.rx), static_cast<uint8_t>(report.ry),
+    report.hat,
+    static_cast<uint8_t>(report.buttons & 0xff),
+    static_cast<uint8_t>((report.buttons >> 8) & 0xff),
+    static_cast<uint8_t>((report.buttons >> 16) & 0xff),
+    static_cast<uint8_t>((report.buttons >> 24) & 0xff)};
+  return owner_->hidDevice().sendInputReport(
+    ESPBLE_HID_REPORT_ID_GAMEPAD, value, sizeof(value));
+}
+
+bool EspBleClassicHidGamepad::releaseAll()
+{
+  EspBleHidGamepadReport report;
+  return send(report);
 }

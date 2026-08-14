@@ -203,6 +203,124 @@ inline size_t espBleHidComposeDescriptor(
   return used;
 }
 
+// Button and hat constants, and the report types the sketch fills in. They
+// live here rather than in a transport header so the same report can be sent
+// over BLE or over Classic without translating between two shapes.
+
+static constexpr uint8_t ESP_BLE_HID_MOUSE_LEFT = 0x01;
+static constexpr uint8_t ESP_BLE_HID_MOUSE_RIGHT = 0x02;
+static constexpr uint8_t ESP_BLE_HID_MOUSE_MIDDLE = 0x04;
+static constexpr uint8_t ESP_BLE_HID_MOUSE_BACK = 0x08;
+static constexpr uint8_t ESP_BLE_HID_MOUSE_FORWARD = 0x10;
+
+static constexpr uint8_t ESP_BLE_HID_GAMEPAD_HAT_CENTER = 0x00;
+static constexpr uint8_t ESP_BLE_HID_GAMEPAD_HAT_UP = 0x01;
+static constexpr uint8_t ESP_BLE_HID_GAMEPAD_HAT_UP_RIGHT = 0x02;
+static constexpr uint8_t ESP_BLE_HID_GAMEPAD_HAT_RIGHT = 0x03;
+static constexpr uint8_t ESP_BLE_HID_GAMEPAD_HAT_DOWN_RIGHT = 0x04;
+static constexpr uint8_t ESP_BLE_HID_GAMEPAD_HAT_DOWN = 0x05;
+static constexpr uint8_t ESP_BLE_HID_GAMEPAD_HAT_DOWN_LEFT = 0x06;
+static constexpr uint8_t ESP_BLE_HID_GAMEPAD_HAT_LEFT = 0x07;
+static constexpr uint8_t ESP_BLE_HID_GAMEPAD_HAT_UP_LEFT = 0x08;
+
+
+
+struct EspBleHidKeyboardInputReport
+{
+  static constexpr uint8_t LeftControl = 0x01;
+  static constexpr uint8_t LeftShift = 0x02;
+  static constexpr uint8_t LeftAlt = 0x04;
+  static constexpr uint8_t LeftGui = 0x08;
+  static constexpr uint8_t RightControl = 0x10;
+  static constexpr uint8_t RightShift = 0x20;
+  static constexpr uint8_t RightAlt = 0x40;
+  static constexpr uint8_t RightGui = 0x80;
+
+  uint8_t modifiers = 0;
+  uint8_t keys[6] = {};
+};
+
+// Full NKRO keyboard state in one report: modifier byte + a bitmap of usages
+// 0x00-0xDF (the EspUsbDevice-compatible 29-byte layout). Modifier usages
+// 0xE0-0xE7 live in `modifiers`, not the bitmap, and press() / release() route
+// them there automatically. isDown() matches the Host-side
+// EspBleHidKeyboardState accessor so a Host snapshot can be replayed on a
+// Device with the same vocabulary; the bitmaps differ in size (the Host tracks
+// usages up to 0xFF, this report up to MaxBitmapUsage).
+struct EspBleHidKeyboardNkroReport
+{
+  static constexpr size_t BitmapSize = 28;
+  static constexpr uint8_t MaxBitmapUsage = 0xdf;
+
+  uint8_t modifiers = 0;
+  // A bitmap, not a usage array (see EspBleHidKeyboardState::bitmap).
+  uint8_t bitmap[BitmapSize] = {};
+
+  void clear()
+  {
+    modifiers = 0;
+    for (size_t index = 0; index < BitmapSize; ++index) bitmap[index] = 0;
+  }
+
+  // Returns false when the usage is above MaxBitmapUsage and is not a modifier
+  // (0xE0-0xE7), i.e. this report cannot represent it.
+  bool press(uint8_t usage)
+  {
+    if (usage >= 0xe0 && usage <= 0xe7)
+    {
+      modifiers |= static_cast<uint8_t>(1u << (usage - 0xe0));
+      return true;
+    }
+    if (usage > MaxBitmapUsage) return false;
+    bitmap[usage >> 3] |= static_cast<uint8_t>(1u << (usage & 7));
+    return true;
+  }
+
+  bool release(uint8_t usage)
+  {
+    if (usage >= 0xe0 && usage <= 0xe7)
+    {
+      modifiers &= static_cast<uint8_t>(~(1u << (usage - 0xe0)));
+      return true;
+    }
+    if (usage > MaxBitmapUsage) return false;
+    bitmap[usage >> 3] &= static_cast<uint8_t>(~(1u << (usage & 7)));
+    return true;
+  }
+
+  bool isDown(uint8_t usage) const
+  {
+    if (usage >= 0xe0 && usage <= 0xe7)
+    {
+      return (modifiers & static_cast<uint8_t>(1u << (usage - 0xe0))) != 0;
+    }
+    if (usage > MaxBitmapUsage) return false;
+    return (bitmap[usage >> 3] & static_cast<uint8_t>(1u << (usage & 7))) != 0;
+  }
+};
+
+struct EspBleHidMouseReport
+{
+  uint8_t buttons = 0;
+  int8_t x = 0;
+  int8_t y = 0;
+  int8_t wheel = 0;
+};
+
+struct EspBleHidGamepadReport
+{
+  int8_t x = 0;
+  int8_t y = 0;
+  int8_t z = 0;
+  int8_t rz = 0;
+  int8_t rx = 0;
+  int8_t ry = 0;
+  uint8_t hat = ESP_BLE_HID_GAMEPAD_HAT_CENTER;
+  uint32_t buttons = 0;
+};
+
+using EspBleHidKeyboardReport = EspBleHidKeyboardInputReport;
+
 // Report packing. These are the payloads that follow the report ID, in the
 // layout the descriptors above declare.
 

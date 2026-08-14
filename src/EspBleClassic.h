@@ -7,6 +7,8 @@
 #include <stdint.h>
 
 #include "EspBleTypes.h"
+#include "EspBleHidProfile.h"
+#include "EspBleKeymap.h"
 
 using EspBleClassicSppSessionId = uint32_t;
 using EspBleClassicA2dpConnectionId = uint16_t;
@@ -493,6 +495,40 @@ enum class EspBleClassicHidReportType : uint8_t
   Input = 1,
   Output = 2,
   Feature = 3,
+};
+
+// Device identity for the composed HID Device. The Classic profile registers
+// one device record, so the first configured profile decides these.
+struct EspBleClassicHidProfileConfig
+{
+  const char *name = "EspBle HID";
+  const char *description = "EspBle Classic HID Device";
+  const char *provider = "EspBle";
+  // Mouse profiles use this to size the button field; ignored elsewhere.
+  uint8_t mouseButtonCount = 5;
+};
+
+// The LED state a Host writes to a keyboard. Classic identifies the peer by
+// address where the BLE side uses a connection id.
+struct EspBleClassicHidKeyboardLeds
+{
+  String peerAddress;
+  uint8_t leds = 0;
+  bool numLock = false;
+  bool capsLock = false;
+  bool scrollLock = false;
+  bool compose = false;
+  bool kana = false;
+
+  void setLeds(uint8_t value)
+  {
+    leds = value;
+    numLock = (value & 0x01) != 0;
+    capsLock = (value & 0x02) != 0;
+    scrollLock = (value & 0x04) != 0;
+    compose = (value & 0x08) != 0;
+    kana = (value & 0x10) != 0;
+  }
 };
 
 struct EspBleClassicHidDeviceConfig
@@ -1011,6 +1047,150 @@ private:
   ReportCallback outputReportCallback_;
 };
 
+// The Classic HID Device profiles. They take the same reports and expose the
+// same calls as their BLE counterparts, because HID over BR/EDR and HID over
+// GATT differ in transport rather than in content: a sketch that drives a
+// keyboard should not have to be rewritten to change radios.
+class EspBleClassicHidKeyboard
+{
+public:
+  using OutputReportCallback =
+    std::function<void(const EspBleClassicHidKeyboardLeds &)>;
+
+  // Call before EspBleClassic::begin(): the descriptor is registered with the
+  // profile when the stack starts, exactly like the BLE side realizes its HID
+  // service at begin().
+  bool configure(
+    const EspBleClassicHidProfileConfig &config =
+      EspBleClassicHidProfileConfig());
+  bool configured() const;
+  void enableNkro(bool enable = true);
+  bool nkroEnabled() const;
+
+  bool sendReport(const EspBleHidKeyboardInputReport &report);
+  bool sendReport(const EspBleHidKeyboardNkroReport &report);
+  const EspBleHidKeyboardNkroReport &heldState() const;
+  bool ready() const;
+
+  bool pressUsage(uint8_t usage, uint8_t modifiers = 0, uint32_t holdMs = 10);
+  bool releaseUsage(uint8_t usage);
+  bool tapUsage(uint8_t usage, uint8_t modifiers = 0, uint32_t holdMs = 10);
+  bool pressKey(char key, uint32_t holdMs = 10);
+  bool tapKey(char key, uint32_t holdMs = 10);
+  bool write(const char *text, uint32_t interKeyDelayMs = 5);
+  bool releaseAll();
+
+  void setLayout(EspBleKeyboardLayout layout);
+  EspBleKeyboardLayout layout() const;
+
+  void onOutputReport(OutputReportCallback callback);
+  EspBleClassicHidKeyboardLeds ledState() const;
+
+private:
+  friend class EspBleClassic;
+  friend class EspBleClassicHidDevice;
+  explicit EspBleClassicHidKeyboard(EspBleClassic *owner);
+  bool sendHeldNkroState();
+
+  EspBleClassic *owner_;
+  bool configured_ = false;
+  bool nkroEnabled_ = false;
+  EspBleHidKeyboardNkroReport nkroState_;
+  EspBleKeyboardLayout layout_ = EspBleKeyboardLayout::EnUs;
+  EspBleClassicHidKeyboardLeds ledState_;
+  OutputReportCallback outputReportCallback_;
+};
+
+class EspBleClassicHidMouse
+{
+public:
+  bool configure(
+    const EspBleClassicHidProfileConfig &config =
+      EspBleClassicHidProfileConfig());
+  bool configured() const;
+  bool sendReport(const EspBleHidMouseReport &report);
+  bool ready() const;
+
+  bool move(int8_t x, int8_t y, int8_t wheel = 0, uint8_t buttons = 0);
+  bool wheel(int8_t amount);
+  bool press(uint8_t buttons);
+  bool release(uint8_t buttons);
+  bool click(uint8_t button, uint32_t holdMs = 10);
+  bool releaseAll();
+  uint8_t buttons() const;
+
+private:
+  friend class EspBleClassic;
+  explicit EspBleClassicHidMouse(EspBleClassic *owner);
+
+  EspBleClassic *owner_;
+  bool configured_ = false;
+  uint8_t buttons_ = 0;
+};
+
+class EspBleClassicHidConsumerControl
+{
+public:
+  bool configure(
+    const EspBleClassicHidProfileConfig &config =
+      EspBleClassicHidProfileConfig());
+  bool configured() const;
+  bool ready() const;
+  bool sendUsage(uint16_t usage);
+  bool release();
+  bool click(uint16_t usage, uint32_t holdMs = 10);
+  uint16_t usage() const;
+
+private:
+  friend class EspBleClassic;
+  explicit EspBleClassicHidConsumerControl(EspBleClassic *owner);
+
+  EspBleClassic *owner_;
+  bool configured_ = false;
+  uint16_t usage_ = 0;
+};
+
+class EspBleClassicHidSystemControl
+{
+public:
+  bool configure(
+    const EspBleClassicHidProfileConfig &config =
+      EspBleClassicHidProfileConfig());
+  bool configured() const;
+  bool ready() const;
+  bool sendUsage(uint8_t usage);
+  bool release();
+  bool click(uint8_t usage, uint32_t holdMs = 10);
+  uint8_t usage() const;
+
+private:
+  friend class EspBleClassic;
+  explicit EspBleClassicHidSystemControl(EspBleClassic *owner);
+
+  EspBleClassic *owner_;
+  bool configured_ = false;
+  uint8_t usage_ = 0;
+};
+
+class EspBleClassicHidGamepad
+{
+public:
+  bool configure(
+    const EspBleClassicHidProfileConfig &config =
+      EspBleClassicHidProfileConfig());
+  bool configured() const;
+  bool ready() const;
+  bool send(const EspBleHidGamepadReport &report);
+  bool releaseAll();
+
+private:
+  friend class EspBleClassic;
+  explicit EspBleClassicHidGamepad(EspBleClassic *owner);
+
+  EspBleClassic *owner_;
+  bool configured_ = false;
+};
+
 class EspBleClassicHidHost
 {
 public:
@@ -1099,6 +1279,11 @@ public:
 
   EspBleClassicInquiry &inquiry();
   EspBleClassicSpp &spp();
+  EspBleClassicHidKeyboard &hidKeyboard();
+  EspBleClassicHidMouse &hidMouse();
+  EspBleClassicHidConsumerControl &hidConsumerControl();
+  EspBleClassicHidSystemControl &hidSystemControl();
+  EspBleClassicHidGamepad &hidGamepad();
   EspBleClassicHidDevice &hidDevice();
   EspBleClassicHidHost &hidHost();
   EspBleClassicA2dpSink &a2dpSink();
@@ -1141,6 +1326,11 @@ public:
 
 private:
   friend class EspBleClassicInquiry;
+  friend class EspBleClassicHidKeyboard;
+  friend class EspBleClassicHidMouse;
+  friend class EspBleClassicHidConsumerControl;
+  friend class EspBleClassicHidSystemControl;
+  friend class EspBleClassicHidGamepad;
   friend class EspBleClassicSpp;
   friend class EspBleClassicHidDevice;
   friend class EspBleClassicHidHost;
@@ -1152,6 +1342,21 @@ private:
 
   void clearError();
   void setError(EspBleError error, const char *detail);
+  // Records a profile for the composed HID Device descriptor. The device is
+  // registered when the stack starts, so every profile must be configured
+  // before begin().
+  bool configureHidProfile(
+    uint8_t profile, const EspBleClassicHidProfileConfig &config);
+  void setHidKeyboardNkro(bool enable);
+  bool startComposedHidDevice();
+  void deliverHidKeyboardLeds(const EspBleClassicHidReport &report);
+
+  uint8_t hidProfileMask_ = 0;
+  bool hidKeyboardNkro_ = false;
+  uint8_t hidMouseButtonCount_ = 5;
+  EspBleClassicHidProfileConfig hidProfileConfig_;
+  uint8_t hidProfileDescriptor_[512] = {};
+  size_t hidProfileDescriptorLength_ = 0;
 
   EspBleClassicImpl *impl_ = nullptr;
   SecurityChangedCallback securityChangedCallback_;
@@ -1159,6 +1364,11 @@ private:
   PasskeyDisplayedCallback passkeyDisplayedCallback_;
   PasskeyRequestedCallback passkeyRequestedCallback_;
   EspBleClassicInquiry inquiry_;
+  EspBleClassicHidKeyboard hidKeyboard_;
+  EspBleClassicHidMouse hidMouse_;
+  EspBleClassicHidConsumerControl hidConsumerControl_;
+  EspBleClassicHidSystemControl hidSystemControl_;
+  EspBleClassicHidGamepad hidGamepad_;
   EspBleClassicSpp spp_;
   EspBleClassicHidDevice hidDevice_;
   EspBleClassicHidHost hidHost_;
