@@ -74,6 +74,10 @@ EspBleがNimBLE Host（`src/nimble_esp32/`、esp-idfがpinするesp-nimbleと同
 そのhostの保守をライブラリ側で負います。実験的Classic SPP、generic HID Device/Host、
 A2DP raw transport、AVRCP CT/TGは、必要なprofileを有効にして独自ビルドした別のBluedroid hostを使います。
 `EspBleClassic`を使うClassic-only sketchはこのhostを自動選択し、`build_opt.h`を必要としません。
+HIDはBLEと同じAPI形状です。device側は`hidKeyboard()` / `hidMouse()` / `hidConsumerControl()` /
+`hidSystemControl()` / `hidGamepad()`をBLEと同名・同signatureで使え、host側は受け取った
+Report Descriptorを解析してkeyboard stateとusage単位のevent、mouse eventを配送します。
+Report Descriptorとreport packingは両transportで同じmoduleを共有します。
 どちらのhostで動くかはsketchが何を`begin()`したかだけで決まります。片方だけを`begin()`すれば
 brokerはpass-throughの単一host、`EspBle`と`EspBleClassic`の両方を`begin()`すればbrokerがHCIを
 routingするdual-hostになります。build flagはありません。dual-hostは実験扱いなので、

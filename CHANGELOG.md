@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+- (EN) Classic HID now uses the same API shape as BLE HID. The device side
+  gained `hidKeyboard()`, `hidMouse()`, `hidConsumerControl()`,
+  `hidSystemControl()` and `hidGamepad()`, with the same names, signatures and
+  keyboard layout handling as their BLE counterparts; the Report Descriptor is
+  composed from whichever profiles the sketch configured. The host side parses
+  the Report Descriptor it receives over SDP and delivers keyboard state,
+  per-usage keyboard events and mouse events, so a sketch that consumed BLE HID
+  host events can consume Classic ones unchanged. Report Descriptors, report
+  layouts and packing now live in one module shared by both transports, so the
+  two cannot drift apart; the byte-for-byte descriptors are held in place by a
+  host test.
+- (JA) ClassicのHIDをBLEと同じAPI形状にした。device側に`hidKeyboard()`、
+  `hidMouse()`、`hidConsumerControl()`、`hidSystemControl()`、`hidGamepad()`を
+  追加し、名前・signature・keyboard layoutの扱いをBLE側と揃えた。Report Descriptorは
+  sketchがconfigureしたprofileだけを合成する。host側はSDPで受け取ったReport Descriptorを
+  解析し、keyboardのstate、usage単位のkeyboard event、mouse eventを配送するので、
+  BLEのHID host eventを使っていたsketchはそのままClassicへ移せる。Report Descriptorと
+  report構造・packingは両transportで同じmoduleを共有するようにし、片側だけずれないように
+  した。生成されるdescriptorのbyte列はhost testで固定している。
+
 - (EN) Added Classic device discovery, application-driven pairing and bond
   management on the original ESP32. `EspBleClassicInquiry` reports address,
   name (falling back to the extended inquiry response), class of device and

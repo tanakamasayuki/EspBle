@@ -129,7 +129,8 @@ ESP32-S3/C3/C6/H2等はBluetooth Classicを搭載しないため利用できま�
 | HFP（ハンズフリー） | ⚠️ | Client/Audio GatewayのSLC、発信・着信・応答・終了、CVSD・mSBC raw SCO API、AG codec選択、role排他を実装。両codecを実機確認済み。複数call、外部機器相互運用は未確認 |
 | AVRCP（メディア操作） | ⚠️ | CT/TG passthrough、metadata/play-status要求、absolute volume。metadata応答の外部Target相互運用は未完了 |
 | SPP（Serial Port Profile） | ⚠️ | Classic-onlyでServer/Client transportを実機確認。BLEではNUS等で代替 |
-| Classic HID（BT HID） | ⚠️ | Classic-onlyでgeneric Device/Hostを実機確認。BLEではHOGP |
+| Classic HID（BT HID） | ⚠️ | generic Device/HostとBLE同形のprofile API（keyboard / mouse / consumer / system / gamepad）、host側のReport Descriptor解析を実機確認。Get_Report / Set_Report / protocol modeは未公開 |
+| Classic device discovery / pairing / bond | ⚠️ | inquiry（name・Class of Device・RSSI）、IO capability選択、numeric comparison / passkeyのapplication応答、bond一覧・削除を実機確認。legacy PINは拒否 |
 | Classic / BLE同時利用（Dual-host） | ⚠️ | opt-inの実験機能。HID/security/lifecycle、HFP mSBC SCO双方向通信、A2DP encode済みmedia転送、AVRCP操作と、各audio link中・切断後のGATT readを実機確認済み |
 
 ## 補足

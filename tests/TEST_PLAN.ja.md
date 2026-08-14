@@ -314,6 +314,35 @@ profileを置いていないのは次の2種類だけです。
     継続的に検証できる位置づけで、対象はSPPのみ——core同梱sdkconfigは`CONFIG_BT_HID_ENABLED`が
     無効なのでClassic HIDはこの構成では試験できない。
 
+70. ✅ `classic_inquiry`: Classicのdevice discoveryを検証する。address指定のAPIはすべてここから
+    始まるので、**scanする側が観測した内容だけ**を判定にする（peerは発見可能にするだけ）。
+    duration 0はcontrollerへ符号化できないため、終わらないscanを始める代わりに`InvalidArgument`で
+    拒否すること、実行中の再開始が`InvalidState`になること（controllerのinquiry状態は1つで
+    queueではない）を確認する。peerのdevice nameとClass of Deviceが復号されて届くこと
+    （RSSIはinquiry resultで任意なので必須にしない）、durationで自然終了したときは
+    `cancelled=0` / dropped=0、`stop()`したときは`cancelled=1`と区別できること、
+    停止していない状態の`stop()`が黙って成功せず`InvalidState`を返すこと、
+    cancel後も再びscanできることを確認する。
+
+71. ✅ `classic_pairing`: applicationが応答するClassic pairingとbond管理を検証する。両基板を
+    DisplayYesNoにするので両側のcontrollerが同じ6桁を出し、どちらもsketchが答えるまで進めない
+    ——黙って承諾する実装は接続testなら通ってしまうが、この比較値の一致確認では落ちる。
+    残留鍵で再接続されないよう最初に両側のbondを削除してから、numeric comparisonが両側へ
+    同じ値で届くこと、承諾でsuccess=1・status=0になりbondがaddressで一覧できることを確認する。
+    続いて自動承諾を切って**拒否**し、pairing失敗とbond数0を確認したうえで、その直後に
+    通常のpairingが成立すること（拒否が中途半端な状態を残していないこと）を確認する。
+    保留が無い状態での応答は`InvalidState`で拒否し、bondの個別削除が対象1件だけを消すことも確認する。
+
+72. ✅ `classic_hid_api`: ClassicのHIDをBLEと同じAPI形状で使えることを検証する。両側とも
+    BLE側と同名の呼び出し・同じevent型だけを使う。loopbackにならないのは、Host側が
+    **SDPで受け取ったReport Descriptorを解析して**復号するからで、合成したdescriptorと
+    packingした報告が食い違えばusageが違う値で届くか届かなくなる。keyboardはstate→usage単位
+    eventの順（BLEと同順）で配送されること、layoutがdeviceとhostで独立していること
+    （device側ja-JPの`"`はusage 0x1fとして飛び、hostがen-USなら`@`、ja-JPへ変えると`"`と解釈する）、
+    mouseの負値がdescriptorのfield位置経由でも符号付きのまま届くこと、押しっぱなしのbuttonが
+    edgeではなくstateとして保たれること、Consumer Controlが同じHID Deviceからkeyboardではなく
+    自分のreport IDで届くことを確認する。最後に`invalidInputReportCount()`が0であることも確認する。
+
 実験用 `dual_host_smoke` は、Classic HIDと暗号化LE GATTを接続した両基板で、別taskのClassic scan mode切替とNimBLE `Read RSSI`を同時発行する。FIFO投入数＝物理送信数、最終RSSI成功、broker error 0を確認し、各競合サイクル直後に暗号化GATT readとHID双方向通信を再検証する。`ESPBLE_DUAL_CONTENTION_CYCLES`で反復数を変更できる。さらにtest-onlyのdispatch holdでFIFO満杯と超過拒否を作り、未送信command破棄後のGATT/HID/lifecycle復帰を確認する。偽commandはcontrollerへ送らず、hostへ偽応答も返さない。接続中と両transport切断後にinventoryを取得し、条件付きcleanup commandを含む全opcodeが明示policy内であることも検証する。未知／別host opcodeはdual-host時だけ物理送信前に拒否する。nullと上限超過のHID Input / Output reportを送信前に`InvalidArgument`で拒否し、両接続と直後の通常通信が維持されることも確認する。BLE pairingは最初に誤passkeyを入力して双方の失敗、未暗号化、bond 0、保護GATT拒否とClassic継続を確認し、LE再接続後の正しいpasskeyで暗号化・bond・GATTを復旧する。続いてClassicだけを切断し、最終OPEN失敗の非同期`onConnectionFailed`通知、暗号化LE GATTの継続、正しいpeerへのClassic再接続とHID双方向復旧を確認する。Bluedroid公開HID APIではpage中の接続試行を取り消せないため、独自timeoutによる疑似cancelは試験契約にせずbackendの最終OPEN結果を境界とする。その後peerをsoftware resetで突然消失させ、生存側でLE / BR-EDR双方の切断を検出し、保存bondからBLE暗号化とClassic HIDを再接続してGATT/HID通信を復旧する。lifecycle部はcallback targetの参照寿命barrierを有効にした状態でClassic先行／BLE先行停止、Classic再attach、停止・再登録、両destructor順を通し、panic、watchdog、heap低下がないことを確認する。永続NVDSへ触れる`Write Local Name`はcontroller assertionを起こすため、負荷刺激には使わない。
 
 ## 合格条件

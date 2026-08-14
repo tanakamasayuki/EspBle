@@ -130,6 +130,13 @@ PCMFlowBluetoothへは`badFrame`とraw lengthを失わず渡し、decoder側で5
    したがってSPP、A2DP（core側はinternal codec、EspBle側はexternal codecなのでencode済みframe境界の
    検証になる）、AVRCP、HFPは相互接続できるが、Classic HIDはcore hostでは試験できない。
    独自archiveの名前空間化が正しければ同一sketchへ両hostをlinkできない前提も、この構成で確認できる。
+3. **完了: ClassicのHID APIをBLEと同形にする。** device側のprofile API（keyboard / mouse /
+   consumer / system / gamepad）とhost側のReport Descriptor解析・event配送を、BLEと同名・
+   同signature・同event型で公開した。Report Descriptor、report構造、packingは
+   `src/EspBleHidProfile.h`へ集約して両transportで共有するので、片側だけ変わることはない。
+   生成されるdescriptorのbyte列はhost testで固定し、API形状の一致は
+   Peer test `classic_hid_api`が両側から確認する。Get_Report / Set_Report / protocol modeは
+   BLE側にも無いため、棚卸しの優先度に従って別途扱う。
 
 ## 既知の落とし穴
 

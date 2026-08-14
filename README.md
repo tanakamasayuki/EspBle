@@ -87,6 +87,12 @@ the maintenance of the bundled hosts itself. Experimental Classic SPP, generic
 HID Device/Host, A2DP raw transport, and AVRCP CT/TG use a separately built
 Bluedroid host with those profiles enabled. A Classic-only sketch selects this
 host automatically when it uses `EspBleClassic`, with no `build_opt.h` required.
+Classic HID has the same API shape as BLE HID: the device side offers
+`hidKeyboard()`, `hidMouse()`, `hidConsumerControl()`, `hidSystemControl()` and
+`hidGamepad()` under the same names and signatures, and the host side parses the
+Report Descriptor it receives to deliver keyboard state, per-usage keyboard
+events and mouse events. Report Descriptors and report packing come from one
+module shared by both transports.
 Which hosts run follows only what the sketch calls `begin()` on: one host makes
 the broker a pass-through, and starting both `EspBle` and `EspBleClassic` makes
 it route HCI between them. There is no build flag. Dual-host is experimental, so

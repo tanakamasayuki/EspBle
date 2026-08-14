@@ -43,8 +43,10 @@
 | 機能 | 状態 | 補足 |
 |---|---|---|
 | register / connect / disconnect | 公開 | 任意のReport Descriptorを渡せる |
+| profile API（keyboard / mouse / consumer / system / gamepad） | 公開 | `hidKeyboard()`などBLEと同名・同シグネチャ。configureした分だけReport Descriptorを合成する |
+| keyboard layout・NKRO | 公開 | `setLayout()` / `write()` / `pressKey()`。BLEと同じ変換表を共有する |
 | Input Report送信 | 公開 | `sendInputReport()` / `sendReport()` |
-| Output Report受信 | 公開 | `onOutputReport()` |
+| Output Report受信（LED） | 公開 | `onOutputReport()`。profile利用時は`EspBleClassicHidKeyboardLeds`へ展開する |
 | Get_Report要求への応答 | 未公開 | backendはevent経由でGet_Reportを渡すが、EspBleは応答APIを持たない。Hostがreport状態を問い合わせる構成で必要 |
 | Feature Report | 未公開 | 上と同じ経路 |
 | protocol mode（Boot / Report） | 未公開 | Hostが要求するSet_Protocolを扱わない |
@@ -56,6 +58,8 @@
 | 機能 | 状態 | 補足 |
 |---|---|---|
 | connect / disconnect / Input Report受信 | 公開 | 1接続のみ |
+| Report Descriptor解析とkeyboard / mouse eventへの復号 | 公開 | `onKeyboardState()` / `onKeyboard()` / `onMouse()` / `setKeyboardLayout()`。SDPで受け取ったdescriptorを解析するので、独自layoutのdeviceも扱える |
+| 不正Input Reportの計上 | 公開 | `invalidInputReportCount()`。BLEと同じくrollover（usage 0x01〜0x03）は押下として配らない |
 | Output Report送信 | 公開 | `sendOutputReport()` |
 | 非同期の接続失敗通知 | 公開 | `onConnectionFailed()` |
 | Get_Report / Set_Report | 未公開 | `esp_bt_hid_host_get_report` / `set_report`。LED状態の問い合わせなどに必要 |
@@ -133,11 +137,14 @@
 2. **完了: pairing制御**。IO capability選択とnumeric comparison / passkeyのアプリ応答を公開した。
    固定PINの自動承諾は廃止した。
 3. **完了: bond管理**。一覧・削除をBLE側と揃えた。
-4. **Class of Device**: HIDやheadsetとして正しく分類させる。市販Hostの挙動に直接効く。
-5. **接続可能・発見可能の制御**: 現在profileが勝手に設定している。利用者が決められるようにする。
-6. **HID Device / HostのGet_Report・Set_Report・protocol mode**: 実機のHost実装が要求する。
-7. **SPPの複数server**: 1 deviceで複数serviceを出す構成向け。
-8. **A2DP delay reporting、AVRCP TG notification応答**: 相互運用の作り込み段階で必要になる。
+4. **完了: HIDのAPI形状**。Device側のprofile API（keyboard / mouse / consumer / system / gamepad）と
+   Host側のReport Descriptor解析をBLEと同じ名前・同じevent形で公開した。descriptorとpackingは
+   BLEと同じmoduleを共有するので、片側だけ変わることはない。
+5. **Class of Device**: HIDやheadsetとして正しく分類させる。市販Hostの挙動に直接効く。
+6. **接続可能・発見可能の制御**: 現在profileが勝手に設定している。利用者が決められるようにする。
+7. **HID Device / HostのGet_Report・Set_Report・protocol mode**: 実機のHost実装が要求する。
+8. **SPPの複数server**: 1 deviceで複数serviceを出す構成向け。
+9. **A2DP delay reporting、AVRCP TG notification応答**: 相互運用の作り込み段階で必要になる。
 
 外部機器との相互運用（Gate D）と、core内蔵Bluedroidとの相互接続Peer testは、
 [引き継ぎ](HANDOFF_ESP32_CLASSIC.ja.md)の作業メモにあるとおり別途進めます。
