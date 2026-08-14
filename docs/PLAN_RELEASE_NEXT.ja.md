@@ -32,12 +32,11 @@
 | 完了 | 不正HID report / peer消失 | null・上限超過reportを送信前に拒否し接続を維持。peer突然再起動後にbond済みBLEとClassic HIDを復旧 |
 | 完了 | 接続・pairing失敗 | 誤passkey後にbondを残さず再pairing。HID非同期接続失敗後も暗号化LEを維持し、正しいClassic peerへ再接続 |
 | 完了 | lifecycle競合監査 | SPP/HID callback targetを登録mutex下で取得し、解除後は取得済み参照が0になるまでstateを保持。clean実機lifecycle回帰成功 |
-| 未完了 | release scope決定 | experimental flagのまま同梱するか、正式APIに昇格するか、次回releaseから外すかを決定 |
-| 未完了 | 利用者向け文書 | README、Feature Matrix、example、制限、build flagが決定したscopeと一致 |
+| 完了 | release scope決定 | **次回releaseへ含める。**build flagは設けず`EspBleClassic`を使うかどうかだけで決まる。exampleもBLE側と同じ範囲まで用意する。MIT OSSとして厳密なサポート保証は掲げず、代わりに機能ごとの「実機検証済み / 未検証 / 未実装」を文書で区別する。releaseまで未実装項目を減らす作業を続ける（[決定台帳](DECISIONS.ja.md)のスコープ6） |
+| 未完了 | 利用者向け文書 | README、Feature Matrix、example、制限が上記scopeと一致し、**未検証と未実装が読み手に区別できる。**「サポート」「保証」ではなく検証状態で書く |
 
-Gate Aの詳細は[引き継ぎ](HANDOFF_ESP32_CLASSIC.ja.md)を正とします。正式昇格にはACL credit一元管理を
-含めるかを判断します。現状の「物理controller-to-host flow control無効化」を許容する場合も、理由と
-制限を利用者向けに明記します。
+Gate Aの詳細は[引き継ぎ](HANDOFF_ESP32_CLASSIC.ja.md)を正とします。controller-to-host ACL flow controlは
+brokerが所有する形で実装・実機検証済みで、判断待ちではありません。
 
 ## Gate B: 生成物と互換性
 

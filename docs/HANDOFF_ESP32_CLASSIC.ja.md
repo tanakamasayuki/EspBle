@@ -12,8 +12,10 @@ SMPを有効にした名前空間化済み`libespble_bluedroid_classic.a`を使�
 
 host構成はsketchが`begin()`したhostだけで決まり、build flagはありません。1 hostならbrokerは
 pass-through、`EspBle`と`EspBleClassic`の両方をbeginすればbrokerがHCIをroutingします。
-無印ESP32以外はcore同梱NimBLE経路を変更しません。dual-hostは技術検証済みの実験機能であり、
-一般対応へ昇格していません。不安定な場合は一方を`end()`して単一hostで使います。
+無印ESP32以外はcore同梱NimBLE経路を変更しません。Classicは次回releaseへ含めます
+（[決定台帳](DECISIONS.ja.md)のスコープ6）。dual-hostも同梱しますが、検証はEspBle同士と
+core内蔵host相手までで、**外部機器との相互運用は未検証**です。不安定な場合は一方を`end()`して
+単一hostで使います。
 
 Classic-onlyは`EspBleClassic`を使うだけで独自hostを自動選択し、公開exampleに`build_opt.h`はありません。
 明示flagはtest instrumentationにだけ残ります。
@@ -91,7 +93,7 @@ PCMFlowBluetoothへは`badFrame`とraw lengthを失わず渡し、decoder側で5
 
 ### P1: 一般対応・upstream品質
 
-1. **実装済み・検証中:** brokerがincoming ACLを一元管理し、controller-to-host flow controlを
+1. **完了:** brokerがincoming ACLを一元管理し、controller-to-host flow controlを
    有効にしたまま両host分のcreditを返す。geometryは`Read Buffer Size`応答から学習し、
    `Host Buffer Size`と`Set Controller To Host Flow Control`はbrokerが物理controllerへ送る。
    hostの同commandは仮想完了で握り潰し、hostの`Host Number Of Completed Packets`も消費する。
@@ -101,7 +103,7 @@ PCMFlowBluetoothへは`badFrame`とraw lengthを失わず渡し、decoder側で5
    境界を定め、同梱NimBLE portのArduino依存を`espble_hci_broker_set_classic_host_expected()`へ
    置き換えた。境界はhost testが機械的に検査する。詳細は
    [Classic設計・検証記録](PLAN_ESP32_CLASSIC.ja.md#hci-componentの境界)にある。
-4. Classic dual-hostの利用者向けAPI、build flag、対応profile、制限、exampleを正式サポート範囲として確定する。
+4. **完了: release scopeを確定した。** 次回releaseへClassicを含める。build flagは設けず、`EspBleClassic`を使うかどうかだけで決まる。exampleはBLE側と同じ範囲まで用意する。MIT OSSとして厳密なサポート保証は掲げず、機能ごとに「実機検証済み / 未検証 / 未実装」を文書で区別する。releaseまでは未実装項目を減らす作業を続ける（[決定台帳](DECISIONS.ja.md)のスコープ6、[次回リリース前タスクリスト](PLAN_RELEASE_NEXT.ja.md)のGate A）。
 
 ### P2: 配布・保守
 
@@ -160,6 +162,25 @@ PCMFlowBluetoothへは`badFrame`とraw lengthを失わず渡し、decoder側で5
 - bondが残っているとpairingのHCI経路がまるごと走らない。link key応答とSSP応答をpolicyへ
   分類し忘れていても、bond済みのpeerとは正常に通信できるためtestが通ってしまう。dual-host testは
   接続前にbondを削除して初回pairingを必ず通す。
+- HIDの制御チャネルは応答が必須で、返さないとHostは待ち続ける。Get_Reportには報告か拒否
+  （`esp_bt_hid_device_send_report` / `report_error`）、Set_ReportにはHID handshakeを返す。
+  handshakeの成功応答も`esp_bt_hid_device_report_error()`に`ESP_HID_PAR_HANDSHAKE_RSP_SUCCESS`を
+  渡して送る——名前は error だが成功も通す関数である。Set_Reportを無応答にすると、Host側の
+  `Set_Report`完了eventが永久に来ない。
+- report IDの位置がchannelで異なる。Set_Reportは`report_id`フィールドで別に渡り payload に含まれないが、
+  interrupt channelのreportは payload 先頭に含む。Get_Reportの応答もHost側では先頭に付いて届く。
+  device側は`reportId`を正として payload のみを渡すよう正規化した。
+- Class of Deviceは「設定しても電波に出ない」経路が3つある。順に踏んだ。(1) profileのservice登録が
+  自分のservice由来の値で上書きするため、`begin()`で設定するだけでは消える——登録完了event
+  （`ESP_SPP_START_EVT`、`ESP_HIDD_REGISTER_APP_EVT`）で再適用する。登録は非同期なので、
+  start呼び出しの前に適用しても間に合わない。(2) controllerはinquiry scanを有効化する時点で
+  classを取り込むため、scan modeより後にclassを書くと古い値が電波に残る——classを先、scan modeを後にする。
+  (3) 実行時に変更する場合、同じscan modeを書き直してもHCI上は変化が無く、controllerは古いclassを返し続ける
+  ——discoverabilityを一度落として戻す。connectabilityは維持して、その間の接続要求を拒否しない。
+  なお`esp_bt_gap_set_cod()`はBTC taskへの非同期要求なので、直後の`esp_bt_gap_get_cod()`は前の値を返す。
+  反映完了のeventは存在せず、読み直して一致を見るしかない。
+- 可視性（connectable / discoverable）はprofileが各自`esp_bt_gap_set_scan_mode()`を呼んでいたため、
+  最後にstartしたprofileが決めていた。所有者を`EspBleClassic`に一元化し、profileは値を決めず再適用だけを行う。
 - Secure Simple Pairingはserviceが要求したときだけapplicationへ確認を求める。`esp_bt_gap_set_security_param`で
   IO capabilityを設定しても、SPPを`ESP_SPP_SEC_NONE`で開いていると両端がJust Worksで合意し、
   numeric comparisonもpasskeyも発生しないまま pairing が完了する。IO capabilityを設定に反映させるには

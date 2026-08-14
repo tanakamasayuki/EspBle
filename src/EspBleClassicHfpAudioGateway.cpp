@@ -1,5 +1,6 @@
 #include "EspBleClassic.h"
 #include "EspBleClassicBuild.h"
+#include "EspBleClassicVisibility.h"
 #include "EspBleClassicHfpInternal.h"
 
 #include <atomic>
@@ -542,8 +543,7 @@ bool EspBleClassicHfpAudioGateway::begin(
       "failed to initialize HFP Audio Gateway");
     return false;
   }
-  if (config.discoverable && esp_bt_gap_set_scan_mode(
-        ESP_BT_CONNECTABLE, ESP_BT_GENERAL_DISCOVERABLE) != ESP_OK)
+  if (config.discoverable && !EspBleClassicVisibilityOwner::apply())
   {
     end();
     owner_->setError(EspBleError::BackendFailure,

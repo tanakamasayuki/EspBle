@@ -1,5 +1,6 @@
 #include "EspBleClassic.h"
 #include "EspBleClassicBuild.h"
+#include "EspBleClassicVisibility.h"
 
 #include <atomic>
 #include <cstring>
@@ -283,8 +284,7 @@ void a2dpProfileCallback(
           impl->backendAddress, parameter->conn_stat.remote_bda,
           sizeof(impl->backendAddress));
       }
-      (void)esp_bt_gap_set_scan_mode(
-        ESP_BT_NON_CONNECTABLE, ESP_BT_NON_DISCOVERABLE);
+      (void)EspBleClassicVisibilityOwner::hideWhileExclusivelyConnected();
       impl->enqueue(std::move(queued));
     }
     else if (parameter->conn_stat.state == ESP_A2D_CONNECTION_STATE_DISCONNECTED)
@@ -308,8 +308,7 @@ void a2dpProfileCallback(
         restoreDiscoverability = impl->discoverable && !impl->ending;
       }
       if (restoreDiscoverability)
-        (void)esp_bt_gap_set_scan_mode(
-          ESP_BT_CONNECTABLE, ESP_BT_GENERAL_DISCOVERABLE);
+        (void)EspBleClassicVisibilityOwner::apply();
       impl->enqueue(std::move(queued));
     }
     return;
@@ -486,9 +485,7 @@ bool EspBleClassicA2dpSink::begin(
       "failed to register the A2DP SBC stream endpoint");
     return false;
   }
-  if (config.discoverable &&
-      esp_bt_gap_set_scan_mode(
-        ESP_BT_CONNECTABLE, ESP_BT_GENERAL_DISCOVERABLE) != ESP_OK)
+  if (config.discoverable && !EspBleClassicVisibilityOwner::apply())
   {
     end();
     owner_->setError(

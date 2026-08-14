@@ -44,9 +44,10 @@ void setup()
 {
   Serial.begin(115200);
   delay(500);
-  bluetooth.spp().onServerStarted([]() {
-    Serial.println("CLASSIC_SERVER_STARTED");
-  });
+  bluetooth.spp().onServerStarted(
+    [](const EspBleClassicSppServer &server) {
+      Serial.printf("CLASSIC_SERVER_STARTED channel=%u\n", server.channel);
+    });
   bluetooth.spp().onConnected([](const EspBleClassicSppSession &session) {
     sessionId = session.id;
     Serial.printf(
@@ -85,6 +86,34 @@ void loop()
       Serial.printf("CLASSIC_ENDED heap=%u\n", static_cast<unsigned>(ESP.getFreeHeap()));
       delay(100);
       startStack();
+    }
+    else if (command == '2')
+    {
+      // A second service record on the same device. Each server gets its own
+      // channel, which is how a peer picks between them.
+      EspBleClassicSppServerConfig second;
+      second.serviceName = "EspBle SPP Second";
+      Serial.printf("CLASSIC_SECOND_SERVER started=%u error=%s\n",
+        bluetooth.spp().startServer(second) ? 1 : 0,
+        bluetooth.lastErrorName());
+    }
+    else if (command == 's')
+      Serial.printf("CLASSIC_SERVERS_STOPPED %u\n",
+        bluetooth.spp().stopServer() ? 1 : 0);
+    else if (command == '1')
+      Serial.printf("CLASSIC_FIRST_SERVER started=%u error=%s\n",
+        bluetooth.spp().startServer() ? 1 : 0, bluetooth.lastErrorName());
+    else if (command == '?')
+    {
+      Serial.printf("CLASSIC_SERVERS count=%u",
+        static_cast<unsigned>(bluetooth.spp().serverCount()));
+      for (size_t index = 0; index < bluetooth.spp().serverCount(); ++index)
+      {
+        EspBleClassicSppServer server;
+        if (bluetooth.spp().server(index, server))
+          Serial.printf(" %u:%s", server.channel, server.serviceName.c_str());
+      }
+      Serial.println();
     }
   }
   delay(1);

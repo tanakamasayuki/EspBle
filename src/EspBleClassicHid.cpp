@@ -1,5 +1,6 @@
 #include "EspBleClassic.h"
 #include "EspBleClassicBuild.h"
+#include "EspBleClassicVisibility.h"
 
 #include <atomic>
 #include <cstring>
@@ -30,6 +31,17 @@
 #define esp_bt_hid_host_register_callback \
   espble_bd_esp_bt_hid_host_register_callback
 #define esp_bt_hid_host_set_report espble_bd_esp_bt_hid_host_set_report
+#define esp_bt_hid_host_get_report espble_bd_esp_bt_hid_host_get_report
+#define esp_bt_hid_host_get_protocol espble_bd_esp_bt_hid_host_get_protocol
+#define esp_bt_hid_host_set_protocol espble_bd_esp_bt_hid_host_set_protocol
+#define esp_bt_hid_host_get_idle espble_bd_esp_bt_hid_host_get_idle
+#define esp_bt_hid_host_set_idle espble_bd_esp_bt_hid_host_set_idle
+#define esp_bt_hid_host_virtual_cable_unplug \
+  espble_bd_esp_bt_hid_host_virtual_cable_unplug
+#define esp_bt_hid_device_report_error \
+  espble_bd_esp_bt_hid_device_report_error
+#define esp_bt_hid_device_virtual_cable_unplug \
+  espble_bd_esp_bt_hid_device_virtual_cable_unplug
 #include <esp_gap_bt_api.h>
 #include <esp_hidd_api.h>
 #include <esp_hidh_api.h>
@@ -51,6 +63,18 @@ String hidAddress(const esp_bd_addr_t address)
     value, sizeof(value), "%02x:%02x:%02x:%02x:%02x:%02x",
     address[0], address[1], address[2], address[3], address[4], address[5]);
   return String(value);
+}
+
+EspBleClassicHidReportType hidReportType(esp_hidd_report_type_t type)
+{
+  switch (type)
+  {
+    case ESP_HIDD_REPORT_TYPE_OUTPUT: return EspBleClassicHidReportType::Output;
+    case ESP_HIDD_REPORT_TYPE_FEATURE:
+      return EspBleClassicHidReportType::Feature;
+    default: break;
+  }
+  return EspBleClassicHidReportType::Input;
 }
 
 bool hidParseAddress(const char *value, esp_bd_addr_t address)
@@ -78,12 +102,23 @@ bool hidParseAddress(const char *value, esp_bd_addr_t address)
 
 struct EspBleClassicHidDeviceImpl
 {
-  enum class EventType : uint8_t { Connected, Disconnected, OutputReport };
+  enum class EventType : uint8_t
+  {
+    Connected,
+    Disconnected,
+    OutputReport,
+    SetReport,
+    ReportRequested,
+    ProtocolMode,
+  };
   struct Event
   {
     EventType type = EventType::Connected;
     EspBleClassicHidConnection connection;
     EspBleClassicHidReport report;
+    EspBleClassicHidReportRequest request;
+    EspBleClassicHidProtocolMode protocolMode =
+      EspBleClassicHidProtocolMode::Report;
   };
 
   bool enqueue(Event event)
@@ -118,6 +153,17 @@ struct EspBleClassicHidDeviceImpl
   String provider;
   uint8_t *descriptor = nullptr;
   size_t descriptorLength = 0;
+  // The Host owns the protocol mode; the device only observes it.
+  EspBleClassicHidProtocolMode protocolMode =
+    EspBleClassicHidProtocolMode::Report;
+  // The request being answered, so a sketch can reply with the type and report
+  // ID the Host asked for without tracking them itself.
+  bool reportRequestPending = false;
+  EspBleClassicHidReportRequest reportRequest;
+  // A Set_Report on the control channel has to be acknowledged with a HID
+  // handshake, or the Host waits and never learns the value arrived. Reports on
+  // the interrupt channel are not acknowledged, so this only covers Set_Report.
+  bool setReportPending = false;
 #if ESPBLE_CLASSIC_HID_BACKEND_AVAILABLE
   esp_hidd_app_param_t application = {};
   esp_hidd_qos_param_t inputQos = {};
@@ -133,6 +179,10 @@ struct EspBleClassicHidHostImpl
     Disconnected,
     ConnectionFailed,
     InputReport,
+    ReportResult,
+    ReportSent,
+    ProtocolMode,
+    IdleRate,
   };
   struct Event
   {
@@ -140,6 +190,9 @@ struct EspBleClassicHidHostImpl
     EspBleClassicHidConnection connection;
     EspBleClassicHidConnectionFailure failure;
     EspBleClassicHidReport report;
+    EspBleClassicHidHost::ReportResult reportResult;
+    EspBleClassicHidHost::ProtocolModeResult protocolModeResult;
+    EspBleClassicHidHost::IdleRateResult idleRateResult;
   };
 
   bool enqueue(Event event)
@@ -179,6 +232,11 @@ struct EspBleClassicHidHostImpl
   uint8_t previousKeys[EspBleClassicHidKeyboardState::BitmapSize] = {};
   uint8_t previousModifiers = 0;
   uint8_t previousMouseButtons = 0;
+  // Set_Protocol and Set_Idle acknowledge without echoing the value, so the
+  // request is remembered to report what is now in effect.
+  EspBleClassicHidProtocolMode requestedProtocolMode =
+    EspBleClassicHidProtocolMode::Report;
+  uint8_t requestedIdleRate = 0;
   String peerAddress;
 #if ESPBLE_CLASSIC_HID_BACKEND_AVAILABLE
   esp_bd_addr_t backendAddress = {};
@@ -284,6 +342,10 @@ void hidDeviceCallback(
   }
   else if (event == ESP_HIDD_REGISTER_APP_EVT)
   {
+    // The registration writes a Class of Device derived from the HID service,
+    // so whatever the sketch asked for is re-asserted afterwards.
+    if (parameter->register_app.status == ESP_HIDD_SUCCESS)
+      (void)EspBleClassicVisibilityOwner::apply();
     std::lock_guard<std::mutex> lock(impl->mutex);
     impl->registered = parameter->register_app.status == ESP_HIDD_SUCCESS;
     impl->registrationCompleted = true;
@@ -327,22 +389,78 @@ void hidDeviceCallback(
   else if (
     event == ESP_HIDD_INTR_DATA_EVT || event == ESP_HIDD_SET_REPORT_EVT)
   {
-    const uint8_t *data = event == ESP_HIDD_INTR_DATA_EVT ?
+    const bool interrupt = event == ESP_HIDD_INTR_DATA_EVT;
+    const uint8_t *data = interrupt ?
       parameter->intr_data.data : parameter->set_report.data;
-    const size_t length = event == ESP_HIDD_INTR_DATA_EVT ?
+    size_t length = interrupt ?
       parameter->intr_data.len : parameter->set_report.len;
     if (data == nullptr || length > MaximumHidReportLength) return;
     EspBleClassicHidDeviceImpl::Event queued;
-    queued.type = EspBleClassicHidDeviceImpl::EventType::OutputReport;
+    // A Set_Report keeps the type the Host used, so a Feature report is not
+    // reported as an Output report. Data on the interrupt channel has no type
+    // of its own and is an Output report by definition.
+    queued.type = interrupt
+      ? EspBleClassicHidDeviceImpl::EventType::OutputReport
+      : EspBleClassicHidDeviceImpl::EventType::SetReport;
     {
       std::lock_guard<std::mutex> lock(impl->mutex);
       queued.report.peerAddress = impl->peerAddress;
     }
-    queued.report.type = EspBleClassicHidReportType::Output;
-    queued.report.reportId = event == ESP_HIDD_INTR_DATA_EVT ?
+    queued.report.type = interrupt
+      ? EspBleClassicHidReportType::Output
+      : hidReportType(parameter->set_report.report_type);
+    queued.report.reportId = interrupt ?
       parameter->intr_data.report_id : parameter->set_report.report_id;
+    // The two channels do not agree on where the report ID lives: Set_Report
+    // hands it over separately, while a report on the interrupt channel carries
+    // it in front of the payload. reportId is the authority either way, so a
+    // leading copy of it is removed and value is the payload alone — otherwise
+    // a sketch would have to know which channel delivered the report.
+    if (
+      length > 1 && queued.report.reportId != 0 &&
+      data[0] == queued.report.reportId)
+    {
+      ++data;
+      --length;
+    }
     queued.report.value = String(
       reinterpret_cast<const char *>(data), length);
+    if (!interrupt)
+    {
+      std::lock_guard<std::mutex> lock(impl->mutex);
+      impl->setReportPending = true;
+    }
+    impl->enqueue(std::move(queued));
+  }
+  else if (event == ESP_HIDD_GET_REPORT_EVT)
+  {
+    EspBleClassicHidDeviceImpl::Event queued;
+    queued.type = EspBleClassicHidDeviceImpl::EventType::ReportRequested;
+    queued.request.type = hidReportType(parameter->get_report.report_type);
+    queued.request.reportId = parameter->get_report.report_id;
+    queued.request.maximumLength = parameter->get_report.buffer_size;
+    {
+      std::lock_guard<std::mutex> lock(impl->mutex);
+      queued.request.peerAddress = impl->peerAddress;
+      // Held so a sketch can answer without repeating the type and report ID,
+      // and so an answer sent for no request can be refused.
+      impl->reportRequest = queued.request;
+      impl->reportRequestPending = true;
+    }
+    impl->enqueue(std::move(queued));
+  }
+  else if (event == ESP_HIDD_SET_PROTOCOL_EVT)
+  {
+    EspBleClassicHidDeviceImpl::Event queued;
+    queued.type = EspBleClassicHidDeviceImpl::EventType::ProtocolMode;
+    queued.protocolMode =
+      parameter->set_protocol.protocol_mode == ESP_HIDD_BOOT_MODE
+        ? EspBleClassicHidProtocolMode::Boot
+        : EspBleClassicHidProtocolMode::Report;
+    {
+      std::lock_guard<std::mutex> lock(impl->mutex);
+      impl->protocolMode = queued.protocolMode;
+    }
     impl->enqueue(std::move(queued));
   }
 }
@@ -485,6 +603,71 @@ void hidHostCallback(
       parameter->data_ind.len);
     impl->enqueue(std::move(queued));
   }
+  else if (event == ESP_HIDH_GET_RPT_EVT)
+  {
+    EspBleClassicHidHostImpl::Event queued;
+    queued.type = EspBleClassicHidHostImpl::EventType::ReportResult;
+    queued.reportResult.success = parameter->get_rpt.status == ESP_HIDH_OK;
+    if (
+      queued.reportResult.success && parameter->get_rpt.data != nullptr &&
+      parameter->get_rpt.len <= MaximumHidReportLength)
+    {
+      queued.reportResult.value = String(
+        reinterpret_cast<const char *>(parameter->get_rpt.data),
+        parameter->get_rpt.len);
+    }
+    impl->enqueue(std::move(queued));
+  }
+  else if (event == ESP_HIDH_SET_RPT_EVT)
+  {
+    EspBleClassicHidHostImpl::Event queued;
+    queued.type = EspBleClassicHidHostImpl::EventType::ReportSent;
+    queued.reportResult.success = parameter->set_rpt.status == ESP_HIDH_OK;
+    impl->enqueue(std::move(queued));
+  }
+  else if (event == ESP_HIDH_GET_PROTO_EVT || event == ESP_HIDH_SET_PROTO_EVT)
+  {
+    EspBleClassicHidHostImpl::Event queued;
+    queued.type = EspBleClassicHidHostImpl::EventType::ProtocolMode;
+    // Set_Protocol reports no mode of its own, so the mode the sketch asked for
+    // is the one in effect when it succeeded.
+    if (event == ESP_HIDH_GET_PROTO_EVT)
+    {
+      queued.protocolModeResult.success =
+        parameter->get_proto.status == ESP_HIDH_OK;
+      queued.protocolModeResult.mode =
+        parameter->get_proto.proto_mode == ESP_HIDH_BOOT_MODE
+          ? EspBleClassicHidProtocolMode::Boot
+          : EspBleClassicHidProtocolMode::Report;
+    }
+    else
+    {
+      queued.protocolModeResult.success =
+        parameter->set_proto.status == ESP_HIDH_OK;
+      std::lock_guard<std::mutex> lock(impl->mutex);
+      queued.protocolModeResult.mode = impl->requestedProtocolMode;
+    }
+    impl->enqueue(std::move(queued));
+  }
+  else if (event == ESP_HIDH_GET_IDLE_EVT || event == ESP_HIDH_SET_IDLE_EVT)
+  {
+    EspBleClassicHidHostImpl::Event queued;
+    queued.type = EspBleClassicHidHostImpl::EventType::IdleRate;
+    if (event == ESP_HIDH_GET_IDLE_EVT)
+    {
+      queued.idleRateResult.success =
+        parameter->get_idle.status == ESP_HIDH_OK;
+      queued.idleRateResult.idleRate = parameter->get_idle.idle_rate;
+    }
+    else
+    {
+      queued.idleRateResult.success =
+        parameter->set_idle.status == ESP_HIDH_OK;
+      std::lock_guard<std::mutex> lock(impl->mutex);
+      queued.idleRateResult.idleRate = impl->requestedIdleRate;
+    }
+    impl->enqueue(std::move(queued));
+  }
 }
 
 bool waitForFlag(
@@ -610,9 +793,7 @@ bool EspBleClassicHidDevice::begin(
     owner_->setError(EspBleError::BackendFailure, "failed to register HID device application");
     return false;
   }
-  if (
-    esp_bt_gap_set_scan_mode(
-      ESP_BT_CONNECTABLE, ESP_BT_GENERAL_DISCOVERABLE) != ESP_OK)
+  if (!EspBleClassicVisibilityOwner::apply())
   {
     end();
     owner_->setError(EspBleError::BackendFailure, "failed to make HID device discoverable");
@@ -755,6 +936,130 @@ bool EspBleClassicHidDevice::disconnect()
 #endif
 }
 
+bool EspBleClassicHidDevice::virtualCableUnplug()
+{
+  if (!connected())
+  {
+    owner_->setError(EspBleError::InvalidState, "HID Device is not connected");
+    return false;
+  }
+#if ESPBLE_CLASSIC_HID_BACKEND_AVAILABLE
+  if (esp_bt_hid_device_virtual_cable_unplug() != ESP_OK)
+  {
+    owner_->setError(
+      EspBleError::BackendFailure, "failed to unplug the virtual cable");
+    return false;
+  }
+  owner_->clearError();
+  return true;
+#else
+  return false;
+#endif
+}
+
+bool EspBleClassicHidDevice::respondToReportRequest(
+  const EspBleClassicHidReportRequest &request,
+  const uint8_t *data, size_t length)
+{
+  if (data == nullptr || length == 0 || length > MaximumReportLength)
+  {
+    owner_->setError(EspBleError::InvalidArgument, "invalid HID report");
+    return false;
+  }
+  if (!connected())
+  {
+    owner_->setError(EspBleError::InvalidState, "HID Device is not connected");
+    return false;
+  }
+#if ESPBLE_CLASSIC_HID_BACKEND_AVAILABLE
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    // Answering when the Host asked nothing would send an unsolicited report on
+    // the control channel, which is not what the caller means by "respond".
+    if (!impl_->reportRequestPending)
+    {
+      owner_->setError(
+        EspBleError::InvalidState, "no HID report request is pending");
+      return false;
+    }
+    impl_->reportRequestPending = false;
+  }
+  // The Host matches the answer against what it asked for, so an answer that
+  // exceeds the size it offered is refused here rather than being truncated.
+  if (length > request.maximumLength && request.maximumLength != 0)
+  {
+    owner_->setError(
+      EspBleError::InvalidArgument,
+      "the report is larger than the Host allowed");
+    return false;
+  }
+  const esp_hidd_report_type_t type =
+    request.type == EspBleClassicHidReportType::Feature
+      ? ESP_HIDD_REPORT_TYPE_FEATURE
+      : (request.type == EspBleClassicHidReportType::Output
+          ? ESP_HIDD_REPORT_TYPE_OUTPUT : ESP_HIDD_REPORT_TYPE_INPUT);
+  if (
+    esp_bt_hid_device_send_report(
+      type, request.reportId, static_cast<uint16_t>(length),
+      const_cast<uint8_t *>(data)) != ESP_OK)
+  {
+    owner_->setError(
+      EspBleError::BackendFailure, "failed to answer the HID report request");
+    return false;
+  }
+  owner_->clearError();
+  return true;
+#else
+  (void)request;
+  return false;
+#endif
+}
+
+bool EspBleClassicHidDevice::refuseReportRequest(
+  EspBleClassicHidRequestError error)
+{
+  if (!connected())
+  {
+    owner_->setError(EspBleError::InvalidState, "HID Device is not connected");
+    return false;
+  }
+#if ESPBLE_CLASSIC_HID_BACKEND_AVAILABLE
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    // Either kind of control-channel request can be refused: a Get_Report the
+    // device cannot answer, or a Set_Report it will not accept.
+    if (!impl_->reportRequestPending && !impl_->setReportPending)
+    {
+      owner_->setError(
+        EspBleError::InvalidState, "no HID report request is pending");
+      return false;
+    }
+    impl_->reportRequestPending = false;
+    impl_->setReportPending = false;
+  }
+  if (
+    esp_bt_hid_device_report_error(
+      static_cast<esp_hidd_handshake_error_t>(error)) != ESP_OK)
+  {
+    owner_->setError(
+      EspBleError::BackendFailure, "failed to refuse the HID report request");
+    return false;
+  }
+  owner_->clearError();
+  return true;
+#else
+  (void)error;
+  return false;
+#endif
+}
+
+EspBleClassicHidProtocolMode EspBleClassicHidDevice::protocolMode() const
+{
+  if (impl_ == nullptr) return EspBleClassicHidProtocolMode::Report;
+  std::lock_guard<std::mutex> lock(impl_->mutex);
+  return impl_->protocolMode;
+}
+
 void EspBleClassicHidDevice::onConnected(ConnectionCallback callback)
 {
   connectedCallback_ = std::move(callback);
@@ -768,6 +1073,21 @@ void EspBleClassicHidDevice::onDisconnected(ConnectionCallback callback)
 void EspBleClassicHidDevice::onOutputReport(ReportCallback callback)
 {
   outputReportCallback_ = std::move(callback);
+}
+
+void EspBleClassicHidDevice::onSetReport(ReportCallback callback)
+{
+  setReportCallback_ = std::move(callback);
+}
+
+void EspBleClassicHidDevice::onReportRequested(ReportRequestCallback callback)
+{
+  reportRequestedCallback_ = std::move(callback);
+}
+
+void EspBleClassicHidDevice::onProtocolMode(ProtocolModeCallback callback)
+{
+  protocolModeCallback_ = std::move(callback);
 }
 
 size_t EspBleClassicHidDevice::droppedEventCount() const
@@ -805,6 +1125,47 @@ void EspBleClassicHidDevice::update()
       // callback still sees every output report, custom descriptors included.
       owner_->deliverHidKeyboardLeds(event.report);
       if (outputReportCallback_) outputReportCallback_(event.report);
+    }
+    else if (
+      event.type == EspBleClassicHidDeviceImpl::EventType::SetReport)
+    {
+      // An Output report reaches onOutputReport() whichever channel carried it,
+      // so a sketch that only cares about LEDs does not have to know about
+      // Set_Report at all.
+      if (event.report.type == EspBleClassicHidReportType::Output)
+      {
+        owner_->deliverHidKeyboardLeds(event.report);
+        if (outputReportCallback_) outputReportCallback_(event.report);
+      }
+      if (setReportCallback_) setReportCallback_(event.report);
+      // Acknowledged unless the sketch refused it during the callback, so a
+      // sketch that only reads the value does not have to know the control
+      // channel expects a handshake.
+      bool acknowledge = false;
+      {
+        std::lock_guard<std::mutex> lock(impl_->mutex);
+        acknowledge = impl_->setReportPending;
+        impl_->setReportPending = false;
+      }
+#if ESPBLE_CLASSIC_HID_BACKEND_AVAILABLE
+      if (acknowledge)
+      {
+        (void)esp_bt_hid_device_report_error(
+          ESP_HID_PAR_HANDSHAKE_RSP_SUCCESS);
+      }
+#else
+      (void)acknowledge;
+#endif
+    }
+    else if (
+      event.type == EspBleClassicHidDeviceImpl::EventType::ReportRequested)
+    {
+      if (reportRequestedCallback_) reportRequestedCallback_(event.request);
+    }
+    else if (
+      event.type == EspBleClassicHidDeviceImpl::EventType::ProtocolMode)
+    {
+      if (protocolModeCallback_) protocolModeCallback_(event.protocolMode);
     }
   }
 }
@@ -994,6 +1355,226 @@ String EspBleClassicHidHost::peerAddress() const
   return impl_->peerAddress;
 }
 
+namespace
+{
+#if ESPBLE_CLASSIC_HID_BACKEND_AVAILABLE
+esp_hidh_report_type_t hostReportType(EspBleClassicHidReportType type)
+{
+  switch (type)
+  {
+    case EspBleClassicHidReportType::Output:
+      return ESP_HIDH_REPORT_TYPE_OUTPUT;
+    case EspBleClassicHidReportType::Feature:
+      return ESP_HIDH_REPORT_TYPE_FEATURE;
+    default: break;
+  }
+  return ESP_HIDH_REPORT_TYPE_INPUT;
+}
+#endif
+} // namespace
+
+bool EspBleClassicHidHost::requestReport(
+  EspBleClassicHidReportType type, uint8_t reportId, uint16_t maximumLength)
+{
+  if (!connected())
+  {
+    owner_->setError(EspBleError::InvalidState, "HID Host is not connected");
+    return false;
+  }
+#if ESPBLE_CLASSIC_HID_BACKEND_AVAILABLE
+  esp_bd_addr_t address = {};
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    memcpy(address, impl_->backendAddress, sizeof(address));
+  }
+  if (
+    esp_bt_hid_host_get_report(
+      address, hostReportType(type), reportId,
+      static_cast<int>(maximumLength)) != ESP_OK)
+  {
+    owner_->setError(
+      EspBleError::BackendFailure, "failed to request a HID report");
+    return false;
+  }
+  owner_->clearError();
+  return true;
+#else
+  (void)type;
+  (void)reportId;
+  (void)maximumLength;
+  return false;
+#endif
+}
+
+bool EspBleClassicHidHost::sendReport(
+  EspBleClassicHidReportType type, const uint8_t *data, size_t length)
+{
+  if (!connected() || data == nullptr || length == 0 ||
+      length > MaximumReportLength)
+  {
+    owner_->setError(EspBleError::InvalidArgument, "invalid HID host report");
+    return false;
+  }
+#if ESPBLE_CLASSIC_HID_BACKEND_AVAILABLE
+  esp_bd_addr_t address = {};
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    memcpy(address, impl_->backendAddress, sizeof(address));
+  }
+  if (
+    esp_bt_hid_host_set_report(
+      address, hostReportType(type), const_cast<uint8_t *>(data),
+      length) != ESP_OK)
+  {
+    owner_->setError(
+      EspBleError::BackendFailure, "failed to send HID host report");
+    return false;
+  }
+  owner_->clearError();
+  return true;
+#else
+  (void)type;
+  return false;
+#endif
+}
+
+bool EspBleClassicHidHost::requestProtocolMode()
+{
+  if (!connected())
+  {
+    owner_->setError(EspBleError::InvalidState, "HID Host is not connected");
+    return false;
+  }
+#if ESPBLE_CLASSIC_HID_BACKEND_AVAILABLE
+  esp_bd_addr_t address = {};
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    memcpy(address, impl_->backendAddress, sizeof(address));
+  }
+  if (esp_bt_hid_host_get_protocol(address) != ESP_OK)
+  {
+    owner_->setError(
+      EspBleError::BackendFailure, "failed to request the protocol mode");
+    return false;
+  }
+  owner_->clearError();
+  return true;
+#else
+  return false;
+#endif
+}
+
+bool EspBleClassicHidHost::setProtocolMode(EspBleClassicHidProtocolMode mode)
+{
+  if (!connected())
+  {
+    owner_->setError(EspBleError::InvalidState, "HID Host is not connected");
+    return false;
+  }
+#if ESPBLE_CLASSIC_HID_BACKEND_AVAILABLE
+  esp_bd_addr_t address = {};
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    memcpy(address, impl_->backendAddress, sizeof(address));
+    impl_->requestedProtocolMode = mode;
+  }
+  if (
+    esp_bt_hid_host_set_protocol(
+      address, mode == EspBleClassicHidProtocolMode::Boot
+        ? ESP_HIDH_BOOT_MODE : ESP_HIDH_REPORT_MODE) != ESP_OK)
+  {
+    owner_->setError(
+      EspBleError::BackendFailure, "failed to set the protocol mode");
+    return false;
+  }
+  owner_->clearError();
+  return true;
+#else
+  (void)mode;
+  return false;
+#endif
+}
+
+bool EspBleClassicHidHost::requestIdleRate()
+{
+  if (!connected())
+  {
+    owner_->setError(EspBleError::InvalidState, "HID Host is not connected");
+    return false;
+  }
+#if ESPBLE_CLASSIC_HID_BACKEND_AVAILABLE
+  esp_bd_addr_t address = {};
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    memcpy(address, impl_->backendAddress, sizeof(address));
+  }
+  if (esp_bt_hid_host_get_idle(address) != ESP_OK)
+  {
+    owner_->setError(
+      EspBleError::BackendFailure, "failed to request the idle rate");
+    return false;
+  }
+  owner_->clearError();
+  return true;
+#else
+  return false;
+#endif
+}
+
+bool EspBleClassicHidHost::setIdleRate(uint8_t idleRate)
+{
+  if (!connected())
+  {
+    owner_->setError(EspBleError::InvalidState, "HID Host is not connected");
+    return false;
+  }
+#if ESPBLE_CLASSIC_HID_BACKEND_AVAILABLE
+  esp_bd_addr_t address = {};
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    memcpy(address, impl_->backendAddress, sizeof(address));
+    impl_->requestedIdleRate = idleRate;
+  }
+  if (esp_bt_hid_host_set_idle(address, idleRate) != ESP_OK)
+  {
+    owner_->setError(
+      EspBleError::BackendFailure, "failed to set the idle rate");
+    return false;
+  }
+  owner_->clearError();
+  return true;
+#else
+  (void)idleRate;
+  return false;
+#endif
+}
+
+bool EspBleClassicHidHost::virtualCableUnplug()
+{
+  if (!connected())
+  {
+    owner_->setError(EspBleError::InvalidState, "HID Host is not connected");
+    return false;
+  }
+#if ESPBLE_CLASSIC_HID_BACKEND_AVAILABLE
+  esp_bd_addr_t address = {};
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    memcpy(address, impl_->backendAddress, sizeof(address));
+  }
+  if (esp_bt_hid_host_virtual_cable_unplug(address) != ESP_OK)
+  {
+    owner_->setError(
+      EspBleError::BackendFailure, "failed to unplug the virtual cable");
+    return false;
+  }
+  owner_->clearError();
+  return true;
+#else
+  return false;
+#endif
+}
+
 bool EspBleClassicHidHost::sendOutputReport(
   const uint8_t *data, size_t length)
 {
@@ -1132,6 +1713,22 @@ void EspBleClassicHidHost::update()
       deliverDecoded(event.report);
       if (inputReportCallback_) inputReportCallback_(event.report);
     }
+    else if (
+      event.type == EspBleClassicHidHostImpl::EventType::ReportResult &&
+      reportResultCallback_)
+      reportResultCallback_(event.reportResult);
+    else if (
+      event.type == EspBleClassicHidHostImpl::EventType::ReportSent &&
+      reportSentCallback_)
+      reportSentCallback_(event.reportResult);
+    else if (
+      event.type == EspBleClassicHidHostImpl::EventType::ProtocolMode &&
+      protocolModeCallback_)
+      protocolModeCallback_(event.protocolModeResult);
+    else if (
+      event.type == EspBleClassicHidHostImpl::EventType::IdleRate &&
+      idleRateCallback_)
+      idleRateCallback_(event.idleRateResult);
   }
 }
 
@@ -1521,6 +2118,26 @@ void EspBleClassicHidHost::onKeyboard(KeyboardCallback callback)
 void EspBleClassicHidHost::onMouse(MouseCallback callback)
 {
   mouseCallback_ = std::move(callback);
+}
+
+void EspBleClassicHidHost::onReportResult(ReportResultCallback callback)
+{
+  reportResultCallback_ = std::move(callback);
+}
+
+void EspBleClassicHidHost::onReportSent(ReportResultCallback callback)
+{
+  reportSentCallback_ = std::move(callback);
+}
+
+void EspBleClassicHidHost::onProtocolMode(ProtocolModeResultCallback callback)
+{
+  protocolModeCallback_ = std::move(callback);
+}
+
+void EspBleClassicHidHost::onIdleRate(IdleRateResultCallback callback)
+{
+  idleRateCallback_ = std::move(callback);
 }
 
 void EspBleClassicHidHost::setKeyboardLayout(EspBleKeyboardLayout layout)

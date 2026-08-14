@@ -58,6 +58,18 @@ void handleCommand(const String &value)
       "CLASSIC_PEER_CONNECT_ACCEPTED %u\n",
       bluetooth.spp().connect(value.c_str() + 1, 15000) ? 1 : 0);
   }
+  else if (value.startsWith("k"))
+  {
+    // address:channel — connecting to a channel the peer named, which is the
+    // only way to reach a specific one of several services.
+    const int separator = value.lastIndexOf(':');
+    const String address = value.substring(1, separator);
+    const uint8_t channel = value.substring(separator + 1).toInt();
+    Serial.printf(
+      "CLASSIC_PEER_CONNECT_ACCEPTED %u\n",
+      bluetooth.spp().connectToChannel(
+        address.c_str(), channel, 15000) ? 1 : 0);
+  }
   else if (value == "d" && sessionId != 0)
   {
     Serial.printf(

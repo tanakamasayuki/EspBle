@@ -17,10 +17,10 @@
 | 機能 | 状態 | 補足 |
 |---|---|---|
 | device name設定 | 公開 | `EspBleClassicConfig::deviceName` |
-| 接続可能・発見可能状態 | 部分 | `begin()`とprofile初期化が`ESP_BT_CONNECTABLE` + `ESP_BT_GENERAL_DISCOVERABLE`を直接設定する。利用者が非発見にする手段がない。A2DP Sinkはstream中に自分で切り替える |
+| 接続可能・発見可能状態 | 公開 | `EspBleClassicConfig::visibility`と`setVisibility()` / `visibility()`（`Hidden` / `ConnectableOnly` / `ConnectableDiscoverable`）。所有者は`EspBleClassic`で、profileは値を決めず再適用のみ行う。A2DP Sinkはsource接続中だけ自分で隠し、復帰時は所有者の値へ戻す |
 | inquiry（周辺機器探索） | 公開 | `EspBleClassicInquiry`。address、name（EIR fallbackつき）、Class of Device、RSSIを返す。`read_remote_name`の個別照会は未公開 |
 | SDP（相手のservice照会） | 未公開 | `esp_bt_gap_get_remote_services` / `get_remote_service_record`。SPP clientの内部でchannel解決に使うだけ |
-| Class of Device | 未公開 | `esp_bt_gap_set_cod`。HIDやheadsetとして正しいiconと挙動で扱われるために必要 |
+| Class of Device | 公開 | `EspBleClassicConfig::classOfDevice`と`setClassOfDevice()` / `classOfDevice()`。反映は非同期で、profile登録による上書きとcontrollerのinquiry scan取り込みまでlibraryが面倒を見る |
 | bond一覧・削除 | 公開 | `bondCount()` / `bond(index)` / `deleteBond()` / `deleteAllBonds()` |
 | pairing（SSP） | 公開 | `EspBleClassicSecurityConfig`でIO capabilityを選び、numeric comparisonとpasskey要求をアプリへ通知して`confirmNumericComparison()` / `providePasskey()`で応答する。無応答はtimeoutで拒否。設定を有効にするとservice側がMITMを要求する |
 | pairing（legacy PIN） | 未公開 | 応答経路が無いため拒否する。以前の固定PIN `1234`は廃止した |
@@ -32,10 +32,10 @@
 | 機能 | 状態 | 補足 |
 |---|---|---|
 | server（1 service） | 公開 | `startServer()` / `stopServer()` |
-| client接続 | 公開 | `connect(address, timeout)`。内部でSDPからchannelを解決する |
+| client接続 | 公開 | `connect(address, timeout)`はSDPからchannelを解決する。相手が複数serviceを公開している場合は`connectToChannel(address, channel)`で選ぶ。送信側は同時1接続 |
 | 複数session | 公開 | `sessionCount()` / session単位のread/write |
 | 送受信・queue・統計 | 公開 | `write()` / `read()` / `pendingWriteCount()` / `droppedWriteCount()` |
-| 複数serverの同時公開 | 未公開 | `esp_spp_start_srv_with_cfg` / `stop_srv_scn`でservice recordを複数持てる |
+| 複数serverの同時公開 | 公開 | `startServer()`を繰り返し呼ぶと最大4 serviceを公開する。`serverCount()` / `server(index)`で列挙し、`onServerStarted()`がchannelを渡す。停止は`stopServer()`（全停止）のみ |
 | VFS（Stream風API） | 未公開 | `esp_spp_vfs_register`。Arduino利用者には`BluetoothSerial`相当の使い勝手になる |
 
 ## HID Device
@@ -47,11 +47,11 @@
 | keyboard layout・NKRO | 公開 | `setLayout()` / `write()` / `pressKey()`。BLEと同じ変換表を共有する |
 | Input Report送信 | 公開 | `sendInputReport()` / `sendReport()` |
 | Output Report受信（LED） | 公開 | `onOutputReport()`。profile利用時は`EspBleClassicHidKeyboardLeds`へ展開する |
-| Get_Report要求への応答 | 未公開 | backendはevent経由でGet_Reportを渡すが、EspBleは応答APIを持たない。Hostがreport状態を問い合わせる構成で必要 |
-| Feature Report | 未公開 | 上と同じ経路 |
-| protocol mode（Boot / Report） | 未公開 | Hostが要求するSet_Protocolを扱わない |
-| virtual cable unplug | 未公開 | `esp_bt_hid_device_virtual_cable_unplug`。Host側のペア情報を明示的に解除する |
-| report error応答 | 未公開 | `esp_bt_hid_device_report_error` |
+| Get_Report要求への応答 | 公開 | `onReportRequested()`と`respondToReportRequest()` / `refuseReportRequest()`。要求が無いときの応答は拒否する |
+| Feature Report | 公開 | `onSetReport()`がHostの使ったtypeを保って配送し、Get_Reportの応答もtype指定で返せる |
+| protocol mode（Boot / Report） | 公開 | `protocolMode()` / `onProtocolMode()`。Hostが決めるものなのでsetterは持たない |
+| virtual cable unplug | 公開 | `virtualCableUnplug()`。Host側のペア情報を明示的に解除する |
+| report error応答 | 公開 | `refuseReportRequest()`。Set_Reportは拒否しなければ成功応答を自動で返す |
 
 ## HID Host
 
@@ -62,10 +62,10 @@
 | 不正Input Reportの計上 | 公開 | `invalidInputReportCount()`。BLEと同じくrollover（usage 0x01〜0x03）は押下として配らない |
 | Output Report送信 | 公開 | `sendOutputReport()`（raw）と`setKeyboardLeds()`（BLEと同名。report IDは相手のdescriptor由来） |
 | 非同期の接続失敗通知 | 公開 | `onConnectionFailed()` |
-| Get_Report / Set_Report | 未公開 | `esp_bt_hid_host_get_report` / `set_report`。LED状態の問い合わせなどに必要 |
-| protocol mode取得・設定 | 未公開 | `get_protocol` / `set_protocol` |
-| idle rate | 未公開 | `get_idle` / `set_idle` |
-| virtual cable unplug | 未公開 | `esp_bt_hid_host_virtual_cable_unplug` |
+| Get_Report / Set_Report | 公開 | `requestReport()` / `sendReport()`。結果は`onReportResult()` / `onReportSent()`へ届く |
+| protocol mode取得・設定 | 公開 | `requestProtocolMode()` / `setProtocolMode()` / `onProtocolMode()` |
+| idle rate | 公開 | `requestIdleRate()` / `setIdleRate()` / `onIdleRate()` |
+| virtual cable unplug | 公開 | `virtualCableUnplug()` |
 | 複数device同時接続 | 未公開 | backendは複数を扱えるが公開APIは単一接続を前提にしている |
 
 ## A2DP
@@ -140,11 +140,17 @@
 4. **完了: HIDのAPI形状**。Device側のprofile API（keyboard / mouse / consumer / system / gamepad）と
    Host側のReport Descriptor解析をBLEと同じ名前・同じevent形で公開した。descriptorとpackingは
    BLEと同じmoduleを共有するので、片側だけ変わることはない。
-5. **Class of Device**: HIDやheadsetとして正しく分類させる。市販Hostの挙動に直接効く。
-6. **接続可能・発見可能の制御**: 現在profileが勝手に設定している。利用者が決められるようにする。
-7. **HID Device / HostのGet_Report・Set_Report・protocol mode**: 実機のHost実装が要求する。
-8. **SPPの複数server**: 1 deviceで複数serviceを出す構成向け。
+5. **完了: Class of Device**。設定・読み出しを公開した。profile登録による上書き、controllerが
+   inquiry scan有効化時にclassを取り込む性質、反映が非同期であることの3点をlibrary側で吸収している。
+6. **完了: 接続可能・発見可能の制御**。所有者を`EspBleClassic`へ一元化し、profileは再適用だけを行う。
+7. **完了: HID Device / HostのGet_Report・Set_Report・protocol mode・idle rate・virtual cable unplug**。
+   制御チャネルは応答が必須で、Get_Reportの無応答とSet_Reportのhandshake欠落はどちらもHostを
+   待たせ続けていた。Peer test `classic_hid_control`で両方向を検証している。
+8. **完了: SPPの複数server**。`startServer()`の繰り返しで最大4 serviceを公開する。channel単位の停止は
+   意図的に持たない——`stopServer()`で全停止して必要な分を再startすれば足り、取り消す手段を2つに
+   増やさないため。相手側から特定serviceへ届くよう`connectToChannel()`を用意した。
 9. **A2DP delay reporting、AVRCP TG notification応答**: 相互運用の作り込み段階で必要になる。
+10. **SDP照会（`get_remote_services`）と`read_remote_name`**: 相手が何を提供しているかを接続前に知る手段。
 
 外部機器との相互運用（Gate D）と、core内蔵Bluedroidとの相互接続Peer testは、
 [引き継ぎ](HANDOFF_ESP32_CLASSIC.ja.md)の作業メモにあるとおり別途進めます。

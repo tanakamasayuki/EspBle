@@ -1,6 +1,12 @@
 import re
 
 
+# A capture with nothing after it can match a partial line: the serial stream
+# arrives in pieces, and "address=00:70:07" is a valid match for a looser
+# pattern while the rest is still on its way.
+ADDRESS = rb"([0-9a-f]{2}(?::[0-9a-f]{2}){5})"
+
+
 def test_numeric_comparison_pairing_and_bond_management(dut, peers):
     """Classic pairing driven by the application instead of auto-accepted.
 
@@ -12,9 +18,9 @@ def test_numeric_comparison_pairing_and_bond_management(dut, peers):
     """
     peer = peers["device"]
     peer_ready = peer.expect(
-        re.compile(rb"PAIR_PEER_READY address=([0-9a-f:]+)"), timeout=30
+        re.compile(rb"PAIR_PEER_READY address=" + ADDRESS), timeout=30
     )
-    ready = dut.expect(re.compile(rb"PAIR_READY address=([0-9a-f:]+)"), timeout=30)
+    ready = dut.expect(re.compile(rb"PAIR_READY address=" + ADDRESS), timeout=30)
     dut_address = ready.group(1).decode()
     peer_address = peer_ready.group(1).decode()
 

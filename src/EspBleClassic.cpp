@@ -1,5 +1,6 @@
 #include "EspBleClassic.h"
 #include "EspBleClassicBuild.h"
+#include "EspBleClassicVisibility.h"
 
 #include <algorithm>
 #include <atomic>
@@ -34,9 +35,14 @@
 #define esp_bt_gap_set_device_name espble_bd_esp_bt_gap_set_device_name
 #define esp_bt_gap_set_pin espble_bd_esp_bt_gap_set_pin
 #define esp_bt_gap_set_scan_mode espble_bd_esp_bt_gap_set_scan_mode
+#define esp_bt_gap_set_cod espble_bd_esp_bt_gap_set_cod
+#define esp_bt_gap_get_cod espble_bd_esp_bt_gap_get_cod
 #define esp_bt_gap_start_discovery espble_bd_esp_bt_gap_start_discovery
 #define esp_bt_gap_cancel_discovery espble_bd_esp_bt_gap_cancel_discovery
 #define esp_bt_gap_resolve_eir_data espble_bd_esp_bt_gap_resolve_eir_data
+#define esp_bt_gap_get_remote_services \
+  espble_bd_esp_bt_gap_get_remote_services
+#define esp_bt_gap_read_remote_name espble_bd_esp_bt_gap_read_remote_name
 #define esp_bt_gap_set_security_param \
   espble_bd_esp_bt_gap_set_security_param
 #define esp_bt_gap_ssp_confirm_reply \
@@ -69,6 +75,122 @@
 namespace
 {
 constexpr size_t EventQueueCapacity = 12;
+
+// The scan mode the sketch asked for. Profiles re-assert it rather than
+// deciding it, so starting a profile cannot make a device answer inquiry that
+// the sketch configured to stay hidden.
+std::atomic<uint8_t> classicVisibility{
+  static_cast<uint8_t>(EspBleClassicVisibility::ConnectableDiscoverable)};
+
+// The Class of Device the sketch named, packed so it can be read from the
+// profile paths without a lock: major in bits 0..4, minor in 5..10, service in
+// 11..21, and bit 31 marking that a sketch asked for one at all. Starting a
+// profile rewrites the class from the services it registers, so the sketch's
+// value is re-applied afterwards; zero means "leave the backend's default".
+std::atomic<uint32_t> classicClassOfDevice{0};
+
+constexpr uint32_t ClassOfDeviceRequested = 0x80000000u;
+
+// The backend applies the class on its own task, and the controller only puts
+// it into the response it sends while inquiry scan is enabled. So the scan mode
+// has to be re-asserted once the class has actually landed; there is no event
+// for that, which leaves reading the class back as the only signal. update()
+// does the checking so the caller is not blocked.
+std::atomic<bool> classOfDevicePending{false};
+std::atomic<uint32_t> classOfDeviceDeadlineMs{0};
+constexpr uint32_t ClassOfDeviceSettleTimeoutMs = 3000;
+
+uint32_t packClassOfDevice(const EspBleClassicClassOfDevice &value)
+{
+  return static_cast<uint32_t>(value.majorDeviceClass & 0x1f) |
+    (static_cast<uint32_t>(value.minorDeviceClass & 0x3f) << 5) |
+    (static_cast<uint32_t>(value.serviceClass & 0x7ff) << 11) |
+    ClassOfDeviceRequested;
+}
+
+bool applyVisibility(EspBleClassicVisibility visibility)
+{
+#if ESPBLE_CLASSIC_BACKEND_AVAILABLE
+  esp_bt_connection_mode_t connection = ESP_BT_CONNECTABLE;
+  esp_bt_discovery_mode_t discovery = ESP_BT_GENERAL_DISCOVERABLE;
+  switch (visibility)
+  {
+    case EspBleClassicVisibility::Hidden:
+      connection = ESP_BT_NON_CONNECTABLE;
+      discovery = ESP_BT_NON_DISCOVERABLE;
+      break;
+    case EspBleClassicVisibility::ConnectableOnly:
+      discovery = ESP_BT_NON_DISCOVERABLE;
+      break;
+    case EspBleClassicVisibility::ConnectableDiscoverable:
+      break;
+  }
+  return esp_bt_gap_set_scan_mode(connection, discovery) == ESP_OK;
+#else
+  (void)visibility;
+  return false;
+#endif
+}
+
+bool applyClassOfDevice()
+{
+#if ESPBLE_CLASSIC_BACKEND_AVAILABLE
+  const uint32_t packed =
+    classicClassOfDevice.load(std::memory_order_acquire);
+  if ((packed & ClassOfDeviceRequested) == 0) return true;
+  esp_bt_cod_t cod = {};
+  cod.major = packed & 0x1f;
+  cod.minor = (packed >> 5) & 0x3f;
+  cod.service = (packed >> 11) & 0x7ff;
+  if (esp_bt_gap_set_cod(cod, ESP_BT_SET_COD_ALL) != ESP_OK) return false;
+  classOfDeviceDeadlineMs.store(
+    millis() + ClassOfDeviceSettleTimeoutMs, std::memory_order_relaxed);
+  classOfDevicePending.store(true, std::memory_order_release);
+  return true;
+#else
+  return false;
+#endif
+}
+
+// Returns true once nothing is left to wait for.
+bool settleClassOfDevice()
+{
+#if ESPBLE_CLASSIC_BACKEND_AVAILABLE
+  if (!classOfDevicePending.load(std::memory_order_acquire)) return true;
+  const uint32_t packed =
+    classicClassOfDevice.load(std::memory_order_acquire);
+  esp_bt_cod_t cod = {};
+  const bool landed = esp_bt_gap_get_cod(&cod) == ESP_OK &&
+    cod.major == (packed & 0x1f) &&
+    cod.minor == ((packed >> 5) & 0x3f) &&
+    cod.service == ((packed >> 11) & 0x7ff);
+  const bool expired = static_cast<int32_t>(
+    millis() - classOfDeviceDeadlineMs.load(std::memory_order_relaxed)) >= 0;
+  if (!landed && !expired) return false;
+  classOfDevicePending.store(false, std::memory_order_release);
+  // Only worth refreshing the scan mode when the class really changed; on
+  // timeout the controller still holds the previous one.
+  if (landed)
+  {
+    const EspBleClassicVisibility current =
+      static_cast<EspBleClassicVisibility>(
+        classicVisibility.load(std::memory_order_acquire));
+    // The controller takes the class into its inquiry response when inquiry
+    // scan is enabled, and re-writing the same scan mode changes nothing. So
+    // discoverability is switched off and on again, which is what makes the
+    // new class reach the air. Connectability is left alone so an incoming
+    // connection is not refused during the gap.
+    if (current == EspBleClassicVisibility::ConnectableDiscoverable)
+    {
+      (void)applyVisibility(EspBleClassicVisibility::ConnectableOnly);
+    }
+    (void)applyVisibility(current);
+  }
+  return true;
+#else
+  return true;
+#endif
+}
 
 #if ESPBLE_CLASSIC_BACKEND_AVAILABLE && defined(ESPBLE_CLASSIC_CUSTOM_HOST)
 void classicHostSend(uint8_t *data, uint16_t length)
@@ -157,6 +279,33 @@ const char *errorName(EspBleError error)
 }
 
 #if ESPBLE_CLASSIC_BACKEND_AVAILABLE
+String formatServiceUuid(const esp_bt_uuid_t &uuid)
+{
+  char value[37];
+  if (uuid.len == ESP_UUID_LEN_16)
+  {
+    snprintf(value, sizeof(value), "%04x", uuid.uuid.uuid16);
+    return String(value);
+  }
+  if (uuid.len == ESP_UUID_LEN_32)
+  {
+    snprintf(value, sizeof(value), "%08lx",
+      static_cast<unsigned long>(uuid.uuid.uuid32));
+    return String(value);
+  }
+  if (uuid.len != ESP_UUID_LEN_128) return String();
+  // The backend stores a 128-bit UUID least-significant byte first, while the
+  // text form reads most-significant first.
+  const uint8_t *bytes = uuid.uuid.uuid128;
+  snprintf(
+    value, sizeof(value),
+    "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
+    bytes[15], bytes[14], bytes[13], bytes[12], bytes[11], bytes[10],
+    bytes[9], bytes[8], bytes[7], bytes[6], bytes[5], bytes[4], bytes[3],
+    bytes[2], bytes[1], bytes[0]);
+  return String(value);
+}
+
 String formatAddress(const esp_bd_addr_t address)
 {
   char value[18];
@@ -220,6 +369,14 @@ struct EspBleClassicInquiryImpl
   bool stopRequested = false;
   bool completionPending = false;
   bool completionCancelled = false;
+  // One query of each kind at a time: the events carry the peer address but the
+  // backend keeps no queue, so a second request would race the first answer.
+  bool servicesPending = false;
+  bool namePending = false;
+  bool servicesReady = false;
+  bool nameReady = false;
+  EspBleClassicRemoteServices services;
+  EspBleClassicRemoteName remoteName;
 };
 
 constexpr size_t SecurityEventQueueCapacity = 8;
@@ -294,6 +451,7 @@ struct EspBleClassicSppImpl
   struct Event
   {
     EventType type = EventType::ServerStarted;
+    EspBleClassicSppServer server;
     EspBleClassicSppSession session;
     EspBleClassicSppData data;
     EspBleClassicSppWriteResult writeResult;
@@ -323,10 +481,33 @@ struct EspBleClassicSppImpl
   bool initialized = false;
   bool initializationCompleted = false;
   bool ending = false;
-  bool serverStartPending = false;
-  bool serverRunning = false;
-  String serverName;
-  uint8_t serverChannel = 0;
+  // One entry per published service. ESP_SPP_START_EVT reports only the channel
+  // the backend assigned, with no way back to the request, so exactly one start
+  // is in flight at a time and the answer belongs to that request.
+  struct Server
+  {
+    bool used = false;
+    bool running = false;
+    String name;
+    uint8_t requestedChannel = 0;
+    uint8_t channel = 0;
+  };
+  Server servers[EspBleClassicSpp::MaximumServers];
+  bool serverStartInFlight = false;
+  size_t startingServer = 0;
+
+  bool anyServerRunning() const
+  {
+    for (const Server &entry : servers)
+      if (entry.used && entry.running) return true;
+    return false;
+  }
+  bool anyServerPending() const
+  {
+    for (const Server &entry : servers)
+      if (entry.used && !entry.running) return true;
+    return false;
+  }
   uint32_t backendHandle = 0;
   EspBleClassicSppSession activeSession;
   EspBleClassicSppSessionId nextSessionId = 1;
@@ -484,21 +665,40 @@ void startPendingServer(EspBleClassicSppImpl *impl)
 {
   String name;
   uint8_t channel = 0;
+  size_t index = 0;
   {
     std::lock_guard<std::mutex> lock(impl->mutex);
-    if (!impl->initialized || !impl->serverStartPending || impl->ending) return;
-    name = impl->serverName;
-    channel = impl->serverChannel;
+    if (!impl->initialized || impl->ending || impl->serverStartInFlight) return;
+    bool found = false;
+    for (size_t candidate = 0;
+         candidate < EspBleClassicSpp::MaximumServers; ++candidate)
+    {
+      const EspBleClassicSppImpl::Server &entry = impl->servers[candidate];
+      if (!entry.used || entry.running) continue;
+      index = candidate;
+      name = entry.name;
+      channel = entry.requestedChannel;
+      found = true;
+      break;
+    }
+    if (!found) return;
+    impl->serverStartInFlight = true;
+    impl->startingServer = index;
   }
+  // Each call publishes its own service record, which is what makes a second
+  // server a second service rather than a replacement. The richer
+  // esp_spp_start_srv_with_cfg() is deliberately not used: it pulls the SPP VFS
+  // path into the link and cost over 500 KB of flash in a Classic-only sketch,
+  // and its only extra control here would be suppressing the service record.
   if (
-    esp_bt_gap_set_scan_mode(
-      ESP_BT_CONNECTABLE, ESP_BT_GENERAL_DISCOVERABLE) != ESP_OK ||
+    !EspBleClassicVisibilityOwner::apply() ||
     esp_spp_start_srv(
       static_cast<esp_spp_sec_t>(sppSecurityMask()), ESP_SPP_ROLE_SLAVE,
       channel, name.c_str()) != ESP_OK)
   {
     std::lock_guard<std::mutex> lock(impl->mutex);
-    impl->serverStartPending = false;
+    impl->servers[index] = EspBleClassicSppImpl::Server();
+    impl->serverStartInFlight = false;
   }
 }
 
@@ -568,6 +768,55 @@ void classicGapCallback(
     inquiry->completionCancelled = inquiry->stopRequested;
     inquiry->stopRequested = false;
     inquiry->completionPending = true;
+  }
+  else if (inquiry != nullptr && event == ESP_BT_GAP_RMT_SRVCS_EVT)
+  {
+    EspBleClassicRemoteServices services;
+    services.peerAddress = formatAddress(parameter->rmt_srvcs.bda);
+    services.success = parameter->rmt_srvcs.stat == ESP_BT_STATUS_SUCCESS;
+    if (services.success && parameter->rmt_srvcs.uuid_list != nullptr &&
+        parameter->rmt_srvcs.num_uuids > 0)
+    {
+      services.reportedCount =
+        static_cast<size_t>(parameter->rmt_srvcs.num_uuids);
+      for (int index = 0; index < parameter->rmt_srvcs.num_uuids; ++index)
+      {
+        if (services.count >=
+            EspBleClassicRemoteServices::MaximumServices)
+        {
+          break;
+        }
+        const esp_bt_uuid_t &uuid = parameter->rmt_srvcs.uuid_list[index];
+        services.uuids[services.count++] = formatServiceUuid(uuid);
+      }
+    }
+    std::lock_guard<std::mutex> lock(inquiry->mutex);
+    // Only the answer to a query this object asked for is kept: the callback is
+    // shared with anything else in the process that queries SDP.
+    if (inquiry->servicesPending)
+    {
+      inquiry->servicesPending = false;
+      inquiry->services = std::move(services);
+      inquiry->servicesReady = true;
+    }
+  }
+  else if (inquiry != nullptr && event == ESP_BT_GAP_READ_REMOTE_NAME_EVT)
+  {
+    EspBleClassicRemoteName remote;
+    remote.peerAddress = formatAddress(parameter->read_rmt_name.bda);
+    remote.success = parameter->read_rmt_name.stat == ESP_BT_STATUS_SUCCESS;
+    if (remote.success)
+    {
+      remote.name = String(
+        reinterpret_cast<const char *>(parameter->read_rmt_name.rmt_name));
+    }
+    std::lock_guard<std::mutex> lock(inquiry->mutex);
+    if (inquiry->namePending)
+    {
+      inquiry->namePending = false;
+      inquiry->remoteName = std::move(remote);
+      inquiry->nameReady = true;
+    }
   }
 
   EspBleClassicImpl *classic = activeClassicImpl.load(std::memory_order_acquire);
@@ -757,22 +1006,47 @@ void sppCallback(esp_spp_cb_event_t event, esp_spp_cb_param_t *parameter)
   }
   else if (event == ESP_SPP_START_EVT)
   {
-    std::lock_guard<std::mutex> lock(impl->mutex);
-    impl->serverStartPending = false;
-    impl->serverRunning = parameter->start.status == ESP_SPP_SUCCESS;
-    if (impl->serverRunning) impl->serverChannel = parameter->start.scn;
-    if (impl->serverRunning)
+    // Registering the service record rewrites the Class of Device from that
+    // service, so the sketch's value is re-asserted once registration is done
+    // rather than before it starts.
+    if (parameter->start.status == ESP_SPP_SUCCESS)
+      (void)EspBleClassicVisibilityOwner::apply();
+    bool startNext = false;
     {
-      EspBleClassicSppImpl::Event queued;
-      queued.type = EspBleClassicSppImpl::EventType::ServerStarted;
-      const size_t tail = (impl->eventHead + impl->eventCount) % EventQueueCapacity;
-      if (impl->eventCount == EventQueueCapacity) ++impl->droppedEvents;
-      else
+      std::lock_guard<std::mutex> lock(impl->mutex);
+      const size_t index = impl->startingServer;
+      impl->serverStartInFlight = false;
+      if (index < EspBleClassicSpp::MaximumServers &&
+          impl->servers[index].used)
       {
-        impl->events[tail] = std::move(queued);
-        ++impl->eventCount;
+        if (parameter->start.status == ESP_SPP_SUCCESS)
+        {
+          impl->servers[index].running = true;
+          impl->servers[index].channel = parameter->start.scn;
+          EspBleClassicSppImpl::Event queued;
+          queued.type = EspBleClassicSppImpl::EventType::ServerStarted;
+          queued.server.serviceName = impl->servers[index].name;
+          queued.server.channel = impl->servers[index].channel;
+          const size_t tail =
+            (impl->eventHead + impl->eventCount) % EventQueueCapacity;
+          if (impl->eventCount == EventQueueCapacity) ++impl->droppedEvents;
+          else
+          {
+            impl->events[tail] = std::move(queued);
+            ++impl->eventCount;
+          }
+        }
+        else
+        {
+          // A refused start leaves no service record, so the entry goes away
+          // rather than sitting as a server that never answers.
+          impl->servers[index] = EspBleClassicSppImpl::Server();
+        }
       }
+      startNext = impl->anyServerPending() && !impl->ending;
     }
+    // Starts are issued one at a time, so the next one waits for this answer.
+    if (startNext) startPendingServer(impl);
   }
   else if (event == ESP_SPP_DISCOVERY_COMP_EVT)
   {
@@ -963,8 +1237,16 @@ void sppCallback(esp_spp_cb_event_t event, esp_spp_cb_param_t *parameter)
   else if (event == ESP_SPP_SRV_STOP_EVT)
   {
     std::lock_guard<std::mutex> lock(impl->mutex);
-    impl->serverRunning = false;
-    impl->serverStartPending = false;
+    // The event names the channel that stopped, so stopping one service does
+    // not mark the others as gone.
+    for (EspBleClassicSppImpl::Server &entry : impl->servers)
+    {
+      if (entry.used && entry.running &&
+          entry.channel == parameter->srv_stop.scn)
+      {
+        entry = EspBleClassicSppImpl::Server();
+      }
+    }
   }
 }
 } // namespace
@@ -1067,7 +1349,7 @@ void EspBleClassicSpp::end()
     std::lock_guard<std::mutex> lock(impl_->mutex);
     impl_->ending = true;
     initialized = impl_->initialized;
-    serverRunning = impl_->serverRunning;
+    serverRunning = impl_->anyServerRunning();
     handle = impl_->backendHandle;
   }
   if (handle != 0) esp_spp_disconnect(handle);
@@ -1095,10 +1377,10 @@ void EspBleClassicSpp::end()
   impl_->initialized = false;
   impl_->initializationCompleted = false;
   impl_->ending = false;
-  impl_->serverStartPending = false;
-  impl_->serverRunning = false;
-  impl_->serverName = "";
-  impl_->serverChannel = 0;
+  for (EspBleClassicSppImpl::Server &entry : impl_->servers)
+    entry = EspBleClassicSppImpl::Server();
+  impl_->serverStartInFlight = false;
+  impl_->startingServer = 0;
   impl_->backendHandle = 0;
   impl_->activeSession = EspBleClassicSppSession();
   impl_->nextSessionId = 1;
@@ -1169,14 +1451,32 @@ bool EspBleClassicSpp::startServer(
   if (!begin()) return false;
   {
     std::lock_guard<std::mutex> lock(impl_->mutex);
-    if (impl_->serverStartPending || impl_->serverRunning)
+    size_t slot = MaximumServers;
+    for (size_t index = 0; index < MaximumServers; ++index)
     {
-      owner_->setError(EspBleError::InvalidState, "SPP server is already active");
+      const EspBleClassicSppImpl::Server &entry = impl_->servers[index];
+      // A channel the sketch names has to be unique: two records on the same
+      // channel would make the peer's choice ambiguous.
+      if (entry.used && config.channel != 0 &&
+          (entry.requestedChannel == config.channel ||
+           entry.channel == config.channel))
+      {
+        owner_->setError(
+          EspBleError::InvalidState, "that SPP channel is already in use");
+        return false;
+      }
+      if (!entry.used && slot == MaximumServers) slot = index;
+    }
+    if (slot == MaximumServers)
+    {
+      owner_->setError(
+        EspBleError::ResourceExhausted, "no SPP server slot is free");
       return false;
     }
-    impl_->serverName = config.serviceName;
-    impl_->serverChannel = config.channel;
-    impl_->serverStartPending = true;
+    impl_->servers[slot] = EspBleClassicSppImpl::Server();
+    impl_->servers[slot].used = true;
+    impl_->servers[slot].name = config.serviceName;
+    impl_->servers[slot].requestedChannel = config.channel;
   }
   startPendingServer(impl_);
   owner_->clearError();
@@ -1203,13 +1503,11 @@ bool EspBleClassicSpp::stopServer()
   bool running = false;
   {
     std::lock_guard<std::mutex> lock(impl_->mutex);
-    if (impl_->serverStartPending)
-    {
-      impl_->serverStartPending = false;
-      owner_->clearError();
-      return true;
-    }
-    running = impl_->serverRunning;
+    running = impl_->anyServerRunning();
+    // Pending starts are dropped as well, so a stop right after a start does
+    // not leave a service record appearing a moment later.
+    for (EspBleClassicSppImpl::Server &entry : impl_->servers)
+      entry = EspBleClassicSppImpl::Server();
   }
   if (running && esp_spp_stop_srv() != ESP_OK)
   {
@@ -1225,7 +1523,95 @@ bool EspBleClassicSpp::serverRunning() const
 {
   if (impl_ == nullptr) return false;
   std::lock_guard<std::mutex> lock(impl_->mutex);
-  return impl_->serverRunning;
+  return impl_->anyServerRunning();
+}
+
+size_t EspBleClassicSpp::serverCount() const
+{
+  if (impl_ == nullptr) return 0;
+  std::lock_guard<std::mutex> lock(impl_->mutex);
+  size_t count = 0;
+  for (const EspBleClassicSppImpl::Server &entry : impl_->servers)
+    if (entry.used && entry.running) ++count;
+  return count;
+}
+
+bool EspBleClassicSpp::server(
+  size_t index, EspBleClassicSppServer &server) const
+{
+  if (impl_ == nullptr) return false;
+  std::lock_guard<std::mutex> lock(impl_->mutex);
+  size_t seen = 0;
+  for (const EspBleClassicSppImpl::Server &entry : impl_->servers)
+  {
+    if (!entry.used || !entry.running) continue;
+    if (seen++ != index) continue;
+    server.serviceName = entry.name;
+    server.channel = entry.channel;
+    return true;
+  }
+  return false;
+}
+
+bool EspBleClassicSpp::connectToChannel(
+  const char *address, uint8_t channel, uint32_t timeoutMilliseconds)
+{
+  if (!owner_->initialized())
+  {
+    owner_->setError(
+      EspBleError::InvalidState, "Classic stack is not initialized");
+    return false;
+  }
+  if (timeoutMilliseconds == 0 || channel == 0 || channel > 30)
+  {
+    owner_->setError(
+      EspBleError::InvalidArgument, "invalid SPP channel or timeout");
+    return false;
+  }
+#if !ESPBLE_CLASSIC_BACKEND_AVAILABLE
+  (void)address;
+  owner_->setError(EspBleError::BackendFailure, "Classic SPP is unavailable");
+  return false;
+#else
+  if (!begin()) return false;
+  esp_bd_addr_t backendAddress = {};
+  if (!parseAddress(address, backendAddress))
+  {
+    owner_->setError(EspBleError::InvalidArgument, "invalid Classic address");
+    return false;
+  }
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    if (impl_->connecting || impl_->backendHandle != 0)
+    {
+      owner_->setError(
+        EspBleError::InvalidState, "an SPP connection is already active");
+      return false;
+    }
+    impl_->connecting = true;
+    impl_->connectAddress = address;
+    memcpy(
+      impl_->connectBackendAddress, backendAddress, sizeof(backendAddress));
+    impl_->connectDeadlineMs = millis() + timeoutMilliseconds;
+  }
+  // No discovery: the channel is given, so the same failure paths apply from
+  // the connection attempt onwards.
+  if (
+    esp_spp_connect(
+      static_cast<esp_spp_sec_t>(sppSecurityMask()), ESP_SPP_ROLE_MASTER,
+      channel, backendAddress) != ESP_OK)
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    impl_->connecting = false;
+    impl_->connectAddress = "";
+    impl_->connectDeadlineMs = 0;
+    owner_->setError(
+      EspBleError::BackendFailure, "failed to start the SPP connection");
+    return false;
+  }
+  owner_->clearError();
+  return true;
+#endif
 }
 
 bool EspBleClassicSpp::connect(
@@ -1494,7 +1880,7 @@ void EspBleClassicSpp::update()
     switch (event.type)
     {
       case EspBleClassicSppImpl::EventType::ServerStarted:
-        if (serverStartedCallback_) serverStartedCallback_();
+        if (serverStartedCallback_) serverStartedCallback_(event.server);
         break;
       case EspBleClassicSppImpl::EventType::Connected:
         if (connectedCallback_) connectedCallback_(event.session);
@@ -1667,6 +2053,102 @@ void EspBleClassicInquiry::onComplete(CompleteCallback callback)
   completeCallback_ = std::move(callback);
 }
 
+void EspBleClassicInquiry::onRemoteServices(RemoteServicesCallback callback)
+{
+  remoteServicesCallback_ = std::move(callback);
+}
+
+void EspBleClassicInquiry::onRemoteName(RemoteNameCallback callback)
+{
+  remoteNameCallback_ = std::move(callback);
+}
+
+bool EspBleClassicInquiry::requestServices(const char *address)
+{
+#if !ESPBLE_CLASSIC_BACKEND_AVAILABLE
+  (void)address;
+  owner_->setError(
+    EspBleError::BackendFailure,
+    "Classic is supported only by the original ESP32 build");
+  return false;
+#else
+  if (!owner_->initialized() || impl_ == nullptr)
+  {
+    owner_->setError(EspBleError::InvalidState, "Classic stack is not started");
+    return false;
+  }
+  esp_bd_addr_t backendAddress = {};
+  if (!parseAddress(address, backendAddress))
+  {
+    owner_->setError(EspBleError::InvalidArgument, "invalid Classic address");
+    return false;
+  }
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    if (impl_->servicesPending)
+    {
+      owner_->setError(
+        EspBleError::InvalidState, "an SDP query is already outstanding");
+      return false;
+    }
+    impl_->servicesPending = true;
+  }
+  if (esp_bt_gap_get_remote_services(backendAddress) != ESP_OK)
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    impl_->servicesPending = false;
+    owner_->setError(
+      EspBleError::BackendFailure, "failed to start the SDP query");
+    return false;
+  }
+  owner_->clearError();
+  return true;
+#endif
+}
+
+bool EspBleClassicInquiry::requestName(const char *address)
+{
+#if !ESPBLE_CLASSIC_BACKEND_AVAILABLE
+  (void)address;
+  owner_->setError(
+    EspBleError::BackendFailure,
+    "Classic is supported only by the original ESP32 build");
+  return false;
+#else
+  if (!owner_->initialized() || impl_ == nullptr)
+  {
+    owner_->setError(EspBleError::InvalidState, "Classic stack is not started");
+    return false;
+  }
+  esp_bd_addr_t backendAddress = {};
+  if (!parseAddress(address, backendAddress))
+  {
+    owner_->setError(EspBleError::InvalidArgument, "invalid Classic address");
+    return false;
+  }
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    if (impl_->namePending)
+    {
+      owner_->setError(
+        EspBleError::InvalidState, "a name request is already outstanding");
+      return false;
+    }
+    impl_->namePending = true;
+  }
+  if (esp_bt_gap_read_remote_name(backendAddress) != ESP_OK)
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    impl_->namePending = false;
+    owner_->setError(
+      EspBleError::BackendFailure, "failed to request the remote name");
+    return false;
+  }
+  owner_->clearError();
+  return true;
+#endif
+}
+
 size_t EspBleClassicInquiry::droppedResultCount() const
 {
   if (impl_ == nullptr) return 0;
@@ -1702,6 +2184,31 @@ void EspBleClassicInquiry::update()
     }
   }
   if (completed && completeCallback_) completeCallback_(completion);
+
+  bool servicesReady = false;
+  EspBleClassicRemoteServices services;
+  bool nameReady = false;
+  EspBleClassicRemoteName remoteName;
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    if (impl_->servicesReady)
+    {
+      impl_->servicesReady = false;
+      services = std::move(impl_->services);
+      impl_->services = EspBleClassicRemoteServices();
+      servicesReady = true;
+    }
+    if (impl_->nameReady)
+    {
+      impl_->nameReady = false;
+      remoteName = std::move(impl_->remoteName);
+      impl_->remoteName = EspBleClassicRemoteName();
+      nameReady = true;
+    }
+  }
+  if (servicesReady && remoteServicesCallback_)
+    remoteServicesCallback_(services);
+  if (nameReady && remoteNameCallback_) remoteNameCallback_(remoteName);
 }
 
 EspBleClassic::EspBleClassic() :
@@ -1919,6 +2426,17 @@ bool EspBleClassic::begin(const EspBleClassicConfig &config)
   activeClassicImpl.store(impl_, std::memory_order_release);
 #endif
   impl_->initialized = true;
+  classicVisibility.store(
+    static_cast<uint8_t>(config.visibility), std::memory_order_release);
+  // Left at zero the backend keeps its own default class, so a sketch that
+  // does not care is not forced to name one.
+  classicClassOfDevice.store(
+    config.classOfDevice.majorDeviceClass == 0 &&
+      config.classOfDevice.minorDeviceClass == 0 &&
+      config.classOfDevice.serviceClass == 0
+      ? 0u : packClassOfDevice(config.classOfDevice),
+    std::memory_order_release);
+  (void)EspBleClassicVisibilityOwner::apply();
   // Inquiry shares the GAP callback the stack just registered, so it can only
   // be armed once the stack is up.
   (void)inquiry_.begin();
@@ -1935,6 +2453,8 @@ void EspBleClassic::end()
   activeClassicImpl.store(nullptr, std::memory_order_release);
   classicServiceSecurityMask.store(
     static_cast<uint32_t>(ESP_SPP_SEC_NONE), std::memory_order_release);
+  classicClassOfDevice.store(0, std::memory_order_release);
+  classOfDevicePending.store(false, std::memory_order_release);
 #endif
   inquiry_.end();
   hfpAudioGateway_.end();
@@ -2177,8 +2697,115 @@ bool EspBleClassic::deleteAllBonds()
 #endif
 }
 
+bool EspBleClassicVisibilityOwner::apply()
+{
+  // Both are re-applied together: a profile start rewrites the Class of Device
+  // from its own service records, so re-asserting only the scan mode would
+  // leave the device announcing a class the sketch never asked for.
+  //
+  // The Class of Device goes first and the scan mode second, because the
+  // controller takes the class into the response it sends when inquiry scan is
+  // enabled. Writing the class after that leaves the previous one on the air.
+  const bool classApplied = applyClassOfDevice();
+  return applyVisibility(static_cast<EspBleClassicVisibility>(
+    classicVisibility.load(std::memory_order_acquire))) && classApplied;
+}
+
+bool EspBleClassicVisibilityOwner::hideWhileExclusivelyConnected()
+{
+  return applyVisibility(EspBleClassicVisibility::Hidden);
+}
+
+bool EspBleClassic::setVisibility(EspBleClassicVisibility visibility)
+{
+  // Recorded even before begin(), so a sketch can decide once and let the
+  // stack apply it when it starts.
+  classicVisibility.store(
+    static_cast<uint8_t>(visibility), std::memory_order_release);
+  if (!initialized())
+  {
+    clearError();
+    return true;
+  }
+  if (!applyVisibility(visibility))
+  {
+    setError(
+      EspBleError::BackendFailure, "failed to change Classic visibility");
+    return false;
+  }
+  clearError();
+  return true;
+}
+
+EspBleClassicVisibility EspBleClassic::visibility() const
+{
+  return static_cast<EspBleClassicVisibility>(
+    classicVisibility.load(std::memory_order_acquire));
+}
+
+bool EspBleClassic::setClassOfDevice(
+  const EspBleClassicClassOfDevice &classOfDevice)
+{
+#if !ESPBLE_CLASSIC_BACKEND_AVAILABLE
+  (void)classOfDevice;
+  setError(
+    EspBleError::BackendFailure,
+    "Classic is supported only by the original ESP32 build");
+  return false;
+#else
+  if (!initialized())
+  {
+    setError(EspBleError::InvalidState, "Classic stack is not started");
+    return false;
+  }
+  // The fields are narrower than their storage in the public struct, so a
+  // value that does not fit is refused instead of being truncated into a
+  // different device class.
+  if (classOfDevice.majorDeviceClass > 0x1f ||
+      classOfDevice.minorDeviceClass > 0x3f ||
+      classOfDevice.serviceClass > 0x7ff)
+  {
+    setError(
+      EspBleError::InvalidArgument, "Class of Device field is out of range");
+    return false;
+  }
+  classicClassOfDevice.store(
+    packClassOfDevice(classOfDevice), std::memory_order_release);
+  // Re-asserts the scan mode as well, so the controller picks the new class up
+  // for the responses it sends from now on.
+  if (!EspBleClassicVisibilityOwner::apply())
+  {
+    setError(
+      EspBleError::BackendFailure, "failed to set the Class of Device");
+    return false;
+  }
+  clearError();
+  return true;
+#endif
+}
+
+bool EspBleClassic::classOfDevice(
+  EspBleClassicClassOfDevice &classOfDevice) const
+{
+#if !ESPBLE_CLASSIC_BACKEND_AVAILABLE
+  (void)classOfDevice;
+  return false;
+#else
+  if (!initialized()) return false;
+  esp_bt_cod_t cod = {};
+  if (esp_bt_gap_get_cod(&cod) != ESP_OK) return false;
+  classOfDevice.majorDeviceClass = static_cast<uint8_t>(cod.major);
+  classOfDevice.minorDeviceClass = static_cast<uint8_t>(cod.minor);
+  classOfDevice.serviceClass = static_cast<uint16_t>(cod.service);
+  return true;
+#endif
+}
+
 void EspBleClassic::update()
 {
+#if ESPBLE_CLASSIC_BACKEND_AVAILABLE
+  if (initialized()) (void)settleClassOfDevice();
+#endif
   if (impl_ != nullptr)
   {
     // A pairing nobody answers must not leave the peer waiting forever.

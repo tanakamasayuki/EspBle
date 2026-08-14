@@ -48,9 +48,10 @@ void setup()
   Serial.begin(115200);
   delay(500);
 
-  bluetooth.spp().onServerStarted([]() {
-    Serial.println("COREHOST_SERVER_STARTED");
-  });
+  bluetooth.spp().onServerStarted(
+    [](const EspBleClassicSppServer &server) {
+      Serial.printf("COREHOST_SERVER_STARTED channel=%u\n", server.channel);
+    });
   bluetooth.spp().onConnected([](const EspBleClassicSppSession &session) {
     sessionId = session.id;
     Serial.printf(

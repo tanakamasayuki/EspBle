@@ -69,15 +69,68 @@ struct EspBleClassicBond
   String peerAddress;
 };
 
+// What a peer that is looking around can do with this device. A profile makes
+// itself reachable when it starts, which is what a sketch usually wants; this
+// is for the cases where it does not — a device that should only accept the
+// peer it already paired with, or one that must not answer inquiry at all.
+enum class EspBleClassicVisibility : uint8_t
+{
+  // Neither connectable nor discoverable. Existing connections stay.
+  Hidden,
+  // Reachable by a peer that already knows the address, invisible to inquiry.
+  ConnectableOnly,
+  // Reachable and visible to inquiry.
+  ConnectableDiscoverable,
+};
+
+// The Class of Device tells a Host what kind of device this is before any
+// profile is queried, which is how a phone or a console decides the icon it
+// shows and, on some Hosts, whether it offers to connect at all. A HID device
+// that reports the default class can be listed as "uncategorised" and ignored.
+struct EspBleClassicClassOfDevice
+{
+  // Bluetooth Assigned Numbers, Baseband. The common major classes are
+  // 0x01 Computer, 0x02 Phone, 0x04 Audio/Video, 0x05 Peripheral.
+  uint8_t majorDeviceClass = 0;
+  // The 6-bit minor field, not the byte it sits in — the over-the-air value is
+  // this shifted left by two. Meaning depends on the major class. For
+  // Peripheral: 0x10 keyboard, 0x20 pointing device, 0x01 joystick,
+  // 0x02 gamepad. For Audio/Video: 0x01 headset, 0x02 hands-free,
+  // 0x05 loudspeaker, 0x06 headphones, 0x08 car audio.
+  uint8_t minorDeviceClass = 0;
+  // The 11-bit service field: 0x020 Rendering, 0x040 Capturing,
+  // 0x080 Object Transfer, 0x100 Audio, 0x200 Telephony. A headset reports
+  // Audio | Rendering, which is why a Host groups it with speakers.
+  uint16_t serviceClass = 0;
+};
+
 struct EspBleClassicConfig
 {
   const char *deviceName = "EspBle Classic";
   EspBleClassicSecurityConfig security;
+  // Applied at begin(). A profile that starts afterwards keeps whatever the
+  // sketch asked for rather than making the device reachable behind its back.
+  EspBleClassicVisibility visibility =
+    EspBleClassicVisibility::ConnectableDiscoverable;
+  // Left at zero the backend's default class is used, which identifies the
+  // device as uncategorised.
+  EspBleClassicClassOfDevice classOfDevice;
 };
 
 struct EspBleClassicSppServerConfig
 {
   const char *serviceName = "EspBle SPP";
+  // Zero lets the backend pick a free RFCOMM channel. A device that publishes
+  // more than one service needs a distinct channel per service, so a fixed
+  // value is only useful when a peer expects that exact channel.
+  uint8_t channel = 0;
+};
+
+// A running SPP server. A device can publish several, each with its own service
+// record, which is how one device offers more than one serial service.
+struct EspBleClassicSppServer
+{
+  String serviceName;
   uint8_t channel = 0;
 };
 
@@ -560,7 +613,43 @@ struct EspBleClassicHidReport
   String peerAddress;
   EspBleClassicHidReportType type = EspBleClassicHidReportType::Input;
   uint8_t reportId = 0;
+  // On the HID Device side this is the payload alone, with reportId carrying
+  // the identifier whichever channel delivered the report. On the HID Host side
+  // an incoming report arrives exactly as the device sent it, so a device that
+  // declares report IDs puts one in front of the payload there.
   String value;
+};
+
+// A Host asking the device for the current contents of a report rather than
+// waiting for the device to send one. Real Hosts do this after connecting, and a
+// device that never answers looks broken to them.
+struct EspBleClassicHidReportRequest
+{
+  String peerAddress;
+  EspBleClassicHidReportType type = EspBleClassicHidReportType::Input;
+  uint8_t reportId = 0;
+  // The largest reply the Host will accept.
+  uint16_t maximumLength = 0;
+};
+
+// Why a request could not be answered. Sent instead of a report so the Host
+// stops waiting; the names follow the HID handshake codes.
+enum class EspBleClassicHidRequestError : uint8_t
+{
+  NotReady = 1,
+  InvalidReportId = 2,
+  UnsupportedRequest = 3,
+  InvalidParameter = 4,
+  Unknown = 14,
+  Fatal = 15,
+};
+
+// Report Protocol is the normal mode. Boot Protocol is a fixed keyboard or
+// mouse layout that restricted Hosts such as a BIOS use.
+enum class EspBleClassicHidProtocolMode : uint8_t
+{
+  Report = 0,
+  Boot = 1,
 };
 
 // Inquiry is how a sketch finds a peer it has no address for. Every profile
@@ -945,7 +1034,11 @@ public:
   static constexpr size_t WriteQueueCapacity = 8;
   static constexpr size_t ReceiveBufferCapacity = 2048;
 
-  using ServerStartedCallback = std::function<void()>;
+  // Carries which server started: with more than one server the channel is
+  // the only way to tell them apart, and it is not known until the backend
+  // assigns it.
+  using ServerStartedCallback =
+    std::function<void(const EspBleClassicSppServer &)>;
   using SessionCallback = std::function<void(const EspBleClassicSppSession &)>;
   using DataCallback = std::function<void(const EspBleClassicSppData &)>;
   using WriteCompletedCallback =
@@ -960,13 +1053,35 @@ public:
   void onWriteCompleted(WriteCompletedCallback callback);
   void onConnectionFailed(ConnectionFailureCallback callback);
 
+  // Can be called more than once to publish several services. Each call adds a
+  // service record; the channel arrives with onServerStarted() because the
+  // backend assigns it.
+  static constexpr size_t MaximumServers = 4;
   bool startServer(
     const EspBleClassicSppServerConfig &config =
       EspBleClassicSppServerConfig());
+  // Stops every server this object started. There is deliberately no
+  // per-channel stop: retiring one service is rare enough that stopping all of
+  // them and starting the ones still wanted covers it, and it keeps one way of
+  // undoing startServer() instead of two.
   bool stopServer();
+  // True while at least one server is listening.
   bool serverRunning() const;
+  size_t serverCount() const;
+  bool server(size_t index, EspBleClassicSppServer &server) const;
 
   bool connect(const char *address, uint32_t timeoutMilliseconds = 10000);
+  // One outgoing connection at a time: a second call while a session is open
+  // is refused. Incoming sessions are not limited this way.
+  //
+  // Connects to a specific RFCOMM channel. Needed once the peer publishes more
+  // than one service: discovery returns every channel it offers and there is no
+  // way to tell from the outside which one is wanted. Skips discovery, so the
+  // caller has to know the channel — from the peer's own report, or from a
+  // service whose channel is fixed by agreement.
+  bool connectToChannel(
+    const char *address, uint8_t channel,
+    uint32_t timeoutMilliseconds = 10000);
   bool disconnect(EspBleClassicSppSessionId sessionId);
   size_t sessionCount() const;
   bool session(
@@ -1029,10 +1144,36 @@ public:
   bool sendInputReport(
     uint8_t reportId, const uint8_t *data, size_t length);
   bool disconnect();
+  // Drops the Host's pairing for this device as well as the connection, so the
+  // Host forgets it instead of trying to reconnect to a device that is gone.
+  bool virtualCableUnplug();
+
+  // Answers a Get_Report request. The reply must use the type and report ID the
+  // Host asked for, so a sketch normally passes the request's own fields back.
+  bool respondToReportRequest(
+    const EspBleClassicHidReportRequest &request,
+    const uint8_t *data, size_t length);
+  // Refuses a request. Without either answer the Host waits for its own
+  // timeout, and some Hosts drop the connection at that point.
+  bool refuseReportRequest(EspBleClassicHidRequestError error);
+
+  // The Host decides the protocol mode. A device cannot change it, only observe
+  // it, which is why there is no setter.
+  EspBleClassicHidProtocolMode protocolMode() const;
+
+  using ReportRequestCallback =
+    std::function<void(const EspBleClassicHidReportRequest &)>;
+  using ProtocolModeCallback =
+    std::function<void(EspBleClassicHidProtocolMode)>;
 
   void onConnected(ConnectionCallback callback);
   void onDisconnected(ConnectionCallback callback);
   void onOutputReport(ReportCallback callback);
+  // Set_Report carries a value the Host wants stored, including Feature
+  // reports. Output reports also arrive through onOutputReport().
+  void onSetReport(ReportCallback callback);
+  void onReportRequested(ReportRequestCallback callback);
+  void onProtocolMode(ProtocolModeCallback callback);
   size_t droppedEventCount() const;
 
 private:
@@ -1046,6 +1187,9 @@ private:
   ConnectionCallback connectedCallback_;
   ConnectionCallback disconnectedCallback_;
   ReportCallback outputReportCallback_;
+  ReportCallback setReportCallback_;
+  ReportRequestCallback reportRequestedCallback_;
+  ProtocolModeCallback protocolModeCallback_;
 };
 
 // The Classic HID Device profiles. They take the same reports and expose the
@@ -1254,6 +1398,26 @@ public:
   String peerAddress() const;
 
   bool sendOutputReport(const uint8_t *data, size_t length);
+
+  // Asking the device for a report instead of waiting for one. The answer
+  // arrives through onReportResult(), because the exchange is a round trip.
+  bool requestReport(
+    EspBleClassicHidReportType type, uint8_t reportId, uint16_t maximumLength);
+  // Sends a report the device is expected to store. The first byte is the
+  // report ID when the device declares one, as with sendOutputReport().
+  bool sendReport(
+    EspBleClassicHidReportType type, const uint8_t *data, size_t length);
+  // Boot Protocol is what a restricted Host uses; a sketch acting as Host can
+  // put a device into it and read back which mode is in effect.
+  bool requestProtocolMode();
+  bool setProtocolMode(EspBleClassicHidProtocolMode mode);
+  // The idle rate is how often the device repeats a report with no change.
+  // Zero means "only on change", which is what most devices default to.
+  bool requestIdleRate();
+  bool setIdleRate(uint8_t idleRate);
+  // Makes the device forget this Host, rather than only closing the link.
+  bool virtualCableUnplug();
+
   // The LED report, named and ordered as on the BLE side. The report ID comes
   // from the peer's Report Descriptor, so this needs the descriptor to have
   // arrived; sendOutputReport() stays available for anything else.
@@ -1287,6 +1451,36 @@ public:
   EspBleKeyboardLayout keyboardLayout() const;
   bool reportMapKnown() const;
 
+  // Results of the round-trip requests above. Each carries whether the device
+  // answered, because a device may refuse a request it does not support.
+  struct ReportResult
+  {
+    bool success = false;
+    // Carries the report ID in front of the payload when the device declares
+    // one, the same shape onInputReport() delivers.
+    String value;
+  };
+  struct ProtocolModeResult
+  {
+    bool success = false;
+    EspBleClassicHidProtocolMode mode = EspBleClassicHidProtocolMode::Report;
+  };
+  struct IdleRateResult
+  {
+    bool success = false;
+    uint8_t idleRate = 0;
+  };
+  using ReportResultCallback = std::function<void(const ReportResult &)>;
+  using ProtocolModeResultCallback =
+    std::function<void(const ProtocolModeResult &)>;
+  using IdleRateResultCallback = std::function<void(const IdleRateResult &)>;
+
+  void onReportResult(ReportResultCallback callback);
+  // Reports whether a sendReport() was accepted; there is no value to return.
+  void onReportSent(ReportResultCallback callback);
+  void onProtocolMode(ProtocolModeResultCallback callback);
+  void onIdleRate(IdleRateResultCallback callback);
+
   size_t droppedEventCount() const;
   // Reports whose length does not match the descriptor. Counting beats
   // dropping them silently: "discovered but no keys arrive" is unexplainable.
@@ -1308,7 +1502,34 @@ private:
   KeyboardStateCallback keyboardStateCallback_;
   KeyboardCallback keyboardCallback_;
   MouseCallback mouseCallback_;
+  ReportResultCallback reportResultCallback_;
+  ReportResultCallback reportSentCallback_;
+  ProtocolModeResultCallback protocolModeCallback_;
+  IdleRateResultCallback idleRateCallback_;
   EspBleKeyboardLayout keyboardLayout_ = EspBleKeyboardLayout::EnUs;
+};
+
+// What a peer says it offers, asked for by address rather than found by
+// scanning. Inquiry reports that a device exists; this reports what it is for.
+struct EspBleClassicRemoteServices
+{
+  static constexpr size_t MaximumServices = 12;
+  String peerAddress;
+  bool success = false;
+  // Service UUIDs as text, in the form the BLE side of this library uses.
+  // Truncated at MaximumServices; the count says how many were reported.
+  String uuids[MaximumServices];
+  size_t count = 0;
+  size_t reportedCount = 0;
+};
+
+// A name asked for directly. An inquiry result may carry no name at all, and
+// the name can take longer to fetch than the inquiry response itself.
+struct EspBleClassicRemoteName
+{
+  String peerAddress;
+  bool success = false;
+  String name;
 };
 
 class EspBleClassicInquiry
@@ -1318,6 +1539,10 @@ public:
     std::function<void(const EspBleClassicInquiryResult &)>;
   using CompleteCallback =
     std::function<void(const EspBleClassicInquiryComplete &)>;
+  using RemoteServicesCallback =
+    std::function<void(const EspBleClassicRemoteServices &)>;
+  using RemoteNameCallback =
+    std::function<void(const EspBleClassicRemoteName &)>;
 
   // One scan at a time. Results arrive from update() as the controller reports
   // them, and the same peer can be reported more than once during a scan.
@@ -1326,8 +1551,16 @@ public:
   bool stop();
   bool running() const;
 
+  // Both are round trips over SDP or a name request, so the answer arrives at
+  // the matching callback rather than as a return value. One query of each kind
+  // at a time; a second while one is outstanding is refused.
+  bool requestServices(const char *address);
+  bool requestName(const char *address);
+
   void onResult(ResultCallback callback);
   void onComplete(CompleteCallback callback);
+  void onRemoteServices(RemoteServicesCallback callback);
+  void onRemoteName(RemoteNameCallback callback);
   size_t droppedResultCount() const;
 
 private:
@@ -1342,6 +1575,8 @@ private:
   EspBleClassicInquiryImpl *impl_ = nullptr;
   ResultCallback resultCallback_;
   CompleteCallback completeCallback_;
+  RemoteServicesCallback remoteServicesCallback_;
+  RemoteNameCallback remoteNameCallback_;
 };
 
 class EspBleClassic
@@ -1399,6 +1634,20 @@ public:
   bool bond(size_t index, EspBleClassicBond &bond) const;
   bool deleteBond(const EspBleClassicBond &bond);
   bool deleteAllBonds();
+
+  // Visibility and Class of Device can both change while running: a device may
+  // want to be discoverable only while a user is pairing it, and a composed
+  // device may only know which class it is after the sketch decided which
+  // profiles to start.
+  bool setVisibility(EspBleClassicVisibility visibility);
+  EspBleClassicVisibility visibility() const;
+  // The backend applies the class on its own task, and starting a profile
+  // rewrites it from that profile's service records before this library
+  // restores it. So true means the request was accepted, not that the class is
+  // already in effect, and classOfDevice() read back immediately still reports
+  // the previous value.
+  bool setClassOfDevice(const EspBleClassicClassOfDevice &classOfDevice);
+  bool classOfDevice(EspBleClassicClassOfDevice &classOfDevice) const;
 
   EspBleError lastError() const;
   const char *lastErrorName() const;

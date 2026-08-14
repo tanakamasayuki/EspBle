@@ -2,6 +2,72 @@
 
 ## Unreleased
 
+- (EN) A Classic device can publish several SPP services. `startServer()` may be
+  called repeatedly, up to four services, each getting its own RFCOMM channel;
+  `onServerStarted()` reports which channel a service received, and
+  `serverCount()` / `server(index)` list them. `connectToChannel()` dials a named
+  channel, which is what a client needs once a peer offers more than one service
+  — discovery returns every channel it publishes and cannot say which one is
+  meant. Stopping is `stopServer()`, which takes down all of them; there is no
+  per-channel stop, because starting the ones still wanted covers it without a
+  second way to undo `startServer()`.
+- (JA) ClassicのdeviceがSPP serviceを複数公開できるようになった。`startServer()`は
+  繰り返し呼べ、最大4 serviceがそれぞれ自分のRFCOMM channelを得る。どのchannelになったかは
+  `onServerStarted()`が渡し、`serverCount()` / `server(index)`で列挙できる。
+  `connectToChannel()`はchannelを指定して接続する——相手が複数serviceを公開すると、
+  discoveryは全channelを返すだけでどれを指すかを示せないため、clientにはこれが必要になる。
+  停止は`stopServer()`で全停止のみとした。channel単位の停止は持たない。残したいserviceを
+  start仕直せば足り、`startServer()`を取り消す手段を2つに増やさないためである。
+
+- (EN) The Classic HID control channel is answered now. A Host that asks for a
+  report with Get_Report gets one: `onReportRequested()` delivers the request and
+  `respondToReportRequest()` answers it with the type and report ID the Host
+  used, or `refuseReportRequest()` declines. A Set_Report is acknowledged with a
+  HID handshake, which the library sends unless the sketch refuses the report —
+  without it the Host's own request never completes. `onSetReport()` keeps the
+  type the Host used, so a Feature report is no longer reported as an Output
+  report. The device also exposes the protocol mode the Host selected
+  (`protocolMode()`, `onProtocolMode()`) and can unplug its virtual cable. On the
+  host side, `requestReport()`, `sendReport()`, `requestProtocolMode()`,
+  `setProtocolMode()`, `requestIdleRate()`, `setIdleRate()` and
+  `virtualCableUnplug()` drive the same channel, each reporting its result
+  through its own callback because every one of them is a round trip.
+- (JA) ClassicのHID制御チャネルに応答するようにした。HostがGet_Reportで問い合わせたら
+  報告する——`onReportRequested()`が要求を配送し、`respondToReportRequest()`がHostの使った
+  typeとreport IDで答える。`refuseReportRequest()`で断ることもできる。Set_Reportへは
+  HID handshakeを返す。sketchが拒否しない限りlibraryが送る——返さないとHost側の要求が
+  完了しない。`onSetReport()`はHostの使ったtypeを保つので、Feature reportがOutput reportとして
+  届くことはなくなった。deviceはHostが選んだprotocol mode（`protocolMode()`、
+  `onProtocolMode()`）を公開し、virtual cable unplugも行える。host側は`requestReport()`、
+  `sendReport()`、`requestProtocolMode()`、`setProtocolMode()`、`requestIdleRate()`、
+  `setIdleRate()`、`virtualCableUnplug()`で同じチャネルを操作する。いずれも往復なので、
+  結果はそれぞれのcallbackへ届く。
+
+- (EN) Classic devices can now say what they are and control whether they can be
+  found. `EspBleClassicConfig::classOfDevice` and `setClassOfDevice()` set the
+  Class of Device — the value a Host uses to pick an icon and, on some Hosts, to
+  decide whether it offers to connect at all — and `visibility` /
+  `setVisibility()` choose between hidden, connectable and
+  connectable-plus-discoverable. Both were previously decided by whichever
+  profile happened to start last, because each profile set the scan mode itself;
+  the sketch owns them now and profiles re-assert them. Getting the class onto
+  the air needs three things the backend does not do on its own: re-applying it
+  after a profile's service registration overwrites it, writing it before the
+  scan mode because the controller takes it in when inquiry scan is enabled, and
+  toggling discoverability for a change made while running. The library handles
+  all three, so `setClassOfDevice()` reports acceptance and the class becomes
+  live shortly after.
+- (JA) Classic機器が「自分が何であるか」を示し、見つけられるかどうかを制御できるように
+  なった。`EspBleClassicConfig::classOfDevice`と`setClassOfDevice()`でClass of Deviceを
+  設定する——Hostがiconを選び、機種によっては接続を提案するかどうかを決める値である。
+  `visibility` / `setVisibility()`で非表示・接続可能・接続可能かつ発見可能を選ぶ。
+  従来はprofileが各自scan modeを設定していたため、最後にstartしたprofileがどちらも決めていた。
+  所有者をsketch側へ移し、profileは再適用だけを行う。classを電波へ乗せるにはbackendが
+  自動でやらない3点が必要で、profileのservice登録による上書き後の再適用、controllerが
+  inquiry scan有効化時に取り込むためscan modeより先に書くこと、実行時変更では
+  discoverabilityを切り替えること、をlibraryが引き受ける。したがって
+  `setClassOfDevice()`は受理を返し、classはその直後に有効になる。
+
 - (EN) Fixed dual-host pairing from scratch. The broker rejected the link key
   and Secure Simple Pairing replies as unclassified, so the first pairing with
   a peer timed out at the HCI layer while a peer that was already bonded worked
