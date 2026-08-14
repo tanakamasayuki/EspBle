@@ -10,7 +10,8 @@
 
 - BLE/GATT/Security/HID/MIDIの公開済み機能はv1.2.0までに提供済み。
 - 無印ESP32向け同梱NimBLE hostはCentral / Peripheral両roleで実機回帰済み。
-- Classic-only Bluedroid archive、SPP、HID Device/Host、dual-host HCI brokerは実装・実機検証済みだが実験扱い。
+- Classic-only Bluedroid archive、SPP、HID Device/Host、dual-host HCI brokerは実装・実機検証済み。
+  Classicは次回releaseの対象で、BLEとClassicの同時利用（dual-host）だけを実験扱いとして残す。
 - Classic-onlyを実用範囲へ広げる次の対象はA2DP/AVRCP/HFP。Bluetooth media payloadまでをEspBleの
   責務とし、PCM処理とdevice I/OはPCMFlow等の独立libraryへ委ねる方針を確定した。
 - A2DP Sink / Sourceのraw transport APIとESP32同士の実機media転送、AVRCP CT/TGのpassthroughと
@@ -19,8 +20,11 @@
   実機probeで判明したdecoder reset問題と正式E2E追加を担当側へ依頼中である。
 - 配布形式は次回Classic拡張ではNimBLE source / Classic `.a`のmixed distributionを意図的に維持する。
 - dual-hostはcommand/ACL routing、bond/RPA、任意停止順、再attach、FIFO満杯、再登録とheap安定性に加え、BLE GATT接続中のHFP mSBC SCO双方向通信とA2DP/AVRCPまで検証済み。
-- 数時間級dual-host soak、観測HCI commandのpolicy分類、不正HID report拒否、peer突然消失後の復旧、接続・pairing失敗後の復旧、lifecycle競合監査は完了。公開サポート範囲の確定が未完了。
-- `CHANGELOG.md`のUnreleasedと利用者向けClassic文書は、次回release内容として未整理。
+- 数時間級dual-host soak、観測HCI commandのpolicy分類、不正HID report拒否、peer突然消失後の復旧、接続・pairing失敗後の復旧、lifecycle競合監査は完了。公開範囲は「次回releaseへ含める（保証は掲げず検証状態を書く）」として確定した。
+- `CHANGELOG.md`のUnreleasedと利用者向けClassic文書は次回release内容として整理済み。文書整合と
+  artifact監査も完了した。残るのはGate Cの最終回帰（機械時間）とGate Dの外部機器相互運用である。
+- board / core matrix、release対象board全体でのexample compile、release操作、公開後確認は
+  GitHub Actionsが行うため、release gateとしては追跡しない。
 
 ## Gate A: Classic / dual-hostの公開範囲
 
@@ -33,7 +37,7 @@
 | 完了 | 接続・pairing失敗 | 誤passkey後にbondを残さず再pairing。HID非同期接続失敗後も暗号化LEを維持し、正しいClassic peerへ再接続 |
 | 完了 | lifecycle競合監査 | SPP/HID callback targetを登録mutex下で取得し、解除後は取得済み参照が0になるまでstateを保持。clean実機lifecycle回帰成功 |
 | 完了 | release scope決定 | **次回releaseへ含める。**build flagは設けず`EspBleClassic`を使うかどうかだけで決まる。exampleもBLE側と同じ範囲まで用意する。MIT OSSとして厳密なサポート保証は掲げず、代わりに機能ごとの「実機検証済み / 未検証 / 未実装」を文書で区別する。releaseまで未実装項目を減らす作業を続ける（[決定台帳](DECISIONS.ja.md)のスコープ6） |
-| 未完了 | 利用者向け文書 | README、Feature Matrix、example、制限が上記scopeと一致し、**未検証と未実装が読み手に区別できる。**「サポート」「保証」ではなく検証状態で書く |
+| 完了 | 利用者向け文書 | README、Feature Matrix、example、制限が上記scopeと一致し、**未検証と未実装が読み手に区別できる。**「サポート」「保証」ではなく検証状態で書く |
 
 Gate Aの詳細は[引き継ぎ](HANDOFF_ESP32_CLASSIC.ja.md)を正とします。controller-to-host ACL flow controlは
 brokerが所有する形で実装・実機検証済みで、判断待ちではありません。
@@ -50,8 +54,6 @@ brokerが所有する形で実装・実機検証済みで、判断待ちでは�
 | 一部完了 | AVRCP CT/TG | passthrough、absolute volume、通知をA2DP併用で実機確認。metadata/play-status受信は外部Targetとの相互運用を残す |
 | 一部完了 | HFP | Client/Audio GatewayのSLC、発信・着信・応答・終了、選択可能なmSBC/CVSD raw SCO transport、packet statistics、role排他を実機確認。外部機器相互運用を残す |
 | 完了 | dual-host Audio基本回帰 | BLE GATT接続を維持してHFP mSBC SCO、A2DP SBC media、AVRCP Play / absolute volumeを実行し、各link中・切断後のGATT readとbroker異常0を確認 |
-| 未完了 | board matrix | workflowで対象boardを再生成し、次回versionのBOARDS文書を確定 |
-| 未完了 | core matrix | Arduino-ESP32対応versionを再検証し、次回versionのCOMPATIBILITY文書を確定 |
 | 完了 | 他SoC非影響 | Arduino-ESP32 3.3.11のS3/C3/C6/H2/P4代表compileでClassic archive・無印ESP32 patchが非適用 |
 
 archive手順は[Classic host archive再生成](CLASSIC_HOST_BUILD.ja.md)を正とします。
@@ -67,9 +69,9 @@ Audioのscopeと段階は[Classic Audio拡張計画](PLAN_ESP32_CLASSIC_AUDIO.ja
 | 完了 | Classic-only build UX | 独自hostを自動選択し、公開Classic exampleから`build_opt.h`を除去。flagなしSPPを実機確認 |
 | 完了 | dual-host回帰 | public address、RPA/bond、soak、HFP、A2DP/AVRCPが成功 |
 | 未完了 | P4/C6 Hosted代表回帰 | Security非依存のrelease gateが成功。上流既知制限は再確認 |
-| 未完了 | 全example compile | release対象boardでworkflow成功、Classic exampleは無印ESP32条件を確認 |
 
 具体的なcommandは[リリースチェックリスト](RELEASE_CHECKLIST.ja.md)を正とします。
+release対象board全体でのexample compileはworkflowが行うため、gateには含めません（後述）。
 
 ## Gate D: 相互運用
 
@@ -82,16 +84,29 @@ Audioのscopeと段階は[Classic Audio拡張計画](PLAN_ESP32_CLASSIC_AUDIO.ja
 
 結果には実施日、機器、OS、Bluetooth stack/versionを記録します。
 
-## Gate E: 文書・metadata・公開
+## Gate E: 文書とmetadata
+
+release操作そのものはこのgateに含めません（後述の「GitHub Actionsで行う作業」）。
 
 | 状態 | 項目 | 完了条件 |
 |---|---|---|
-| 未完了 | CHANGELOG | Unreleasedへdual-host/Classic/RPA/lifecycle、制限、破壊的変更の有無を日英で記録 |
-| 未完了 | 文書整合 | README、STATUS、Feature Matrix、API/spec、example、テスト計画がrelease scopeと一致 |
-| 未完了 | metadata | `library.properties`、`keywords.txt`、version生成文書を最終確認 |
-| 未完了 | artifact監査 | build/cache/local profile、意図しないbinary、dirty submoduleなし。archive provenance確認 |
-| 未完了 | release | bump preview、release workflow、branch/tag/GitHub release作成 |
-| 未完了 | 公開後確認 | Arduino Library Managerから取得し、最小exampleをcompile |
+| 完了 | CHANGELOG | Unreleasedへdual-host/Classic/RPA/lifecycle、無線設定、SPP Stream、HFP付随command、HID合成上限、制限、破壊的変更の有無を日英で記録 |
+| 完了 | 文書整合 | README / STATUS / Feature Matrix / CLASSIC_VS_BLE（日英）、棚卸し、技術検証、試験計画をscopeと突き合わせた。scope未確定を前提にした記述と、dual-hostのbuild flag opt-inという古い記述を削除。試験計画に未記載だった5 suite（`classic_hid_profiles`、`classic_a2dp_sink_profile`、`classic_a2dp_media`、`dual_host_hfp`、`dual_host_a2dp`）を日英へ追加し、`tests/peer`の全suiteが両方の計画に載っている状態にした |
+| 完了 | metadata | `library.properties`と`keywords.txt`をClassic分を含めて確認し、`EspBleClassicSppStream`とHFPの追加型・追加methodをkeywordsへ登録。version生成文書（BOARDS / COMPATIBILITY）はworkflowが作るためここでは扱わない |
+| 完了 | artifact監査 | 追跡binaryは`src/esp32/libespble_bluedroid_classic.a`のみ。output / build / cache / logは未追跡。`git diff --check`は無警告。archiveのSHA-256が[archive再生成手順](CLASSIC_HOST_BUILD.ja.md)の記録と一致（`d64d3a40…9421`） |
+
+## GitHub Actionsで行う作業（gateではない）
+
+次はworkflowの実行結果であり、手元で先に通しても意味が変わりません。したがってrelease gateとして
+追跡しません。release時またはrelease後に実行し、結果だけを記録します。
+
+| 項目 | workflow | 備考 |
+|---|---|---|
+| board matrix | `board-matrix.yml` | 対象boardを再生成し、`docs/BOARDS.<version>.md`を確定 |
+| core matrix | `core-matrix.yml` | Arduino-ESP32対応versionを再検証し、`docs/COMPATIBILITY.<version>.md`を確定 |
+| 全example compile | `compile-examples.yml` | release対象board全体。手元ではesp32 / esp32s3のcompileをGate Cで確認する |
+| release操作 | `release.yml` | bump preview、version、CHANGELOG、release branch、tag、GitHub release |
+| 公開後確認 | — | Arduino Library Managerから取得し、最小exampleをcompile |
 
 ## Gate F: Classic exampleと入門ガイド
 
@@ -127,8 +142,8 @@ exampleに無い機能は「無い機能」として扱われる。BLEにあっ�
 - Classic HIDは有効。姉妹libraryは「Core buildで無効」と書いているが、EspBleは独自archiveで有効化している。
 - A2DP/HFPはexternal codecで、EspBleが扱うのはencode済みpayloadとraw SCOである。復号PCMは扱わない。
 - AVRCPはController/Targetを1つの`avrcp()`が持ち、別objectではない。
-- SPPのStream / Serial adapter（姉妹libraryの`EspBluedroidSppSerial`相当）は未実装。
-  ガイドに書く前に[棚卸し](CLASSIC_FEATURE_INVENTORY.ja.md)のVFS行を実装するか、書かないかを決める。
+- SPPのStream adapterは`EspBleClassicSppStream`として実装済み。ただし姉妹libraryの
+  `EspBluedroidSppSerial`とは違い`esp_spp_vfs_register()`を使わず、sessionを借りるだけである。
 
 ## 未実装項目の削減（release前）
 
@@ -150,40 +165,32 @@ release前に未実装を減らす方針（[決定台帳](DECISIONS.ja.md)のス
 ## 残作業の規模（概算）
 
 行数は作業量ではないため、性質ごとに分けて見積もる。実装と実機検証は概ね終わっており、
-残りは**exampleと文書、最終回帰、外部機器との相互運用、release操作**である。
+残りは**最終回帰、文書整合、外部機器との相互運用**である。
 
 | 区分 | 残り | 性質 | 目安 |
 |---|---|---|---|
-| 実装・実機検証（Gate A・B の機能行） | ほぼ完了 | — | Classic / dual-hostの機能検証は完了。残るのはscope決定という判断 |
+| 実装・実機検証（Gate A・B の機能行） | 完了 | — | Classic / dual-hostの機能検証とscope決定はいずれも完了 |
 | Gate F: example | 完了（15本） | 執筆。既存exampleの構成（sketch + README両言語 + `sketch.yaml`）に沿う | 12本＋`Classic/RadioSettings`＋`Classic/SppStream`。あわせてREADMEが無かったClassic example 9本へ両言語のREADMEを追加し、Classic exampleは全数がREADME付きになった。全数がesp32 / esp32s3でcompile通過 |
 | Gate F: Classic入門ガイド | 完了（ja / en） | 執筆 | — |
-| Gate F: 違いの周知（残り） | 1 | 既存文書への反映と英語版 | 1作業単位 |
-| Gate A・E: 利用者向け文書とCHANGELOG整合 | 4 | scope決定の後でなければ確定しない | 1作業日 |
-| Gate C: 最終回帰 | 4 | ほぼ機械時間。code freeze後にやり直しが必要 | S3全Peer cleanを複数回で数時間×回数、無印ESP32掃引、P4/C6、example compile workflow |
-| Gate B: board / core matrix | 2 | CI（`workflow_dispatch`）実行と生成物確認 | 1作業単位＋CI時間 |
+| Gate F: 違いの周知 | 完了 | 既存文書への反映と英語版 | — |
+| Gate E: CHANGELOGとmetadata | 完了 | 執筆と点検 | — |
+| Gate E: 文書整合とartifact監査 | 2 | 執筆と点検 | 1作業日 |
+| Gate C: 最終回帰 | 4 | ほぼ機械時間。code freeze後にやり直しが必要 | S3全Peer cleanを複数回で数時間×回数、無印ESP32掃引、Classic、P4/C6 |
 | Gate D＋Gate Bの一部完了2件 | 6 | **外部機器が必要でblockしている。**市販BLE keyboard、外部Host 2種以上、外部Classic HID/SPP/A2DP/AVRCP機器、外部HFP機器 | 機材の準備待ち。準備後は各1作業単位 |
-| Gate E: `keywords.txt`のClassic分 | 1 | 機械作業。`EspBleClassic`系のclass名とmethod名が未登録で、editorの色分けに出ない | 1作業単位 |
-| Gate E: release操作 | 2 | metadata確認、release workflow、公開後確認 | 1作業単位 |
 
-したがってblockしているのは次の2つだけである。
-
-1. **Classicのrelease scope決定**（判断）。これが決まらないとGate Aの利用者向け文書、
-   Gate EのCHANGELOG整合、Gate Fのexampleの取捨が確定しない。ただしHIDのように
-   実装済みでexampleが無いものは、scopeと独立に埋めてよい。
-2. **外部機器**（Gate D）。手元の2台構成では代替できない。
+したがってblockしているのは**外部機器**（Gate D）だけである。手元の2台構成では代替できない。
+board / core matrix、release対象board全体でのexample compile、release操作、公開後確認は
+workflowの仕事であり、手元で前倒ししても結果が変わらないためgateから外した。
 
 ## 推奨実行順
 
-1. AVRCP metadata/play-statusの外部Target相互運用と、HFPの外部機器相互運用を行う。
+1. AVRCP metadata/play-statusの外部Target相互運用と、HFPの外部機器相互運用を行う（機材待ち）。
 2. [PCMFlowBluetooth修正依頼](REQUEST_PCMFLOWBLUETOOTH_A2DP_VALIDATION.ja.md)のreset修正と正式E2E結果を受け取り、
    PCMFlowDevice等を接続した実出力と長時間負荷へ進む。
-3. A2DP/AVRCP/HFPの到達範囲を踏まえてClassicのrelease scopeを決める。
-4. Gate FのexampleとClassic入門ガイドを揃える。scope決定を待つのはexampleの取捨だけで、
-   実装済み機能にexampleが無い状態（とくにHID）はscopeと独立に解消する。
-5. scope確定後にCHANGELOGと利用者向け文書を更新する。
-6. Gate Bのboard/core matrixと他SoC非影響を確定する。
-7. コードfreeze後にGate Cのclean全回帰を複数回行う。
-8. Gate Dを並行実施し、最後にGate Eのmetadata・release操作へ進む。
+3. コードfreeze後にGate Cのclean全回帰を複数回行う。
+4. Gate Eの文書整合とartifact監査を締める。
+5. Gate Dを並行実施する。
+6. release時にworkflowを回し、生成文書と公開後の取得を確認する。
 
 コード変更後に全回帰を先行してもfreeze後に再実行が必要です。長時間作業の結果は、合否だけでなく
 条件とlog保存先を引き継ぎ文書・技術検証へ記録します。

@@ -128,7 +128,7 @@ ESP32-S3/C3/C6/H2等はBluetooth Classicを搭載しないため利用できま�
 | A2DP（オーディオストリーミング） | ⚠️ | Sink/SourceのSBC negotiationとencode済みpayload transport。codec/PCM/device I/Oは別library |
 | HFP（ハンズフリー） | ⚠️ | Client/Audio GatewayのSLC、発信・着信・応答・終了、CVSD・mSBC raw SCO API、AG codec選択、role排他に加え、Client側のoperator名・subscriber番号・memory dial・NREC・Apple電池残量通知を実装し実機確認済み。通話待ち・三者通話（CHLD / BTRH）は未実装。外部機器相互運用は未確認 |
 | AVRCP（メディア操作） | ⚠️ | CT/TG passthrough、metadata/play-status要求、absolute volume。metadata応答の外部Target相互運用は未完了 |
-| SPP（Serial Port Profile） | ⚠️ | Classic-onlyでServer/Client transportを実機確認。BLEではNUS等で代替 |
+| SPP（Serial Port Profile） | ⚠️ | Classic-onlyでServer/Client transportを実機確認。`EspBleClassicSppStream`でsessionをArduino `Stream`として扱える（write 1回が1 packet、送信queueは有限）。BLEではNUS等で代替 |
 | Classic HID（BT HID） | ⚠️ | generic Device/HostとBLE同形のprofile API（keyboard / mouse / consumer / system / gamepad）、host側のReport Descriptor解析、制御チャネル（Get_Report / Set_Report / protocol mode / idle rate / virtual cable unplug）を実機確認。合成できるprofile数はSDP recordの214 byte（descriptor + 文字列）が上限で、超過は`begin()`が拒否する。host側の復号はkeyboardとmouseのみ |
 | Classic device discovery / pairing / bond | ⚠️ | inquiry（name・Class of Device・RSSI）、SDP照会、IO capability選択、numeric comparison / passkeyのapplication応答、bond一覧・削除を実機確認。legacy PINは拒否 |
 | Classicの無線・link設定 | ⚠️ | 送信電力（範囲・単一値）、page timeout、暗号鍵の最小長を実機確認。RSSI（接続後）・QoS・AFH・EIR設定は未公開 |

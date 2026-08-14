@@ -122,6 +122,7 @@ EspBleClassicClassOfDevice	KEYWORD1
 EspBleClassicConfig	KEYWORD1
 EspBleClassicEncodedAudioPacket	KEYWORD1
 EspBleClassicEncodedAudioView	KEYWORD1
+EspBleClassicHfpAppleFeatures	KEYWORD1
 EspBleClassicHfpAtResponse	KEYWORD1
 EspBleClassicHfpAudioConnection	KEYWORD1
 EspBleClassicHfpAudioGateway	KEYWORD1
@@ -141,6 +142,8 @@ EspBleClassicHfpCurrentCallState	KEYWORD1
 EspBleClassicHfpEncodedAudioPacket	KEYWORD1
 EspBleClassicHfpEncodedAudioView	KEYWORD1
 EspBleClassicHfpPacketStatistics	KEYWORD1
+EspBleClassicHfpSubscriberNumber	KEYWORD1
+EspBleClassicHfpSubscriberServiceType	KEYWORD1
 EspBleClassicHfpVolume	KEYWORD1
 EspBleClassicHfpVolumeTarget	KEYWORD1
 EspBleClassicHidConnection	KEYWORD1
@@ -183,6 +186,8 @@ EspBleClassicSppData	KEYWORD1
 EspBleClassicSppServer	KEYWORD1
 EspBleClassicSppServerConfig	KEYWORD1
 EspBleClassicSppSession	KEYWORD1
+EspBleClassicSppSessionId	KEYWORD1
+EspBleClassicSppStream	KEYWORD1
 EspBleClassicSppWriteResult	KEYWORD1
 EspBleClassicVisibility	KEYWORD1
 #######################################
@@ -448,9 +453,12 @@ value	KEYWORD2
 a2dpSink	KEYWORD2
 a2dpSource	KEYWORD2
 answerCall	KEYWORD2
+attach	KEYWORD2
+attached	KEYWORD2
 audioConnected	KEYWORD2
 audioConnection	KEYWORD2
 available	KEYWORD2
+availableForWrite	KEYWORD2
 avrcp	KEYWORD2
 callState	KEYWORD2
 classOfDevice	KEYWORD2
@@ -461,10 +469,15 @@ connected	KEYWORD2
 controllerConnected	KEYWORD2
 controllerInitialized	KEYWORD2
 currentCall	KEYWORD2
+detach	KEYWORD2
 dial	KEYWORD2
+dialMemory	KEYWORD2
+disableNoiseReduction	KEYWORD2
 disconnectAudio	KEYWORD2
 droppedReceiveByteCount	KEYWORD2
 droppedWriteCount	KEYWORD2
+enableAppleExtensions	KEYWORD2
+flush	KEYWORD2
 hfpAudioGateway	KEYWORD2
 hfpClient	KEYWORD2
 hidDevice	KEYWORD2
@@ -482,11 +495,13 @@ onCurrentCall	KEYWORD2
 onData	KEYWORD2
 onDelay	KEYWORD2
 onIdleRate	KEYWORD2
+onInBandRingTone	KEYWORD2
 onInputReport	KEYWORD2
 onMedia	KEYWORD2
 onMetadata	KEYWORD2
 onNotificationRegistered	KEYWORD2
 onNumericComparisonRequested	KEYWORD2
+onOperatorName	KEYWORD2
 onPacketStatistics	KEYWORD2
 onPasskeyRequested	KEYWORD2
 onPassthrough	KEYWORD2
@@ -503,6 +518,8 @@ onServerStarted	KEYWORD2
 onSetReport	KEYWORD2
 onSinkDelay	KEYWORD2
 onStreamStateChanged	KEYWORD2
+onSubscriberNumber	KEYWORD2
+onVoiceTagNumber	KEYWORD2
 onVolumeChanged	KEYWORD2
 onWriteCompleted	KEYWORD2
 pageTimeout	KEYWORD2
@@ -510,6 +527,7 @@ peek	KEYWORD2
 peerAddress	KEYWORD2
 pendingWriteCount	KEYWORD2
 queryCurrentCalls	KEYWORD2
+queryOperatorName	KEYWORD2
 read	KEYWORD2
 redial	KEYWORD2
 refuseReportRequest	KEYWORD2
@@ -517,6 +535,7 @@ registerNotifications	KEYWORD2
 registerVolumeNotifications	KEYWORD2
 registered	KEYWORD2
 rejectOrEndCall	KEYWORD2
+reportBatteryLevel	KEYWORD2
 reportCallActive	KEYWORD2
 reportCallEnded	KEYWORD2
 reportIncomingCall	KEYWORD2
@@ -524,6 +543,7 @@ reportMapKnown	KEYWORD2
 reportOutgoingCall	KEYWORD2
 requestDelay	KEYWORD2
 requestIdleRate	KEYWORD2
+requestLastVoiceTagNumber	KEYWORD2
 requestMetadata	KEYWORD2
 requestName	KEYWORD2
 requestPacketStatistics	KEYWORD2
@@ -531,6 +551,7 @@ requestPlayStatus	KEYWORD2
 requestProtocolMode	KEYWORD2
 requestReport	KEYWORD2
 requestServices	KEYWORD2
+requestSubscriberNumber	KEYWORD2
 respondToCommand	KEYWORD2
 respondToNotification	KEYWORD2
 respondToReportRequest	KEYWORD2
@@ -553,6 +574,7 @@ setAbsoluteVolume	KEYWORD2
 setClassOfDevice	KEYWORD2
 setDelay	KEYWORD2
 setIdleRate	KEYWORD2
+setInBandRingTone	KEYWORD2
 setLocalVolume	KEYWORD2
 setMinimumEncryptionKeySize	KEYWORD2
 setNetworkStatus	KEYWORD2
@@ -563,6 +585,7 @@ setProtocolMode	KEYWORD2
 setVisibility	KEYWORD2
 setVoiceRecognition	KEYWORD2
 setVolume	KEYWORD2
+setWriteTimeout	KEYWORD2
 spp	KEYWORD2
 startServer	KEYWORD2
 startVoiceRecognition	KEYWORD2
@@ -576,6 +599,7 @@ targetInitialized	KEYWORD2
 virtualCableUnplug	KEYWORD2
 visibility	KEYWORD2
 volume	KEYWORD2
+writeTimeout	KEYWORD2
 #######################################
 # Constants (LITERAL1)
 #######################################

@@ -103,9 +103,10 @@ for sketch in $(find examples -name sketch.yaml -printf '%h\n' | sort); do
 done
 ```
 
-- `compile-examples.yml`が全exampleをESP32-S3で通過している。
-- `board-matrix.yml` / `core-matrix.yml`を手動実行し、生成文書を更新する。
 - リリース直前にS3 Peer suiteを複数回実行し、flaky failure、heap低下、task残留がないことを確認する。P4代表suiteは最終候補で少なくとも1回通過させる。
+
+手元のloopで確認するのはesp32とesp32s3です。release対象board全体でのexample compileは
+`compile-examples.yml`の仕事で、`board-matrix.yml` / `core-matrix.yml`と同じく後述の「workflow」で扱います。
 
 ## 手動相互運用
 
@@ -116,9 +117,17 @@ done
 - Just Worksと静的passkeyを外部BLE実装から確認する。
 - Scan、GATT read/write、notifyの基本経路をスマートフォンまたはPCのBLE toolで確認する。
 
-## 最終確認とリリース
+## 最終確認
 
 - `git diff --check`とリンク検索を行い、意図しないbuild artifact、cache、local profile固有の変更がないことを確認する。
-- bump scriptのpreviewでversion変更を確認する。
-- release workflowでversion、CHANGELOG、release branch、tag、GitHub releaseを作成する。
+
+## workflow
+
+次はGitHub Actionsで実行します。手元で先に回しても結果が変わらないため、gateではなくrelease時の
+手順として扱い、結果だけを記録します。
+
+- `board-matrix.yml`: 対象boardを再生成し、`docs/BOARDS.<version>.md`を確定する。
+- `core-matrix.yml`: Arduino-ESP32対応versionを再検証し、`docs/COMPATIBILITY.<version>.md`を確定する。
+- `compile-examples.yml`: release対象board全体でのexample compile。
+- `release.yml`: bump scriptのpreviewでversion変更を確認し、version、CHANGELOG、release branch、tag、GitHub releaseを作成する。
 - 公開後にArduino Library Managerから取得できるversionと最小exampleのcompileを確認する。

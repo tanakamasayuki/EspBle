@@ -89,7 +89,7 @@ brokerはpass-throughの単一host、`EspBle`と`EspBleClassic`の両方を`begi
 routingするdual-hostになります。build flagはありません。dual-hostは実験扱いなので、
 不安定な場合は一方を`end()`してもう一方だけを使ってください。Classic HID通信中のLE接続、GATT read反復、
 HID双方向通信、BLE接続を維持したClassic host再attach、Classic接続中のBLE pairing・bond再接続・暗号化必須GATT readまで実機検証済みです。Classic-onlyではA2DP Sink/Sourceのencode済みmedia転送、AVRCPの再生操作・absolute volume、HFP Client/Audio Gatewayの単一call controlとraw mSBC/CVSD SCO transportも確認済みです。Audio Gatewayの`preferredAudioCodec`でmSBCまたはCVSDを選べます。dual-hostでもBLE GATT接続を維持したmSBC SCO双方向通信に加え、A2DP encode済みmedia転送とAVRCP操作を行い、各audio linkの接続中・切断後にGATTが継続することを確認しました。外部HFP機器との相互運用確認は残します。HFPの2 roleはprocess-wideで排他です。共有command scheduler、host要求event maskのunion、再attach時のHCI Resetとflow-control設定の仮想完了、最後のhostがcontrollerを停止するlifecycleを実装し、観測commandの分類と長時間負荷試験も完了しています。誤passkeyとHID接続失敗からの復旧、backend callback解除時の参照寿命barrierも検証済みです。Classicは次回releaseの対象で、機能ごとに実機検証済み / 未検証 / 未実装を
-[棚卸し](docs/CLASSIC_FEATURE_INVENTORY.ja.md)へ明記します。dual-hostのACL credit管理の一元化は未確定です。詳細は
+[棚卸し](docs/CLASSIC_FEATURE_INVENTORY.ja.md)へ明記します。dual-hostの受信ACL flow controlはbrokerが所有しますが、送信側bufferは2つのhost間で按分していません。詳細は
 [Classic実装計画](docs/PLAN_ESP32_CLASSIC.ja.md)にあります。
 加えて無印ESP32はBLE 4.2 controllerのため**LE 2M / Coded PHYが使えず**、
 Extended / Periodic Advertisingも使えません。同時接続数の上限は3です。

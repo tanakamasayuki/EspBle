@@ -101,9 +101,9 @@ for sketch in $(find examples -name sketch.yaml -printf '%h\n' | sort); do
 done
 ```
 
-- `compile-examples.yml` passes for every example on ESP32-S3.
-- Run `board-matrix.yml` / `core-matrix.yml` manually and update the generated documents.
 - Run the S3 peer suite repeatedly immediately before release; check for flaky failures, heap loss, and leaked tasks. Pass the P4 representative suite at least once on the final candidate.
+
+The local loop above covers esp32 and esp32s3. Compiling every example across the whole release board set belongs to `compile-examples.yml`, together with `board-matrix.yml` and `core-matrix.yml`; see "Workflows" below.
 
 ## Manual Interoperability
 
@@ -114,9 +114,16 @@ Record the date and OS/device version for each result.
 - Verify Just Works and static-passkey pairing with an external BLE implementation.
 - Verify basic scan, GATT read/write, and notify flows with a phone or desktop BLE tool.
 
-## Final Checks and Release
+## Final Checks
 
 - Run `git diff --check` and a link/reference audit; exclude build artifacts, caches, and local-profile-only changes.
-- Preview the version change with the bump script.
-- Use the release workflow to create the version update, release branch, tag, and GitHub release.
+
+## Workflows
+
+These run in GitHub Actions. Running them locally first would not change the result, so they are release-time steps rather than gates; record the outcome.
+
+- `board-matrix.yml`: regenerate the board set and settle `docs/BOARDS.<version>.md`.
+- `core-matrix.yml`: recheck the supported Arduino-ESP32 versions and settle `docs/COMPATIBILITY.<version>.md`.
+- `compile-examples.yml`: every example across the release board set.
+- `release.yml`: preview the version change with the bump script, then create the version update, release branch, tag, and GitHub release.
 - After publication, verify the Arduino Library Manager version and compile the minimal example from the published package.

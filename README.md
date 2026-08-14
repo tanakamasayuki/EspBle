@@ -124,8 +124,12 @@ resetting or reconfiguring an active LE controller. Pairing, bond persistence,
 bond reconnection, and encrypted GATT access also pass while Classic HID remains
 connected. Observed-command classification and long-duration load have completed;
 wrong-passkey and HID-connection failures recover without dropping the other host,
-and backend callback teardown has a reference-lifetime barrier. The public Classic
-scope and centralized incoming-ACL credit handling are not settled.
+and backend callback teardown has a reference-lifetime barrier. Classic is part of
+the next release, with each feature's state — hardware-verified, unverified or
+unimplemented — written down in the
+[Classic feature inventory](docs/CLASSIC_FEATURE_INVENTORY.ja.md) (Japanese).
+Incoming ACL flow control is broker-owned; outgoing buffers are not apportioned
+between the two hosts.
 See the [Classic implementation plan](docs/PLAN_ESP32_CLASSIC.ja.md). The classic ESP32
 also has a BLE 4.2 controller, so **LE 2M and LE Coded PHY are unavailable**,
 extended and periodic advertising are unavailable, and the connection limit is 3.

@@ -137,6 +137,8 @@ Classic側の制限の多くはbackend（独自buildしたClassic-only Bluedroid
 A2DPの1 role 1 sessionはbackendの制約です。無印ESP32のcontrollerはBLE 4.2相当のため、
 BLE側にもLE 2M / Coded PHYとExtended / Periodic Advertisingが使えない制限があります。
 
-Classicとdual-hostの正式な対応範囲は未確定です。決定までは互換性を保証しません。
+Classicは次回releaseの対象です。MIT OSSとしてサポートや互換性は保証せず、代わりに機能ごとの
+「実機検証済み / 未検証 / 未実装」を[棚卸し](CLASSIC_FEATURE_INVENTORY.ja.md)に書きます。
+BLEとClassicの同時利用（dual-host）は実機検証済みですが実験扱いのままです。
 経緯と検証結果は[Classic実装計画](PLAN_ESP32_CLASSIC.ja.md)と
 [引き継ぎ](HANDOFF_ESP32_CLASSIC.ja.md)にあります。

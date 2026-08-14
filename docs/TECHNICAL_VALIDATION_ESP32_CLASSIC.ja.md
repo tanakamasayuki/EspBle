@@ -16,8 +16,9 @@ broker所有FIFOとcontroller credit管理、最後のhostがcontrollerを停止
 Classic再attach時のflow-control command仮想化まで実装した。Classic HID接続中のBLE pairing、bond保存、
 bond再接続、暗号化必須GATT readも成立した。数時間級負荷を完走し、実機で観測したcommandを明示policyへ
 分類した。dual-hostは未観測commandをfail-closedにする。HID接続失敗、pairing失敗からの復旧と
-callback参照寿命監査も完了した。公開範囲とACL credit一元管理が未確定なので、opt-inでない通常buildは
-引き続き二つ目のhost登録を`ESP_ERR_NOT_SUPPORTED`とする。
+callback参照寿命監査も完了した。二つ目のhost登録にbuild flagは要らず、`begin()`したhostだけで
+routed modeへ入る。controller-to-host ACL flow controlはbrokerが所有し、受信ACLごとにcreditを
+返す。host-to-controller方向のbuffer按分は行っておらず、各hostは相手の送信を勘定できない。
 
 HFPについてもdual-host実機検証を追加し、BLE GATT接続を維持したままSLC、発信、mSBC SCOの
 双方向payload転送、SCO中と切断後のGATT readが成立した。HCI policyへVoice Settingと同期接続commandを
