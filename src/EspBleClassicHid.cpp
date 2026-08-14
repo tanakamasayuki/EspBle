@@ -168,6 +168,17 @@ struct EspBleClassicHidHostImpl
   bool connecting = false;
   bool connected = false;
   uint8_t handle = 0;
+  // The Host receives the peer's Report Descriptor over SDP, which is the same
+  // information the BLE side reads from the Report Map characteristic. Parsing
+  // it is what turns raw reports into keyboard and mouse events.
+  EspBleHidReportMapInfo reportMap;
+  bool reportMapValid = false;
+  size_t invalidInputReports = 0;
+  // Previous keyboard usages, so a report can be turned into press and release
+  // events rather than a snapshot the sketch has to diff itself.
+  uint8_t previousKeys[EspBleClassicHidKeyboardState::BitmapSize] = {};
+  uint8_t previousModifiers = 0;
+  uint8_t previousMouseButtons = 0;
   String peerAddress;
 #if ESPBLE_CLASSIC_HID_BACKEND_AVAILABLE
   esp_bd_addr_t backendAddress = {};
@@ -354,6 +365,21 @@ void hidHostCallback(
   {
     std::lock_guard<std::mutex> lock(impl->mutex);
     impl->initialized = false;
+  }
+  else if (event == ESP_HIDH_GET_DSCP_EVT)
+  {
+    // The peer's Report Descriptor. Parsing it here means the decode path is
+    // ready before the first input report arrives.
+    if (parameter->dscp.dsc_list != nullptr && parameter->dscp.dl_len > 0)
+    {
+      const EspBleHidReportMapInfo parsed = espBleParseHidReportMap(
+        parameter->dscp.dsc_list, parameter->dscp.dl_len);
+      std::lock_guard<std::mutex> lock(impl->mutex);
+      impl->reportMap = parsed;
+      impl->reportMapValid = parsed.count > 0;
+      memset(impl->previousKeys, 0, sizeof(impl->previousKeys));
+      impl->previousModifiers = 0;
+    }
   }
   else if (event == ESP_HIDH_OPEN_EVT)
   {
@@ -1052,9 +1078,11 @@ void EspBleClassicHidHost::update()
       connectionFailureCallback_)
       connectionFailureCallback_(event.failure);
     else if (
-      event.type == EspBleClassicHidHostImpl::EventType::InputReport &&
-      inputReportCallback_)
-      inputReportCallback_(event.report);
+      event.type == EspBleClassicHidHostImpl::EventType::InputReport)
+    {
+      deliverDecoded(event.report);
+      if (inputReportCallback_) inputReportCallback_(event.report);
+    }
   }
 }
 
@@ -1427,4 +1455,204 @@ bool EspBleClassicHidGamepad::releaseAll()
 {
   EspBleHidGamepadReport report;
   return send(report);
+}
+
+// --- Classic HID Host decoding --------------------------------------------
+
+void EspBleClassicHidHost::onKeyboardState(KeyboardStateCallback callback)
+{
+  keyboardStateCallback_ = std::move(callback);
+}
+
+void EspBleClassicHidHost::onKeyboard(KeyboardCallback callback)
+{
+  keyboardCallback_ = std::move(callback);
+}
+
+void EspBleClassicHidHost::onMouse(MouseCallback callback)
+{
+  mouseCallback_ = std::move(callback);
+}
+
+void EspBleClassicHidHost::setKeyboardLayout(EspBleKeyboardLayout layout)
+{
+  keyboardLayout_ = layout;
+}
+
+EspBleKeyboardLayout EspBleClassicHidHost::keyboardLayout() const
+{
+  return keyboardLayout_;
+}
+
+bool EspBleClassicHidHost::reportMapKnown() const
+{
+  if (impl_ == nullptr) return false;
+  std::lock_guard<std::mutex> lock(impl_->mutex);
+  return impl_->reportMapValid;
+}
+
+size_t EspBleClassicHidHost::invalidInputReportCount() const
+{
+  if (impl_ == nullptr) return 0;
+  std::lock_guard<std::mutex> lock(impl_->mutex);
+  return impl_->invalidInputReports;
+}
+
+void EspBleClassicHidHost::deliverDecoded(const EspBleClassicHidReport &report)
+{
+  if (impl_ == nullptr) return;
+  if (!keyboardCallback_ && !keyboardStateCallback_ && !mouseCallback_) return;
+
+  EspBleHidReportMapEntry entry;
+  bool found = false;
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    if (!impl_->reportMapValid) return;
+    for (size_t index = 0; index < impl_->reportMap.count; ++index)
+    {
+      const EspBleHidReportMapEntry &candidate = impl_->reportMap.entries[index];
+      // A device with a single report collection may omit the report ID, in
+      // which case the transport reports 0 and the descriptor agrees.
+      if (candidate.hasReportId && candidate.reportId != report.reportId)
+        continue;
+      entry = candidate;
+      found = true;
+      break;
+    }
+  }
+  if (!found) return;
+
+  const uint8_t *data = reinterpret_cast<const uint8_t *>(report.value.c_str());
+  const size_t length = report.value.length();
+  if (entry.inputBitLength == 0 || length != entry.inputByteLength())
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    ++impl_->invalidInputReports;
+    return;
+  }
+
+  if (entry.kind == EspBleHidReportKind::Keyboard)
+  {
+    EspBleClassicHidKeyboardState state;
+    state.peerAddress = report.peerAddress;
+    if (entry.keyboardBitmap)
+    {
+      if (entry.keyboardHasModifiers)
+      {
+        for (uint8_t bit = 0; bit < 8; ++bit)
+        {
+          const size_t source = entry.keyboardModifierBitOffset + bit;
+          if ((data[source >> 3] &
+               static_cast<uint8_t>(1u << (source & 7))) != 0)
+            state.modifiers = static_cast<uint8_t>(state.modifiers | (1u << bit));
+        }
+      }
+      for (uint16_t index = 0; index < entry.keyboardBitmapBitCount; ++index)
+      {
+        const size_t source = entry.keyboardBitmapBitOffset + index;
+        if ((data[source >> 3] & static_cast<uint8_t>(1u << (source & 7))) == 0)
+          continue;
+        const uint16_t usage = entry.keyboardBitmapUsageMinimum + index;
+        if (usage > 0xff) continue;
+        state.bitmap[usage >> 3] =
+          static_cast<uint8_t>(state.bitmap[usage >> 3] | (1u << (usage & 7)));
+      }
+    }
+    else
+    {
+      // Boot-compatible layout: modifiers, one constant byte, six usages.
+      if (length < 8)
+      {
+        std::lock_guard<std::mutex> lock(impl_->mutex);
+        ++impl_->invalidInputReports;
+        return;
+      }
+      state.modifiers = data[0];
+      for (size_t index = 0; index < 6; ++index)
+      {
+        const uint8_t usage = data[index + 2];
+        // 0x01 to 0x03 are rollover and error codes, not keys. Reporting them
+        // as presses would invent keys the user never touched.
+        if (usage >= 0x01 && usage <= 0x03)
+        {
+          std::lock_guard<std::mutex> lock(impl_->mutex);
+          ++impl_->invalidInputReports;
+          return;
+        }
+        if (usage == 0) continue;
+        state.bitmap[usage >> 3] =
+          static_cast<uint8_t>(state.bitmap[usage >> 3] | (1u << (usage & 7)));
+      }
+    }
+
+    uint8_t previousKeys[EspBleClassicHidKeyboardState::BitmapSize];
+    uint8_t previousModifiers = 0;
+    {
+      std::lock_guard<std::mutex> lock(impl_->mutex);
+      memcpy(previousKeys, impl_->previousKeys, sizeof(previousKeys));
+      previousModifiers = impl_->previousModifiers;
+      memcpy(impl_->previousKeys, state.bitmap, sizeof(impl_->previousKeys));
+      impl_->previousModifiers = state.modifiers;
+    }
+
+    // State first, then one event per changed usage: the same order the BLE
+    // host delivers them in.
+    if (keyboardStateCallback_) keyboardStateCallback_(state);
+    if (!keyboardCallback_) return;
+    for (uint16_t usage = 0; usage < 256; ++usage)
+    {
+      const bool now = state.isDown(static_cast<uint8_t>(usage));
+      const bool before =
+        (previousKeys[usage >> 3] &
+         static_cast<uint8_t>(1u << (usage & 7))) != 0;
+      if (now == before) continue;
+      EspBleClassicHidKeyboardEvent value;
+      value.peerAddress = report.peerAddress;
+      value.usage = static_cast<uint8_t>(usage);
+      value.modifiers = state.modifiers;
+      value.pressed = now;
+      value.released = !now;
+      value.rawData = data;
+      value.rawLength = length;
+      value.unicode = espBleUsageToUnicode(
+        static_cast<uint8_t>(usage),
+        now ? state.modifiers : previousModifiers, keyboardLayout_, false, false);
+      value.ascii = value.unicode <= 0xff
+        ? static_cast<uint8_t>(value.unicode) : 0;
+      keyboardCallback_(value);
+    }
+    return;
+  }
+
+  if (entry.kind == EspBleHidReportKind::Mouse && mouseCallback_)
+  {
+    EspBleClassicHidMouseEvent value;
+    value.peerAddress = report.peerAddress;
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    // Field positions come from the descriptor rather than a fixed layout, so
+    // a device that orders or sizes them differently still decodes.
+    for (size_t index = 0; index < impl_->reportMap.fieldCount; ++index)
+    {
+      const EspBleHidReportField &field = impl_->reportMap.fields[index];
+      if (field.kind != EspBleHidReportKind::Mouse) continue;
+      if (entry.hasReportId && field.reportId != report.reportId) continue;
+      const int32_t raw = espBleHidReadFieldValue(field, data, length);
+      if (field.usagePage == 0x09)
+      {
+        if (raw != 0)
+          value.buttons = static_cast<uint8_t>(
+            value.buttons | (1u << (field.usage - 1)));
+      }
+      else if (field.usagePage == 0x01 && field.usage == 0x30)
+        value.x = static_cast<int16_t>(raw);
+      else if (field.usagePage == 0x01 && field.usage == 0x31)
+        value.y = static_cast<int16_t>(raw);
+      else if (field.usagePage == 0x01 && field.usage == 0x38)
+        value.wheel = static_cast<int16_t>(raw);
+    }
+    value.moved = value.x != 0 || value.y != 0 || value.wheel != 0;
+    value.buttonsChanged = value.buttons != impl_->previousMouseButtons;
+    impl_->previousMouseButtons = value.buttons;
+    mouseCallback_(value);
+  }
 }

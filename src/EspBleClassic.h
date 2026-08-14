@@ -9,6 +9,7 @@
 #include "EspBleTypes.h"
 #include "EspBleHidProfile.h"
 #include "EspBleKeymap.h"
+#include "EspBleHidReportMap.h"
 
 using EspBleClassicSppSessionId = uint32_t;
 using EspBleClassicA2dpConnectionId = uint16_t;
@@ -1191,6 +1192,49 @@ private:
   bool configured_ = false;
 };
 
+// The decoded keyboard state a Classic Host reports, mirroring the BLE side.
+struct EspBleClassicHidKeyboardState
+{
+  static constexpr size_t BitmapSize = 32;
+
+  String peerAddress;
+  uint8_t modifiers = 0;
+  // One bit per usage, so any number of simultaneous keys can be reported.
+  uint8_t bitmap[BitmapSize] = {};
+
+  bool isDown(uint8_t usage) const
+  {
+    return (bitmap[usage >> 3] & static_cast<uint8_t>(1u << (usage & 7))) != 0;
+  }
+};
+
+struct EspBleClassicHidKeyboardEvent
+{
+  String peerAddress;
+  uint8_t usage = 0;
+  // Unicode code point for the selected layout, 0 when the usage produces no
+  // character. `ascii` is its ISO-8859-1 subset.
+  uint16_t unicode = 0;
+  uint8_t ascii = 0;
+  uint8_t modifiers = 0;
+  bool pressed = false;
+  bool released = false;
+  // The report this event was decoded from; several events can share one.
+  const uint8_t *rawData = nullptr;
+  size_t rawLength = 0;
+};
+
+struct EspBleClassicHidMouseEvent
+{
+  String peerAddress;
+  int16_t x = 0;
+  int16_t y = 0;
+  int16_t wheel = 0;
+  uint8_t buttons = 0;
+  bool moved = false;
+  bool buttonsChanged = false;
+};
+
 class EspBleClassicHidHost
 {
 public:
@@ -1211,15 +1255,38 @@ public:
 
   bool sendOutputReport(const uint8_t *data, size_t length);
 
+  using KeyboardStateCallback =
+    std::function<void(const EspBleClassicHidKeyboardState &)>;
+  using KeyboardCallback =
+    std::function<void(const EspBleClassicHidKeyboardEvent &)>;
+  using MouseCallback =
+    std::function<void(const EspBleClassicHidMouseEvent &)>;
+
   void onConnected(ConnectionCallback callback);
   void onDisconnected(ConnectionCallback callback);
   void onConnectionFailed(ConnectionFailureCallback callback);
+  // Every input report, decoded or not. A device with a descriptor this
+  // library cannot classify still reaches the sketch here.
   void onInputReport(ReportCallback callback);
+
+  // Decoded events, named as on the BLE side. They need the peer's Report
+  // Descriptor, which arrives with the connection.
+  void onKeyboardState(KeyboardStateCallback callback);
+  void onKeyboard(KeyboardCallback callback);
+  void onMouse(MouseCallback callback);
+  void setKeyboardLayout(EspBleKeyboardLayout layout);
+  EspBleKeyboardLayout keyboardLayout() const;
+  bool reportMapKnown() const;
+
   size_t droppedEventCount() const;
+  // Reports whose length does not match the descriptor. Counting beats
+  // dropping them silently: "discovered but no keys arrive" is unexplainable.
+  size_t invalidInputReportCount() const;
 
 private:
   friend class EspBleClassic;
   explicit EspBleClassicHidHost(EspBleClassic *owner);
+  void deliverDecoded(const EspBleClassicHidReport &report);
   ~EspBleClassicHidHost();
   void update();
 
@@ -1229,6 +1296,10 @@ private:
   ConnectionCallback disconnectedCallback_;
   ConnectionFailureCallback connectionFailureCallback_;
   ReportCallback inputReportCallback_;
+  KeyboardStateCallback keyboardStateCallback_;
+  KeyboardCallback keyboardCallback_;
+  MouseCallback mouseCallback_;
+  EspBleKeyboardLayout keyboardLayout_ = EspBleKeyboardLayout::EnUs;
 };
 
 class EspBleClassicInquiry
