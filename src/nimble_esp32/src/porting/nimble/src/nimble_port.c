@@ -44,9 +44,8 @@
 #include "freertos/task.h"
 #if CONFIG_BT_CONTROLLER_ENABLED
 #include "esp_bt.h"
-/* btClassicInUse() reports whether a Classic host is linked into the sketch;
- * the broker owns the shared controller once either host starts it. */
-#include "esp32-hal-bt.h"
+/* The broker owns the shared controller once either host starts it, and
+ * answers whether a Classic host is linked at all. */
 #include "EspBleHciBroker.h"
 #endif
 #if !SOC_ESP_NIMBLE_CONTROLLER && CONFIG_BT_CONTROLLER_ENABLED
@@ -351,7 +350,7 @@ nimble_port_init(void)
 #if CONFIG_IDF_TARGET_ESP32 && CONFIG_BT_CONTROLLER_ENABLED
     /* Releasing Classic controller memory cannot be undone for the rest of the
      * boot, so keep it whenever a Classic host is linked into the sketch. */
-    if (!btClassicInUse()) {
+    if (!espble_hci_broker_classic_host_expected()) {
         esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);
     }
 #endif
@@ -374,7 +373,8 @@ nimble_port_init(void)
      * Classic host needs BR/EDR too, so start the dual-mode controller on its
      * behalf; otherwise BLE alone keeps the radio configuration minimal.  An
      * ESP-IDF build with NimBLE enabled gets both from its own sdkconfig. */
-    config_opts.mode = btClassicInUse() ? ESP_BT_MODE_BTDM : ESP_BT_MODE_BLE;
+    config_opts.mode = espble_hci_broker_classic_host_expected() ?
+      ESP_BT_MODE_BTDM : ESP_BT_MODE_BLE;
     config_opts.ble_max_conn = CONFIG_BT_NIMBLE_MAX_CONNECTIONS;
 #endif
 

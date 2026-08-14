@@ -655,6 +655,18 @@ void espble_hci_broker_unregister(espble_hci_host_t host)
     ESP_LOGE(TAG, "failed to stop the adopted controller");
 }
 
+static bool classic_host_expected;
+
+void espble_hci_broker_set_classic_host_expected(bool expected)
+{
+  classic_host_expected = expected;
+}
+
+bool espble_hci_broker_classic_host_expected(void)
+{
+  return classic_host_expected;
+}
+
 bool espble_hci_broker_host_registered(espble_hci_host_t host)
 {
   return valid_host(host) && hosts[host] != NULL;

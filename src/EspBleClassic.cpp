@@ -111,6 +111,16 @@ void shutdownAdoptedController()
   (void)espble_hci_broker_shutdown_controller();
 }
 
+// Answers the broker's platform question before setup() runs, so the NimBLE
+// port can size the controller for both hosts even when BLE starts first. This
+// is the one place that knows how this platform links its Bluetooth libraries;
+// the HCI component below only asks.
+struct ClassicHostPresence
+{
+  ClassicHostPresence() { espble_hci_broker_set_classic_host_expected(true); }
+};
+const ClassicHostPresence classicHostPresence;
+
 // Classic starts the controller, so it picks the mode both hosts have to live
 // with.  BT_MODE_CLASSIC_BT releases the BLE controller memory for the rest of
 // the boot, which would make a later ble.begin() impossible.  Choose it only

@@ -97,7 +97,10 @@ PCMFlowBluetoothへは`badFrame`とraw lengthを失わず渡し、decoder側で5
    hostの同commandは仮想完了で握り潰し、hostの`Host Number Of Completed Packets`も消費する。
 2. **完了:** HCI parser、transaction、handle table、credit分配へfuzz / fault injectionを追加した。
    sanitizer付きhost testで、3モジュールとも行カバレッジ100%と500 seed掃引を通した。
-3. Arduino依存を外したdirection-aware router componentの境界を定め、ESP-IDF upstreamへ出せる差分へ縮小する。
+3. **完了:** routing logic（platform非依存）、broker（ESP-IDFまで）、統合層（Arduino）の3層へ
+   境界を定め、同梱NimBLE portのArduino依存を`espble_hci_broker_set_classic_host_expected()`へ
+   置き換えた。境界はhost testが機械的に検査する。詳細は
+   [Classic設計・検証記録](PLAN_ESP32_CLASSIC.ja.md#hci-componentの境界)にある。
 4. Classic dual-hostの利用者向けAPI、build flag、対応profile、制限、exampleを正式サポート範囲として確定する。
 
 ### P2: 配布・保守

@@ -115,6 +115,28 @@ Arduino coreの設定はSPP有効・Classic HID無効であり、core `libbt.a`�
 4. HID接続失敗とBLE pairing失敗を両transport同時状態で試験済み。誤passkeyでは両側bond 0を確認してから正しいpasskeyで暗号化を復旧し、HID接続失敗後もLE GATTを維持して正しいClassic peerへ再接続した。
 5. callback解除と実行が別coreで競合するlifecycle境界を監査済み。SPP/HID Device/HID Hostへ登録mutexとcallback参照数による停止barrierを追加し、clean実機lifecycle回帰を完走した。
 
+## HCI componentの境界
+
+dual-hostの実装をESP-IDFへ提案できる差分へ縮めるため、HCI層を依存の強さで3段に分ける。
+`tests/unit/hci_router/test_hci_component_boundary.py`がこの分割をincludeで機械的に検査する。
+
+| 層 | ファイル | 依存 |
+|---|---|---|
+| routing logic | `EspBleHciRouter` / `EspBleHciCommandScheduler` / `EspBleHciControllerPolicy` / `EspBleHciAclCredits` | `string.h`等のC標準のみ。platformもESP-IDFも参照しない |
+| broker | `EspBleHciBroker` | ESP-IDF（VHCI、FreeRTOS、log）まで。SDKがlibraryをどうlinkするかは知らない |
+| 統合層 | `EspBleClassic.cpp` / `EspBle.cpp` | Arduino coreのAPI。`esp32-hal-bt.h`を読むのはここだけ |
+
+routing logicはH4 packetとcontroller状態についての問いに答えるだけなので、hostでそのまま
+実行・fuzzできる。brokerは物理transportを駆動するのでESP-IDFに依存するが、
+「このfirmwareにClassic hostがlinkされているか」はplatform固有の知識なので、
+`espble_hci_broker_set_classic_host_expected()`で統合層が起動時に一度答える。
+同梱NimBLE portはこのhookを呼ぶだけで、Arduino coreのheaderを含まない。
+
+upstreamへ提案する場合の対象は、host分離（`esp_bluedroid_attach_hci_driver`は既存）、
+brokerのrouting/scheduling/credit、公開境界のsource差分であって、archiveそのものではない。
+NimBLE側は現状vendor patchで実現している「controllerを起動せずhostだけattachする」経路を、
+upstreamではinjectable transportとして持てるかどうかが論点になる。
+
 ## 配布形式の方針
 
 現在はNimBLE hostを`src/nimble_esp32/`のソースとして同梱し、Classic-only Bluedroid hostを

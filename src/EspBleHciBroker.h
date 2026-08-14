@@ -71,6 +71,15 @@ esp_err_t espble_hci_broker_register(
   espble_hci_host_t host, const espble_hci_host_callbacks_t *callbacks);
 void espble_hci_broker_unregister(espble_hci_host_t host);
 
+// Whether this firmware links a Classic host that will share the controller.
+// The broker cannot infer it: the Classic host registers only when the sketch
+// starts it, while the decisions that depend on it (keeping the Classic
+// controller memory, choosing the dual-mode controller) happen earlier. The
+// integration layer answers it once at startup, so no part of the HCI
+// component needs to know how a platform links its libraries.
+void espble_hci_broker_set_classic_host_expected(bool expected);
+bool espble_hci_broker_classic_host_expected(void);
+
 // True while the given logical host holds a registration.  A host uses it to
 // tell whether the other one is already sharing the controller.
 bool espble_hci_broker_host_registered(espble_hci_host_t host);

@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- (EN) Split the HCI layer into three dependency tiers and made the split
+  enforceable: the routing modules depend on the C library alone, the broker
+  stops at ESP-IDF, and only the integration layer reads Arduino core headers.
+  The bundled NimBLE port no longer includes an Arduino header to learn whether
+  a Classic host shares the controller; it asks the broker, which the
+  integration layer answers once at startup. A host test checks the tiers by
+  their includes.
+- (JA) HCI層を依存の強さで3段（platform非依存のrouting、ESP-IDFまでのbroker、
+  Arduinoを見る統合層）へ分け、host testでincludeを検査して退行を防ぐようにした。
+  同梱NimBLE portはClassic hostが共有controllerを使うかどうかをArduino coreのheaderで
+  はなくbrokerへ問い合わせ、統合層が起動時に一度答える。
+
 - (EN) The HCI broker now owns controller-to-host ACL flow control on the
   original ESP32 instead of disabling it. It learns the controller's buffer
   geometry from the Read Buffer Size response, configures the controller
