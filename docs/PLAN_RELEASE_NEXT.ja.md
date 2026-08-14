@@ -113,7 +113,8 @@ exampleに無い機能は「無い機能」として扱われる。BLEにあっ�
 | 未完了 | `Hosted/WifiCoexistence` | P4/C6でWi-FiとBLEが同一transportを共有し、`EspBle::end()`がWi-Fiを残すこと。peer testはあるがexampleが無い |
 | 未完了 | `Gap/MultiConnection` | 複数同時接続（上限3）。`AutoReconnectClient`は1接続の再接続のみ |
 | 未完了 | `docs/GUIDE_CLASSIC_BASICS.ja.md` / `.md` | Classicの概念とAPI境界の入門。`GUIDE_BLE_BASICS`と対にする。姉妹library`../EspBleBluedroid/docs/GUIDE_CLASSIC_BASICS.ja.md`の構成（BLEと別の通信モデル、Inquiry、SPP、Security、A2DP/AVRCP、HFP、同時利用）を土台に、EspBleのAPI名と範囲へ書き換える |
-| 未完了 | BLEとClassicの違いと接続先 | `examples/README`、README、Feature Matrix、各Classic exampleの冒頭へ、同じAPI形でも無線と接続先が変わることを明記。BLE = HOGPを持つ携帯・タブレット・PC、Classic = 旧世代ゲーム機、古いPC、car audio、headset。Classicは無印ESP32のみ |
+| 完了 | BLEとClassicの選び方 | [CLASSIC_VS_BLE.ja.md](CLASSIC_VS_BLE.ja.md)。どちらを選ぶか、Classicの用途が実質SPP・音声・旧世代HIDの3つであること、HIDとSPPの同時利用が可能であること、両方にある機能（HID / Security / 探索 / データ転送）の差を記述。docs索引とREADME.ja.mdから参照 |
+| 一部完了 | BLEとClassicの違いの周知 | 上記文書は作成済み。残りは英語版`CLASSIC_VS_BLE.md`、`examples/README`両言語、`README.md`（英語）、Feature Matrix、各Classic exampleの冒頭コメントへの反映 |
 
 姉妹libraryのガイドをそのまま持ち込まない。次の点はEspBleと異なる。
 
@@ -125,6 +126,30 @@ exampleに無い機能は「無い機能」として扱われる。BLEにあっ�
 - AVRCPはController/Targetを1つの`avrcp()`が持ち、別objectではない。
 - SPPのStream / Serial adapter（姉妹libraryの`EspBluedroidSppSerial`相当）は未実装。
   ガイドに書く前に[棚卸し](CLASSIC_FEATURE_INVENTORY.ja.md)のVFS行を実装するか、書かないかを決める。
+
+## 残作業の規模（概算）
+
+行数は作業量ではないため、性質ごとに分けて見積もる。実装と実機検証は概ね終わっており、
+残りは**exampleと文書、最終回帰、外部機器との相互運用、release操作**である。
+
+| 区分 | 残り | 性質 | 目安 |
+|---|---|---|---|
+| 実装・実機検証（Gate A・B の機能行） | ほぼ完了 | — | Classic / dual-hostの機能検証は完了。残るのはscope決定という判断 |
+| Gate F: example 12本 | 12 | 執筆。既存exampleの構成（sketch + README両言語 + `sketch.yaml`）に沿う | 1本あたり1作業単位。合計で数日規模 |
+| Gate F: Classic入門ガイド | 2（ja / en） | 執筆。姉妹libraryの構成を土台にAPI名と範囲を書き換える | 1〜2作業日 |
+| Gate F: 違いの周知（残り） | 1 | 既存文書への反映と英語版 | 1作業単位 |
+| Gate A・E: 利用者向け文書とCHANGELOG整合 | 4 | scope決定の後でなければ確定しない | 1作業日 |
+| Gate C: 最終回帰 | 4 | ほぼ機械時間。code freeze後にやり直しが必要 | S3全Peer cleanを複数回で数時間×回数、無印ESP32掃引、P4/C6、example compile workflow |
+| Gate B: board / core matrix | 2 | CI（`workflow_dispatch`）実行と生成物確認 | 1作業単位＋CI時間 |
+| Gate D＋Gate Bの一部完了2件 | 6 | **外部機器が必要でblockしている。**市販BLE keyboard、外部Host 2種以上、外部Classic HID/SPP/A2DP/AVRCP機器、外部HFP機器 | 機材の準備待ち。準備後は各1作業単位 |
+| Gate E: release操作 | 2 | metadata確認、release workflow、公開後確認 | 1作業単位 |
+
+したがってblockしているのは次の2つだけである。
+
+1. **Classicのrelease scope決定**（判断）。これが決まらないとGate Aの利用者向け文書、
+   Gate EのCHANGELOG整合、Gate Fのexampleの取捨が確定しない。ただしHIDのように
+   実装済みでexampleが無いものは、scopeと独立に埋めてよい。
+2. **外部機器**（Gate D）。手元の2台構成では代替できない。
 
 ## 推奨実行順
 

@@ -78,6 +78,7 @@ HIDはBLEと同じAPI形状です。device側は`hidKeyboard()` / `hidMouse()` /
 `hidSystemControl()` / `hidGamepad()`をBLEと同名・同signatureで使え、host側は受け取った
 Report Descriptorを解析してkeyboard stateとusage単位のevent、mouse eventを配送します。
 Report Descriptorとreport packingは両transportで同じmoduleを共有します。
+どちらを使うかの判断と、両方にある機能の差は[BLEとClassicの選び方](docs/CLASSIC_VS_BLE.ja.md)にあります。
 どちらのhostで動くかはsketchが何を`begin()`したかだけで決まります。片方だけを`begin()`すれば
 brokerはpass-throughの単一host、`EspBle`と`EspBleClassic`の両方を`begin()`すればbrokerがHCIを
 routingするdual-hostになります。build flagはありません。dual-hostは実験扱いなので、

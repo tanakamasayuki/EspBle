@@ -26,6 +26,7 @@ EspBleの開発ドキュメント一覧と、初見の人が状況を把握す�
 | 確定した設計決定とその理由 | [DECISIONS.ja.md](DECISIONS.ja.md) |
 | HIDの仕様（Device / Host） | [HID_DEVICE_SPEC.ja.md](HID_DEVICE_SPEC.ja.md) / [HID_HOST_SPEC.ja.md](HID_HOST_SPEC.ja.md) |
 | BLE通信の入門ガイド（GAP / セキュリティ / GATT / UUID / HID / BLE MIDI） | [GUIDE_BLE_BASICS.ja.md](GUIDE_BLE_BASICS.ja.md) |
+| BLEとClassicのどちらを使うか、両方にある機能の差 | [CLASSIC_VS_BLE.ja.md](CLASSIC_VS_BLE.ja.md) |
 | テスト方針・カバレッジ | [../tests/TEST_PLAN.ja.md](../tests/TEST_PLAN.ja.md) |
 | 次回リリースまでに残っている作業 | [PLAN_RELEASE_NEXT.ja.md](PLAN_RELEASE_NEXT.ja.md) |
 | リリース前の確認手順 | [RELEASE_CHECKLIST.ja.md](RELEASE_CHECKLIST.ja.md) |
