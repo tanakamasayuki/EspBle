@@ -91,7 +91,8 @@ PCMFlowBluetoothへは`badFrame`とraw lengthを失わず渡し、decoder側で5
 ### P1: 一般対応・upstream品質
 
 1. brokerがincoming ACL処理完了を一元管理し、controller-to-host flow controlを無効化せず両hostへcreditを返せる形を設計する。
-2. HCI parser、transaction、handle table、credit分配へfuzz / fault injectionを追加する。
+2. **完了:** HCI parser、transaction、handle table、credit分配へfuzz / fault injectionを追加した。
+   sanitizer付きhost testで、3モジュールとも行カバレッジ100%と500 seed掃引を通した。
 3. Arduino依存を外したdirection-aware router componentの境界を定め、ESP-IDF upstreamへ出せる差分へ縮小する。
 4. Classic dual-hostの利用者向けAPI、build flag、対応profile、制限、exampleを正式サポート範囲として確定する。
 

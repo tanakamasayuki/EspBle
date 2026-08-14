@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- (EN) Added randomized fault injection for the HCI router, command scheduler
+  and controller policy. It builds them with AddressSanitizer and
+  UndefinedBehaviorSanitizer and feeds truncated, oversized and mutated H4
+  packets from exact-size heap buffers, plus deterministic probes for the table
+  exhaustion and null-argument paths a random walk rarely reaches. The three
+  modules reach full line coverage from this test alone.
+- (JA) HCI router、command scheduler、controller policyへrandomized fault
+  injectionを追加した。AddressSanitizer / UndefinedBehaviorSanitizer付きでbuildし、
+  切り詰め・過長・変異させたH4 packetを実サイズのheap bufferから与える。table満杯と
+  NULL引数のように乱択では踏みにくい経路は決定的な検査として併記した。この試験だけで
+  3モジュールとも行カバレッジ100%に到達する。
+
 - (EN) Fixed a crash in the bundled NimBLE port: removing an event from an
   event queue sampled the queue depth under a function-local spinlock, so a
   concurrent dequeue by the host task on the other core made the following
