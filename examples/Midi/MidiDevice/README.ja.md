@@ -30,3 +30,7 @@
 MIDI in: status=0xb0 data1=7 data2=100 ts=1234
 SysEx chunk: start=1 end=0 length=16
 ```
+
+## 関連するガイド
+
+- [BLE入門ガイド §7 BLE MIDI編](../../../docs/GUIDE_BLE_BASICS.ja.md#7-ble-midi編--楽器としてつながる) — packet形式とtimestamp

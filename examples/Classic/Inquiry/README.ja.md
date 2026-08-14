@@ -38,3 +38,7 @@ Bluetooth Classicのdevice discoveryです。他のClassic profileはaddressを�
 
 接続できる機器が必ずinquiryで見つかるとは限りません。`ConnectableOnly`の相手は結果に
 出ませんが、addressを知っている側からは接続できます。
+
+## 関連するガイド
+
+- [Classic入門ガイド §3 Inquiry](../../../docs/GUIDE_CLASSIC_BASICS.ja.md#3-inquiry) — scanが返すもの、addressを取る照会

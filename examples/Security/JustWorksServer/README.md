@@ -37,3 +37,7 @@ Send 'c' while disconnected to clear all bonds.
 Security established: encrypted=1 authenticated=0 bonded=1 keySize=16
 Encrypted write: hello
 ```
+
+## Related guides
+
+- [BLE guide §3 Security](../../../docs/GUIDE_BLE_BASICS.md#3-security--how-far-to-trust-the-peer-you-connected-to) — pairing, bonding and IO capabilities

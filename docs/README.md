@@ -21,9 +21,10 @@ The design documents are written in Japanese. This guide lists them and shows th
 | What the library is meant to be (requirements/scope) | [REQUIREMENTS.ja.md](REQUIREMENTS.ja.md) |
 | Which features are done / planned / out of scope | [FEATURE_MATRIX.md](FEATURE_MATRIX.md) |
 | Design philosophy and layering | [CORE_DESIGN.ja.md](CORE_DESIGN.ja.md) |
-| Public API design principles | [API_DESIGN.ja.md](API_DESIGN.ja.md) |
+| Public API design principles | [API_DESIGN.md](API_DESIGN.md) |
 | Terminology and naming rules | [TERMINOLOGY.ja.md](TERMINOLOGY.ja.md) |
 | Settled decisions and their rationale | [DECISIONS.ja.md](DECISIONS.ja.md) |
+| Writing and verifying a HID Report Descriptor | [GUIDE_HID_DESCRIPTORS.md](GUIDE_HID_DESCRIPTORS.md) |
 | HID spec (Device / Host) | [HID_DEVICE_SPEC.ja.md](HID_DEVICE_SPEC.ja.md) / [HID_HOST_SPEC.ja.md](HID_HOST_SPEC.ja.md) |
 | BLE communication beginner guide: GAP / security / GATT / UUID / HID / BLE MIDI | [GUIDE_BLE_BASICS.md](GUIDE_BLE_BASICS.md) |
 | Bluetooth Classic beginner guide: inquiry / SPP / HID / A2DP / HFP (original ESP32 only) | [GUIDE_CLASSIC_BASICS.md](GUIDE_CLASSIC_BASICS.md) |

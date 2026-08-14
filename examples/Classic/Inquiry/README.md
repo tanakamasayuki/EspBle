@@ -42,3 +42,7 @@ becomes 10.24 s.
 A device that accepts connections is not necessarily one an inquiry finds. A peer
 set to `ConnectableOnly` stays out of every result while still accepting
 connections from someone who knows its address.
+
+## Related guides
+
+- [Classic guide §3 Inquiry](../../../docs/GUIDE_CLASSIC_BASICS.md#3-inquiry) — what a scan returns, and the queries that take an address

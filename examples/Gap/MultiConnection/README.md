@@ -42,3 +42,7 @@ targets allow more.
 |---|---|
 | `r` | read the battery level from every peer |
 | `d` | disconnect the first peer |
+
+## Related guides
+
+- [BLE guide §2 GAP](../../../docs/GUIDE_BLE_BASICS.md#2-gap--finding-and-connecting) — advertising, scanning and connecting

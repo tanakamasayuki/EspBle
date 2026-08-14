@@ -29,3 +29,8 @@ Tx Power Level: -8 dBm
 Link Loss Alert Level: 0
 Armed Link Loss High Alert
 ```
+
+## Related guides
+
+- [BLE guide §4 GATT](../../../../docs/GUIDE_BLE_BASICS.md#4-gatt--exchanging-data) — services, characteristics, notify and MTU
+- [BLE guide §5 UUIDs](../../../../docs/GUIDE_BLE_BASICS.md#5-understanding-uuids) — 16-bit and 128-bit forms

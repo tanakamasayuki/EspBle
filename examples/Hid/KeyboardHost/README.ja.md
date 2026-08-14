@@ -42,3 +42,8 @@ Key pressed: usage=0x04 ascii=0x61
 同じreportについてはstate callbackが先に呼ばれ、そのあとusage単位のkey eventが届きます。
 `ascii`はそのreportのmodifiersに従うので、同じキーでもShiftなしなら`0x61`、Shiftありなら
 `0x41`になります。
+
+## 関連するガイド
+
+- [BLE入門ガイド §6 HID編](../../../docs/GUIDE_BLE_BASICS.ja.md#6-hid編--キーボードやマウスとして振る舞う) — reportとdescriptor、Hostが期待するもの
+- [HID Report Descriptorを書く](../../../docs/GUIDE_HID_DESCRIPTORS.ja.md) — 自作descriptorの書き方と確かめ方

@@ -30,3 +30,7 @@ Advertises a BLE MIDI peripheral using the standard BLE MIDI service. Send Note 
 MIDI in: status=0xb0 data1=7 data2=100 ts=1234
 SysEx chunk: start=1 end=0 length=16
 ```
+
+## Related guides
+
+- [BLE guide §7 BLE MIDI](../../../docs/GUIDE_BLE_BASICS.md#7-ble-midi--connecting-as-an-instrument) — the packet format and timestamps

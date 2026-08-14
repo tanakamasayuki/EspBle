@@ -37,3 +37,9 @@ may total 214 bytes. A larger descriptor is refused by `begin()` with
 A generic Host will not interpret vendor usages: the peer side has to be written
 to match, which is what [HidVendorHost](../HidVendorHost/) does by printing raw
 reports.
+
+## Related guides
+
+- [Classic guide §6 HID](../../../docs/GUIDE_CLASSIC_BASICS.md#6-hid) — the SDP record, the 214-byte budget and what a Host decodes
+- [Writing a HID Report Descriptor](../../../docs/GUIDE_HID_DESCRIPTORS.md) — report IDs on Classic, and how to verify a descriptor
+- [BLE or Bluetooth Classic](../../../docs/CLASSIC_VS_BLE.md) — how Classic HID differs from BLE HID

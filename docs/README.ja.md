@@ -21,9 +21,10 @@ EspBleの開発ドキュメント一覧と、初見の人が状況を把握す�
 | 何を作るライブラリか（要件・スコープ） | [REQUIREMENTS.ja.md](REQUIREMENTS.ja.md) |
 | どの機能が対応済み / 追加予定 / 対象外か | [FEATURE_MATRIX.ja.md](FEATURE_MATRIX.ja.md) |
 | 設計思想・レイヤ構成 | [CORE_DESIGN.ja.md](CORE_DESIGN.ja.md) |
-| 公開APIの設計方針 | [API_DESIGN.ja.md](API_DESIGN.ja.md) |
+| 公開APIの設計方針 | [API_DESIGN.ja.md](API_DESIGN.ja.md)（英語版: [API_DESIGN.md](API_DESIGN.md)） |
 | 用語・命名規則 | [TERMINOLOGY.ja.md](TERMINOLOGY.ja.md) |
 | 確定した設計決定とその理由 | [DECISIONS.ja.md](DECISIONS.ja.md) |
+| HID Report Descriptorの書き方と確かめ方 | [GUIDE_HID_DESCRIPTORS.ja.md](GUIDE_HID_DESCRIPTORS.ja.md)（英語版: [GUIDE_HID_DESCRIPTORS.md](GUIDE_HID_DESCRIPTORS.md)） |
 | HIDの仕様（Device / Host） | [HID_DEVICE_SPEC.ja.md](HID_DEVICE_SPEC.ja.md) / [HID_HOST_SPEC.ja.md](HID_HOST_SPEC.ja.md) |
 | BLE通信の入門ガイド（GAP / セキュリティ / GATT / UUID / HID / BLE MIDI） | [GUIDE_BLE_BASICS.ja.md](GUIDE_BLE_BASICS.ja.md) |
 | BLEとClassicのどちらを使うか、両方にある機能の差 | [CLASSIC_VS_BLE.ja.md](CLASSIC_VS_BLE.ja.md)（英語版: [CLASSIC_VS_BLE.md](CLASSIC_VS_BLE.md)） |

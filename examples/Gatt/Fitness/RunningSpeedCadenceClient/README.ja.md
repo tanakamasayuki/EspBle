@@ -29,3 +29,8 @@ Sensor location: 2
 Walking: 3.00 m/s, cadence 180 /min, stride 1.25 m, distance 3.0 m
 Walking: 3.00 m/s, cadence 180 /min, stride 1.25 m, distance 6.0 m
 ```
+
+## 関連するガイド
+
+- [BLE入門ガイド §4 GATT編](../../../../docs/GUIDE_BLE_BASICS.ja.md#4-gatt編--データをやり取りする) — service・characteristic・notify・MTU
+- [BLE入門ガイド §5 UUID](../../../../docs/GUIDE_BLE_BASICS.ja.md#5-uuidを理解する) — 16-bitと128-bitの関係

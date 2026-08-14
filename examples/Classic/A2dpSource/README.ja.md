@@ -37,3 +37,7 @@ sketchではPCMFlowBluetooth等のencoderから受け取ります。受け取る
 | `s` | streaming開始 |
 | `p` | 一時停止 |
 | `d` | 切断 |
+
+## 関連するガイド
+
+- [Classic入門ガイド §7 A2DPとAVRCP](../../../docs/GUIDE_CLASSIC_BASICS.ja.md#7-a2dpとavrcp) — encode済みmedia、codec設定、操作

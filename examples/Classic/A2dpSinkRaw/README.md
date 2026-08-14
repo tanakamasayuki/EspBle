@@ -37,3 +37,7 @@ Counting bytes, as this example does, needs no copy.
 
 Only the Sink knows its own latency, so `setDelay()` is a value the application
 measures; this library cannot work it out.
+
+## Related guides
+
+- [Classic guide §7 A2DP and AVRCP](../../../docs/GUIDE_CLASSIC_BASICS.md#7-a2dp-and-avrcp) — encoded media, codec configuration and control

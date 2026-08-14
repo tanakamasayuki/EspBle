@@ -77,3 +77,8 @@ Whatever the callback passes to `setValue()` is what the peer receives. No perio
 Connection 1 wrote: hello from Central
 Descriptor 10da4dd2-8eaa-4c69-9003-676174747277 wrote: descriptor value
 ```
+
+## Related guides
+
+- [BLE guide §4 GATT](../../../../docs/GUIDE_BLE_BASICS.md#4-gatt--exchanging-data) — services, characteristics, notify and MTU
+- [BLE guide §5 UUIDs](../../../../docs/GUIDE_BLE_BASICS.md#5-understanding-uuids) — 16-bit and 128-bit forms

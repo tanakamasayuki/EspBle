@@ -54,3 +54,7 @@ request lasts for the connection.
 mSBC decoder can conceal the loss instead of clicking.
 
 Call waiting and three-way calling (CHLD, BTRH) are not implemented.
+
+## Related guides
+
+- [Classic guide §8 HFP](../../../docs/GUIDE_CLASSIC_BASICS.md#8-hfp) — the service-level connection, call control and raw SCO

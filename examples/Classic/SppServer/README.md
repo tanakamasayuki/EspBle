@@ -38,3 +38,8 @@ SPP is binary-safe: `0x00` in the middle of a payload is data, not a terminator.
 
 Pairing is not required for SPP by itself, but a peer may insist. To control it
 from the sketch, see [SppPairing](../SppPairing/).
+
+## Related guides
+
+- [Classic guide §4 SPP](../../../docs/GUIDE_CLASSIC_BASICS.md#4-spp) — RFCOMM channels, several services and the byte stream
+- [EspBle in depth](../../../docs/GUIDE_ADVANCED.md) — the 990-byte packet, the eight-write queue and backpressure

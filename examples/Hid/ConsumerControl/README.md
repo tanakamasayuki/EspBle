@@ -27,3 +27,8 @@ A BLE HID Consumer Control device over GATT (HOGP) — media keys for volume and
 ```
 Send '+', '-', or 'p'.
 ```
+
+## Related guides
+
+- [BLE guide §6 HID](../../../docs/GUIDE_BLE_BASICS.md#6-hid--acting-as-a-keyboard-or-a-mouse) — reports, descriptors and what a Host expects
+- [Writing a HID Report Descriptor](../../../docs/GUIDE_HID_DESCRIPTORS.md) — when you need your own descriptor, and how to verify it

@@ -53,3 +53,7 @@ d0:cf:13:58:fd:95 type=0 rssi=-13 uuid=0000181a-0000-1000-8000-00805f9b34fb serv
 d0:cf:13:58:fd:95 type=0 rssi=-13 manufacturer[25]=4c0002150102030405060708090a0b0c0d0e0f1000640001c5 ibeacon uuid=01020304-0506-0708-090a-0b0c0d0e0f10 major=100 minor=1 power=-59
 counters: droppedScanResults=0 droppedEvents=0
 ```
+
+## Related guides
+
+- [BLE guide §1 What BLE is](../../../docs/GUIDE_BLE_BASICS.md#1-what-ble-is) — the vocabulary the rest of the docs use

@@ -54,3 +54,7 @@ On the [Info/ScanDump](../../Info/ScanDump/) side:
 ```
 d0:cf:13:58:fd:95 type=0 rssi=-13 uuid=0000181a-0000-1000-8000-00805f9b34fb servicedata[0000181a-0000-1000-8000-00805f9b34fb][2]=c409
 ```
+
+## Related guides
+
+- [BLE guide §2 GAP](../../../docs/GUIDE_BLE_BASICS.md#2-gap--finding-and-connecting) — advertising, scanning and connecting

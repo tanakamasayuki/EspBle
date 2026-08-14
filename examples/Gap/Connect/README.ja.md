@@ -34,3 +34,7 @@ sketch冒頭の`TARGET_SERVICE_UUID`を、接続したいPeripheralがadvertise�
 Connected to 5a:b8:1e:0c:2f:71 (id=1)
 Disconnected (id=1)
 ```
+
+## 関連するガイド
+
+- [BLE入門ガイド §2 GAP編](../../../docs/GUIDE_BLE_BASICS.ja.md#2-gap編--探してつながる) — advertising・scan・接続

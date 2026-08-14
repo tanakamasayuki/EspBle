@@ -63,3 +63,7 @@ On the [Info/ScanDump](../../Info/ScanDump/) side (active scan):
 ```
 d0:cf:13:58:fd:95 type=0 rssi=-38 connectable scannable name="EspBle Scan Response" uuid=5266f727-49d7-4eaf-a6f1-7363616e7270 manufacturer[5]=ffff010203
 ```
+
+## Related guides
+
+- [BLE guide §2 GAP](../../../docs/GUIDE_BLE_BASICS.md#2-gap--finding-and-connecting) — advertising, scanning and connecting

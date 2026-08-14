@@ -37,3 +37,8 @@ Input Reportで送ります。Classic側にも同じ呼び出しがあり
 | `b` | button 2 |
 | `d` | 左stickを右上、hatは上、button 1 |
 | `r` | すべて解放 |
+
+## 関連するガイド
+
+- [BLE入門ガイド §6 HID編](../../../docs/GUIDE_BLE_BASICS.ja.md#6-hid編--キーボードやマウスとして振る舞う) — reportとdescriptor、Hostが期待するもの
+- [HID Report Descriptorを書く](../../../docs/GUIDE_HID_DESCRIPTORS.ja.md) — 自作descriptorの書き方と確かめ方

@@ -34,3 +34,8 @@ SPPはbinary-safeです。payload途中の`0x00`は終端ではなくデータ�
 
 SPP自体はpairingを必須としませんが、相手が要求することがあります。sketchから制御する
 場合は[SppPairing](../SppPairing/)を参照してください。
+
+## 関連するガイド
+
+- [Classic入門ガイド §4 SPP](../../../docs/GUIDE_CLASSIC_BASICS.ja.md#4-spp) — RFCOMM channel、複数service、byte stream
+- [EspBleを深く使う](../../../docs/GUIDE_ADVANCED.ja.md) — 990 byteのpacket、8件の送信queue、backpressure

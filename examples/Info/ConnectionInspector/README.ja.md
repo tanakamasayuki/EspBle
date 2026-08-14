@@ -35,3 +35,7 @@ CONNECTION id=1 handle=0 peer=5a:b8:1e:0c:2f:71(type=0) role=Central
   mtu=255 maxNotificationPayload=252
   encrypted=0 authenticated=0 bonded=0 keySize=0
 ```
+
+## 関連するガイド
+
+- [BLE入門ガイド §1 BLEとは](../../../docs/GUIDE_BLE_BASICS.ja.md#1-bleとは) — 以降の文書が使う語彙

@@ -64,3 +64,7 @@ PARAMETERS interval=400 (500.00 ms) latency=4 timeout=600 (6000 ms) phy=tx1/rx1
 REQUEST 2M PHY accepted=1
 PHY interval=400 (500.00 ms) latency=4 timeout=600 (6000 ms) phy=tx2/rx2
 ```
+
+## 関連するガイド
+
+- [BLE入門ガイド §2 GAP編](../../../docs/GUIDE_BLE_BASICS.ja.md#2-gap編--探してつながる) — advertising・scan・接続

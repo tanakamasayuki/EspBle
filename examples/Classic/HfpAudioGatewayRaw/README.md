@@ -48,3 +48,7 @@ bytes too — pass the length and the flag through so a decoder can conceal the 
 
 This Audio Gateway has a single-call model on purpose: call waiting and three-way
 calling are not implemented.
+
+## Related guides
+
+- [Classic guide §8 HFP](../../../docs/GUIDE_CLASSIC_BASICS.md#8-hfp) — the service-level connection, call control and raw SCO

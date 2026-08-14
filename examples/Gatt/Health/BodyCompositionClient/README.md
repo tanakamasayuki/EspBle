@@ -27,3 +27,8 @@ Connects to a Body Composition Service (0x181B), reads Body Composition Feature,
 Body fat: 27.5 %, weight: 70.000 kg
 Body fat: 27.6 %, weight: 70.000 kg
 ```
+
+## Related guides
+
+- [BLE guide §4 GATT](../../../../docs/GUIDE_BLE_BASICS.md#4-gatt--exchanging-data) — services, characteristics, notify and MTU
+- [BLE guide §5 UUIDs](../../../../docs/GUIDE_BLE_BASICS.md#5-understanding-uuids) — 16-bit and 128-bit forms

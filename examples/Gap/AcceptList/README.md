@@ -59,3 +59,7 @@ Policy: open (accept list has 1 entries)
 Connected id=1 from aa:bb:cc:dd:ee:ff
 Disconnected id=1
 ```
+
+## Related guides
+
+- [BLE guide §2 GAP](../../../docs/GUIDE_BLE_BASICS.md#2-gap--finding-and-connecting) — advertising, scanning and connecting

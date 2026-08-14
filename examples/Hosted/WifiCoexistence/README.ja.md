@@ -32,3 +32,8 @@ ESP-Hosted構成でないtargetでは、buildを失敗させずにそう伝え�
 |---|---|
 | `b` | BLEだけ停止（Wi-Fiは継続） |
 | `w` | BLEとWi-Fiを停止し、transportを解放 |
+
+## 関連するガイド
+
+- [ESP-Hostedセットアップ](../../../docs/ESP_HOSTED_SETUP.ja.md) — 配線・対応version・C6 firmware
+- [ESP-Hostedの実機確認済み制限](../../../docs/ESP_HOSTED_LIMITATIONS.ja.md) — いま動かないものとその理由

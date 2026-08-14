@@ -44,3 +44,7 @@ Put the player's address in `playerAddress`; [Inquiry](../Inquiry/) finds one.
 | `m` | ask for title, artist and album |
 | `v` | set absolute volume to 64 |
 | `r` | repeat one track |
+
+## Related guides
+
+- [Classic guide §7 A2DP and AVRCP](../../../docs/GUIDE_CLASSIC_BASICS.md#7-a2dp-and-avrcp) — encoded media, codec configuration and control

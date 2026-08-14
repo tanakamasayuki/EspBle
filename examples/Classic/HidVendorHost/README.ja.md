@@ -37,3 +37,9 @@ report IDを宣言するdeviceのreportは、payload先頭にIDが入ります�
 `reportId`は同じことを2度示します。
 
 HID Hostの接続は同時に1つです。
+
+## 関連するガイド
+
+- [Classic入門ガイド §6 HID](../../../docs/GUIDE_CLASSIC_BASICS.ja.md#6-hid) — SDP record、214 byteの予算、Hostが復号する範囲
+- [HID Report Descriptorを書く](../../../docs/GUIDE_HID_DESCRIPTORS.ja.md) — Classicでのreport IDの位置と確かめ方
+- [BLEとClassicの選び方](../../../docs/CLASSIC_VS_BLE.ja.md) — Classic HIDとBLE HIDの違い

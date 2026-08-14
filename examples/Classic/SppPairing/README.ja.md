@@ -36,3 +36,8 @@ serviceが要求したときだけapplicationを介するため、securityを有
 断る方がよいという判断です。
 
 legacy PIN pairingは拒否します。応答経路が無く、固定PINは固定鍵になるためです。
+
+## 関連するガイド
+
+- [Classic入門ガイド §4 SPP](../../../docs/GUIDE_CLASSIC_BASICS.ja.md#4-spp) — RFCOMM channel、複数service、byte stream
+- [EspBleを深く使う](../../../docs/GUIDE_ADVANCED.ja.md) — 990 byteのpacket、8件の送信queue、backpressure

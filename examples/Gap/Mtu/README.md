@@ -33,3 +33,7 @@ Requests a larger ATT MTU before connecting and observes the negotiated value. T
 ```
 Connected with MTU 185 (notification payload up to 182 bytes)
 ```
+
+## Related guides
+
+- [BLE guide §2 GAP](../../../docs/GUIDE_BLE_BASICS.md#2-gap--finding-and-connecting) — advertising, scanning and connecting

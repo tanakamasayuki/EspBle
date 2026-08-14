@@ -34,3 +34,8 @@ Set `WIFI_SSID` and `WIFI_PASSWORD`, or pass them as compiler defines.
 |---|---|
 | `b` | stop BLE only; Wi-Fi keeps running |
 | `w` | stop BLE and Wi-Fi, releasing the transport |
+
+## Related guides
+
+- [ESP-Hosted setup (Japanese)](../../../docs/ESP_HOSTED_SETUP.ja.md) — wiring, versions and the C6 firmware
+- [Verified ESP-Hosted limitations (Japanese)](../../../docs/ESP_HOSTED_LIMITATIONS.ja.md) — what does not work yet, and why

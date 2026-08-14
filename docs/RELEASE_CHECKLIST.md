@@ -5,8 +5,8 @@ Use this checklist before releasing EspBle. The GitHub Actions workflows and `to
 ## Preflight
 
 - `README.ja.md` / `README.md`, `docs/STATUS.ja.md` / `docs/STATUS.md`, and `docs/FEATURE_MATRIX.ja.md` / `docs/FEATURE_MATRIX.md` match the implemented scope.
-- The Japanese and English editions of the user-facing documents are in sync (root `README`, `docs/README`, `docs/GUIDE_BLE_BASICS`, `docs/GUIDE_CLASSIC_BASICS`, `docs/GUIDE_ADVANCED`, `docs/GUIDE_MIGRATION`, `docs/CLASSIC_VS_BLE`, `docs/STATUS`, `docs/FEATURE_MATRIX`, `docs/RELEASE_CHECKLIST`, `tests/TEST_PLAN`, `examples/README`, and the per-example READMEs).
-- `docs/API_DESIGN.ja.md`, `docs/HID_DEVICE_SPEC.ja.md`, and `docs/HID_HOST_SPEC.ja.md` match the public API.
+- The Japanese and English editions of the user-facing documents are in sync (root `README`, `docs/README`, `docs/GUIDE_BLE_BASICS`, `docs/GUIDE_CLASSIC_BASICS`, `docs/GUIDE_ADVANCED`, `docs/GUIDE_MIGRATION`, `docs/GUIDE_HID_DESCRIPTORS`, `docs/API_DESIGN`, `docs/CLASSIC_VS_BLE`, `docs/STATUS`, `docs/FEATURE_MATRIX`, `docs/RELEASE_CHECKLIST`, `tests/TEST_PLAN`, `examples/README`, and the per-example READMEs).
+- `docs/API_DESIGN.md` / `docs/API_DESIGN.ja.md`, `docs/HID_DEVICE_SPEC.ja.md`, and `docs/HID_HOST_SPEC.ja.md` match the public API.
 - `examples/README.ja.md` / `examples/README.md` and per-example READMEs use the implemented APIs.
 - No links to completed temporary plans or removed API names remain.
 - `CHANGELOG.md` records all user-visible changes under `Unreleased`.

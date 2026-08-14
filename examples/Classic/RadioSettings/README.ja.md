@@ -47,3 +47,7 @@ timeoutを短くすると、居ない相手に対して`connect()`が諦める�
 
 page timeoutを短くすると応答が遅れただけの相手を諦め、送信電力を下げると距離が
 縮みます。どちらも改善ではなくtrade-offです。
+
+## 関連するガイド
+
+- [Classic入門ガイド §2 起動と可視性](../../../docs/GUIDE_CLASSIC_BASICS.ja.md#2-起動と可視性) — 送信電力、page timeout、可視性

@@ -27,3 +27,8 @@ Body Composition Service（0x181B）へ接続し、Body Composition FeatureをRe
 Body fat: 27.5 %, weight: 70.000 kg
 Body fat: 27.6 %, weight: 70.000 kg
 ```
+
+## 関連するガイド
+
+- [BLE入門ガイド §4 GATT編](../../../../docs/GUIDE_BLE_BASICS.ja.md#4-gatt編--データをやり取りする) — service・characteristic・notify・MTU
+- [BLE入門ガイド §5 UUID](../../../../docs/GUIDE_BLE_BASICS.ja.md#5-uuidを理解する) — 16-bitと128-bitの関係

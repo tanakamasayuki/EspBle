@@ -26,3 +26,8 @@ Connects to a Bond Management Service (0x181E), reads the Bond Management Featur
 Bond Management Feature: 0x000011
 Delete-bond op code sent
 ```
+
+## Related guides
+
+- [BLE guide §4 GATT](../../../../docs/GUIDE_BLE_BASICS.md#4-gatt--exchanging-data) — services, characteristics, notify and MTU
+- [BLE guide §5 UUIDs](../../../../docs/GUIDE_BLE_BASICS.md#5-understanding-uuids) — 16-bit and 128-bit forms

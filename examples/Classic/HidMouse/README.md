@@ -39,3 +39,9 @@ works on the original ESP32 only.**
 | `w` | scroll down one step |
 | `p` | press left, then move — a drag |
 | `r` | release every button |
+
+## Related guides
+
+- [Classic guide §6 HID](../../../docs/GUIDE_CLASSIC_BASICS.md#6-hid) — the SDP record, the 214-byte budget and what a Host decodes
+- [Writing a HID Report Descriptor](../../../docs/GUIDE_HID_DESCRIPTORS.md) — report IDs on Classic, and how to verify a descriptor
+- [BLE or Bluetooth Classic](../../../docs/CLASSIC_VS_BLE.md) — how Classic HID differs from BLE HID

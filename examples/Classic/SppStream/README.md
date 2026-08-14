@@ -44,3 +44,8 @@ Two things differ from `Serial` and are worth knowing:
 `available()` and `read()` read the same session buffer the SPP API exposes, so
 mixing `stream.read()` with `spp().read(sessionId)` is allowed — they are two
 views of one buffer, not two buffers.
+
+## Related guides
+
+- [Classic guide §4 SPP](../../../docs/GUIDE_CLASSIC_BASICS.md#4-spp) — RFCOMM channels, several services and the byte stream
+- [EspBle in depth](../../../docs/GUIDE_ADVANCED.md) — the 990-byte packet, the eight-write queue and backpressure

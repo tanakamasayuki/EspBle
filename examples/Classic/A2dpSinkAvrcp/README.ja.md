@@ -37,3 +37,7 @@ Targetとしてmetadataやplay statusを送るAPIはbackendに存在しません
 
 keyを受けるのではなく送る側になるなら、この機器はControllerです——
 [AvrcpController](../AvrcpController/)を参照してください。
+
+## 関連するガイド
+
+- [Classic入門ガイド §7 A2DPとAVRCP](../../../docs/GUIDE_CLASSIC_BASICS.ja.md#7-a2dpとavrcp) — encode済みmedia、codec設定、操作

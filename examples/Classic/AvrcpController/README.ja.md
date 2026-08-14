@@ -41,3 +41,7 @@ AVRCP Controllerです。相手側の再生・停止を操作する側になり�
 | `m` | title・artist・albumを要求 |
 | `v` | absolute volumeを64にする |
 | `r` | 1曲リピートにする |
+
+## 関連するガイド
+
+- [Classic入門ガイド §7 A2DPとAVRCP](../../../docs/GUIDE_CLASSIC_BASICS.ja.md#7-a2dpとavrcp) — encode済みmedia、codec設定、操作

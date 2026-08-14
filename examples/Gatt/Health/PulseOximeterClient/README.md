@@ -28,3 +28,8 @@ Connects to a Pulse Oximeter Service (0x1822), reads PLX Features, subscribes to
 SpO2: 98 %, pulse: 60 bpm
 SpO2: 99 %, pulse: 60 bpm
 ```
+
+## Related guides
+
+- [BLE guide §4 GATT](../../../../docs/GUIDE_BLE_BASICS.md#4-gatt--exchanging-data) — services, characteristics, notify and MTU
+- [BLE guide §5 UUIDs](../../../../docs/GUIDE_BLE_BASICS.md#5-understanding-uuids) — 16-bit and 128-bit forms

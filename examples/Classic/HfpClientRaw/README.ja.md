@@ -47,3 +47,7 @@ noise reductionを戻す呼び出しはありません——要求はその接�
 クリックノイズにせず欠損を補えます。
 
 通話待ち・三者通話（CHLD、BTRH）は未実装です。
+
+## 関連するガイド
+
+- [Classic入門ガイド §8 HFP](../../../docs/GUIDE_CLASSIC_BASICS.ja.md#8-hfp) — SLC、call control、raw SCO

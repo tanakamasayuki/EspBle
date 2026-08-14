@@ -63,3 +63,7 @@ Advertising. Passive scanners see only the service UUID.
 ```
 d0:cf:13:58:fd:95 type=0 rssi=-38 connectable scannable name="EspBle Scan Response" uuid=5266f727-49d7-4eaf-a6f1-7363616e7270 manufacturer[5]=ffff010203
 ```
+
+## 関連するガイド
+
+- [BLE入門ガイド §2 GAP編](../../../docs/GUIDE_BLE_BASICS.ja.md#2-gap編--探してつながる) — advertising・scan・接続

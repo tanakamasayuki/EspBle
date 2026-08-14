@@ -28,3 +28,8 @@ Alert Notification Service（0x1811）へ接続し、Supported New Alert Categor
 Supported categories: 0x0022
 New Alert: category 1, count 3, text "Bob"
 ```
+
+## 関連するガイド
+
+- [BLE入門ガイド §4 GATT編](../../../../docs/GUIDE_BLE_BASICS.ja.md#4-gatt編--データをやり取りする) — service・characteristic・notify・MTU
+- [BLE入門ガイド §5 UUID](../../../../docs/GUIDE_BLE_BASICS.ja.md#5-uuidを理解する) — 16-bitと128-bitの関係

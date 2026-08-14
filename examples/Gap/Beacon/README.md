@@ -36,3 +36,7 @@ Silent on success. On failure:
 BLE init failed: InvalidState (...)
 Advertising failed: InvalidArgument (...)
 ```
+
+## Related guides
+
+- [BLE guide §2 GAP](../../../docs/GUIDE_BLE_BASICS.md#2-gap--finding-and-connecting) — advertising, scanning and connecting

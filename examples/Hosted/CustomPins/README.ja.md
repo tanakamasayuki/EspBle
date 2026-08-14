@@ -41,3 +41,8 @@ pin設定はWi-FiとBLEが共有するSDIO transportの設定であるため、E
 Arduino CoreのHosted HALを使用します。詳細は
 [ESP-Hostedセットアップ](../../../docs/ESP_HOSTED_SETUP.ja.md#sdio-pinの選択と上書き)を
 参照してください。
+
+## 関連するガイド
+
+- [ESP-Hostedセットアップ](../../../docs/ESP_HOSTED_SETUP.ja.md) — 配線・対応version・C6 firmware
+- [ESP-Hostedの実機確認済み制限](../../../docs/ESP_HOSTED_LIMITATIONS.ja.md) — いま動かないものとその理由

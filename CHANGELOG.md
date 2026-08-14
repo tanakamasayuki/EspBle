@@ -262,7 +262,12 @@
   identity, the dual-host broker's internals and diagnostics, how to measure
   footprint, and a playbook of known failure signatures; **Coming to EspBle from
   another library** (`docs/GUIDE_MIGRATION.md`) maps `BLEDevice`, NimBLE-Arduino and
-  `BluetoothSerial` onto EspBle call by call.
+  `BluetoothSerial` onto EspBle call by call. **Writing a HID Report Descriptor**
+  (`docs/GUIDE_HID_DESCRIPTORS.md`) covers the three routes to a descriptor, how
+  fields pack, where the report ID sits on each transport, the Classic SDP budget
+  and how to verify a descriptor rather than reason about it. The API design rules
+  now exist in English as well (`docs/API_DESIGN.md`), and every example README
+  links to the guide sections that explain it.
 - (JA) Classic HIDのexampleをBLE HIDと同じ一覧にした——gamepad、mouse、メディアキー、NKRO、
   複合device。exampleが無い機能は無い機能として読まれるためである。`Classic/HidGamepad`はBLE
   で代替できない用途で、旧世代のゲーム機はBR/EDR HIDしか受け付けない。Classic exampleは全数が
@@ -273,6 +278,10 @@
   backpressure、再接続と素性、dual-host brokerの内部と診断、sizeの測り方、既知の不具合の
   見取り図を書いた。**他のライブラリからEspBleへ**（`docs/GUIDE_MIGRATION.ja.md`）は
   `BLEDevice`系・NimBLE-Arduino・`BluetoothSerial`との対応を1行ずつ示した。
+  **HID Report Descriptorを書く**（`docs/GUIDE_HID_DESCRIPTORS.ja.md`）はdescriptorへ至る
+  3経路、fieldの詰まり方、transportごとのreport IDの位置、ClassicのSDP予算、そして頭の中で
+  済ませずに確かめる方法を書いた。API設計規則の英語版（`docs/API_DESIGN.md`）も用意し、
+  各example READMEから該当するガイドの章へリンクした。
 - (EN) Internals: the HCI layer is split into three dependency tiers checked by a
   host test (routing depends on the C library alone, the broker stops at ESP-IDF,
   only the integration layer reads Arduino headers); the router, command scheduler

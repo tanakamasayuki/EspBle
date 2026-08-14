@@ -31,3 +31,7 @@ Connects to a BLE MIDI peripheral as a central: scan the BLE MIDI service → co
 ```
 MIDI: conn=1 status=0x90 data1=60 data2=100 ts=165
 ```
+
+## Related guides
+
+- [BLE guide §7 BLE MIDI](../../../docs/GUIDE_BLE_BASICS.md#7-ble-midi--connecting-as-an-instrument) — the packet format and timestamps

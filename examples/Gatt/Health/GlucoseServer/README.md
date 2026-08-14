@@ -25,3 +25,8 @@ Standard Glucose Service (0x1808) peripheral with the **Record Access Control Po
 ## Expected Serial output
 
 The server is silent; observe the records on the client.
+
+## Related guides
+
+- [BLE guide §4 GATT](../../../../docs/GUIDE_BLE_BASICS.md#4-gatt--exchanging-data) — services, characteristics, notify and MTU
+- [BLE guide §5 UUIDs](../../../../docs/GUIDE_BLE_BASICS.md#5-understanding-uuids) — 16-bit and 128-bit forms

@@ -38,3 +38,7 @@ Send 'c' while disconnected to clear all bonds.
 Enter passkey 481907 on the peer.
 Security established: encrypted=1 authenticated=1 bonded=1
 ```
+
+## Related guides
+
+- [BLE guide §3 Security](../../../docs/GUIDE_BLE_BASICS.md#3-security--how-far-to-trust-the-peer-you-connected-to) — pairing, bonding and IO capabilities

@@ -37,3 +37,9 @@ Bluetooth Classic（BR/EDR）のHID mouseです。呼び出しはBLE版の
 | `w` | 1段スクロール |
 | `p` | 左を押しながら移動（ドラッグ） |
 | `r` | すべてのbuttonを解放 |
+
+## 関連するガイド
+
+- [Classic入門ガイド §6 HID](../../../docs/GUIDE_CLASSIC_BASICS.ja.md#6-hid) — SDP record、214 byteの予算、Hostが復号する範囲
+- [HID Report Descriptorを書く](../../../docs/GUIDE_HID_DESCRIPTORS.ja.md) — Classicでのreport IDの位置と確かめ方
+- [BLEとClassicの選び方](../../../docs/CLASSIC_VS_BLE.ja.md) — Classic HIDとBLE HIDの違い

@@ -166,6 +166,7 @@ void loop() {
 - [BLEとClassicの選び方](docs/CLASSIC_VS_BLE.ja.md)
 - [EspBleを深く使う（上級）](docs/GUIDE_ADVANCED.ja.md)
 - [他のライブラリからの移行](docs/GUIDE_MIGRATION.ja.md)
+- [HID Report Descriptorを書く](docs/GUIDE_HID_DESCRIPTORS.ja.md)
 - [開発状況とTODO](docs/STATUS.ja.md)
 - [要件](docs/REQUIREMENTS.ja.md)
 - [コア設計](docs/CORE_DESIGN.ja.md)

@@ -50,3 +50,7 @@ Advertising with a random static address.
 Connected id=1 peer=d0:cf:13:58:fd:95 bonded=0
 Disconnected id=1
 ```
+
+## Related guides
+
+- [BLE guide §2 GAP](../../../docs/GUIDE_BLE_BASICS.md#2-gap--finding-and-connecting) — advertising, scanning and connecting

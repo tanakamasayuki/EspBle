@@ -28,3 +28,8 @@
 ## 期待されるSerial出力
 
 Serverは何も出力しません。decode結果はClient側で確認します。
+
+## 関連するガイド
+
+- [BLE入門ガイド §4 GATT編](../../../../docs/GUIDE_BLE_BASICS.ja.md#4-gatt編--データをやり取りする) — service・characteristic・notify・MTU
+- [BLE入門ガイド §5 UUID](../../../../docs/GUIDE_BLE_BASICS.ja.md#5-uuidを理解する) — 16-bitと128-bitの関係

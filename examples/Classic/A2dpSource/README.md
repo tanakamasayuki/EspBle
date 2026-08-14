@@ -40,3 +40,7 @@ Put the speaker's address in `speakerAddress`; [Inquiry](../Inquiry/) finds one.
 | `s` | start streaming |
 | `p` | suspend |
 | `d` | disconnect |
+
+## Related guides
+
+- [Classic guide §7 A2DP and AVRCP](../../../docs/GUIDE_CLASSIC_BASICS.md#7-a2dp-and-avrcp) — encoded media, codec configuration and control

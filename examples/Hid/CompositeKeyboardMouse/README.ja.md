@@ -28,3 +28,8 @@ keyboardとmouseを兼ねる複合BLE HID device（HID over GATT / HOGP）です
 ```
 Send 'h' to type hello, 'm' to move.
 ```
+
+## 関連するガイド
+
+- [BLE入門ガイド §6 HID編](../../../docs/GUIDE_BLE_BASICS.ja.md#6-hid編--キーボードやマウスとして振る舞う) — reportとdescriptor、Hostが期待するもの
+- [HID Report Descriptorを書く](../../../docs/GUIDE_HID_DESCRIPTORS.ja.md) — 自作descriptorの書き方と確かめ方

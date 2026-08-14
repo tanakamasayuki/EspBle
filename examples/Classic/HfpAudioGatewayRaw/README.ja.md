@@ -41,3 +41,7 @@ device I/OはEspBleの外側です。実機ではmSBCの57 byte送信が58／60 
 bad frameも60 byteで届きます。長さとflagを渡せばdecoderが欠損を補えます。
 
 このAudio Gatewayは意図的に単一call modelです。通話待ちと三者通話は未実装です。
+
+## 関連するガイド
+
+- [Classic入門ガイド §8 HFP](../../../docs/GUIDE_CLASSIC_BASICS.ja.md#8-hfp) — SLC、call control、raw SCO

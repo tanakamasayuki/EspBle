@@ -33,3 +33,8 @@ HID discovery: ready
 Vendor Input report=6 length=8 data=45 53 50 00 04 05 06 07
 Output: sent
 ```
+
+## 関連するガイド
+
+- [BLE入門ガイド §6 HID編](../../../docs/GUIDE_BLE_BASICS.ja.md#6-hid編--キーボードやマウスとして振る舞う) — reportとdescriptor、Hostが期待するもの
+- [HID Report Descriptorを書く](../../../docs/GUIDE_HID_DESCRIPTORS.ja.md) — 自作descriptorの書き方と確かめ方

@@ -44,3 +44,8 @@ A peer left waiting forever is worse than a refusal.
 
 Legacy PIN pairing is refused. There is no way to answer it here, and a fixed PIN
 would be a fixed key.
+
+## Related guides
+
+- [Classic guide §4 SPP](../../../docs/GUIDE_CLASSIC_BASICS.md#4-spp) — RFCOMM channels, several services and the byte stream
+- [EspBle in depth](../../../docs/GUIDE_ADVANCED.md) — the 990-byte packet, the eight-write queue and backpressure

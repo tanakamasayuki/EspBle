@@ -40,3 +40,7 @@ Sending metadata or play-status as a Target has no backend API at all.
 
 To send keys rather than receive them, this device would be the Controller; see
 [AvrcpController](../AvrcpController/).
+
+## Related guides
+
+- [Classic guide §7 A2DP and AVRCP](../../../docs/GUIDE_CLASSIC_BASICS.md#7-a2dp-and-avrcp) — encoded media, codec configuration and control

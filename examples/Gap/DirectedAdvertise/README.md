@@ -46,3 +46,7 @@ Connected id=1 from aa:bb:cc:dd:ee:ff
 Disconnected id=1
 Undirected: anyone may connect.
 ```
+
+## Related guides
+
+- [BLE guide §2 GAP](../../../docs/GUIDE_BLE_BASICS.md#2-gap--finding-and-connecting) — advertising, scanning and connecting

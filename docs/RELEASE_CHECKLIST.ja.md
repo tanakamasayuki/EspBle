@@ -5,8 +5,8 @@ EspBleをリリースする前の確認項目です。GitHub Actionsと`tools/`�
 ## 事前確認
 
 - `README.ja.md` / `README.md`、`docs/STATUS.ja.md` / `docs/STATUS.md`、`docs/FEATURE_MATRIX.ja.md` / `docs/FEATURE_MATRIX.md`の対応範囲が実装と一致している。
-- 利用者向け文書の日本語版と英語版が同期している（root `README`、`docs/README`、`docs/GUIDE_BLE_BASICS`、`docs/GUIDE_CLASSIC_BASICS`、`docs/GUIDE_ADVANCED`、`docs/GUIDE_MIGRATION`、`docs/CLASSIC_VS_BLE`、`docs/STATUS`、`docs/FEATURE_MATRIX`、`docs/RELEASE_CHECKLIST`、`tests/TEST_PLAN`、`examples/README` と各example README）。
-- `docs/API_DESIGN.ja.md`、`docs/HID_DEVICE_SPEC.ja.md`、`docs/HID_HOST_SPEC.ja.md`が公開APIと一致している。
+- 利用者向け文書の日本語版と英語版が同期している（root `README`、`docs/README`、`docs/GUIDE_BLE_BASICS`、`docs/GUIDE_CLASSIC_BASICS`、`docs/GUIDE_ADVANCED`、`docs/GUIDE_MIGRATION`、`docs/GUIDE_HID_DESCRIPTORS`、`docs/API_DESIGN`、`docs/CLASSIC_VS_BLE`、`docs/STATUS`、`docs/FEATURE_MATRIX`、`docs/RELEASE_CHECKLIST`、`tests/TEST_PLAN`、`examples/README` と各example README）。
+- `docs/API_DESIGN.md` / `docs/API_DESIGN.ja.md`、`docs/HID_DEVICE_SPEC.ja.md`、`docs/HID_HOST_SPEC.ja.md`が公開APIと一致している。
 - `examples/README.ja.md` / `examples/README.md`と各example READMEが実装済みAPIと一致している。
 - 完了済みの作業計画や古いAPI名へのリンクが残っていない。
 - `CHANGELOG.md`の`Unreleased`に今回の利用者向け変更が記録されている。

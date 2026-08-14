@@ -38,3 +38,8 @@ SPPの接続する側です。serverは待って見つけられる側ですが�
 | `k` | channel 1へ直接接続 |
 | `w` | 0を含む4 byteを送信 |
 | `d` | 切断 |
+
+## 関連するガイド
+
+- [Classic入門ガイド §4 SPP](../../../docs/GUIDE_CLASSIC_BASICS.ja.md#4-spp) — RFCOMM channel、複数service、byte stream
+- [EspBleを深く使う](../../../docs/GUIDE_ADVANCED.ja.md) — 990 byteのpacket、8件の送信queue、backpressure

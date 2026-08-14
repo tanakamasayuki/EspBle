@@ -53,3 +53,7 @@ the controller's default.
 
 A shorter page timeout gives up on a peer that was merely slow to answer, and a
 lower transmit power shortens the range. Both are trades, not improvements.
+
+## Related guides
+
+- [Classic guide §2 Starting up and being visible](../../../docs/GUIDE_CLASSIC_BASICS.md#2-starting-up-and-being-visible) — transmit power, page timeout and discoverability

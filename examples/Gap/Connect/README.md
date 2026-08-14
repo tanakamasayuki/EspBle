@@ -34,3 +34,7 @@ Edit `TARGET_SERVICE_UUID` at the top of the sketch to the UUID your peripheral 
 Connected to 5a:b8:1e:0c:2f:71 (id=1)
 Disconnected (id=1)
 ```
+
+## Related guides
+
+- [BLE guide §2 GAP](../../../docs/GUIDE_BLE_BASICS.md#2-gap--finding-and-connecting) — advertising, scanning and connecting

@@ -39,3 +39,8 @@ SPPをArduinoの`Stream`として扱い、`Serial`向けに書かれたcodeを�
 `available()`と`read()`はSPP APIが見せるsession bufferと同じものです。
 `stream.read()`と`spp().read(sessionId)`を混ぜても構いません——bufferが2つあるのではなく、
 1つのbufferに対する2つの見え方です。
+
+## 関連するガイド
+
+- [Classic入門ガイド §4 SPP](../../../docs/GUIDE_CLASSIC_BASICS.ja.md#4-spp) — RFCOMM channel、複数service、byte stream
+- [EspBleを深く使う](../../../docs/GUIDE_ADVANCED.ja.md) — 990 byteのpacket、8件の送信queue、backpressure
