@@ -27,6 +27,7 @@
 | 状態 | 項目 | 完了条件 |
 |---|---|---|
 | 完了 | 数時間級dual-host soak | 20 run、1時間41分44秒。command競合／停止・再登録各100サイクル、panic・broker error・heap低下なし |
+| 完了 | pairing / policy修正後のsoak再実行 | 10 run、1時間7分9秒（2026-08-14）。初回pairingから接続する条件で、heapは103 sample全て同値（min差12 byte）、`unknown=0 qfull=0 mismatch=0 busy=0`、FIFO投入数＝物理送信数。log: `tests/.soak/dual-host-20260814T071408Z` |
 | 完了 | HCI command policy監査 | 接続後cleanupを含むinventoryを分類し、未知／別host opcodeのfail-closed policyとunit・実機回帰を追加 |
 | 完了 | 不正HID report / peer消失 | null・上限超過reportを送信前に拒否し接続を維持。peer突然再起動後にbond済みBLEとClassic HIDを復旧 |
 | 完了 | 接続・pairing失敗 | 誤passkey後にbondを残さず再pairing。HID非同期接続失敗後も暗号化LEを維持し、正しいClassic peerへ再接続 |
