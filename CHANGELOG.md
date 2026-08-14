@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- (EN) Added Classic device discovery, application-driven pairing and bond
+  management on the original ESP32. `EspBleClassicInquiry` reports address,
+  name (falling back to the extended inquiry response), class of device and
+  RSSI. `EspBleClassicSecurityConfig` selects the IO capability, and numeric
+  comparison and passkey requests are delivered to the sketch, which answers
+  with `confirmNumericComparison()` or `providePasskey()`; an unanswered
+  request is rejected when its timeout elapses. Bonds can be listed and
+  removed. Pairing previously accepted every request automatically and replied
+  to legacy PIN requests with a fixed `1234`; it now refuses legacy PIN pairing
+  instead of using a guessable key.
+- (JA) 無印ESP32へClassicのdevice discovery、application制御のpairing、bond管理を
+  追加した。`EspBleClassicInquiry`はaddress、name（EIRへfallback）、Class of Device、
+  RSSIを返す。`EspBleClassicSecurityConfig`でIO capabilityを選び、numeric comparisonと
+  passkey要求はsketchへ通知して`confirmNumericComparison()` / `providePasskey()`で
+  応答する。無応答の要求はtimeoutで拒否する。bondは一覧・削除できる。従来のpairingは
+  全要求を自動承諾し、legacy PIN要求へ固定値`1234`を返していたが、推測可能な鍵を使う代わりに
+  legacy PIN pairingを拒否するようにした。
+
 - (EN) Split the HCI layer into three dependency tiers and made the split
   enforceable: the routing modules depend on the C library alone, the broker
   stops at ESP-IDF, and only the integration layer reads Arduino core headers.

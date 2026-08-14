@@ -41,6 +41,12 @@
   espble_bd_esp_bt_gap_set_security_param
 #define esp_bt_gap_ssp_confirm_reply \
   espble_bd_esp_bt_gap_ssp_confirm_reply
+#define esp_bt_gap_ssp_passkey_reply \
+  espble_bd_esp_bt_gap_ssp_passkey_reply
+#define esp_bt_gap_get_bond_device_num espble_bd_esp_bt_gap_get_bond_device_num
+#define esp_bt_gap_get_bond_device_list \
+  espble_bd_esp_bt_gap_get_bond_device_list
+#define esp_bt_gap_remove_bond_device espble_bd_esp_bt_gap_remove_bond_device
 #define esp_spp_connect espble_bd_esp_spp_connect
 #define esp_spp_deinit espble_bd_esp_spp_deinit
 #define esp_spp_disconnect espble_bd_esp_spp_disconnect
@@ -216,10 +222,61 @@ struct EspBleClassicInquiryImpl
   bool completionCancelled = false;
 };
 
+constexpr size_t SecurityEventQueueCapacity = 8;
+
 struct EspBleClassicImpl
 {
+  enum class EventType : uint8_t
+  {
+    SecurityChanged,
+    NumericComparison,
+    PasskeyDisplayed,
+    PasskeyRequested,
+  };
+
+  struct Event
+  {
+    EventType type = EventType::SecurityChanged;
+    EspBleClassicSecurityChanged securityChanged;
+    EspBleClassicNumericComparison numericComparison;
+    EspBleClassicPasskeyDisplayed passkeyDisplayed;
+    EspBleClassicPasskeyRequested passkeyRequested;
+  };
+
+  bool enqueue(Event event)
+  {
+    std::lock_guard<std::mutex> lock(mutex);
+    if (eventCount == SecurityEventQueueCapacity)
+    {
+      ++droppedEvents;
+      return false;
+    }
+    events[(eventHead + eventCount) % SecurityEventQueueCapacity] =
+      std::move(event);
+    ++eventCount;
+    return true;
+  }
+
+  mutable std::mutex mutex;
   bool initialized = false;
   String deviceName;
+  EspBleClassicSecurityConfig security;
+  Event events[SecurityEventQueueCapacity];
+  size_t eventHead = 0;
+  size_t eventCount = 0;
+  size_t droppedEvents = 0;
+  // A pairing request is answered exactly once, so the pending peer is kept
+  // here and cleared by the answer, the timeout, or the completion event.
+  bool numericComparisonPending = false;
+  bool passkeyPending = false;
+  bool numericComparisonCallbackConfigured = false;
+  bool passkeyRequestedCallbackConfigured = false;
+  String numericComparisonAddress;
+  String passkeyAddress;
+  uint8_t numericComparisonBackendAddress[6] = {};
+  uint8_t passkeyBackendAddress[6] = {};
+  uint32_t numericComparisonDeadlineMs = 0;
+  uint32_t passkeyDeadlineMs = 0;
 };
 
 struct EspBleClassicSppImpl
@@ -297,6 +354,7 @@ struct EspBleClassicSppImpl
 namespace
 {
 std::atomic<EspBleClassic *> activeClassic{nullptr};
+std::atomic<EspBleClassicImpl *> activeClassicImpl{nullptr};
 // The GAP callback runs on Bluedroid's task, so it reaches the inquiry
 // state through this pointer rather than through the owning object.
 std::atomic<EspBleClassicInquiryImpl *> activeInquiry{nullptr};
@@ -499,14 +557,147 @@ void classicGapCallback(
     inquiry->completionPending = true;
   }
 
-  if (event == ESP_BT_GAP_CFM_REQ_EVT)
+  EspBleClassicImpl *classic = activeClassicImpl.load(std::memory_order_acquire);
+  if (classic == nullptr) return;
+
+  if (event == ESP_BT_GAP_AUTH_CMPL_EVT)
   {
-    esp_bt_gap_ssp_confirm_reply(parameter->cfm_req.bda, true);
+    {
+      // Pairing finished, so nothing is waiting for an answer any more.
+      std::lock_guard<std::mutex> lock(classic->mutex);
+      if (classic->numericComparisonPending &&
+          memcmp(classic->numericComparisonBackendAddress,
+            parameter->auth_cmpl.bda, ESP_BD_ADDR_LEN) == 0)
+      {
+        classic->numericComparisonPending = false;
+        classic->numericComparisonAddress = "";
+        classic->numericComparisonDeadlineMs = 0;
+      }
+      if (classic->passkeyPending &&
+          memcmp(classic->passkeyBackendAddress,
+            parameter->auth_cmpl.bda, ESP_BD_ADDR_LEN) == 0)
+      {
+        classic->passkeyPending = false;
+        classic->passkeyAddress = "";
+        classic->passkeyDeadlineMs = 0;
+      }
+    }
+    EspBleClassicImpl::Event queued;
+    queued.type = EspBleClassicImpl::EventType::SecurityChanged;
+    queued.securityChanged.peerAddress =
+      formatAddress(parameter->auth_cmpl.bda);
+    queued.securityChanged.success =
+      parameter->auth_cmpl.stat == ESP_BT_STATUS_SUCCESS;
+    queued.securityChanged.status = parameter->auth_cmpl.stat;
+    classic->enqueue(std::move(queued));
+  }
+  else if (event == ESP_BT_GAP_CFM_REQ_EVT)
+  {
+    bool justWorks = false;
+    bool canAsk = false;
+    {
+      std::lock_guard<std::mutex> lock(classic->mutex);
+      justWorks = !classic->security.enabled ||
+        classic->security.ioCapability ==
+          EspBleClassicSecurityIoCapability::None;
+      canAsk = classic->security.enabled &&
+        classic->security.ioCapability ==
+          EspBleClassicSecurityIoCapability::DisplayYesNo &&
+        classic->numericComparisonCallbackConfigured &&
+        !classic->numericComparisonPending;
+      if (canAsk)
+      {
+        classic->numericComparisonPending = true;
+        classic->numericComparisonAddress =
+          formatAddress(parameter->cfm_req.bda);
+        memcpy(classic->numericComparisonBackendAddress,
+          parameter->cfm_req.bda, ESP_BD_ADDR_LEN);
+        classic->numericComparisonDeadlineMs =
+          millis() + classic->security.responseTimeoutMilliseconds;
+      }
+    }
+    // Just Works has nobody to ask. Any other configuration without a
+    // reachable application answer is rejected rather than accepted blindly.
+    if (justWorks)
+    {
+      esp_bt_gap_ssp_confirm_reply(parameter->cfm_req.bda, true);
+      return;
+    }
+    if (!canAsk)
+    {
+      esp_bt_gap_ssp_confirm_reply(parameter->cfm_req.bda, false);
+      return;
+    }
+    EspBleClassicImpl::Event queued;
+    queued.type = EspBleClassicImpl::EventType::NumericComparison;
+    queued.numericComparison.peerAddress =
+      formatAddress(parameter->cfm_req.bda);
+    queued.numericComparison.value = parameter->cfm_req.num_val;
+    if (!classic->enqueue(std::move(queued)))
+    {
+      {
+        std::lock_guard<std::mutex> lock(classic->mutex);
+        classic->numericComparisonPending = false;
+        classic->numericComparisonAddress = "";
+        classic->numericComparisonDeadlineMs = 0;
+      }
+      esp_bt_gap_ssp_confirm_reply(parameter->cfm_req.bda, false);
+    }
+  }
+  else if (event == ESP_BT_GAP_KEY_NOTIF_EVT)
+  {
+    EspBleClassicImpl::Event queued;
+    queued.type = EspBleClassicImpl::EventType::PasskeyDisplayed;
+    queued.passkeyDisplayed.peerAddress =
+      formatAddress(parameter->key_notif.bda);
+    queued.passkeyDisplayed.passkey = parameter->key_notif.passkey;
+    classic->enqueue(std::move(queued));
+  }
+  else if (event == ESP_BT_GAP_KEY_REQ_EVT)
+  {
+    bool canAsk = false;
+    {
+      std::lock_guard<std::mutex> lock(classic->mutex);
+      canAsk = classic->security.enabled &&
+        classic->security.ioCapability ==
+          EspBleClassicSecurityIoCapability::KeyboardOnly &&
+        classic->passkeyRequestedCallbackConfigured &&
+        !classic->passkeyPending;
+      if (canAsk)
+      {
+        classic->passkeyPending = true;
+        classic->passkeyAddress = formatAddress(parameter->key_req.bda);
+        memcpy(classic->passkeyBackendAddress,
+          parameter->key_req.bda, ESP_BD_ADDR_LEN);
+        classic->passkeyDeadlineMs =
+          millis() + classic->security.responseTimeoutMilliseconds;
+      }
+    }
+    if (!canAsk)
+    {
+      esp_bt_gap_ssp_passkey_reply(parameter->key_req.bda, false, 0);
+      return;
+    }
+    EspBleClassicImpl::Event queued;
+    queued.type = EspBleClassicImpl::EventType::PasskeyRequested;
+    queued.passkeyRequested.peerAddress = formatAddress(parameter->key_req.bda);
+    if (!classic->enqueue(std::move(queued)))
+    {
+      {
+        std::lock_guard<std::mutex> lock(classic->mutex);
+        classic->passkeyPending = false;
+        classic->passkeyAddress = "";
+        classic->passkeyDeadlineMs = 0;
+      }
+      esp_bt_gap_ssp_passkey_reply(parameter->key_req.bda, false, 0);
+    }
   }
   else if (event == ESP_BT_GAP_PIN_REQ_EVT)
   {
-    esp_bt_pin_code_t pin = {'1', '2', '3', '4'};
-    esp_bt_gap_pin_reply(parameter->pin_req.bda, true, 4, pin);
+    // Legacy PIN pairing has no application path here, and a fixed PIN would
+    // be a fixed key. Refuse instead of accepting with a guessable one.
+    esp_bt_pin_code_t pin = {};
+    esp_bt_gap_pin_reply(parameter->pin_req.bda, false, 0, pin);
   }
 }
 
@@ -1608,6 +1799,23 @@ bool EspBleClassic::begin(const EspBleClassicConfig &config)
     return false;
   }
   esp_bt_io_cap_t ioCapability = ESP_BT_IO_CAP_NONE;
+  if (config.security.enabled)
+  {
+    switch (config.security.ioCapability)
+    {
+      case EspBleClassicSecurityIoCapability::DisplayOnly:
+        ioCapability = ESP_BT_IO_CAP_OUT;
+        break;
+      case EspBleClassicSecurityIoCapability::KeyboardOnly:
+        ioCapability = ESP_BT_IO_CAP_IN;
+        break;
+      case EspBleClassicSecurityIoCapability::DisplayYesNo:
+        ioCapability = ESP_BT_IO_CAP_IO;
+        break;
+      case EspBleClassicSecurityIoCapability::None:
+        break;
+    }
+  }
   if (
     esp_bt_gap_set_security_param(
       ESP_BT_SP_IOCAP_MODE, &ioCapability, sizeof(ioCapability)) != ESP_OK)
@@ -1646,6 +1854,24 @@ bool EspBleClassic::begin(const EspBleClassicConfig &config)
     return false;
   }
   impl_->deviceName = deviceName;
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    impl_->security = config.security;
+    impl_->eventHead = 0;
+    impl_->eventCount = 0;
+    impl_->droppedEvents = 0;
+    impl_->numericComparisonPending = false;
+    impl_->passkeyPending = false;
+    impl_->numericComparisonDeadlineMs = 0;
+    impl_->passkeyDeadlineMs = 0;
+    impl_->numericComparisonCallbackConfigured =
+      static_cast<bool>(numericComparisonCallback_);
+    impl_->passkeyRequestedCallbackConfigured =
+      static_cast<bool>(passkeyRequestedCallback_);
+  }
+#if ESPBLE_CLASSIC_BACKEND_AVAILABLE
+  activeClassicImpl.store(impl_, std::memory_order_release);
+#endif
   impl_->initialized = true;
   // Inquiry shares the GAP callback the stack just registered, so it can only
   // be armed once the stack is up.
@@ -1658,6 +1884,9 @@ bool EspBleClassic::begin(const EspBleClassicConfig &config)
 void EspBleClassic::end()
 {
   if (!initialized()) return;
+#if ESPBLE_CLASSIC_BACKEND_AVAILABLE
+  activeClassicImpl.store(nullptr, std::memory_order_release);
+#endif
   inquiry_.end();
   hfpAudioGateway_.end();
   hfpClient_.end();
@@ -1689,8 +1918,290 @@ void EspBleClassic::end()
   clearError();
 }
 
+void EspBleClassic::onSecurityChanged(SecurityChangedCallback callback)
+{
+  securityChangedCallback_ = std::move(callback);
+}
+
+void EspBleClassic::onNumericComparisonRequested(
+  NumericComparisonCallback callback)
+{
+  numericComparisonCallback_ = std::move(callback);
+  if (impl_ == nullptr) return;
+  std::lock_guard<std::mutex> lock(impl_->mutex);
+  impl_->numericComparisonCallbackConfigured =
+    static_cast<bool>(numericComparisonCallback_);
+}
+
+void EspBleClassic::onPasskeyDisplayed(PasskeyDisplayedCallback callback)
+{
+  passkeyDisplayedCallback_ = std::move(callback);
+}
+
+void EspBleClassic::onPasskeyRequested(PasskeyRequestedCallback callback)
+{
+  passkeyRequestedCallback_ = std::move(callback);
+  if (impl_ == nullptr) return;
+  std::lock_guard<std::mutex> lock(impl_->mutex);
+  impl_->passkeyRequestedCallbackConfigured =
+    static_cast<bool>(passkeyRequestedCallback_);
+}
+
+bool EspBleClassic::confirmNumericComparison(
+  const char *peerAddress, bool accept)
+{
+#if !ESPBLE_CLASSIC_BACKEND_AVAILABLE
+  (void)peerAddress;
+  (void)accept;
+  setError(
+    EspBleError::BackendFailure,
+    "Classic is supported only by the original ESP32 build");
+  return false;
+#else
+  if (!initialized())
+  {
+    setError(EspBleError::InvalidState, "Classic stack is not started");
+    return false;
+  }
+  esp_bd_addr_t address = {};
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    // The answer has to name the peer it answers for: two requests can be
+    // outstanding in a sketch that reconnects while pairing.
+    if (!impl_->numericComparisonPending ||
+        (peerAddress != nullptr &&
+         impl_->numericComparisonAddress != peerAddress))
+    {
+      setError(
+        EspBleError::InvalidState, "no numeric comparison is waiting");
+      return false;
+    }
+    memcpy(address, impl_->numericComparisonBackendAddress, sizeof(address));
+    impl_->numericComparisonPending = false;
+    impl_->numericComparisonAddress = "";
+    impl_->numericComparisonDeadlineMs = 0;
+  }
+  if (esp_bt_gap_ssp_confirm_reply(address, accept) != ESP_OK)
+  {
+    setError(EspBleError::BackendFailure, "failed to answer the comparison");
+    return false;
+  }
+  clearError();
+  return true;
+#endif
+}
+
+bool EspBleClassic::providePasskey(const char *peerAddress, uint32_t passkey)
+{
+#if !ESPBLE_CLASSIC_BACKEND_AVAILABLE
+  (void)peerAddress;
+  (void)passkey;
+  setError(
+    EspBleError::BackendFailure,
+    "Classic is supported only by the original ESP32 build");
+  return false;
+#else
+  if (!initialized())
+  {
+    setError(EspBleError::InvalidState, "Classic stack is not started");
+    return false;
+  }
+  if (passkey > 999999)
+  {
+    setError(EspBleError::InvalidArgument, "passkey must be six digits");
+    return false;
+  }
+  esp_bd_addr_t address = {};
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    if (!impl_->passkeyPending ||
+        (peerAddress != nullptr && impl_->passkeyAddress != peerAddress))
+    {
+      setError(EspBleError::InvalidState, "no passkey is waiting");
+      return false;
+    }
+    memcpy(address, impl_->passkeyBackendAddress, sizeof(address));
+    impl_->passkeyPending = false;
+    impl_->passkeyAddress = "";
+    impl_->passkeyDeadlineMs = 0;
+  }
+  if (esp_bt_gap_ssp_passkey_reply(address, true, passkey) != ESP_OK)
+  {
+    setError(EspBleError::BackendFailure, "failed to answer the passkey");
+    return false;
+  }
+  clearError();
+  return true;
+#endif
+}
+
+size_t EspBleClassic::bondCount() const
+{
+#if !ESPBLE_CLASSIC_BACKEND_AVAILABLE
+  return 0;
+#else
+  if (!initialized()) return 0;
+  const int count = esp_bt_gap_get_bond_device_num();
+  return count > 0 ? static_cast<size_t>(count) : 0;
+#endif
+}
+
+bool EspBleClassic::bond(size_t index, EspBleClassicBond &bond) const
+{
+#if !ESPBLE_CLASSIC_BACKEND_AVAILABLE
+  (void)index;
+  (void)bond;
+  return false;
+#else
+  if (!initialized()) return false;
+  const int total = esp_bt_gap_get_bond_device_num();
+  if (total <= 0 || index >= static_cast<size_t>(total)) return false;
+  // The list is read whole because the backend has no indexed accessor.
+  int count = total;
+  esp_bd_addr_t *addresses = static_cast<esp_bd_addr_t *>(
+    malloc(sizeof(esp_bd_addr_t) * static_cast<size_t>(total)));
+  if (addresses == nullptr) return false;
+  const bool read =
+    esp_bt_gap_get_bond_device_list(&count, addresses) == ESP_OK &&
+    index < static_cast<size_t>(count);
+  if (read) bond.peerAddress = formatAddress(addresses[index]);
+  free(addresses);
+  return read;
+#endif
+}
+
+bool EspBleClassic::deleteBond(const EspBleClassicBond &bond)
+{
+#if !ESPBLE_CLASSIC_BACKEND_AVAILABLE
+  (void)bond;
+  setError(
+    EspBleError::BackendFailure,
+    "Classic is supported only by the original ESP32 build");
+  return false;
+#else
+  if (!initialized())
+  {
+    setError(EspBleError::InvalidState, "Classic stack is not started");
+    return false;
+  }
+  esp_bd_addr_t address = {};
+  if (!parseAddress(bond.peerAddress.c_str(), address))
+  {
+    setError(EspBleError::InvalidArgument, "invalid bond address");
+    return false;
+  }
+  if (esp_bt_gap_remove_bond_device(address) != ESP_OK)
+  {
+    setError(EspBleError::NotFound, "no such bond");
+    return false;
+  }
+  clearError();
+  return true;
+#endif
+}
+
+bool EspBleClassic::deleteAllBonds()
+{
+#if !ESPBLE_CLASSIC_BACKEND_AVAILABLE
+  setError(
+    EspBleError::BackendFailure,
+    "Classic is supported only by the original ESP32 build");
+  return false;
+#else
+  if (!initialized())
+  {
+    setError(EspBleError::InvalidState, "Classic stack is not started");
+    return false;
+  }
+  bool removedAll = true;
+  // Removing an entry renumbers the list, so this always deletes the first.
+  for (EspBleClassicBond entry; bond(0, entry);)
+  {
+    if (!deleteBond(entry))
+    {
+      removedAll = false;
+      break;
+    }
+  }
+  if (removedAll) clearError();
+  return removedAll;
+#endif
+}
+
 void EspBleClassic::update()
 {
+  if (impl_ != nullptr)
+  {
+    // A pairing nobody answers must not leave the peer waiting forever.
+    uint8_t timedOutComparison[6] = {};
+    uint8_t timedOutPasskey[6] = {};
+    bool rejectComparison = false;
+    bool rejectPasskey = false;
+    {
+      std::lock_guard<std::mutex> lock(impl_->mutex);
+      if (impl_->numericComparisonPending &&
+          static_cast<int32_t>(millis() - impl_->numericComparisonDeadlineMs) >= 0)
+      {
+        memcpy(timedOutComparison, impl_->numericComparisonBackendAddress,
+          sizeof(timedOutComparison));
+        impl_->numericComparisonPending = false;
+        impl_->numericComparisonAddress = "";
+        impl_->numericComparisonDeadlineMs = 0;
+        rejectComparison = true;
+      }
+      if (impl_->passkeyPending &&
+          static_cast<int32_t>(millis() - impl_->passkeyDeadlineMs) >= 0)
+      {
+        memcpy(timedOutPasskey, impl_->passkeyBackendAddress,
+          sizeof(timedOutPasskey));
+        impl_->passkeyPending = false;
+        impl_->passkeyAddress = "";
+        impl_->passkeyDeadlineMs = 0;
+        rejectPasskey = true;
+      }
+    }
+#if ESPBLE_CLASSIC_BACKEND_AVAILABLE
+    if (rejectComparison)
+      (void)esp_bt_gap_ssp_confirm_reply(timedOutComparison, false);
+    if (rejectPasskey)
+      (void)esp_bt_gap_ssp_passkey_reply(timedOutPasskey, false, 0);
+#else
+    (void)rejectComparison;
+    (void)rejectPasskey;
+#endif
+
+    for (;;)
+    {
+      EspBleClassicImpl::Event event;
+      {
+        std::lock_guard<std::mutex> lock(impl_->mutex);
+        if (impl_->eventCount == 0) break;
+        event = std::move(impl_->events[impl_->eventHead]);
+        impl_->eventHead = (impl_->eventHead + 1) % SecurityEventQueueCapacity;
+        --impl_->eventCount;
+      }
+      switch (event.type)
+      {
+        case EspBleClassicImpl::EventType::SecurityChanged:
+          if (securityChangedCallback_)
+            securityChangedCallback_(event.securityChanged);
+          break;
+        case EspBleClassicImpl::EventType::NumericComparison:
+          if (numericComparisonCallback_)
+            numericComparisonCallback_(event.numericComparison);
+          break;
+        case EspBleClassicImpl::EventType::PasskeyDisplayed:
+          if (passkeyDisplayedCallback_)
+            passkeyDisplayedCallback_(event.passkeyDisplayed);
+          break;
+        case EspBleClassicImpl::EventType::PasskeyRequested:
+          if (passkeyRequestedCallback_)
+            passkeyRequestedCallback_(event.passkeyRequested);
+          break;
+      }
+    }
+  }
+
   inquiry_.update();
   spp_.update();
   hidDevice_.update();

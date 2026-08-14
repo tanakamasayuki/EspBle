@@ -18,11 +18,12 @@
 |---|---|---|
 | device name設定 | 公開 | `EspBleClassicConfig::deviceName` |
 | 接続可能・発見可能状態 | 部分 | `begin()`とprofile初期化が`ESP_BT_CONNECTABLE` + `ESP_BT_GENERAL_DISCOVERABLE`を直接設定する。利用者が非発見にする手段がない。A2DP Sinkはstream中に自分で切り替える |
-| inquiry（周辺機器探索） | 未公開 | `esp_bt_gap_start_discovery` / `cancel_discovery` / `read_remote_name`。接続先アドレスを利用者が知っている前提のAPIしかない |
+| inquiry（周辺機器探索） | 公開 | `EspBleClassicInquiry`。address、name（EIR fallbackつき）、Class of Device、RSSIを返す。`read_remote_name`の個別照会は未公開 |
 | SDP（相手のservice照会） | 未公開 | `esp_bt_gap_get_remote_services` / `get_remote_service_record`。SPP clientの内部でchannel解決に使うだけ |
 | Class of Device | 未公開 | `esp_bt_gap_set_cod`。HIDやheadsetとして正しいiconと挙動で扱われるために必要 |
-| bond一覧・削除 | 未公開 | `esp_bt_gap_get_bond_device_list` / `remove_bond_device`。BLE側には`bondCount()` / `deleteAllBonds()`がある |
-| pairing（SSP・PIN） | 部分 | IO capabilityは`ESP_BT_IO_CAP_NONE`固定、SSP確認は常に自動承諾、PINは`1234`固定。`ssp_passkey_reply`は未使用。アプリへ通知するcallbackがない |
+| bond一覧・削除 | 公開 | `bondCount()` / `bond(index)` / `deleteBond()` / `deleteAllBonds()` |
+| pairing（SSP） | 公開 | `EspBleClassicSecurityConfig`でIO capabilityを選び、numeric comparisonとpasskey要求をアプリへ通知して`confirmNumericComparison()` / `providePasskey()`で応答する。無応答はtimeoutで拒否 |
+| pairing（legacy PIN） | 未公開 | 応答経路が無いため拒否する。以前の固定PIN `1234`は廃止した |
 | 暗号鍵長・QoS・page timeout・AFH・EIR | 未公開 | `set_min_enc_key_size` / `set_qos` / `set_page_timeout` / `set_afh_channels` / `config_eir_data` |
 | RSSI・送信電力 | 未公開 | `read_rssi_delta` / `read_tx_pwr_lvl` |
 
@@ -127,11 +128,11 @@
 利用者が最初に詰まるのは「相手を探せない」「pairingを制御できない」「HIDとして正しく見えない」の3つで、
 どれもGAP層です。profileの細かい拡張より先にここを埋めるのが自然です。
 
-1. **inquiry + remote name + SDP照会**: 接続先アドレスを事前に知らなくても使えるようにする。
-   HID Host、SPP client、A2DP Source、HFPすべての入口になる。
-2. **pairing制御**: IO capabilityの選択、SSP確認・passkey・PINをアプリへ通知して応答させる。
-   現在の「常に自動承諾・PIN固定」は相手によっては繋がらず、繋がっても安全ではない。
-3. **bond管理**: 一覧・削除。BLE側と機能を揃える。
+1. **完了: inquiry**。`EspBleClassicInquiry`として公開した。SDP照会（`get_remote_services`）と
+   `read_remote_name`の個別照会は残る。
+2. **完了: pairing制御**。IO capability選択とnumeric comparison / passkeyのアプリ応答を公開した。
+   固定PINの自動承諾は廃止した。
+3. **完了: bond管理**。一覧・削除をBLE側と揃えた。
 4. **Class of Device**: HIDやheadsetとして正しく分類させる。市販Hostの挙動に直接効く。
 5. **接続可能・発見可能の制御**: 現在profileが勝手に設定している。利用者が決められるようにする。
 6. **HID Device / HostのGet_Report・Set_Report・protocol mode**: 実機のHost実装が要求する。

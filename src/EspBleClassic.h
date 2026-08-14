@@ -12,9 +12,64 @@ using EspBleClassicSppSessionId = uint32_t;
 using EspBleClassicA2dpConnectionId = uint16_t;
 using EspBleClassicHfpSyncConnectionId = uint16_t;
 
+// Classic pairing. Without this the stack can only accept every pairing
+// request with no user check, which is what a hard-coded "always yes" does.
+enum class EspBleClassicSecurityIoCapability : uint8_t
+{
+  // No input and no output: Just Works, accepted without asking anyone.
+  None = 0,
+  // Shows a passkey the peer types in.
+  DisplayOnly,
+  // Types in the passkey the peer shows.
+  KeyboardOnly,
+  // Shows a number both sides compare, and can answer yes or no.
+  DisplayYesNo,
+};
+
+struct EspBleClassicSecurityConfig
+{
+  // Off keeps the historical behaviour: Just Works, accepted automatically.
+  bool enabled = false;
+  EspBleClassicSecurityIoCapability ioCapability =
+    EspBleClassicSecurityIoCapability::None;
+  // A pairing the application never answers must not hold the peer forever.
+  uint32_t responseTimeoutMilliseconds = 30000;
+};
+
+struct EspBleClassicSecurityChanged
+{
+  String peerAddress;
+  bool success = false;
+  // The backend status, kept so a failure can be told apart from a rejection.
+  int status = 0;
+};
+
+struct EspBleClassicNumericComparison
+{
+  String peerAddress;
+  uint32_t value = 0;
+};
+
+struct EspBleClassicPasskeyDisplayed
+{
+  String peerAddress;
+  uint32_t passkey = 0;
+};
+
+struct EspBleClassicPasskeyRequested
+{
+  String peerAddress;
+};
+
+struct EspBleClassicBond
+{
+  String peerAddress;
+};
+
 struct EspBleClassicConfig
 {
   const char *deviceName = "EspBle Classic";
+  EspBleClassicSecurityConfig security;
 };
 
 struct EspBleClassicSppServerConfig
@@ -1052,6 +1107,34 @@ public:
   EspBleClassicHfpClient &hfpClient();
   EspBleClassicHfpAudioGateway &hfpAudioGateway();
 
+  using SecurityChangedCallback =
+    std::function<void(const EspBleClassicSecurityChanged &)>;
+  using NumericComparisonCallback =
+    std::function<void(const EspBleClassicNumericComparison &)>;
+  using PasskeyDisplayedCallback =
+    std::function<void(const EspBleClassicPasskeyDisplayed &)>;
+  using PasskeyRequestedCallback =
+    std::function<void(const EspBleClassicPasskeyRequested &)>;
+
+  void onSecurityChanged(SecurityChangedCallback callback);
+  // Delivered only with DisplayYesNo. Answer with confirmNumericComparison();
+  // a request nobody answers before the timeout is rejected.
+  void onNumericComparisonRequested(NumericComparisonCallback callback);
+  // Delivered with DisplayOnly: show this passkey to the user.
+  void onPasskeyDisplayed(PasskeyDisplayedCallback callback);
+  // Delivered with KeyboardOnly. Answer with providePasskey().
+  void onPasskeyRequested(PasskeyRequestedCallback callback);
+
+  bool confirmNumericComparison(const char *peerAddress, bool accept);
+  bool providePasskey(const char *peerAddress, uint32_t passkey);
+
+  // Bonds live in NVS and outlive a restart, so a sketch needs to be able to
+  // list and drop them without erasing the whole partition.
+  size_t bondCount() const;
+  bool bond(size_t index, EspBleClassicBond &bond) const;
+  bool deleteBond(const EspBleClassicBond &bond);
+  bool deleteAllBonds();
+
   EspBleError lastError() const;
   const char *lastErrorName() const;
   const String &lastErrorDetail() const;
@@ -1071,6 +1154,10 @@ private:
   void setError(EspBleError error, const char *detail);
 
   EspBleClassicImpl *impl_ = nullptr;
+  SecurityChangedCallback securityChangedCallback_;
+  NumericComparisonCallback numericComparisonCallback_;
+  PasskeyDisplayedCallback passkeyDisplayedCallback_;
+  PasskeyRequestedCallback passkeyRequestedCallback_;
   EspBleClassicInquiry inquiry_;
   EspBleClassicSpp spp_;
   EspBleClassicHidDevice hidDevice_;
