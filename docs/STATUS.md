@@ -15,6 +15,10 @@ P4/S3 pair. Security/bonding is blocked by
 the P4 ECC defect in the bundled IDF, while repeated full reinitialization is
 blocked by the bundled Hosted resource leak; both are tracked in the documented
 [ESP-Hosted limitations](ESP_HOSTED_LIMITATIONS.ja.md).
+The BLE radio work in this setup happens on the slave chip, whose ESP-Hosted firmware
+is not part of this library and is flashed separately. What works depends on that chip
+and firmware version, so **only the C6 slave on firmware 2.12.11 counts as verified**
+(see the Japanese [ESP-Hosted setup guide](ESP_HOSTED_SETUP.ja.md#slaveのチップとfirmware)).
 
 HID can compose keyboard (6KRO / NKRO), mouse, consumer control, system control, gamepad, and vendor input / output / feature into a single service. The host discovers every supported input report and dispatches it to a per-kind event.
 

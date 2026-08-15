@@ -49,7 +49,7 @@ A P4 compile does not exercise the SDIO transport between P4 and C6, ESP-Hosted 
 
 - Use ESP32-P4 as the host and ESP32-C6 as the ESP-Hosted slave/controller. The second ESP32-S3 is a wireless peer and has no signal wiring to the P4.
 - Connect P4 and C6 using 4-bit SDIO `CLK`, `CMD`, `D0` through `D3`, `RESET`, and stable power/GND.
-- Flash C6 with ESP-Hosted Slave firmware compatible with the Host bundled in Arduino-ESP32 Core. See the [ESP-Hosted setup guide (Japanese)](../docs/ESP_HOSTED_SETUP.ja.md) for preparation and version requirements.
+- Flash C6 with ESP-Hosted Slave firmware compatible with the Host bundled in Arduino-ESP32 Core. See the [ESP-Hosted setup guide (Japanese)](../docs/ESP_HOSTED_SETUP.ja.md) for preparation and version requirements. **The BLE work happens on the slave chip, so record its target name and firmware version alongside the result**; a run on a different slave chip (a C5, say) or a different firmware version is a separate result, not this one.
 - Prefer an Espressif ESP32-P4-Function-EV-Board with its onboard C6, or an equivalent fixture using the standard wiring on the P4 side: `CLK=18`, `CMD=19`, `D0=14`, `D1=15`, `D2=16`, `D3=17`, and `RESET=54`. This matches Arduino-ESP32's generic `esp32p4` variant and provides a reproducible baseline without a board-specific override.
 - Boards with different wiring, such as M5Stack Tab5, are valid when the correct board variant is selected or `hostedSetPins()` is called before `ble.begin()`. See [SDIO pin selection and override (Japanese)](../docs/ESP_HOSTED_SETUP.ja.md#sdio-pinの選択と上書き), and record the board/profile and pin configuration with the result.
 

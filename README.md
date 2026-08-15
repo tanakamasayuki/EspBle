@@ -20,8 +20,9 @@ the table under [Compatibility](#compatibility) lays the differences out.
 > **The original ESP32** has no Core-provided NimBLE, since its prebuilt libraries
 > are Bluedroid, so EspBle bundles a NimBLE host for it. Its BLE 4.2 controller
 > rules out some features, and in exchange the chip has Bluetooth Classic.
-> **ESP32-P4 + ESP32-C6** works through ESP-Hosted, with upstream limitations
-> including security and bonding.
+> **The ESP32-P4** has no BLE radio: a slave chip attached over SDIO does the BLE
+> work (ESP-Hosted). That slave needs **its own firmware, separate from this
+> library**, and what works depends on which chip it is and which version it runs.
 
 ## Why use EspBle?
 
@@ -76,14 +77,15 @@ suite plus host-side unit tests. What is covered per SoC is in
 
 ### What differs per SoC
 
-| | ESP32-S3 / C3 / C6 / H2 | Original ESP32 | ESP32-P4 + ESP32-C6 |
+| | ESP32-S3 / C3 / C6 / H2 | Original ESP32 | ESP32-P4 + slave (ESP-Hosted) |
 |---|---|---|---|
-| NimBLE host | From the Core | **Bundled by EspBle** (`src/nimble_esp32/`) | From the Core (HCI over SDIO to the C6) |
+| BLE radio | On-chip | On-chip | **On the slave chip** (over SDIO; needs its own firmware) |
+| NimBLE host | From the Core | **Bundled by EspBle** (`src/nimble_esp32/`) | From the Core (HCI carried over SDIO to the slave) |
 | Public BLE API | Same | Same | Same |
 | Security / bonding | Supported | Supported | **Unavailable** (upstream ECC defect) |
-| 2M / Coded PHY | Supported | **Unavailable** (BLE 4.2 controller) | Outside the representative suite |
+| 2M / Coded PHY | Supported | **Unavailable** (BLE 4.2 controller) | Depends on the slave chip and its firmware (outside the representative suite) |
 | Bluetooth Classic | No BR/EDR radio | **Supported** (SPP / HID / A2DP / AVRCP / HFP) | No BR/EDR radio |
-| Verified scope | Every feature, on a two-S3 peer suite (C3 / C6 / H2 are build-verified in CI) | A two-board peer sweep in both roles; only what passes counts | Representative suite (connect, GATT, notify, MTU, Wi-Fi coexistence) |
+| Verified scope | Every feature, on a two-S3 peer suite (C3 / C6 / H2 are build-verified in CI) | A two-board peer sweep in both roles; only what passes counts | Representative suite (connect, GATT, notify, MTU, Wi-Fi coexistence), **verified only with a C6 slave on firmware 2.12.11** |
 
 Some limits apply across the whole family. Extended and periodic advertising are unavailable on
 every target, because the NimBLE the Core ships is built with
@@ -144,14 +146,30 @@ Japanese [Classic implementation plan](docs/PLAN_ESP32_CLASSIC.ja.md) and
 
 ### ESP32-P4 + ESP32-C6 (ESP-Hosted)
 
-The P4 has no BLE radio, so a C6 is attached over SDIO as an ESP-Hosted slave and
-used through the ESP-Hosted NimBLE configuration the Core supplies. Verified
-host/slave versions, the C6 update procedure and the supported subset are in the
-Japanese [ESP-Hosted setup guide](docs/ESP_HOSTED_SETUP.ja.md).
+The P4 has no BLE radio, so a chip that has one is attached over SDIO as an
+ESP-Hosted slave and used through the ESP-Hosted NimBLE configuration the Core
+supplies. **In this setup the BLE radio work happens on the slave, not on the P4.**
 
-With Core 3.3.11, a P4 ECC defect in the bundled IDF blocks LE Secure Connections,
-bonding and dependent HID paths, and repeated `begin()` after `end()` is limited
-as well. Both are recorded in the Japanese
+> [!IMPORTANT]
+> **The slave runs its own ESP-Hosted co-processor firmware, separate from this
+> library.** EspBle neither ships nor updates it; flash it yourself with
+> `ESP_HostedOTA` from Arduino-ESP32 or Espressif's own procedure. **Behaviour
+> depends on that firmware's version** — slave 2.3.2 and 2.12.11 behaved
+> differently on our hardware — so keep the host and slave versions matched.
+>
+> **What works also depends on which chip the slave is**, because the BLE version,
+> the supported PHYs and the connection limit come from its radio and firmware. The
+> Core 3.3.11 prebuilt libraries for the P4 carry `esp32c6` as the default slave
+> target, but from ESP-Hosted 2.12.2 the Core asks the attached co-processor for its
+> target name and picks the update firmware by that name, so a slave other than the
+> C6 is possible in principle. **EspBle's peer tests cover P4 + C6 only.**
+
+Verified host/slave versions, the slave firmware update procedure and the supported
+subset are in the Japanese [ESP-Hosted setup guide](docs/ESP_HOSTED_SETUP.ja.md).
+
+With Core 3.3.11 and a C6 slave, a P4 ECC defect in the bundled IDF blocks LE Secure
+Connections, bonding and dependent HID paths, and repeated `begin()` after `end()`
+is limited as well. Both are recorded in the Japanese
 [known limitations](docs/ESP_HOSTED_LIMITATIONS.ja.md).
 
 For a Tab5 or a custom board whose SDIO wiring differs from the generic P4, select

@@ -5,6 +5,12 @@ ESP32-P4 + ESP32-C6（SDIO）で実機確認した制限を記録する。
 compile、scan、接続、GATT read/write、notify/indicate、MTU交換に加え、Wi-Fi/BLEの
 同時利用と共有transportの最終所有者までの維持は動作する。
 
+**ここに書いた結果はこの組み合わせに対するものである。**BLEを実行するのはslave側のチップなので、
+slaveのchipまたはfirmware versionが変われば結果も変わりうる。slave firmwareはEspBleの配布物では
+なく別途書き込む（[slaveのチップとfirmware](ESP_HOSTED_SETUP.ja.md#slaveのチップとfirmware)）。
+実際、Slave 2.3.2では基本的なGATTは動いたがSecurityの症状が異なった。上流versionを更新したら、
+この文書の各項目を再実行して解消の有無を確認する。
+
 ## Wi-Fi/BLE共存で確認済みの範囲
 
 P4でWi-Fiを先に開始してDHCPでIP addressを取得し、その後BLEを開始する順序を

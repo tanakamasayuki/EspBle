@@ -16,7 +16,8 @@ Arduino-ESP32同梱の`BLEDevice` / `BLEClient` / `BLEServer`などのラッパ�
 > **ESP32-S3 / C3 / C6 / H2**はCore同梱のNimBLEをそのまま使う標準構成です。
 > **無印ESP32**はCoreのプリビルドがBluedroidのため、EspBleがNimBLE hostを同梱して動かします。
 > BLE 4.2 controllerなので使えない機能があり、代わりにBluetooth Classicが使えます。
-> **ESP32-P4 + ESP32-C6**はESP-Hosted経由で、Security/bondingなど上流由来の制限があります。
+> **ESP32-P4**はBLE無線を持たず、SDIOでつないだslave側のチップがBLEを担当します（ESP-Hosted）。
+> slaveには**このライブラリとは別のfirmware**が要り、使える範囲はそのチップとversionで変わります。
 
 ## なぜEspBleを使うのか
 
@@ -63,14 +64,15 @@ API単位の対応状況と制限は[機能対応マトリクス](docs/FEATURE_M
 
 ### SoCごとの違い
 
-| | ESP32-S3 / C3 / C6 / H2 | 無印ESP32 | ESP32-P4 + ESP32-C6 |
+| | ESP32-S3 / C3 / C6 / H2 | 無印ESP32 | ESP32-P4 + slave（ESP-Hosted） |
 |---|---|---|---|
-| NimBLE host | Core同梱 | **EspBleが同梱**（`src/nimble_esp32/`） | Core同梱（HCIはSDIO経由でC6へ） |
+| BLE無線 | 内蔵 | 内蔵 | **slave側のチップ**（SDIO接続。別途firmwareが必要） |
+| NimBLE host | Core同梱 | **EspBleが同梱**（`src/nimble_esp32/`） | Core同梱（HCIをSDIOでslaveへ流す） |
 | BLEの公開API | 同一 | 同一 | 同一 |
 | Security / bonding | 対応 | 対応 | **不可**（上流のECC不具合） |
-| 2M / Coded PHY | 対応 | **不可**（BLE 4.2 controller） | 代表suiteの対象外 |
+| 2M / Coded PHY | 対応 | **不可**（BLE 4.2 controller） | slaveのチップとfirmware次第（代表suiteの対象外） |
 | Bluetooth Classic | 無線が無いため不可 | **対応**（SPP / HID / A2DP / AVRCP / HFP） | 不可 |
-| 検証範囲 | S3の2台で全機能をPeer test（C3 / C6 / H2はCIのbuild検証） | 2台でPeer testを両role掃引し、通った範囲のみ | 代表suite（接続、GATT、notify、MTU、Wi-Fi共存） |
+| 検証範囲 | S3の2台で全機能をPeer test（C3 / C6 / H2はCIのbuild検証） | 2台でPeer testを両role掃引し、通った範囲のみ | 代表suite（接続、GATT、notify、MTU、Wi-Fi共存）。**C6 slave / firmware 2.12.11でのみ確認** |
 
 シリーズ共通の制限もあります。Extended / Periodic Advertisingは、Coreが同梱するNimBLEが
 `CONFIG_BT_NIMBLE_EXT_ADV`無効でbuildされているためどのtargetでも使えません。同時接続数の上限は
@@ -117,12 +119,29 @@ GATT read反復、BLE GATT接続を維持したA2DP / AVRCP / HFP mSBC SCOまで
 
 ### ESP32-P4 + ESP32-C6（ESP-Hosted）
 
-P4はBLE無線を持たないため、C6をESP-Hosted slaveとしてSDIOで接続し、Core提供のESP-Hosted NimBLE構成で
-利用します。検証済みのHost/Slave version、C6の更新方法、対応済み範囲は
+P4はBLE無線を持たないため、無線を持つ別チップをESP-Hosted slaveとしてSDIOで接続し、Core提供の
+ESP-Hosted NimBLE構成で利用します。**この構成ではBLEを実行するのはP4ではなくslave側のチップです。**
+
+> [!IMPORTANT]
+> **slave側には、このライブラリとは別のESP-Hosted co-processor firmwareが載ります。**
+> EspBleはこのfirmwareを同梱も更新もしません。書き込みはArduino-ESP32 Core同梱の
+> `ESP_HostedOTA`（またはEspressifの手順）で別途行ってください。**動作はfirmwareのversionで
+> 変わります**——実機でもslave 2.3.2と2.12.11で挙動が違いました。Host側とSlave側のversionは
+> 揃えてください。
+>
+> **使える範囲はslaveのチップでも変わります。** BLEのversion、対応PHY、同時接続数は
+> slave側の無線とfirmwareが決めるためです。Core 3.3.11のP4向けプリビルドは
+> `esp32c6`をslave targetの既定値として持ちますが、ESP-Hosted 2.12.2以降のCoreは
+> 実機のco-processorへ問い合わせてtarget名を得て、更新用firmwareもその名前から選びます。
+> したがってC5などC6以外のslaveも仕組みの上では成立しますが、**EspBleがPeer testで
+> 確認したのはP4 + C6の組み合わせだけです。**
+
+検証済みのHost/Slave version、slave firmwareの更新方法、対応済み範囲は
 [ESP-Hostedセットアップ](docs/ESP_HOSTED_SETUP.ja.md)にあります。
 
-Core 3.3.11では同梱IDFのP4 ECC不具合により、LE Secure Connections、bonding、それを前提とするHID、
-および`end()`後の複数回の再`begin()`に[既知制限](docs/ESP_HOSTED_LIMITATIONS.ja.md)があります。
+Core 3.3.11とC6 slaveの組み合わせでは、同梱IDFのP4 ECC不具合により、LE Secure Connections、bonding、
+それを前提とするHID、および`end()`後の複数回の再`begin()`に
+[既知制限](docs/ESP_HOSTED_LIMITATIONS.ja.md)があります。
 
 Tab5や独自基板でSDIO pin配置がgeneric P4と異なる場合は、正しいboard variantを選ぶか、初期化前にCoreの
 pin設定を上書きします（[SDIO pinの選択と上書き](docs/ESP_HOSTED_SETUP.ja.md#sdio-pinの選択と上書き)、

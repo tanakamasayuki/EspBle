@@ -97,6 +97,25 @@ Hosted transportとpin設定を共有する。Coreは次を拒否する。
 pinはWi-Fi/BLE共有SDIO transportの設定なので、EspBle固有APIとして重複させず、
 Arduino CoreのHosted HALを利用する。
 
+## slaveのチップとfirmware
+
+ESP-Hosted構成でBLEを実行するのはP4ではなく**slave側のチップ**である。したがって
+「何が使えるか」はP4ではなくslaveの無線とfirmwareで決まる。
+
+- **slave firmwareはEspBleの配布物ではない。**EspBleはこれを同梱も更新もしない。書き込みは
+  Arduino-ESP32 Core同梱の`ESP_HostedOTA`（後述）またはEspressifの手順で別途行う。
+- **versionで挙動が変わる。**実機でもSlave 2.3.2と2.12.11で差が出た（後述）。HostとSlaveの
+  versionは揃える。
+- **チップによって使える範囲が変わる。**BLEのversion、対応PHY、同時接続数はslaveの
+  controllerが決めるためである。Core 3.3.11のP4向けプリビルドは
+  `CONFIG_ESP_HOSTED_IDF_SLAVE_TARGET="esp32c6"`を既定値として持つが、ESP-Hosted 2.12.2以降の
+  Coreは`hostedGetSlaveTargetName()`で実機のco-processorへ問い合わせてtarget名を得て、更新用
+  firmwareのURLもその名前から組み立てる（`hosted/<target>-v<version>.bin`）。C5などC6以外の
+  slaveも仕組みの上では成立する。
+- **EspBleが実機で確認したのはP4 + C6だけである。**他のslaveでの結果は持っていないので、
+  対応済みとは書かない。使う場合はそのチップとfirmware versionを記録し、代表suiteを回して
+  どこまで通るかを自分で確かめる。
+
 ## 対応version
 
 初期検証環境は次の組み合わせとする。

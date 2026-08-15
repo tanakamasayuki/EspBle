@@ -14,6 +14,9 @@ notify/indicate、MTU、Wi-Fi/BLE共存と共有transport lifecycleに加え、S
 Security/bondingはCore 3.3.11同梱IDFのP4 ECC不具合、複数回の完全再初期化は
 Hosted 2.12.11のresource leakにより、
 [ESP-Hostedの既知制限](ESP_HOSTED_LIMITATIONS.ja.md)として上流修正取り込み待ちです。
+この構成でBLEを実行するのはslave側のチップで、slave firmwareはEspBleの配布物ではなく別途
+書き込みます。使える範囲はslaveのchipとfirmware versionで変わるため、**検証済みと言えるのは
+C6 slave / firmware 2.12.11の組み合わせだけ**です（[slaveのチップとfirmware](ESP_HOSTED_SETUP.ja.md#slaveのチップとfirmware)）。
 
 HIDはKeyboard（6KRO / NKRO）、Mouse、Consumer Control、System Control、Gamepad、Vendor Input / Output / Featureを1つのServiceへ合成できます。Hostは対応する全Input ReportをDiscoveryし、種別別eventへ配送します。
 

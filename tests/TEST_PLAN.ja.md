@@ -49,7 +49,7 @@ P4向けのコンパイルだけでは、P4とC6の間にあるSDIO transport、
 
 - ESP32-P4をhost、ESP32-C6をESP-Hosted slave/controllerとして使用する。2台目のESP32-S3は無線Peerであり、P4との信号配線は不要。
 - P4-C6間は4-bit SDIOの`CLK`、`CMD`、`D0`〜`D3`、`RESET`と安定した電源/GNDを接続する。
-- C6にはArduino-ESP32 Core同梱hostと互換性のあるESP-Hosted Slave firmwareを書き込む。準備とversion条件は[ESP-Hostedセットアップ](../docs/ESP_HOSTED_SETUP.ja.md)を参照する。
+- C6にはArduino-ESP32 Core同梱hostと互換性のあるESP-Hosted Slave firmwareを書き込む。準備とversion条件は[ESP-Hostedセットアップ](../docs/ESP_HOSTED_SETUP.ja.md)を参照する。**BLEを実行するのはslave側のチップなので、slaveのchip名とfirmware versionは結果と一緒に記録する。**別のchip（C5など）やversionでの結果は、この記録とは別物として扱う。
 - 基準fixtureには、C6を搭載済みのEspressif ESP32-P4-Function-EV-Board、またはそれと同じ標準SDIO配線（P4側`CLK=18`、`CMD=19`、`D0=14`、`D1=15`、`D2=16`、`D3=17`、`RESET=54`）のP4+C6構成を推奨する。この配線はArduino-ESP32の汎用`esp32p4` variantと一致し、board固有設定なしで共通の回帰条件を再現できる。
 - M5Stack Tab5など標準配線と異なるboardも使用できる。その場合は正しいboard variantを選ぶか、`ble.begin()`より前に`hostedSetPins()`で上書きする。方法は[SDIO pinの選択と上書き](../docs/ESP_HOSTED_SETUP.ja.md#sdio-pinの選択と上書き)を参照し、結果には使用したboard/profileとpin構成を記録する。
 
