@@ -359,11 +359,17 @@ API, which makes it the cheapest per suite.
 
 A test that waits for a line a sketch prints once at boot misses it when the
 serial monitor attaches after the reset, and then fails for no reason of its own.
-That happened with `classic_hid_report` and `classic_spp_stream` — flash and reset
-timing, not a code defect. **Synchronise with a command probe instead**: the sketch
-answers the same line on a command such as `a` as well as at boot, and the test
-asks until it is answered. The `probe` fixture in `tests/conftest.py` does this; a test takes it as an
-argument.
+That happened with `classic_hid_report`, `classic_spp_stream`, `classic_a2dp_media`,
+`classic_hfp_cvsd` and `dual_host_a2dp` — flash and reset timing, not a code defect.
+In a two-board suite the board flashed first boots and prints while the other one is
+still being flashed, which takes minutes for the Classic audio sketches, so its whole
+startup output is gone by the time the monitor attaches; the symptom is a completely
+empty log on exactly one side. **Synchronise with a command probe instead**: the sketch
+answers the same lines on a command (`?` in the audio suites) as well as at boot, and
+the test asks until it is answered. The `probe` fixture in `tests/conftest.py` does
+this; a test takes it as an argument. State that a sketch announces when it happens —
+a BLE link coming up, for instance — is answered by the same command, so a test asks
+for the current state rather than waiting for the announcement.
 
 ## Pass Criteria
 

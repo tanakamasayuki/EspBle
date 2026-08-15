@@ -16,6 +16,11 @@ bool avrcpCommandsSent = false;
 bool teardownRequested = false;
 size_t packetTarget = 100;
 uint32_t baselineHeap = 0;
+// Readiness is printed once at boot, and the board that finishes flashing first
+// prints it before the other board's monitor is attached. Keeping the state
+// lets the "?" command answer the same lines on demand.
+bool sourceInitialized = false;
+bool dualClientReady = false;
 constexpr size_t MaximumPacketTarget = 500000;
 
 #if defined(ESPBLE_TEST_DUAL_A2DP)
@@ -142,20 +147,33 @@ void setup()
     return;
   }
   Serial.println("AVRCP_SOURCE_READY");
-  const bool initialized = bluetooth.a2dpSource().begin();
+  sourceInitialized = bluetooth.a2dpSource().begin();
   baselineHeap = ESP.getFreeHeap();
   Serial.printf("A2DP_SOURCE_PROFILE initialized=%u\n",
-    initialized ? 1 : 0);
+    sourceInitialized ? 1 : 0);
   Serial.printf("A2DP_SOURCE_READY endpoint=%u seid=0\n",
-    initialized ? 1 : 0);
+    sourceInitialized ? 1 : 0);
 #if defined(ESPBLE_TEST_DUAL_A2DP)
-  if (!initialized || !startDualBleClient())
+  if (!sourceInitialized || !startDualBleClient())
   {
     Serial.printf("DUAL_A2DP_BLE_START_FAILED %s\n",
       dualBle.lastErrorDetail().c_str());
     return;
   }
+  dualClientReady = true;
   Serial.println("DUAL_A2DP_BLE_CLIENT_READY");
+#endif
+}
+
+void reportReady()
+{
+  Serial.println("AVRCP_SOURCE_READY");
+  Serial.printf("A2DP_SOURCE_PROFILE initialized=%u\n",
+    sourceInitialized ? 1 : 0);
+  Serial.printf("A2DP_SOURCE_READY endpoint=%u seid=0\n",
+    sourceInitialized ? 1 : 0);
+#if defined(ESPBLE_TEST_DUAL_A2DP)
+  if (dualClientReady) Serial.println("DUAL_A2DP_BLE_CLIENT_READY");
 #endif
 }
 
@@ -201,7 +219,9 @@ void loop()
   {
     String command = Serial.readStringUntil('\n');
     command.trim();
-    if (command.startsWith("c"))
+    if (command == "?")
+      reportReady();
+    else if (command.startsWith("c"))
       Serial.printf("A2DP_SOURCE_CONNECT requested=%u\n",
         bluetooth.a2dpSource().connect(command.c_str() + 1) ? 1 : 0);
     else if (command.startsWith("v") && a2dpConnected &&

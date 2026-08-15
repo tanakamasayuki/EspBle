@@ -1,7 +1,7 @@
 import re
 
 
-def test_a2dp_and_avrcp_while_ble_gatt_remains_live(dut, peers):
+def test_a2dp_and_avrcp_while_ble_gatt_remains_live(dut, peers, probe):
     peer = peers["device"]
 
     def assert_clean_diagnostics():
@@ -23,22 +23,26 @@ def test_a2dp_and_avrcp_while_ble_gatt_remains_live(dut, peers):
         assert diagnostics.group(7) == b"0"
         assert diagnostics.group(8) == b"1"
 
-    dut.expect_exact("AVRCP_SINK_READY", timeout=30)
+    # Both boards print their readiness once at boot, and the one flashed first
+    # prints it before this monitor attaches. "?" repeats those lines, so ask
+    # for the first of them and read the rest of the same answer.
+    probe(dut, "?\n", re.compile(rb"AVRCP_SINK_READY"))
     ready = dut.expect(
         re.compile(
             rb"A2DP_SINK_READY started=1 address=([0-9a-f:]+) error=None:"
         ),
-        timeout=30,
+        timeout=10,
     )
-    dut.expect_exact("DUAL_A2DP_BLE_SERVER_READY", timeout=30)
-    peer.expect_exact("AVRCP_SOURCE_READY", timeout=30)
-    peer.expect_exact("A2DP_SOURCE_PROFILE initialized=1", timeout=30)
-    peer.expect_exact("A2DP_SOURCE_READY endpoint=1 seid=0", timeout=30)
-    peer.expect_exact("DUAL_A2DP_BLE_CLIENT_READY", timeout=30)
+    dut.expect_exact("DUAL_A2DP_BLE_SERVER_READY", timeout=10)
+    probe(peer, "?\n", re.compile(rb"AVRCP_SOURCE_READY"))
+    peer.expect_exact("A2DP_SOURCE_PROFILE initialized=1", timeout=10)
+    peer.expect_exact("A2DP_SOURCE_READY endpoint=1 seid=0", timeout=10)
+    peer.expect_exact("DUAL_A2DP_BLE_CLIENT_READY", timeout=10)
 
-    dut.expect_exact("DUAL_A2DP_BLE_SERVER_CONNECTED", timeout=30)
-    peer.expect_exact("DUAL_A2DP_BLE_CLIENT_CONNECTED", timeout=30)
-    peer.expect_exact("DUAL_A2DP_BLE_READ_REQUESTED 1", timeout=10)
+    # The BLE link forms on its own once both sides are up. Ask each side for
+    # its state instead of waiting for the announcement it makes when it happens.
+    probe(dut, "?\n", re.compile(rb"DUAL_A2DP_BLE_SERVER_CONNECTED"))
+    probe(peer, "r\n", re.compile(rb"DUAL_A2DP_BLE_READ_REQUESTED 1"))
     peer.expect(
         re.compile(
             rb"DUAL_A2DP_BLE_READ success=1 value=dual-a2dp a2dp=0"

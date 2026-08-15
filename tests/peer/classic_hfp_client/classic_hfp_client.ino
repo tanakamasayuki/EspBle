@@ -6,6 +6,13 @@
 #endif
 
 EspBleClassic bluetooth;
+// Readiness is printed once at boot. In a two-board suite the board that
+// finishes flashing first prints it while the other one is still being flashed,
+// so a monitor that attaches afterwards never sees it. Keeping the state lets
+// the "?" command answer the same lines on demand.
+bool gatewayExcluded = false;
+bool dualServerReady = false;
+bool dualServerConnected = false;
 
 #if defined(ESPBLE_TEST_DUAL_HFP)
 EspBle dualBle;
@@ -25,9 +32,11 @@ bool startDualBleServer()
     dualService, DualHfpCharacteristicUuid, characteristicConfig);
   dualBle.gattServer().setValue(dualCharacteristic, String("dual-hfp"));
   dualBle.onConnected([](const EspBleConnection &) {
+    dualServerConnected = true;
     Serial.println("DUAL_HFP_BLE_SERVER_CONNECTED");
   });
   dualBle.onDisconnected([](const EspBleConnection &) {
+    dualServerConnected = false;
     Serial.println("DUAL_HFP_BLE_SERVER_DISCONNECTED");
   });
   EspBleConfig config;
@@ -132,6 +141,7 @@ void setup()
     return;
   }
   const bool gatewayAccepted = bluetooth.hfpAudioGateway().begin();
+  gatewayExcluded = !gatewayAccepted;
   Serial.printf("HFP_CLIENT_EXCLUSION ag=%u error=%s\n",
     gatewayAccepted ? 1 : 0, bluetooth.lastErrorName());
 #if defined(ESPBLE_TEST_DUAL_HFP)
@@ -141,10 +151,22 @@ void setup()
       dualBle.lastErrorDetail().c_str());
     return;
   }
+  dualServerReady = true;
   Serial.println("DUAL_HFP_BLE_SERVER_READY");
 #endif
   Serial.printf("HFP_CLIENT_READY address=%s\n",
     classicAddress().c_str());
+}
+
+void reportReady()
+{
+  Serial.printf("HFP_CLIENT_EXCLUSION ag=%u error=%s\n",
+    gatewayExcluded ? 0 : 1, gatewayExcluded ? "InvalidState" : "None");
+#if defined(ESPBLE_TEST_DUAL_HFP)
+  if (dualServerReady) Serial.println("DUAL_HFP_BLE_SERVER_READY");
+  if (dualServerConnected) Serial.println("DUAL_HFP_BLE_SERVER_CONNECTED");
+#endif
+  Serial.printf("HFP_CLIENT_READY address=%s\n", classicAddress().c_str());
 }
 
 void loop()
@@ -155,7 +177,9 @@ void loop()
 #endif
   if (!Serial.available()) { delay(1); return; }
   const String command = Serial.readStringUntil('\n');
-  if (command.startsWith("c"))
+  if (command == "?")
+    reportReady();
+  else if (command.startsWith("c"))
     Serial.printf("HFP_CLIENT_CONNECT requested=%u\n",
       bluetooth.hfpClient().connect(command.substring(1).c_str()) ? 1 : 0);
   else if (command == "q")

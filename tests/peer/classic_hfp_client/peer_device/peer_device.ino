@@ -6,6 +6,11 @@
 
 EspBleClassic bluetooth;
 bool audioEchoed = false;
+// Readiness is printed once at boot, and the board that finishes flashing first
+// prints it before the other board's monitor is attached. Keeping the state
+// lets the "?" command answer the same lines on demand.
+bool clientExcluded = false;
+bool dualClientReady = false;
 
 #if defined(ESPBLE_TEST_DUAL_HFP)
 EspBle dualBle;
@@ -186,6 +191,7 @@ void setup()
     return;
   }
   const bool clientAccepted = bluetooth.hfpClient().begin();
+  clientExcluded = !clientAccepted;
   Serial.printf("HFP_AG_EXCLUSION client=%u error=%s\n",
     clientAccepted ? 1 : 0, bluetooth.lastErrorName());
 #if defined(ESPBLE_TEST_DUAL_HFP)
@@ -195,7 +201,18 @@ void setup()
       dualBle.lastErrorDetail().c_str());
     return;
   }
+  dualClientReady = true;
   Serial.println("DUAL_HFP_BLE_CLIENT_READY");
+#endif
+  Serial.printf("HFP_AG_READY address=%s\n", classicAddress().c_str());
+}
+
+void reportReady()
+{
+  Serial.printf("HFP_AG_EXCLUSION client=%u error=%s\n",
+    clientExcluded ? 0 : 1, clientExcluded ? "InvalidState" : "None");
+#if defined(ESPBLE_TEST_DUAL_HFP)
+  if (dualClientReady) Serial.println("DUAL_HFP_BLE_CLIENT_READY");
 #endif
   Serial.printf("HFP_AG_READY address=%s\n", classicAddress().c_str());
 }
@@ -209,7 +226,9 @@ void loop()
   if (Serial.available())
   {
     const String command = Serial.readStringUntil('\n');
-    if (command == "b" || command == "B")
+    if (command == "?")
+      reportReady();
+    else if (command == "b" || command == "B")
       Serial.printf("HFP_AG_INBAND set=%u provided=%u\n",
         bluetooth.hfpAudioGateway().setInBandRingTone(command == "b") ? 1 : 0,
         command == "b" ? 1 : 0);

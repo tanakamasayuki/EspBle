@@ -2,21 +2,24 @@ import os
 import re
 
 
-def test_a2dp_sink_receives_external_codec_media(dut, peers):
+def test_a2dp_sink_receives_external_codec_media(dut, peers, probe):
     packet_target = int(os.environ.get("ESPBLE_A2DP_PACKET_TARGET", "100"))
     assert 1 <= packet_target <= 500000
     transfer_timeout = max(30, packet_target // 250 + 30)
     peer = peers["device"]
-    dut.expect_exact("AVRCP_SINK_READY", timeout=30)
+    # Both boards print their readiness once at boot, and the one flashed first
+    # prints it before this monitor attaches. "?" repeats those lines, so ask
+    # for the first of them and read the rest of the same answer.
+    probe(dut, "?\n", re.compile(rb"AVRCP_SINK_READY"))
     ready = dut.expect(
         re.compile(
             rb"A2DP_SINK_READY started=1 address=([0-9a-f:]+) error=None:"
         ),
-        timeout=30,
+        timeout=10,
     )
-    peer.expect_exact("AVRCP_SOURCE_READY", timeout=30)
-    peer.expect_exact("A2DP_SOURCE_PROFILE initialized=1", timeout=30)
-    peer.expect_exact("A2DP_SOURCE_READY endpoint=1 seid=0", timeout=30)
+    probe(peer, "?\n", re.compile(rb"AVRCP_SOURCE_READY"))
+    peer.expect_exact("A2DP_SOURCE_PROFILE initialized=1", timeout=10)
+    peer.expect_exact("A2DP_SOURCE_READY endpoint=1 seid=0", timeout=10)
     peer.write(b"c" + ready.group(1) + b"\n")
     peer.expect_exact("A2DP_SOURCE_CONNECT requested=1", timeout=10)
     peer.expect(

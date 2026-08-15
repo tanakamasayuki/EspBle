@@ -158,7 +158,19 @@ def test_rpa_bond_reconnect_and_reboot_restore_with_classic_hid(dut, peers):
     dut.write("Y")
     dut.expect_exact("RPA_DUAL_TIMEOUT seconds=900 rc=0", timeout=10)
 
-    assert start_rpa_connection(peer) == rotated_rpas[-1]
+    # Read the address once rotation is frozen instead of reusing the last one
+    # observed in the loop: the two-second timer keeps firing while the Classic
+    # HID round trip runs, so that value can already have been replaced. What
+    # this checks is that a connection uses the address being advertised now.
+    peer.write("p\n")
+    peer.expect_exact("RPA_DUAL_OBSERVE 1", timeout=10)
+    frozen = peer.expect(
+        re.compile(rb"RPA_DUAL_OBSERVED addr=([0-9a-f:]+) type=(\d+)"),
+        timeout=20,
+    )
+    frozen_rpa, frozen_type = parse_address(frozen)
+    assert_rpa(frozen_rpa, frozen_type)
+    assert start_rpa_connection(peer) == frozen_rpa
     expect_secure_read(dut, peer)
     dut.write("?")
     dut.expect_exact("DUAL_STATE adv=0 classic=1 ble=1", timeout=10)

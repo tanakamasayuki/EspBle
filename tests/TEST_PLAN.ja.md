@@ -479,10 +479,15 @@ suite名は`classic_core_host_spp`の形に揃え、相手側が同梱実装で�
 ## 起動banner待ちを避ける
 
 sketchが起動時に1度だけ出す行を待つtestは、serial monitorがreset後に接続すると取りこぼして
-落ちます。実際に`classic_hid_report`と`classic_spp_stream`で発生しました（どちらもcode側の
-不具合ではなくflashとresetのタイミング）。したがって**同期はcommand probeで行います**。
-sketch側は起動時だけでなく`a`のようなcommandでも同じ行を返し、test側は答えが来るまで数回
-問い合わせます。実装は`tests/conftest.py`の`probe` fixtureで、必要なtestが引数に取ります。
+落ちます。実際に`classic_hid_report`、`classic_spp_stream`、`classic_a2dp_media`、
+`classic_hfp_cvsd`、`dual_host_a2dp`で発生しました（いずれもcode側の不具合ではなくflashと
+resetのタイミング）。2台構成では先にflashが終わった側がbootして出力する間、もう1台のflashが
+続いており、Classic audioのsketchでは数分かかるため、monitorが接続する頃には起動時出力が
+すべて流れています。症状は片側のlogだけが完全に空になることです。したがって**同期はcommand
+probeで行います**。sketch側は起動時だけでなくcommand（audio系は`?`）でも同じ行を返し、test側は
+答えが来るまで数回問い合わせます。実装は`tests/conftest.py`の`probe` fixtureで、必要なtestが
+引数に取ります。BLE linkの確立のように「起きた瞬間に1度だけ知らせる」状態も同じcommandで
+現在値を答えるようにし、testは通知を待たずに状態を問い合わせます。
 
 ## 合格条件
 

@@ -11,11 +11,19 @@ size_t mediaPackets = 0;
 size_t mediaBytes = 0;
 bool teardownRequested = false;
 uint32_t baselineHeap = 0;
+// Readiness is printed once at boot. In a two-board suite this board finishes
+// flashing first and prints while the other one is still being flashed, so a
+// monitor that attaches afterwards never sees it. Keeping the state lets the
+// "?" command answer the same lines on demand.
+bool sinkStarted = false;
+bool dualServerReady = false;
+String sinkStartError;
 
 #if defined(ESPBLE_TEST_DUAL_A2DP)
 EspBle dualBle;
 EspBleGattService dualService;
 EspBleGattCharacteristic dualCharacteristic;
+bool dualServerConnected = false;
 constexpr const char *DualA2dpServiceUuid =
   "6fd8e000-6548-49b7-a32d-b0240fa70001";
 constexpr const char *DualA2dpCharacteristicUuid =
@@ -30,9 +38,11 @@ bool startDualBleServer()
     dualService, DualA2dpCharacteristicUuid, characteristicConfig);
   dualBle.gattServer().setValue(dualCharacteristic, String("dual-a2dp"));
   dualBle.onConnected([](const EspBleConnection &) {
+    dualServerConnected = true;
     Serial.println("DUAL_A2DP_BLE_SERVER_CONNECTED");
   });
   dualBle.onDisconnected([](const EspBleConnection &) {
+    dualServerConnected = false;
     Serial.println("DUAL_A2DP_BLE_SERVER_DISCONNECTED");
   });
   EspBleConfig config;
@@ -161,19 +171,32 @@ void setup()
     }
   });
 
-  const bool started = bluetooth.a2dpSink().begin();
+  sinkStarted = bluetooth.a2dpSink().begin();
   baselineHeap = ESP.getFreeHeap();
-  Serial.printf("A2DP_SINK_READY started=%u address=%s error=%s:%s\n",
-    started ? 1 : 0, classicAddress().c_str(), bluetooth.lastErrorName(),
-    bluetooth.lastErrorDetail().c_str());
+  sinkStartError =
+    String(bluetooth.lastErrorName()) + ":" + bluetooth.lastErrorDetail();
+  Serial.printf("A2DP_SINK_READY started=%u address=%s error=%s\n",
+    sinkStarted ? 1 : 0, classicAddress().c_str(), sinkStartError.c_str());
 #if defined(ESPBLE_TEST_DUAL_A2DP)
-  if (!started || !startDualBleServer())
+  if (!sinkStarted || !startDualBleServer())
   {
     Serial.printf("DUAL_A2DP_BLE_START_FAILED %s\n",
       dualBle.lastErrorDetail().c_str());
     return;
   }
+  dualServerReady = true;
   Serial.println("DUAL_A2DP_BLE_SERVER_READY");
+#endif
+}
+
+void reportReady()
+{
+  Serial.println("AVRCP_SINK_READY");
+  Serial.printf("A2DP_SINK_READY started=%u address=%s error=%s\n",
+    sinkStarted ? 1 : 0, classicAddress().c_str(), sinkStartError.c_str());
+#if defined(ESPBLE_TEST_DUAL_A2DP)
+  if (dualServerReady) Serial.println("DUAL_A2DP_BLE_SERVER_READY");
+  if (dualServerConnected) Serial.println("DUAL_A2DP_BLE_SERVER_CONNECTED");
 #endif
 }
 
@@ -202,7 +225,11 @@ void loop()
   if (Serial.available())
   {
     const String command = Serial.readStringUntil('\n');
-    if (command.startsWith("d"))
+    if (command == "?")
+    {
+      reportReady();
+    }
+    else if (command.startsWith("d"))
     {
       // The Sink is the side that knows its own latency, so it is the side that
       // reports it. The unit is tenths of a millisecond.

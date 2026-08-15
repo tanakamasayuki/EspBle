@@ -1,21 +1,24 @@
 import re
 
 
-def test_hfp_sco_while_ble_gatt_remains_live(dut, peers):
+def test_hfp_sco_while_ble_gatt_remains_live(dut, peers, probe):
     peer = peers["device"]
-    dut.expect_exact("DUAL_HFP_BLE_SERVER_READY", timeout=30)
-    peer.expect_exact("DUAL_HFP_BLE_CLIENT_READY", timeout=30)
+    # Readiness is printed once at boot, before the monitor of the board that is
+    # flashed second attaches. "?" repeats those lines on request.
+    probe(dut, "?\n", re.compile(rb"DUAL_HFP_BLE_SERVER_READY"))
     client = dut.expect(
-        re.compile(rb"HFP_CLIENT_READY address=([0-9a-f:]+)"), timeout=30
+        re.compile(rb"HFP_CLIENT_READY address=([0-9a-f:]+)"), timeout=10
     )
+    probe(peer, "?\n", re.compile(rb"DUAL_HFP_BLE_CLIENT_READY"))
     ag = peer.expect(
-        re.compile(rb"HFP_AG_READY address=([0-9a-f:]+)"), timeout=30
+        re.compile(rb"HFP_AG_READY address=([0-9a-f:]+)"), timeout=10
     )
     assert client.group(1) != ag.group(1)
 
-    dut.expect_exact("DUAL_HFP_BLE_SERVER_CONNECTED", timeout=30)
-    peer.expect_exact("DUAL_HFP_BLE_CLIENT_CONNECTED", timeout=30)
-    peer.expect_exact("DUAL_HFP_BLE_READ_REQUESTED 1", timeout=10)
+    # The BLE link forms on its own once both sides are up. Ask each side for its
+    # state instead of waiting for the announcement it makes when it happens.
+    probe(dut, "?\n", re.compile(rb"DUAL_HFP_BLE_SERVER_CONNECTED"))
+    probe(peer, "r\n", re.compile(rb"DUAL_HFP_BLE_READ_REQUESTED 1"))
     peer.expect(re.compile(rb"DUAL_HFP_BLE_READ success=1 value=dual-hfp hfp=0"), timeout=20)
 
     dut.write(b"c" + ag.group(1) + b"\n")
