@@ -186,13 +186,19 @@ void setup()
   esp_a2d_source_register_data_callback(supplyAudio);
   esp_a2d_source_init();
 
-  esp_avrc_ct_init();
+  const esp_err_t ctInit = esp_avrc_ct_init();
   esp_avrc_ct_register_callback(avrcpCallback);
   // A real Source (a phone, say) publishes both AVRCP roles. Without the Target
   // record the Sink's own AVRCP connect attempt fails its SDP lookup, and no
   // AVCTP channel comes up for the Controller commands below to travel on.
-  esp_avrc_tg_init();
+  const esp_err_t tgInit = esp_avrc_tg_init();
   esp_avrc_tg_register_callback(avrcpTargetCallback);
+  esp_avrc_psth_bit_mask_t commands;
+  esp_avrc_tg_get_psth_cmd_filter(ESP_AVRC_PSTH_FILTER_ALLOWED_CMD, &commands);
+  const esp_err_t filter =
+    esp_avrc_tg_set_psth_cmd_filter(ESP_AVRC_PSTH_FILTER_SUPPORTED_CMD, &commands);
+  Serial.printf("A2DPPEER_AVRCP_INIT ct=%d tg=%d filter=%d\n", ctInit, tgInit,
+    filter);
 
   // A Source initiates, so it does not need to be visible to inquiry.
   esp_bt_gap_set_scan_mode(ESP_BT_NON_CONNECTABLE, ESP_BT_NON_DISCOVERABLE);
@@ -230,6 +236,14 @@ void loop()
     else if (command == "p")
     {
       sendPassthrough(ESP_AVRC_PT_CMD_PLAY);
+    }
+    else if (command == "P")
+    {
+      // Ask the stack to open AVRCP explicitly, for the case where neither side
+      // brings it up on its own after the media connection.
+      const esp_err_t result = esp_avrc_ct_send_passthrough_cmd(0,
+        ESP_AVRC_PT_CMD_PLAY, ESP_AVRC_PT_CMD_STATE_PRESSED);
+      Serial.printf("A2DPPEER_AVRCP_PROBE result=%d\n", result);
     }
     else if (command == "d")
     {
