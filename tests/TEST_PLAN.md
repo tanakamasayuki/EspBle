@@ -348,8 +348,20 @@ Scope and current state:
 | BLE HID (HOGP) | bundled `BLEHIDDevice` | not implemented: whether EspBle's HID Host parses a Bluedroid device's Report Map |
 | BLE MIDI | hand-built on the bundled wrapper | not implemented: whether EspBle's MIDI Host accepts another implementation |
 | Classic A2DP / AVRCP | `esp_a2d_*` / `esp_avrc_*` (no wrapper exists) | not implemented: codec negotiation, media transfer, passthrough, absolute volume |
-| Classic HFP | `esp_hf_client_*` / `esp_hf_ag_*` | not implemented: service-level connection, calls, SCO codec, AT responses |
+| Classic HFP | `esp_hf_client_*` / `esp_hf_ag_*` | not implemented: service-level connection, calls, call control and AT responses only. **SCO payload exchange is out of scope** — the esp32 target of Core 3.3.11 is built with `CONFIG_BT_HFP_AUDIO_DATA_PATH_PCM`, so the peer routes SCO to an external codec chip rather than over HCI |
 | Classic HID | — | **cannot be built.** The bundled sdkconfig has `CONFIG_BT_HID_ENABLED` unset; this stays with external-device verification |
+
+Checked before starting (2026-08-16, Core 3.3.11 on the original ESP32):
+
+- The peer sketch builds with the bundled `BLE` wrapper alone. A GATT server
+  (`BLEDevice` / `BLEServer` / `BLE2902`) takes 83% of flash, and adding
+  `BLEHIDDevice` plus `BLESecurity` still lands at 83% — both fit the default
+  partition scheme.
+- `BLESecurity`'s methods are static in 3.3.11 (`BLESecurity::setAuthenticationMode()`,
+  `setEncryptionLevel()`); the older instance-based form does not compile.
+- The bundled sdkconfig has `CONFIG_BT_SPP_ENABLED`, `CONFIG_BT_A2DP_ENABLE` and
+  `CONFIG_BT_HFP_ENABLE` (both roles) enabled, `CONFIG_BT_HID_ENABLED` disabled, and
+  the HFP audio path set to PCM.
 
 Suite names follow `classic_core_host_spp`, so the name says that the other side is
 the bundled implementation. This work starts after the release, in the order BLE

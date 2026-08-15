@@ -470,8 +470,26 @@ EspBle同士のPeerテストは、両側が同じ実装なので**同じ誤解�
 | BLE HID（HOGP） | 同梱`BLEHIDDevice` | 未実装。EspBleのHID HostがBluedroid製deviceのReport Mapを解析できるか |
 | BLE MIDI | 同梱`BLE`ラッパで手組み | 未実装。EspBleのMIDI Hostが別実装deviceを受けられるか |
 | Classic A2DP / AVRCP | `esp_a2d_*` / `esp_avrc_*`（wrapperは無い） | 未実装。codec negotiation、media転送、passthrough、absolute volume |
-| Classic HFP | `esp_hf_client_*` / `esp_hf_ag_*` | 未実装。SLC、発着信、SCO codec、AT応答 |
+| Classic HFP | `esp_hf_client_*` / `esp_hf_ag_*` | 未実装。SLC、発着信、call control、AT応答まで。**SCO payloadの往復は対象外**——core 3.3.11のesp32は`CONFIG_BT_HFP_AUDIO_DATA_PATH_PCM`でbuildされており、相手側はSCOをHCIへ出さず外部codec chipへ流すため |
 | Classic HID | ― | **作れない。**同梱sdkconfigは`CONFIG_BT_HID_ENABLED`が無効。外部機器での確認に委ねる |
+
+着手前に確認済みの前提（2026-08-16、Core 3.3.11 / 無印ESP32）:
+
+- 相手側sketchは同梱`BLE`ラッパだけでbuildできる。GATT Server（`BLEDevice` / `BLEServer` /
+  `BLE2902`）で83%、`BLEHIDDevice` + `BLESecurity`を足しても83%と、既定partitionに収まる。
+- `BLESecurity`のmethodは3.3.11ではstatic（`BLESecurity::setAuthenticationMode()` /
+  `setEncryptionLevel()`）。instanceを作る古い書き方はcompileできない。
+- core同梱sdkconfigは`CONFIG_BT_SPP_ENABLED` / `CONFIG_BT_A2DP_ENABLE` / `CONFIG_BT_HFP_ENABLE`
+  （Client/AGとも）が有効、`CONFIG_BT_HID_ENABLED`は無効、HFPのaudio pathはPCM。
+
+着手前に確認済みの前提（2026-08-16、Core 3.3.11 / 無印ESP32）:
+
+- 相手側sketchは同梱`BLE`ラッパだけでbuildできる。GATT Server（`BLEDevice` / `BLEServer` /
+  `BLE2902`）で83%、`BLEHIDDevice` + `BLESecurity`を足しても83%と、既定partitionに収まる。
+- `BLESecurity`のmethodは3.3.11ではstatic（`BLESecurity::setAuthenticationMode()` /
+  `setEncryptionLevel()`）。instanceを作る古い書き方はcompileできない。
+- core同梱sdkconfigは`CONFIG_BT_SPP_ENABLED` / `CONFIG_BT_A2DP_ENABLE` / `CONFIG_BT_HFP_ENABLE`
+  （Client/AGとも）が有効、`CONFIG_BT_HID_ENABLED`は無効、HFPのaudio pathはPCM。
 
 suite名は`classic_core_host_spp`の形に揃え、相手側が同梱実装であることが名前から分かるようにします。
 着手はrelease後で、優先順位はBLE GATT → BLE Security → BLE HID → Classic A2DP/AVRCP → Classic HFP

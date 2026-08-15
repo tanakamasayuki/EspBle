@@ -129,7 +129,10 @@ PCMFlowBluetoothへは`badFrame`とraw lengthを失わず渡し、decoder側で5
    peer boardをArduino-ESP32同梱のBluedroid（EspBleの独自hostを使わない別sketch）で動かし、
    独自host ⇄ core hostのpair testを追加する。core 3.3.11のesp32 sdkconfigは
    `CONFIG_BT_SPP_ENABLED` / `CONFIG_BT_A2DP_ENABLE` / `CONFIG_BT_HFP_ENABLE`
-   （Client/AG、`CONFIG_BT_HFP_AUDIO_DATA_PATH_HCI`）が有効で、`CONFIG_BT_HID_ENABLED`は無効。
+   （Client/AGとも有効）が有効で、`CONFIG_BT_HID_ENABLED`は無効。**HFPのaudio pathは
+   `CONFIG_BT_HFP_AUDIO_DATA_PATH_PCM`**なので、core側はSCO payloadをHCIへ出さず外部codec chipへ
+   流す。したがってHFPの相互接続で確認できるのはSLC、発着信、call control、AT応答までで、
+   SCO payloadの往復はEspBle同士でしか確認できない。
    したがってSPP、A2DP（core側はinternal codec、EspBle側はexternal codecなのでencode済みframe境界の
    検証になる）、AVRCP、HFPは相互接続できるが、Classic HIDはcore hostでは試験できない。
    独自archiveの名前空間化が正しければ同一sketchへ両hostをlinkできない前提も、この構成で確認できる。
