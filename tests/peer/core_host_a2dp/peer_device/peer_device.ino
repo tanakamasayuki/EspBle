@@ -193,8 +193,17 @@ void setup()
   // AVCTP channel comes up for the Controller commands below to travel on.
   const esp_err_t tgInit = esp_avrc_tg_init();
   esp_avrc_tg_register_callback(avrcpTargetCallback);
+  // The supported set has to be built explicitly: handing back the allowed set
+  // is rejected with ESP_ERR_NOT_SUPPORTED, and without a supported command the
+  // Target publishes no usable record for the Sink's SDP lookup.
   esp_avrc_psth_bit_mask_t commands;
-  esp_avrc_tg_get_psth_cmd_filter(ESP_AVRC_PSTH_FILTER_ALLOWED_CMD, &commands);
+  memset(&commands, 0, sizeof(commands));
+  esp_avrc_psth_bit_mask_operation(ESP_AVRC_BIT_MASK_OP_SET, &commands,
+    ESP_AVRC_PT_CMD_PLAY);
+  esp_avrc_psth_bit_mask_operation(ESP_AVRC_BIT_MASK_OP_SET, &commands,
+    ESP_AVRC_PT_CMD_PAUSE);
+  esp_avrc_psth_bit_mask_operation(ESP_AVRC_BIT_MASK_OP_SET, &commands,
+    ESP_AVRC_PT_CMD_STOP);
   const esp_err_t filter =
     esp_avrc_tg_set_psth_cmd_filter(ESP_AVRC_PSTH_FILTER_SUPPORTED_CMD, &commands);
   Serial.printf("A2DPPEER_AVRCP_INIT ct=%d tg=%d filter=%d\n", ctInit, tgInit,
