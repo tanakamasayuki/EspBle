@@ -2,8 +2,8 @@
 
 > English: [README.md](README.md)
 
-ESP32 Arduino向けの汎用Bluetooth Low Energyライブラリです。**NimBLE Host APIを直接
-呼び出します。**Arduino-ESP32同梱の`BLEDevice` / `BLEClient` / `BLEServer`などのラッパは
+ESP32 Arduino向けの汎用Bluetooth Low Energyライブラリです。**NimBLE Host APIを直接呼び出します。**
+Arduino-ESP32同梱の`BLEDevice` / `BLEClient` / `BLEServer`などのラッパは
 経由しません。Central / Peripheral、GATT Client / Server、Security、HID、BLE MIDIを
 1つの`EspBle`基盤の上で組み合わせられます。
 
