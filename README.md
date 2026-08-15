@@ -3,31 +3,31 @@
 > 日本語版: [README.ja.md](README.ja.md)
 
 EspBle is a general-purpose Bluetooth Low Energy library for ESP32 Arduino.
-**It calls the NimBLE Host API integrated into Arduino-ESP32 as an ESP-IDF
-component directly.** It does not go through Arduino-ESP32's `BLEDevice`,
-`BLEClient`, or `BLEServer` wrappers. Central and peripheral roles, GATT client
-and server operations, security, HID, and BLE MIDI share one `EspBle`
-foundation. On the original ESP32 it also offers Bluetooth Classic — SPP, HID
-device and host, A2DP, AVRCP and HFP — and running it alongside bundled NimBLE
-(dual-host) remains experimental. Which Classic features are
-hardware-verified, unverified or unimplemented is tracked per feature; see
-[BLE or Bluetooth Classic](docs/CLASSIC_VS_BLE.md).
+**It calls the NimBLE Host API directly** rather than going through
+Arduino-ESP32's `BLEDevice`, `BLEClient` or `BLEServer` wrappers. Central and
+peripheral roles, GATT client and server operations, security, HID and BLE MIDI
+compose on one `EspBle` foundation.
+
+On the original ESP32 you also get Bluetooth Classic — SPP, HID device and host,
+A2DP, AVRCP and HFP — through `EspBleClassic`. **The BLE API is the same on every
+ESP32; what changes per SoC is which radio features exist and how much has been
+verified** — the table under [Compatibility](#compatibility) lays the differences out.
 
 > [!IMPORTANT]
-> EspBle uses the NimBLE backend built into Arduino-ESP32. Native-controller
-> targets are **ESP32-S3 / ESP32-C3 / ESP32-C6 / ESP32-H2**.
-> **ESP32-P4 + ESP32-C6 is supported with limitations through ESP-Hosted**;
-> security/bonding and repeated full reinitialization have upstream limitations.
-> **The classic ESP32 works because EspBle bundles a NimBLE host for it, but its
-> BLE 4.2 controller rules out some features and only what is verified on
-> hardware is supported**; see [Compatibility](#compatibility).
+> **ESP32-S3 / C3 / C6 / H2** are the standard case: EspBle uses the NimBLE host
+> that ships with the Core.
+> **The original ESP32** has no Core-provided NimBLE, since its prebuilt libraries
+> are Bluedroid, so EspBle bundles a NimBLE host for it. Its BLE 4.2 controller
+> rules out some features, and in exchange the chip has Bluetooth Classic.
+> **ESP32-P4 + ESP32-C6** works through ESP-Hosted, with upstream limitations
+> including security and bonding.
 
 ## Why use EspBle?
 
-- **Use the Core-integrated NimBLE stack as-is:** EspBle directly uses the
-  ESP-IDF NimBLE Host and controller or ESP-Hosted HCI configuration selected
-  and built by Arduino-ESP32. It does not layer another BLE stack into the
-  library, and follows the Core's SoC support, configuration, and updates.
+- **Use the NimBLE stack the Core selected:** EspBle uses the ESP-IDF NimBLE
+  host and the controller or ESP-Hosted HCI configuration Arduino-ESP32 selected
+  and built, without layering another BLE stack on top. The original ESP32, which
+  gets no NimBLE from the Core, is the one place EspBle brings that same host itself.
 - **Expose low-level correctness through an Arduino-oriented API:** GATT
   attributes can be addressed by handle as well as UUID, so duplicate service
   and characteristic UUIDs, descriptors, and per-connection discovery snapshots
@@ -67,97 +67,109 @@ limitations, and the [examples index](examples/README.md) for task-oriented
 examples.
 
 The full feature set above is verified with an automated two-board ESP32-S3 peer
-test suite plus host-side unit tests. On P4/C6 Hosted, connections, GATT,
-notify/indicate, MTU, Wi-Fi/BLE coexistence, and shared-transport lifecycle have
-been verified with a P4/S3 pair. For excluded security paths and other details,
-see [tests/TEST_PLAN.md](tests/TEST_PLAN.md) and the
-[ESP-Hosted limitations](docs/ESP_HOSTED_LIMITATIONS.ja.md).
+suite plus host-side unit tests. What is covered per SoC is in
+[Compatibility](#compatibility) below; the suite-by-suite detail is in
+[tests/TEST_PLAN.md](tests/TEST_PLAN.md).
 
 ## Compatibility
 
-EspBle directly uses the **NimBLE Host API integrated into Arduino-ESP32 as an
-ESP-IDF component**. A configuration that provides no NimBLE is rejected at
-compile time with a clear `#error`.
+### What differs per SoC
 
-The plain `esp32` board is the one exception: its Arduino-ESP32 prebuilt
-libraries are built with Bluedroid, so EspBle bundles a NimBLE host for it
-(`src/nimble_esp32/`, the same esp-nimble snapshot the matching esp-idf pins).
-Its configuration is frozen to the values the other targets use, and overriding
-any of it is rejected.
+| | ESP32-S3 / C3 / C6 / H2 | Original ESP32 | ESP32-P4 + ESP32-C6 |
+|---|---|---|---|
+| NimBLE host | From the Core | **Bundled by EspBle** (`src/nimble_esp32/`) | From the Core (HCI over SDIO to the C6) |
+| Public BLE API | Same | Same | Same |
+| Security / bonding | Supported | Supported | **Unavailable** (upstream ECC defect) |
+| 2M / Coded PHY | Supported | **Unavailable** (BLE 4.2 controller) | Outside the representative suite |
+| Bluetooth Classic | No BR/EDR radio | **Supported** (SPP / HID / A2DP / AVRCP / HFP) | No BR/EDR radio |
+| Verified scope | Every feature, on a two-S3 peer suite (C3 / C6 / H2 are build-verified in CI) | A two-board peer sweep in both roles; only what passes counts | Representative suite (connect, GATT, notify, MTU, Wi-Fi coexistence) |
 
-Support for the classic ESP32 is not on par with the other chips: EspBle carries
-the maintenance of the bundled hosts itself. Classic SPP (byte stream and Arduino
-`Stream`), generic HID Device/Host, A2DP raw transport, AVRCP CT/TG and HFP
-Client/Audio Gateway use a separately built Bluedroid host with those profiles
-enabled. Radio settings — transmit power, page timeout and the minimum
-encryption key size — are available too, and the composition limit of the HID
-Report Descriptor (214 bytes of descriptor plus device strings, shared with one
-SDP record) is checked before registering rather than failing silently.
-A Classic-only sketch selects this host automatically when it uses
-`EspBleClassic`, with no `build_opt.h` required.
-Classic HID has the same API shape as BLE HID: the device side offers
-`hidKeyboard()`, `hidMouse()`, `hidConsumerControl()`, `hidSystemControl()` and
-`hidGamepad()` under the same names and signatures, and the host side parses the
-Report Descriptor it receives to deliver keyboard state, per-usage keyboard
-events and mouse events. Report Descriptors and report packing come from one
-module shared by both transports.
-Which hosts run follows only what the sketch calls `begin()` on: one host makes
-the broker a pass-through, and starting both `EspBle` and `EspBleClassic` makes
-it route HCI between them. There is no build flag. Dual-host is experimental, so
-`end()` one of them and keep a single host if it misbehaves. Classic HID
-traffic together with an LE connection, repeated GATT reads, and bidirectional HID
-traffic afterwards has passed hardware tests. In Classic-only mode, encoded A2DP
-Sink/Source media transport, AVRCP playback/absolute-volume control, and HFP
-Client/Audio Gateway single-call control plus raw mSBC SCO transport also pass;
-dual-host mode also passes bidirectional mSBC SCO while an LE GATT connection
-remains usable during and after the audio link. It also passes A2DP encoded-media
-streaming and AVRCP playback/volume control while GATT reads remain usable before,
-during, and after the stream. In Classic-only mode the Audio Gateway can select
-CVSD or mSBC, and both codecs pass raw SCO transfer on hardware; external-device
-interoperability remains. The
-two HFP roles are process-wide mutually exclusive.
-Shared-command scheduling now
-uses a broker-owned FIFO and controller command credits. The broker stops the
-controller after the final host leaves, independent of host destruction order;
-event masks are merged from per-host requests, and Classic can reattach without
-resetting or reconfiguring an active LE controller. Pairing, bond persistence,
-bond reconnection, and encrypted GATT access also pass while Classic HID remains
-connected. Observed-command classification and long-duration load have completed;
-wrong-passkey and HID-connection failures recover without dropping the other host,
-and backend callback teardown has a reference-lifetime barrier. Classic is part of
-the next release, with each feature's state — hardware-verified, unverified or
-unimplemented — written down in the
-[Classic feature inventory](docs/CLASSIC_FEATURE_INVENTORY.ja.md) (Japanese).
-Incoming ACL flow control is broker-owned; outgoing buffers are not apportioned
-between the two hosts.
-See the [Classic implementation plan](docs/PLAN_ESP32_CLASSIC.ja.md). The classic ESP32
-also has a BLE 4.2 controller, so **LE 2M and LE Coded PHY are unavailable**,
-extended and periodic advertising are unavailable, and the connection limit is 3.
-Only what the on-hardware peer tests cover is considered supported (GATT
-read/write/discovery, MTU, connection-parameter updates, pairing and bonding, HID
-device, HID host, BLE MIDI device, in both central and peripheral roles); timing
-behaviour is not guaranteed to match the other targets. The reasoning and the
-verification record are in the Japanese
+Some limits apply everywhere. Extended and periodic advertising are unavailable on
+every target, because the NimBLE the Core ships is built with
+`CONFIG_BT_NIMBLE_EXT_ADV` disabled. The simultaneous-connection limit comes from
+the controller and is 3 in the verified configurations. For API-level support, see
+the [feature matrix](docs/FEATURE_MATRIX.md).
+
+A configuration that provides no NimBLE is rejected at compile time with a clear
+`#error`.
+
+### Why the original ESP32 is different
+
+**1. EspBle brings the BLE host.** This is the one chip whose Arduino-ESP32
+prebuilt libraries are Bluedroid, so no Core-provided NimBLE exists. EspBle bundles
+the same esp-nimble snapshot the matching esp-idf pins into `src/nimble_esp32/`,
+frozen to the configuration the other targets use (overriding it is rejected).
+**Carrying that host is maintenance the library takes on**, so support here is not
+on par with the other chips: only what the on-hardware peer tests cover counts as
+supported — GATT read/write/discovery, MTU, connection-parameter updates, pairing
+and bonding, HID device, HID host, BLE MIDI device, in both central and peripheral
+roles — and timing behaviour is not guaranteed to match the other targets. The
+reasoning and the record are in the Japanese
 [original-ESP32 plan](docs/PLAN_ESP32.ja.md).
 
-ESP32-P4 can use the ESP-Hosted NimBLE configuration supplied by Arduino-ESP32.
-The verified host/slave versions, C6 update procedure, and supported subset are
-documented in the Japanese [ESP-Hosted setup guide](docs/ESP_HOSTED_SETUP.ja.md).
-With Core 3.3.11, a P4 ECC defect in the bundled IDF blocks LE Secure
-Connections, bonding, and dependent HID paths; repeated `begin()` after `end()`
-is also limited. These are covered by the
-[known limitations](docs/ESP_HOSTED_LIMITATIONS.ja.md).
-For a Tab5 or custom board whose SDIO wiring differs from generic P4, select the
-matching board variant or override the Core's Hosted pins before initialization.
-See the Japanese [pin setup guide](docs/ESP_HOSTED_SETUP.ja.md#sdio-pinの選択と上書き)
-and the bilingual [Hosted/CustomPins example](examples/Hosted/CustomPins/).
+**2. It has a BLE 4.2 controller.** LE 2M and LE Coded PHY are unavailable.
 
-Development and the peer tests run on arduino-esp32 3.3.11. The supported core-version range and per-board build coverage are measured by CI, not maintained by hand:
+**3. It has Bluetooth Classic.** It is the only Arduino-ESP32 target with a BR/EDR
+radio. Classic runs on a separately built, namespaced Bluedroid host with the
+needed profiles enabled.
+
+- SPP (as a byte stream and as an Arduino `Stream`), generic HID Device/Host, A2DP
+  raw transport, AVRCP CT/TG, and HFP Client/Audio Gateway
+- Radio settings: transmit power, page timeout, and the minimum encryption key size
+- HID keeps the same API shape as BLE: `hidKeyboard()`, `hidMouse()`,
+  `hidConsumerControl()`, `hidSystemControl()` and `hidGamepad()` under the same
+  names and signatures, with Report Descriptors and report packing coming from one
+  module shared by both transports
+- The composition limit of the HID Report Descriptor — 214 bytes of descriptor plus
+  device strings, sharing one SDP record — is checked before registration instead of
+  failing silently
+
+Which radio suits which peer is covered in
+[BLE or Bluetooth Classic](docs/CLASSIC_VS_BLE.md), and each feature's state —
+hardware-verified, unverified or unimplemented — is written down in the Japanese
+[Classic feature inventory](docs/CLASSIC_FEATURE_INVENTORY.ja.md). Classic is part
+of the next release.
+
+**Running BLE and Classic together (dual-host) is experimental.** Which hosts run
+follows only what the sketch calls `begin()` on; there is no build flag. With one
+host the HCI broker in between is a pass-through, and starting both `EspBle` and
+`EspBleClassic` makes it route HCI between them. An LE connection alongside Classic
+HID traffic, repeated GATT reads, and A2DP / AVRCP / HFP mSBC SCO while an LE GATT
+connection stays live all pass on hardware, but constraints remain — outgoing
+buffers are not apportioned between the two hosts, for one — so it stays
+experimental. If it misbehaves, `end()` one of them and keep a single host. See the
+Japanese [Classic implementation plan](docs/PLAN_ESP32_CLASSIC.ja.md) and
+[STATUS](docs/STATUS.md).
+
+### ESP32-P4 + ESP32-C6 (ESP-Hosted)
+
+The P4 has no BLE radio, so a C6 is attached over SDIO as an ESP-Hosted slave and
+used through the ESP-Hosted NimBLE configuration the Core supplies. Verified
+host/slave versions, the C6 update procedure and the supported subset are in the
+Japanese [ESP-Hosted setup guide](docs/ESP_HOSTED_SETUP.ja.md).
+
+With Core 3.3.11, a P4 ECC defect in the bundled IDF blocks LE Secure Connections,
+bonding and dependent HID paths, and repeated `begin()` after `end()` is limited
+as well. Both are recorded in the Japanese
+[known limitations](docs/ESP_HOSTED_LIMITATIONS.ja.md).
+
+For a Tab5 or a custom board whose SDIO wiring differs from the generic P4, select
+the matching board variant or override the Core's Hosted pins before initialization
+(Japanese [pin setup guide](docs/ESP_HOSTED_SETUP.ja.md#sdio-pinの選択と上書き), and
+the bilingual [Hosted/CustomPins example](examples/Hosted/CustomPins/)).
+
+### Core version
+
+Development and the peer tests run on arduino-esp32 3.3.11. The supported
+core-version range and per-board build coverage are measured by CI, not maintained
+by hand:
 
 - **Core Compatibility Matrix** workflow → `docs/COMPATIBILITY.<version>.md` (representative examples across arduino-esp32 releases on S3 / C3 / C6 / H2 / P4)
 - **Board Build Coverage** workflow → `docs/BOARDS.<version>.md` (every example across ESP32-S3 / ESP32 / C3 / C6 / H2 / P4 at one core version)
 
-Both are manual (`workflow_dispatch`) because a full sweep rewrites and rebuilds every sketch. Consult the generated matrix for the authoritative minimum core version.
+Both are manual (`workflow_dispatch`) because a full sweep rewrites and rebuilds
+every sketch. Consult the generated matrix for the authoritative minimum core
+version.
 
 ## Getting started
 
@@ -171,6 +183,12 @@ Each example ships a `sketch.yaml` pinned to the verified Arduino-ESP32 version:
 
 ```sh
 arduino-cli compile --profile esp32s3 examples/Gap/Scan
+```
+
+The Bluetooth Classic examples are original-ESP32 only, so they build with the `esp32` profile:
+
+```sh
+arduino-cli compile --profile esp32 examples/Classic/SppServer
 ```
 
 See the [examples index](examples/README.md) for the full list with pairing suggestions. A minimal scanner looks like:
