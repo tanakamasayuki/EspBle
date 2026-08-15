@@ -489,6 +489,14 @@ probeで行います**。sketch側は起動時だけでなくcommand（audio系�
 引数に取ります。BLE linkの確立のように「起きた瞬間に1度だけ知らせる」状態も同じcommandで
 現在値を答えるようにし、testは通知を待たずに状態を問い合わせます。
 
+## 末尾の可変長fieldは行末で止める
+
+serialの1行は分割して届きます。patternの最後のfieldが可変長で、しかも改行で止めていないと、
+行の残りが届く前にmatchが確定し、切り詰めた値を取り出します。`service_data`では
+`data=abcdef12`と出力した相手から`data=abcdef1`を読み取りました。この形のpatternは`\r?\n`で
+終端します。captureの後ろに同じpattern内の別リテラルが続く場合は、そのリテラルが届くまで
+matchしないので問題ありません。
+
 ## 合格条件
 
 - test codeがすべての入力を生成し、Serial assertionで結果を判定する。

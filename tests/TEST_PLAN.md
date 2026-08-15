@@ -371,6 +371,15 @@ this; a test takes it as an argument. State that a sketch announces when it happ
 a BLE link coming up, for instance — is answered by the same command, so a test asks
 for the current state rather than waiting for the announcement.
 
+## Anchor a trailing variable-length field
+
+A serial line arrives in pieces. A pattern whose last field varies in length and
+is not anchored to the newline can match while the rest of the line is still on
+its way, and it then captures a truncated value: `service_data` read
+`data=abcdef1` from a board that had printed `data=abcdef12`. End such a pattern
+with `\r?\n`. A capture followed by another literal in the same pattern is
+already safe, because the literal cannot match until it has arrived.
+
 ## Pass Criteria
 
 - Test code generates every input and decides the result through serial assertions.

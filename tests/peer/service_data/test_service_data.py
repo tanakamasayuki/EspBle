@@ -1,6 +1,9 @@
 import re
 
-BLOCK = re.compile(rb"SERVICE_DATA index=(\d+) uuid=(\S+) data=([0-9a-f]*)")
+# Anchored to the end of the line: the data field is the last one and varies in
+# length, so a pattern without the newline can match while the rest of the line
+# is still arriving and capture a value that is one character short.
+BLOCK = re.compile(rb"SERVICE_DATA index=(\d+) uuid=(\S+) data=([0-9a-f]*)\r?\n")
 
 
 def test_service_data_blocks_are_received_and_looked_up(dut, peers):

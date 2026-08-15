@@ -22,7 +22,9 @@
 - dual-hostはcommand/ACL routing、bond/RPA、任意停止順、再attach、FIFO満杯、再登録とheap安定性に加え、BLE GATT接続中のHFP mSBC SCO双方向通信とA2DP/AVRCPまで検証済み。
 - 数時間級dual-host soak、観測HCI commandのpolicy分類、不正HID report拒否、peer突然消失後の復旧、接続・pairing失敗後の復旧、lifecycle競合監査は完了。公開範囲は「次回releaseへ含める（保証は掲げず検証状態を書く）」として確定した。
 - `CHANGELOG.md`のUnreleasedと利用者向けClassic文書は次回release内容として整理済み。文書整合と
-  artifact監査も完了した。残るのはGate Cの最終回帰（機械時間）とGate Dの外部機器相互運用である。
+  artifact監査も完了した。Gate Cの自動回帰も、S3標準回帰の連続clean完走、無印ESP32両role、
+  Classic、dual-host、P4/C6、手元のexample compileまで通した。**残るのはGate Dの外部機器
+  相互運用だけ**で、これは外部機器が要るため手元の自動回帰では代替できない。
 - board / core matrix、release対象board全体でのexample compile、release操作、公開後確認は
   GitHub Actionsが行うため、release gateとしては追跡しない。
 
@@ -64,7 +66,7 @@ Audioのscopeと段階は[Classic Audio拡張計画](PLAN_ESP32_CLASSIC_AUDIO.ja
 | 状態 | 項目 | 完了条件 |
 |---|---|---|
 | 完了 | S3標準回帰 | 2026-08-15の`--clean`全Peerで125 passed / 1 failed（`rpa_bond`）。原因はsuiteのprofile設定で、S3ではprivacyがcontroller実装になり接続先がresolving listに無いとinitiator addressがidentityへfallbackするため、bond削除直後の初回接続でRPAを要求できない。**suiteを無印ESP32専用へ変更**し、単独実行で成功を確認。続く2回目は123 passed / 3 failed（`classic_a2dp_media`、`classic_hfp_cvsd`、`dual_host_a2dp`）で、3件とも片側のlogが完全に空——2台構成で先にflashが終わった側の起動時出力が、もう1台のflash中に流れていた。sketchへ`?`で状態を再報告するcommandを足し、testを`probe`で問い合わせる形へ直した（[試験計画](../tests/TEST_PLAN.ja.md)の「起動banner待ちを避ける」）。3回目は124 passed / 1 failed / 1 error。failedは`dual_host_rpa`のtest競合で、rotation周期2秒のまま最後の観測後にClassic HID往復を挟むため、900秒へ戻す前にRPAが更新され得た。凍結後の現在値を読んでから接続先と比較する形へ修正。errorは`numeric_comparison`のsetupで、S3 peerのby-id symlinkがUSB再列挙で一瞬消えたもの（同時刻にsymlink再生成を確認）。いずれも単独実行で成功。4回目と5回目は**連続で126 passed / 失敗0**（2時間16分19秒・2時間15分14秒）。それまでの失敗はすべてtest側とfixture側で、この間`src/`は一度も変更していない |
-| 一部完了 | 無印ESP32 NimBLE回帰 | 両roleの`--clean`掃引を実行。親側83 passed / 21 skipped、Peer側84 passed / 22 skipped。失敗は上記`rpa_bond`のみで、profile修正後は成功。実行commandを分ければerrorも出ない（peer sketchを持たない3 suiteへ`--peer-profile`を渡したための拒否） |
+| 完了 | 無印ESP32 NimBLE回帰 | 両roleの`--clean`掃引を2026-08-15に2巡実行。1巡目は親側83 passed / 21 skipped、Peer側84 passed / 22 skipped（失敗は`rpa_bond`のみで、profile修正後は成功）。`rpa_bond`修正後の2巡目は親側81 passed / 1 failed / 22 skipped（1時間51分24秒）、Peer側83 passed / 23 skipped（1時間55分12秒）。failedは`service_data`のtest側patternで、相手は`data=abcdef12`と正しく出力しているのにpatternを改行で止めていないため行の到着途中で確定し`abcdef1`を読んでいた。行末終端へ修正。どちらの巡でも、peer sketchを持たないsuiteへ`--peer-profile`を渡した分がerrorになる（commandを分ければ出ない）。Peer側1巡目のerror 1件はS3 peerのby-id symlinkがUSB再列挙で消えたもの |
 | 完了 | Classic専用回帰 | clean buildでSPP、HID profile初期化、HID双方向report・SPP併用・再接続が成功。2026-08-15の掃引は単独DUT 3 suiteが成功、2台構成は15 passed / 1 failed（`classic_spp_stream`）。失敗はtest側の競合——`write()`はpacketをqueueした時点で返るのに、peerへ状態を1回しか問い合わせていなかった——で、`probe`で届くまで問い合わせるよう修正し成功を確認 |
 | 完了 | Classic-only build UX | 独自hostを自動選択し、公開Classic exampleから`build_opt.h`を除去。flagなしSPPを実機確認 |
 | 完了 | dual-host回帰 | public address、RPA/bond、soak、HFP、A2DP/AVRCPが成功 |
@@ -173,6 +175,7 @@ release作業とは独立に着手する。ここに書くのは「やると決�
 | notification burstとdrop集計のPeerテスト | 購読中に64→128→256件と段階的にnotifyを積み、round別に配送数と`droppedEventCount()`を突き合わせる。現在この経路を触るのは`gatt_queue_purge`と`persistent_subscription_overflow`だけで、**event queue（8件）が溢れる側の契約**——lifecycle eventが最古のnotificationを追い出し、追い出せなければ新しいeventを落とし、どちらも数える——を固定するテストが無い | 1作業単位 |
 | 別スタックとの相互接続テストの拡充 | 現在はSPPのみ。BLE GATT → BLE Security → BLE HID → Classic A2DP/AVRCP → Classic HFP → BLE MIDIの順に、相手側をArduino-ESP32同梱classとESP-IDF Bluedroid APIで書いて追加する。規則と対象範囲は[テスト計画](../tests/TEST_PLAN.ja.md)の「別スタックとの相互接続テスト」を正本とする | BLE系は各1作業単位、Classic Audio系は各2作業単位 |
 | 残る74 suiteのcommand probe化 | 2台構成のsuiteのうち74本は、最初の同期をいまも起動時1度きりの行に頼っている。Classic audioの3件が実際に落ちた原因と同じ構造で、BLE側はsketchのflashが短いぶん露出が小さいだけである。releaseの直前に一括変換すると全数の再検証が必要になるため、release後に段階的に置き換える。追加規則は[試験計画](../tests/TEST_PLAN.ja.md)の「起動banner待ちを避ける」を正本とする | 10 suiteあたり1作業単位 |
+| 末尾が可変長のpatternの行末終端 | test全体で325箇所のpatternが、最後のcaptureを改行で止めていない。`service_data`が実際に切り詰めた値を読んだのと同じ形である（相手は正しく出力していた）。1件は修正済みで、規則は[試験計画](../tests/TEST_PLAN.ja.md)の「末尾の可変長fieldは行末で止める」に書いた。残りは全数の再検証が要るのでrelease後に置き換える | 20箇所あたり1作業単位 |
 | HID Hostの複数device同時接続 | 公開signatureがdevice単位のidを取る形へ変わるため、releaseを跨がせる | 未見積り |
 | A2DP Sourceの追加endpoint・SBC以外のcodec | EspBleはencode/decodeを持たない方針との整合を先に決める | 未見積り |
 

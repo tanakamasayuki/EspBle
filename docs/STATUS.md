@@ -67,7 +67,7 @@ For how to run them see [tests/TEST_PLAN.md](../tests/TEST_PLAN.md); for the rel
 ## Remaining work before the next release
 
 1. Verify AVRCP metadata/play-status against an external Target and HFP against external devices.
-2. After code freeze, run all peer and unit tests with `--clean`, back to back, several times over. Each configuration has passed once — S3, both original-ESP32 roles, Classic, dual-host, and the P4/C6 representative suites — so what remains is the repetition on the release candidate.
+2. After code freeze, run all peer and unit tests with `--clean`, back to back. On 2026-08-15 the S3 baseline regression finished clean twice in a row at 126 passed, and both original-ESP32 roles, Classic, dual-host, the P4/C6 representative suites and the local example compile passed as well. Repeat the same sweep once a release candidate exists.
 3. Reconciling the READMEs, feature matrix, examples and specifications with the release scope is done, as is the artifact audit; redo both if the scope moves.
 4. At release time, run the board/core matrix and example-compile workflows, then the release workflow, and verify Library Manager installation and compilation. These are workflow results rather than gates.
 
