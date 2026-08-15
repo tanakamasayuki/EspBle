@@ -8,10 +8,11 @@ Arduino-ESP32's `BLEDevice`, `BLEClient` or `BLEServer` wrappers. Central and
 peripheral roles, GATT client and server operations, security, HID and BLE MIDI
 compose on one `EspBle` foundation.
 
-On the original ESP32 you also get Bluetooth Classic — SPP, HID device and host,
-A2DP, AVRCP and HFP — through `EspBleClassic`. **The BLE API is the same on every
-ESP32; what changes per SoC is which radio features exist and how much has been
-verified** — the table under [Compatibility](#compatibility) lays the differences out.
+On the original ESP32 — the first-generation chip, the one with no S3 or C3 suffix —
+you also get Bluetooth Classic through `EspBleClassic`: SPP, HID device and host,
+A2DP, AVRCP and HFP. **The BLE API is the same across the ESP32 family; what changes
+from chip to chip is which radio features exist and how much has been verified** —
+the table under [Compatibility](#compatibility) lays the differences out.
 
 > [!IMPORTANT]
 > **ESP32-S3 / C3 / C6 / H2** are the standard case: EspBle uses the NimBLE host
@@ -43,7 +44,7 @@ verified** — the table under [Compatibility](#compatibility) lays the differen
   notification, and HID events are delivered by `ble.update()` on the loop
   task. The synchronous GATT Server `onRead()` hook is the explicit exception
   and runs on the stack task because it must produce the response immediately.
-- **Rely on hardware-tested behavior:** a two-board ESP32 peer suite covers
+- **Rely on hardware-tested behavior:** a peer suite running on two connected boards covers
   connections, GATT, security, HID, reconnection, and error paths, supplemented
   by host unit tests and cross-SoC example builds.
 
@@ -84,7 +85,7 @@ suite plus host-side unit tests. What is covered per SoC is in
 | Bluetooth Classic | No BR/EDR radio | **Supported** (SPP / HID / A2DP / AVRCP / HFP) | No BR/EDR radio |
 | Verified scope | Every feature, on a two-S3 peer suite (C3 / C6 / H2 are build-verified in CI) | A two-board peer sweep in both roles; only what passes counts | Representative suite (connect, GATT, notify, MTU, Wi-Fi coexistence) |
 
-Some limits apply everywhere. Extended and periodic advertising are unavailable on
+Some limits apply across the whole family. Extended and periodic advertising are unavailable on
 every target, because the NimBLE the Core ships is built with
 `CONFIG_BT_NIMBLE_EXT_ADV` disabled. The simultaneous-connection limit comes from
 the controller and is 3 in the verified configurations. For API-level support, see

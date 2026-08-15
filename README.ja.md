@@ -7,9 +7,10 @@ Arduino-ESP32同梱の`BLEDevice` / `BLEClient` / `BLEServer`などのラッパ�
 経由しません。Central / Peripheral、GATT Client / Server、Security、HID、BLE MIDIを
 1つの`EspBle`基盤の上で組み合わせられます。
 
-無印ESP32では、これに加えてBluetooth Classic（SPP、HID device / host、A2DP、AVRCP、HFP）を
-`EspBleClassic`で使えます。**BLEの公開APIはどのESP32でも同じで、SoCによって変わるのは
-使える無線機能と検証範囲だけです**——違いは[対応環境](#対応環境)の表にまとめてあります。
+無印ESP32——S3やC3などの付かない初代のESP32——では、これに加えてBluetooth Classic
+（SPP、HID device / host、A2DP、AVRCP、HFP）を`EspBleClassic`で使えます。
+**BLEの公開APIはESP32シリーズのどのチップでも同じで、変わるのは使える無線機能と
+検証範囲だけです**——違いは[対応環境](#対応環境)の表にまとめてあります。
 
 > [!IMPORTANT]
 > **ESP32-S3 / C3 / C6 / H2**はCore同梱のNimBLEをそのまま使う標準構成です。
@@ -33,7 +34,7 @@ Arduino-ESP32同梱の`BLEDevice` / `BLEClient` / `BLEServer`などのラッパ�
 - **callbackの実行場所が予測可能:** 接続、GATT操作完了、通知、HIDなどの非同期eventは、
   `ble.update()`を呼ぶloop taskから配送します。同期応答が必要なGATT Serverの
   `onRead()`だけはstack task上で動く明示的な例外です。
-- **実機testで振る舞いを固定:** 2台のESP32を使うPeer testで接続、GATT、Security、
+- **実機testで振る舞いを固定:** ESP32を2台つないだPeer testで接続、GATT、Security、
   HID、再接続、異常系を検証し、host unit testと複数SoCのexample buildも実行します。
 
 ## 機能
@@ -71,7 +72,7 @@ API単位の対応状況と制限は[機能対応マトリクス](docs/FEATURE_M
 | Bluetooth Classic | 無線が無いため不可 | **対応**（SPP / HID / A2DP / AVRCP / HFP） | 不可 |
 | 検証範囲 | S3の2台で全機能をPeer test（C3 / C6 / H2はCIのbuild検証） | 2台でPeer testを両role掃引し、通った範囲のみ | 代表suite（接続、GATT、notify、MTU、Wi-Fi共存） |
 
-どのSoCでも共通の制限もあります。Extended / Periodic Advertisingは、Coreが同梱するNimBLEが
+シリーズ共通の制限もあります。Extended / Periodic Advertisingは、Coreが同梱するNimBLEが
 `CONFIG_BT_NIMBLE_EXT_ADV`無効でbuildされているためどのtargetでも使えません。同時接続数の上限は
 controller由来で、検証済みの構成では3です。API単位の対応状況は[機能対応マトリクス](docs/FEATURE_MATRIX.ja.md)を
 参照してください。
