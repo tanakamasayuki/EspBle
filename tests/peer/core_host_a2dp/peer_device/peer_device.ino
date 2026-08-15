@@ -137,6 +137,19 @@ void avrcpCallback(esp_avrc_ct_cb_event_t event, esp_avrc_ct_cb_param_t *param)
   }
 }
 
+void avrcpTargetCallback(esp_avrc_tg_cb_event_t event, esp_avrc_tg_cb_param_t *param)
+{
+  switch (event)
+  {
+    case ESP_AVRC_TG_CONNECTION_STATE_EVT:
+      Serial.printf("A2DPPEER_AVRCP_TG connected=%u\n",
+        param->conn_stat.connected ? 1 : 0);
+      break;
+    default:
+      break;
+  }
+}
+
 void sendPassthrough(uint8_t keyCode)
 {
   static uint8_t transaction = 0;
@@ -175,6 +188,11 @@ void setup()
 
   esp_avrc_ct_init();
   esp_avrc_ct_register_callback(avrcpCallback);
+  // A real Source (a phone, say) publishes both AVRCP roles. Without the Target
+  // record the Sink's own AVRCP connect attempt fails its SDP lookup, and no
+  // AVCTP channel comes up for the Controller commands below to travel on.
+  esp_avrc_tg_init();
+  esp_avrc_tg_register_callback(avrcpTargetCallback);
 
   // A Source initiates, so it does not need to be visible to inquiry.
   esp_bt_gap_set_scan_mode(ESP_BT_NON_CONNECTABLE, ESP_BT_NON_DISCOVERABLE);

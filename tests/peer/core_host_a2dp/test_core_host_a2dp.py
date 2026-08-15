@@ -67,7 +67,13 @@ def test_a2dp_and_avrcp_interoperate_with_the_core_bluedroid_stack(dut, peers, p
     # AVRCP travels its own L2CAP channel, brought up separately from the media
     # one. Wait for the Controller side to report it before pressing a key, so a
     # missing key event means a lost command rather than a race with setup.
-    peer.expect_exact("A2DPPEER_AVRCP connected=1", timeout=60)
+    # Either role reporting a connection means the AVCTP channel is up; which
+    # side wins the race between them is not this test's business.
+    peer.expect(
+        [re.compile(rb"A2DPPEER_AVRCP connected=1"),
+         re.compile(rb"A2DPPEER_AVRCP_TG connected=1")],
+        timeout=60,
+    )
     peer.write("p\n")
     peer.expect_exact("A2DPPEER_AVRCP_SENT key=68", timeout=20)
     dut.expect(re.compile(rb"A2DPSINK_KEY command=68 state=0 count=\d+"), timeout=20)
