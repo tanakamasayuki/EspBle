@@ -10,6 +10,9 @@ deciding between the two radios see [BLE and Classic](CLASSIC_VS_BLE.md).
 **Classic works on the original ESP32 only.** ESP32-S3/C3/C6/H2/P4 have no
 BR/EDR radio. Which features are hardware-verified, unverified or unimplemented
 is tracked in the [Classic feature inventory](CLASSIC_FEATURE_INVENTORY.ja.md).
+The precompiled Classic host is supported only with Arduino-ESP32 3.3.11; it is
+ABI-bound to ESP-IDF 5.5.5 and xtensa-esp32 GCC 14.2.0. BLE compatibility results
+for other Core versions do not extend this Classic compatibility contract.
 
 ## 1. A different model from BLE
 

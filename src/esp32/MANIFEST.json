@@ -1,0 +1,164 @@
+{
+  "schema_version": 1,
+  "artifact": {
+    "file": "libespble_bluedroid_classic.a",
+    "type": "static-library",
+    "target": "esp32",
+    "architecture": "elf32-xtensa-le",
+    "size_bytes": 4596952,
+    "sha256": "d64d3a40a3f598e206c5aaf798e9d8fda5c867b632224ed72a616b1221089421",
+    "archive_member_count": 290,
+    "non_empty_member_count": 213,
+    "empty_member_count": 77,
+    "archive_member_names_sha256": "27619686b37e6ec653e3ecd4d5f4264929cc0f7345b46e1748d3d6d9f7e93344",
+    "global_defined_symbol_count": 2796,
+    "global_defined_symbol_names_sha256": "208c6356e4aa5a3aa253cabdb54c84a26d397fa37c3da838b3d9c9aee78f0b91",
+    "defined_symbol_prefix": "espble_bd_",
+    "external_undefined_symbol_count": 88,
+    "external_undefined_symbol_names_sha256": "4a229b702338899db73f4cfa51554e6a2d23605e7375043911453de26b1cef54"
+  },
+  "upstream": {
+    "name": "ESP-IDF",
+    "repository": "https://github.com/espressif/esp-idf",
+    "tag": "v5.5.5",
+    "commit": "b774170ff46c393eeb5e495ea37936038d3f4f4f",
+    "component": "components/bt",
+    "tinycrypt_version": "0.2.8"
+  },
+  "abi": {
+    "arduino_esp32": "3.3.11",
+    "esp_idf": "5.5.5",
+    "compiler": "xtensa-esp32-elf-gcc",
+    "compiler_version": "14.2.0",
+    "compiler_release": "esp-14.2.0_20260121",
+    "arduino_tool_package": "esp-x32@2601"
+  },
+  "build_inputs": [
+    {
+      "file": "../../tools/build_classic_bluedroid_host.sh",
+      "sha256": "115f33f2824399f6f803a5b99c2dde22cb381f7e7278f4af110b423b5469fb36"
+    },
+    {
+      "file": "../../tools/classic_bluedroid_host/CMakeLists.txt",
+      "sha256": "3d5a7c0006292c0b71ed998f4606f325b34560f2777ed511055e758d404dcb64"
+    },
+    {
+      "file": "../../tools/classic_bluedroid_host/sdkconfig.defaults",
+      "sha256": "35aa97167f5826f2b4d68dd58b52d61d2994120844b77e8ff4baf310f69c4b6c"
+    },
+    {
+      "file": "../../tools/classic_bluedroid_host/main/CMakeLists.txt",
+      "sha256": "c0da56fd62b687862bd9aa297fd79c81e8a052579b8ebdbc68665162f4665167"
+    },
+    {
+      "file": "../../tools/classic_bluedroid_host/main/link_check.c",
+      "sha256": "f4d5d68c7db4bcb0d40a300a053cc078cbbf401d74a228fb2bb76ea9a440f23f"
+    }
+  ],
+  "effective_kconfig": {
+    "CONFIG_BT_CONTROLLER_DISABLED": true,
+    "CONFIG_BT_BLUEDROID_ENABLED": true,
+    "CONFIG_BT_CLASSIC_ENABLED": true,
+    "CONFIG_BT_BLE_ENABLED": false,
+    "CONFIG_BT_SMP_CRYPTO_STACK_TINYCRYPT": true
+  },
+  "post_processing": [
+    "prefix every global defined symbol with espble_bd_",
+    "strip debug information"
+  ],
+  "source_inventory": {
+    "source_and_archive_member_count": 290,
+    "source_order_matches_archive_member_order": true,
+    "members_with_code_or_data": 213,
+    "empty_members": 77
+  },
+  "license_inventory": {
+    "apache_explicit": {
+      "members": 269,
+      "non_empty": 196,
+      "empty": 73,
+      "license": "Apache-2.0"
+    },
+    "apache_repository_root": {
+      "members": 5,
+      "non_empty": 3,
+      "empty": 2,
+      "license": "Apache-2.0"
+    },
+    "tinycrypt_mixed": {
+      "members": 15,
+      "non_empty": 14,
+      "empty": 1,
+      "licenses": [
+        "Apache-2.0",
+        "BSD-3-Clause",
+        "BSD-2-Clause"
+      ]
+    },
+    "brian_gladman_aes": {
+      "members": 1,
+      "non_empty": 0,
+      "empty": 1,
+      "license": "LicenseRef-Brian-Gladman-AES"
+    }
+  },
+  "license_files": [
+    {
+      "file": "LICENSES/Apache-2.0.txt",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "upstream_file": "LICENSE"
+    },
+    {
+      "file": "LICENSES/TinyCrypt.txt",
+      "sha256": "270e0b63ce74421f1ccaaf03f9c7daa430cdb16c9856259ca4c2e3c74880d589",
+      "upstream_file": "components/bt/common/tinycrypt/LICENSE"
+    },
+    {
+      "file": "LICENSES/Chris-Morrison-BSD-2-Clause.txt",
+      "sha256": "88da7c54029819ea6fd190a5007d932e34b60a204bfde7d6992bc314aa9a8507",
+      "upstream_file": "components/bt/common/tinycrypt/src/ctr_prng.c",
+      "upstream_source_sha256": "074473691632ef9bea200247c770771efefd6b742ccc6ed0a23aad086bb3350c"
+    },
+    {
+      "file": "LICENSES/Brian-Gladman-AES.txt",
+      "sha256": "77c898ff63223390dde6f5faf174e8f38df0dcbf35c47930d5b09e43978697a0",
+      "upstream_file": "components/bt/host/bluedroid/stack/smp/aes.c",
+      "upstream_source_sha256": "a47785e107f4f5eade7c662664e4229cc5f26802d9de87ee6972fb1d2c8f60cd"
+    }
+  ],
+  "notice": {
+    "file": "NOTICE",
+    "sha256": "4e83f2a99cac81c1ade704254d7d9a8b5932d0a2c48933574450bfee07bc872c"
+  },
+  "required_defined_symbols": [
+    "espble_bd_esp_bluedroid_attach_hci_driver",
+    "espble_bd_esp_spp_register_callback",
+    "espble_bd_esp_bt_hid_device_register_callback",
+    "espble_bd_esp_bt_hid_host_register_callback",
+    "espble_bd_esp_a2d_sink_init",
+    "espble_bd_esp_a2d_source_init",
+    "espble_bd_esp_avrc_ct_init",
+    "espble_bd_esp_avrc_tg_init",
+    "espble_bd_esp_hf_client_init",
+    "espble_bd_esp_hf_ag_init",
+    "espble_bd_btc_conf_hf_force_wbs"
+  ],
+  "known_unprefixed_external_bluedroid_symbols": [
+    "BTM_BleGetCurrentAddress",
+    "BTM_Ble_Authorization",
+    "BTM_GetCurrentConnParams",
+    "BTM_GetLocalIRK",
+    "btc_gap_ble_arg_deep_copy",
+    "btc_gap_ble_arg_deep_free",
+    "btc_get_whitelist_size",
+    "btc_storage_get_bonded_ble_devices_list",
+    "btc_storage_get_num_ble_bond_devices",
+    "gatt_get_local_mtu",
+    "gatt_set_local_mtu",
+    "smp_calculate_long_term_key_from_link_key",
+    "smp_clear_local_oob_data",
+    "smp_encrypt_data",
+    "smp_get_local_oob_data",
+    "smp_save_secure_connections_long_term_key"
+  ]
+}

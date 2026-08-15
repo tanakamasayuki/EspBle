@@ -104,12 +104,12 @@ PCMFlowBluetoothへは`badFrame`とraw lengthを失わず渡し、decoder側で5
    境界を定め、同梱NimBLE portのArduino依存を`espble_hci_broker_set_classic_host_expected()`へ
    置き換えた。境界はhost testが機械的に検査する。詳細は
    [Classic設計・検証記録](PLAN_ESP32_CLASSIC.ja.md#hci-componentの境界)にある。
-4. **完了: release scopeを確定した。** 次回releaseへClassicを含める。build flagは設けず、`EspBleClassic`を使うかどうかだけで決まる。exampleはBLE側と同じ範囲まで用意する。MIT OSSとして厳密なサポート保証は掲げず、機能ごとに「実機検証済み / 未検証 / 未実装」を文書で区別する。releaseまでは未実装項目を減らす作業を続ける（[決定台帳](DECISIONS.ja.md)のスコープ6、[次回リリース前タスクリスト](PLAN_RELEASE_NEXT.ja.md)のGate A）。
+4. **完了: release scopeを確定した。** 次回releaseへClassicを含める。build flagは設けず、`EspBleClassic`を使うかどうかだけで決まる。exampleはBLE側と同じ範囲まで用意する。このhostの厳密なサポート保証は掲げず、機能ごとに「実機検証済み / 未検証 / 未実装」を文書で区別する。releaseまでは未実装項目を減らす作業を続ける（[決定台帳](DECISIONS.ja.md)のスコープ6、[次回リリース前タスクリスト](PLAN_RELEASE_NEXT.ja.md)のGate A）。
 
 ### P2: 配布・保守
 
-1. NimBLE source / Classic `.a`のmixed distributionを維持し、理由と生成手順を利用者・保守者文書へ明記する。
-2. Arduino-ESP32更新時のIDF/toolchain ABI matrixとarchive再生成gateをCIまたはrelease手順へ組み込む。
+1. **完了:** NimBLE source / Classic `.a`のmixed distributionを維持し、理由と生成手順を利用者・保守者文書へ明記した。
+2. **一部完了:** archiveのmanifest / license / build input / symbol検査とCore 3.3.11の最終link、S3非linkをCIとrelease pre-bump hookへ組み込んだ。複数CoreのABI matrixは設けず、Classic対応を3.3.11限定とした。source側のversion fail-fastと生成scriptのatomic installはfreeze解除後に残る。
 3. 外部Classic HID Host/Deviceとの相互運用を追加する。
 
 ### 今後の作業メモ

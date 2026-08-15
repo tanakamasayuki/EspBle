@@ -16,7 +16,9 @@ EspBleをリリースする前の確認項目です。GitHub Actionsと`tools/`�
 - `library.properties`の`name`、`version`、`sentence`、`paragraph`、`architectures`、`includes`が公開内容と一致している。
 - `keywords.txt`に主要class、report/event型、accessor、callback/listener APIが含まれている。
 - 生成済みの`docs/BOARDS.<version>.md` / `docs/COMPATIBILITY.<version>.md`がリリース対象versionと現在のexample集合を反映している。
-- Classicをrelease対象へ含める場合、[archive再生成手順](CLASSIC_HOST_BUILD.ja.md)どおりcleanなESP-IDF v5.5.5 / GCC 14.2.0から一時生成し、格納済み`libespble_bluedroid_classic.a`とのSHA-256一致、必須prefixed symbol、他SoC非リンクを確認する。
+- Classicの利用者向け文書が「Arduino-ESP32 3.3.11のみ対応、ESP-IDF 5.5.5 / GCC 14.2.0 ABI固定」で一致し、BLEのCore互換matrixをClassic互換と読めない。
+- release zipにrootの`THIRD_PARTY_NOTICES.md`、Classic archive横の`NOTICE` / `MANIFEST.json` / `LICENSES/`、NimBLE横の`LICENSE` / `NOTICE`がすべて入り、manifestのlicense inventoryと一致している。
+- Classicをrelease対象へ含める場合、[archive再生成手順](CLASSIC_HOST_BUILD.ja.md)どおりcleanなESP-IDF v5.5.5 / GCC 14.2.0から一時生成し、格納済み`libespble_bluedroid_classic.a`とのSHA-256一致、必須prefixed symbol、最終ESP32 link、他SoC非リンクを確認する。
 
 ## 自動テスト
 
@@ -121,6 +123,7 @@ done
 
 ## 最終確認
 
+- `python tools/verify_classic_archive.py`でarchive、manifest、license、build input、symbol inventoryの固定値が一致する。
 - `git diff --check`とリンク検索を行い、意図しないbuild artifact、cache、local profile固有の変更がないことを確認する。
 
 ## workflow
@@ -130,6 +133,6 @@ done
 
 - `board-matrix.yml`: 対象boardを再生成し、`docs/BOARDS.<version>.md`を確定する。
 - `core-matrix.yml`: Arduino-ESP32対応versionを再検証し、`docs/COMPATIBILITY.<version>.md`を確定する。
-- `compile-examples.yml`: release対象board全体でのexample compile。
-- `release.yml`: bump scriptのpreviewでversion変更を確認し、version、CHANGELOG、release branch、tag、GitHub releaseを作成する。
+- `compile-examples.yml`: Classic archiveのintegrity / final-link gate後、release対象board全体でexample compile。
+- `release.yml`: pre-bump hookで同じClassic gateを通した後、bump scriptのpreviewでversion変更を確認し、version、CHANGELOG、release branch、tag、GitHub releaseを作成する。
 - 公開後にArduino Library Managerから取得できるversionと最小exampleのcompileを確認する。

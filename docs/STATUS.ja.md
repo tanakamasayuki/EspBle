@@ -39,7 +39,8 @@ BLE MIDIはbackend非依存のpacket codec（timestamp・running status・複数
 ## 既知の制限
 
 - Classicは次回releaseの対象で、compiler flagは不要です（`EspBleClassic`を使うかどうかだけで決まります）。
-  MITのOSSなのでサポートや互換性の保証は掲げません。そのぶん**機能ごとの状態——実機検証済み / 未検証 /
+  precompiled hostはArduino-ESP32 3.3.11（ESP-IDF 5.5.5 / GCC 14.2.0 ABI）のみ対応します。
+  このhostのサポートや互換性は保証しません。そのぶん**機能ごとの状態——実機検証済み / 未検証 /
   未実装——を[Classic機能の棚卸し](CLASSIC_FEATURE_INVENTORY.ja.md)に明記**します。外部機器との相互運用は
   未検証です。BLEとClassicの同時利用もflagは不要で（`begin()`したhostで決まります）、ただし実験扱いのままです。
 - Core 3.3.11のP4/C6 ESP-Hosted構成では、同梱ESP-IDF 5.5.5のTinyCrypt/ECC不具合で

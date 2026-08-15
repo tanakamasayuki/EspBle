@@ -8,6 +8,8 @@ BLEについては[BLE通信の入門ガイド](GUIDE_BLE_BASICS.ja.md)、どち
 **Classicは無印ESP32でしか使えません。** ESP32-S3/C3/C6/H2/P4はBR/EDRの無線を持ちません。
 機能ごとの検証状態（実機検証済み / 未検証 / 未実装）は
 [Classic機能の棚卸し](CLASSIC_FEATURE_INVENTORY.ja.md)が正本です。
+precompiled Classic hostの対応環境はArduino-ESP32 3.3.11のみで、ESP-IDF 5.5.5 /
+xtensa-esp32 GCC 14.2.0のABIに固定しています。他CoreのBLE互換結果はClassicへ適用しません。
 
 ## 1. BLEとは別の通信モデル
 

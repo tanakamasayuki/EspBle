@@ -8,7 +8,7 @@
 
 | 項目 | 値 | 理由 |
 |---|---|---|
-| ESP-IDF | cleanな`v5.5.5` tag | Arduino-ESP32 3.3.11が基準にするIDFとABIを合わせる |
+| ESP-IDF | cleanな`v5.5.5` tag | 対応対象をArduino-ESP32 3.3.11に限定し、そのIDFとABIを合わせる |
 | target | `esp32` | Classic radioを持つ無印ESP32だけが対象 |
 | compiler | xtensa-esp32 GCC 14.2.0 | Arduino-ESP32 3.3.11とtoolchain ABIを合わせる |
 | Kconfig | `tools/classic_bluedroid_host/sdkconfig.defaults` | host-only、Classic-only、profileとexternal codec境界を固定する |
@@ -87,6 +87,7 @@ CONFIG_BT_HID_ENABLED=y
 CONFIG_BT_HID_HOST_ENABLED=y
 CONFIG_BT_HID_DEVICE_ENABLED=y
 CONFIG_BT_SMP_ENABLE=y
+CONFIG_BT_SMP_CRYPTO_STACK_TINYCRYPT=y
 CONFIG_BT_A2DP_ENABLE=y
 CONFIG_BT_A2DP_USE_EXTERNAL_CODEC=y
 CONFIG_BT_HFP_ENABLE=y
@@ -98,8 +99,9 @@ CONFIG_BT_HFP_WBS_ENABLE=y
 # CONFIG_BT_BLE_ENABLED is not set
 ```
 
-controllerとBLE hostをarchiveへ含めないことが重要です。物理controllerはArduino側のHCI brokerが
-所有し、BLEはEspBle同梱NimBLE hostが担当します。
+controllerとBLE hostを設定上無効にすることが重要です。ESP-IDFのcomponent source選択により、
+未使用のBLE名objectがstatic archiveへ残ることはありますが、Classic-onlyの最終linkでは抽出されません。
+物理controllerはArduino側のHCI brokerが所有し、BLEはEspBle同梱NimBLE hostが担当します。
 
 ## 再現性と差し替え判定
 
@@ -110,6 +112,9 @@ size: 4596952 bytes
 global defined symbols: 2796
 sha256: d64d3a40a3f598e206c5aaf798e9d8fda5c867b632224ed72a616b1221089421
 ```
+
+機械可読の正本はarchive横の[`MANIFEST.json`](../src/esp32/MANIFEST.json)です。artifactだけでなく、
+IDF commit、toolchain、build input、member / symbol集合、license inventoryも固定しています。
 
 2026-08-11に、`v5.5.5` tagの独立したclean cloneと全submodule、GCC 14.2.0から一時生成し、
 このsize・symbol数・SHA-256を再現した。格納済みarchiveとの`cmp`も一致し、差し替えは不要だった。
@@ -134,6 +139,7 @@ CHANGELOG、Arduino Core互換表を同時に更新します。
 3. 通常の無印ESP32 NimBLE回帰をCentral / Peripheral両roleで実行する。
 4. ESP32-S3のCompileSmokeを実行し、Classic archiveが他SoCへリンクされないことを確認する。
 5. `nm`で必須prefixed symbolと、意図しないunprefixed global defined symbolがないことを確認する。
+6. `python tools/verify_classic_archive.py`を実行し、manifest、license、build inputとarchiveの一致を確認する。
 
 具体的なpytest commandは[テスト計画](../tests/TEST_PLAN.ja.md)と
 [リリースチェックリスト](RELEASE_CHECKLIST.ja.md)を正とします。
@@ -143,6 +149,9 @@ CHANGELOG、Arduino Core互換表を同時に更新します。
 次回Classic拡張ではNimBLEをsource、Classic Bluedroidを`.a`で同梱するmixed distributionを維持します。
 NimBLEはlocal patchとtarget条件をsourceで追跡し、ESP-IDF component依存の大きいBluedroidは固定Kconfigから
 再現可能なarchiveとして生成します。形式を揃えること自体はrelease条件ではありません。
+
+Classic archiveに含まれるESP-IDF / TinyCrypt由来コードのライセンス、帰属表示とEspBleによる変更内容は、
+archive横の[`NOTICE`](../src/esp32/NOTICE)と[`LICENSES/`](../src/esp32/LICENSES/)を正本とします。
 
 A2DP/AVRCP/HFPを追加したarchiveの設定と必須symbolは
 [Classic Audio拡張計画](PLAN_ESP32_CLASSIC_AUDIO.ja.md)を正本とします。A2DPはexternal codec、HFPは

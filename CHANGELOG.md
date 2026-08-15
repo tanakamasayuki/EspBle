@@ -10,6 +10,13 @@
 - (JA) 破壊的変更なし。1.2.0のpublicな宣言はすべて同じsignatureで残っているので、1.2.0向けに
   書いたsketchはそのままcompileできる。無印ESP32以外のtargetのBLE生成物も変わらない——Classicと
   同梱Classic hostは無印ESP32にしか存在せず、`EspBleClassic`を使うかどうかで取り込みが決まる。
+- (EN) Documented the intentional mixed distribution (vendored NimBLE source plus
+  a precompiled Classic-only Bluedroid host), limited the Classic compatibility
+  contract to Arduino-ESP32 3.3.11, and added the archive's machine-readable
+  provenance, complete third-party notices, and automated integrity/final-link gate.
+- (JA) NimBLE sourceとprecompiled Classic-only Bluedroid hostを組み合わせる意図的なmixed
+  distribution、ClassicのArduino-ESP32 3.3.11限定契約を明記した。archiveの機械可読な来歴、
+  第三者ライセンス全文、integrity / final-linkの自動gateも追加した。
 
 ### Bluetooth Classic on the original ESP32 / 無印ESP32のBluetooth Classic
 
@@ -17,16 +24,16 @@
   separately built, namespaced Classic-only Bluedroid host that ships as an
   archive. It needs no compiler flag — using the class is what selects it — and it
   exists on the original ESP32 alone, the only Arduino-ESP32 target with a BR/EDR
-  radio. As MIT-licensed software it carries no support or compatibility
-  guarantee; instead each feature's state (hardware-verified, unverified,
+  radio. The project does not promise support or compatibility for this host;
+  instead each feature's state (hardware-verified, unverified,
   unimplemented) is written down in `docs/CLASSIC_FEATURE_INVENTORY.ja.md`.
   Which radio to choose is covered in `docs/CLASSIC_VS_BLE.md`, and the concepts
   in `docs/GUIDE_CLASSIC_BASICS.md`.
 - (JA) `EspBleClassic`でBluetooth Classic（BR/EDR）を利用できるようにした。独自build・
   名前空間化したClassic-only Bluedroid hostをarchiveとして同梱している。compiler flagは
   不要で、このclassを使うかどうかだけで決まる。BR/EDR無線を持つArduino-ESP32のtargetは
-  無印ESP32だけなので、対象もそのchipに限られる。MITのOSSとしてサポートや互換性の保証は
-  掲げず、代わりに機能ごとの状態（実機検証済み / 未検証 / 未実装）を
+  無印ESP32だけなので、対象もそのchipに限られる。このhostのサポートや互換性は保証せず、
+  代わりに機能ごとの状態（実機検証済み / 未検証 / 未実装）を
   `docs/CLASSIC_FEATURE_INVENTORY.ja.md`へ明記する。どちらの無線を選ぶかは
   `docs/CLASSIC_VS_BLE.ja.md`、概念は`docs/GUIDE_CLASSIC_BASICS.ja.md`にある。
 - (EN) Discovery, identity and pairing: `inquiry()` reports address, name, Class of

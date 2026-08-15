@@ -38,7 +38,7 @@
 | 完了 | 不正HID report / peer消失 | null・上限超過reportを送信前に拒否し接続を維持。peer突然再起動後にbond済みBLEとClassic HIDを復旧 |
 | 完了 | 接続・pairing失敗 | 誤passkey後にbondを残さず再pairing。HID非同期接続失敗後も暗号化LEを維持し、正しいClassic peerへ再接続 |
 | 完了 | lifecycle競合監査 | SPP/HID callback targetを登録mutex下で取得し、解除後は取得済み参照が0になるまでstateを保持。clean実機lifecycle回帰成功 |
-| 完了 | release scope決定 | **次回releaseへ含める。**build flagは設けず`EspBleClassic`を使うかどうかだけで決まる。exampleもBLE側と同じ範囲まで用意する。MIT OSSとして厳密なサポート保証は掲げず、代わりに機能ごとの「実機検証済み / 未検証 / 未実装」を文書で区別する。releaseまで未実装項目を減らす作業を続ける（[決定台帳](DECISIONS.ja.md)のスコープ6） |
+| 完了 | release scope決定 | **次回releaseへ含める。**build flagは設けず`EspBleClassic`を使うかどうかだけで決まる。exampleもBLE側と同じ範囲まで用意する。このhostの厳密なサポート保証は掲げず、代わりに機能ごとの「実機検証済み / 未検証 / 未実装」を文書で区別する。releaseまで未実装項目を減らす作業を続ける（[決定台帳](DECISIONS.ja.md)のスコープ6） |
 | 完了 | 利用者向け文書 | README、Feature Matrix、example、制限が上記scopeと一致し、**未検証と未実装が読み手に区別できる。**「サポート」「保証」ではなく検証状態で書く |
 
 Gate Aの詳細は[引き継ぎ](HANDOFF_ESP32_CLASSIC.ja.md)を正とします。controller-to-host ACL flow controlは
@@ -50,6 +50,10 @@ brokerが所有する形で実装・実機検証済みで、判断待ちでは�
 |---|---|---|
 | 完了 | Classic archive生成入口 | IDF/tag/toolchain検査、link check、symbol prefix、必須symbol検査をscript化 |
 | 完了 | archive clean再現 | cleanなIDF v5.5.5 worktree・GCC 14.2.0から一時生成し、格納済みarchiveとbyte単位・SHA-256一致 |
+| 完了 | archive来歴・配布ライセンス | `MANIFEST.json`へIDF commit、toolchain、build input、member / symbol集合、license inventoryを固定。Apache-2.0、TinyCrypt、Chris Morrison、Brian Gladmanの全文と変更NOTICEをarchive横へ同梱 |
+| 完了 | checked-in archive gate | manifest / license / build input / archive hash / 全defined prefixをread-only検査し、Core 3.3.11のSPP最終ELFでplain host symbolなし、S3 mapでarchive非選択をpre-bump hookとCIから検査 |
+| 未完了 | ABIのsource側fail-fast | archive有効時にArduino-ESP32 3.3.11 / IDF 5.5.5完全一致をcompile時検査する。source freeze解除後に実装し、それまでは利用者向け文書で対応Coreを限定 |
+| 未完了 | archive生成のatomic install | cleanな一時build・全検証完了後に配布先へ置く順序へ変更する。生成script freeze解除後に実施 |
 | 完了 | Classic Audio archive | external codec A2DP/AVRCP、Voice over HCI / external codec HFPを有効化し、必須API link checkとclean再生成を完了 |
 | 完了 | A2DP Sink transport | SBC codec設定、接続・stream状態、callback限定raw view、停止barrierを実装し、ESP32同士で実機転送 |
 | 完了 | A2DP Source transport | 固定SBC endpoint、copy送信、MTU検査、`WouldBlock` retryを実装。通常回帰に加え20,000 packet連続転送を欠損なく完走 |

@@ -1,0 +1,38 @@
+EspBle Custom Classic Bluedroid Host
+====================================
+
+libespble_bluedroid_classic.a contains object code built from the
+components/bt component of ESP-IDF v5.5.5, commit
+b774170ff46c393eeb5e495ea37936038d3f4f4f.
+
+The ESP-IDF Bluetooth common and Bluedroid code is licensed under the
+Apache License, Version 2.0. See LICENSES/Apache-2.0.txt.
+
+The archive also contains code derived from TinyCrypt 0.2.8. Its Intel
+Corporation and Kenneth MacKay license terms are reproduced in
+LICENSES/TinyCrypt.txt. The additional license notice for ctr_prng.c by
+Chris Morrison is reproduced in
+LICENSES/Chris-Morrison-BSD-2-Clause.txt.
+
+The build emits an empty object for
+components/bt/host/bluedroid/stack/smp/aes.c. It contains no text, data,
+or BSS in this configuration. Its license notice is included
+conservatively in LICENSES/Brian-Gladman-AES.txt.
+
+Modifications made by EspBle
+----------------------------
+
+The ESP-IDF sources were compiled without source modifications from the
+v5.5.5 input. After compilation, EspBle modified the generated archive as
+follows:
+
+- every global symbol defined by libbt.a was renamed with the
+  "espble_bd_" prefix;
+- debug information was stripped.
+
+These changes isolate this Classic-only Bluedroid host from the
+Bluedroid host bundled with Arduino-ESP32. The build configuration has
+the controller and BLE disabled and enables the documented Classic
+profiles. "BLE disabled" describes the configuration; unused BLE-named
+objects can still be present in the static archive and are not selected
+by a Classic-only final link.

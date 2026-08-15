@@ -149,11 +149,13 @@ backend constraints. The original ESP32's controller is BLE 4.2 class, which is
 also why LE 2M and Coded PHY, and Extended and Periodic Advertising, are
 unavailable on the BLE side.
 
-Classic is part of the next release. As MIT-licensed open source it comes with no
-support or compatibility guarantee; instead each feature's state —
+Classic is part of the next release. The project does not promise support or
+compatibility for this host; instead each feature's state —
 hardware-verified, unverified or unimplemented — is written down in the
 [Classic feature inventory](CLASSIC_FEATURE_INVENTORY.ja.md) (Japanese). Running
-BLE and Classic together is hardware-verified but stays experimental. The history
+BLE and Classic together is hardware-verified but stays experimental. The
+precompiled Classic host is supported only with Arduino-ESP32 3.3.11 and is
+ABI-bound to ESP-IDF 5.5.5 / xtensa-esp32 GCC 14.2.0. The history
 and the measurements are in the
 [Classic implementation plan](PLAN_ESP32_CLASSIC.ja.md) and the
 [handover notes](HANDOFF_ESP32_CLASSIC.ja.md) (both Japanese).

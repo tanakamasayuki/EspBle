@@ -7,12 +7,20 @@ on:
       - "src/**"
       - "examples/**"
       - "library.properties"
+      - "tools/build_classic_bluedroid_host.sh"
+      - "tools/classic_bluedroid_host/**"
+      - "tools/verify_classic_archive.py"
+      - "tools/release_hooks/pre_bump.py"
       - ".github/workflows/compile-examples.yml"
   pull_request:
     paths:
       - "src/**"
       - "examples/**"
       - "library.properties"
+      - "tools/build_classic_bluedroid_host.sh"
+      - "tools/classic_bluedroid_host/**"
+      - "tools/verify_classic_archive.py"
+      - "tools/release_hooks/pre_bump.py"
       - ".github/workflows/compile-examples.yml"
   workflow_dispatch:
 
@@ -32,6 +40,9 @@ jobs:
         with:
           path: ~/.arduino15
           key: arduino-esp32-${{ hashFiles('examples/CompileSmoke/sketch.yaml') }}
+
+      - name: Verify Classic archive and link isolation
+        run: python3 tools/release_hooks/pre_bump.py
 
       - name: Compile all examples
         run: |

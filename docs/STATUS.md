@@ -40,7 +40,7 @@ For how to run them see [tests/TEST_PLAN.md](../tests/TEST_PLAN.md); for the rel
 
 ## Known limits
 
-- Classic is in scope for the next release and needs no compiler flag: whether a sketch uses `EspBleClassic` is what decides. As MIT-licensed software it carries no support or compatibility guarantee, so what matters is that each feature's state is stated — hardware-verified, unverified, or unimplemented — in the [Classic feature inventory](CLASSIC_FEATURE_INVENTORY.ja.md) (Japanese). Interoperability with external devices is unverified. Running BLE and Classic together needs no flag either — which hosts a sketch starts is what decides — but it stays experimental.
+- Classic is in scope for the next release and needs no compiler flag: whether a sketch uses `EspBleClassic` is what decides. Its precompiled host is supported only with Arduino-ESP32 3.3.11 (ESP-IDF 5.5.5 / GCC 14.2.0 ABI). The project does not promise support or compatibility for this host, so what matters is that each feature's state is stated — hardware-verified, unverified, or unimplemented — in the [Classic feature inventory](CLASSIC_FEATURE_INVENTORY.ja.md) (Japanese). Interoperability with external devices is unverified. Running BLE and Classic together needs no flag either — which hosts a sketch starts is what decides — but it stays experimental.
 - With Core 3.3.11 on P4/C6 ESP-Hosted, the TinyCrypt/ECC defect in the bundled
   IDF 5.5.5 makes LE Secure Connections fail with a DHKey check error, so
   Security, bonding, and dependent HID paths are not supported. ESP-IDF

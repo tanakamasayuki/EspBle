@@ -16,7 +16,9 @@ Use this checklist before releasing EspBle. The GitHub Actions workflows and `to
 - `library.properties` `name`, `version`, `sentence`, `paragraph`, `architectures`, and `includes` match the public package.
 - `keywords.txt` includes the main classes, report/event types, accessors, and callback/listener APIs.
 - Generated `docs/BOARDS.<version>.md` / `docs/COMPATIBILITY.<version>.md` files match the release version and current example set.
-- If Classic is in scope, regenerate its archive from clean ESP-IDF v5.5.5 / GCC 14.2.0 inputs, verify its SHA-256 and required prefixed symbols, and prove that other SoCs do not link it. The authoritative procedure is [CLASSIC_HOST_BUILD.ja.md](CLASSIC_HOST_BUILD.ja.md) (Japanese).
+- User-facing Classic documentation consistently says Arduino-ESP32 3.3.11 only, with an ESP-IDF 5.5.5 / GCC 14.2.0 ABI, and does not present the BLE Core matrix as Classic compatibility.
+- The release zip contains the root `THIRD_PARTY_NOTICES.md`, Classic `NOTICE` / `MANIFEST.json` / `LICENSES/`, and NimBLE `LICENSE` / `NOTICE`, matching the manifest's license inventory.
+- If Classic is in scope, regenerate its archive from clean ESP-IDF v5.5.5 / GCC 14.2.0 inputs, verify its SHA-256 and required prefixed symbols, link a final ESP32 consumer, and prove that other SoCs do not link it. The authoritative procedure is [CLASSIC_HOST_BUILD.ja.md](CLASSIC_HOST_BUILD.ja.md) (Japanese).
 
 ## Automated Tests
 
@@ -118,6 +120,7 @@ Record the date and OS/device version for each result.
 
 ## Final Checks
 
+- Run `python tools/verify_classic_archive.py`; the archive, manifest, licenses, build inputs and symbol inventory must match.
 - Run `git diff --check` and a link/reference audit; exclude build artifacts, caches, and local-profile-only changes.
 
 ## Workflows
@@ -126,6 +129,6 @@ These run in GitHub Actions. Running them locally first would not change the res
 
 - `board-matrix.yml`: regenerate the board set and settle `docs/BOARDS.<version>.md`.
 - `core-matrix.yml`: recheck the supported Arduino-ESP32 versions and settle `docs/COMPATIBILITY.<version>.md`.
-- `compile-examples.yml`: every example across the release board set.
-- `release.yml`: preview the version change with the bump script, then create the version update, release branch, tag, and GitHub release.
+- `compile-examples.yml`: run the Classic archive integrity/final-link gate, then compile every example across the release board set.
+- `release.yml`: run the same Classic gate through the pre-bump hook, preview the version change, then create the version update, release branch, tag, and GitHub release.
 - After publication, verify the Arduino Library Manager version and compile the minimal example from the published package.

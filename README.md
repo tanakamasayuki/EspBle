@@ -84,7 +84,7 @@ suite plus host-side unit tests. What is covered per SoC is in
 | Public BLE API | Same | Same | Same |
 | Security / bonding | Supported | Supported | **Unavailable** (upstream ECC defect) |
 | 2M / Coded PHY | Supported | **Unavailable** (BLE 4.2 controller) | Depends on the slave chip and its firmware (outside the representative suite) |
-| Bluetooth Classic | No BR/EDR radio | **Supported** (SPP / HID / A2DP / AVRCP / HFP) | No BR/EDR radio |
+| Bluetooth Classic | No BR/EDR radio | **Core 3.3.11 only** (SPP / HID / A2DP / AVRCP / HFP) | No BR/EDR radio |
 | Verified scope | Every feature, on a two-S3 peer suite (C3 / C6 / H2 are build-verified in CI) | A two-board peer sweep in both roles; only what passes counts | Representative suite (connect, GATT, notify, MTU, Wi-Fi coexistence), **verified only with a C6 slave on firmware 2.12.11** |
 
 Some limits apply across the whole family. Extended and periodic advertising are unavailable on
@@ -115,6 +115,12 @@ reasoning and the record are in the Japanese
 **3. It has Bluetooth Classic.** It is the only Arduino-ESP32 target with a BR/EDR
 radio. Classic runs on a separately built, namespaced Bluedroid host with the
 needed profiles enabled.
+
+This is an intentional Arduino mixed-library layout: the bundled NimBLE host is
+compiled from source, while the separately generated Classic-only Bluedroid host
+ships as `src/esp32/libespble_bluedroid_classic.a`. Their build and update
+constraints differ, so EspBle deliberately keeps the two artifacts in different
+forms.
 
 - SPP (as a byte stream and as an Arduino `Stream`), generic HID Device/Host, A2DP
   raw transport, AVRCP CT/TG, and HFP Client/Audio Gateway
@@ -180,15 +186,23 @@ the bilingual [Hosted/CustomPins example](examples/Hosted/CustomPins/)).
 ### Core version
 
 Development and the peer tests run on arduino-esp32 3.3.11. The supported
-core-version range and per-board build coverage are measured by CI, not maintained
-by hand:
+core-version range and per-board build coverage for BLE are measured by CI, not
+maintained by hand.
 
-- **Core Compatibility Matrix** workflow → `docs/COMPATIBILITY.<version>.md` (representative examples across arduino-esp32 releases on S3 / C3 / C6 / H2 / P4)
-- **Board Build Coverage** workflow → `docs/BOARDS.<version>.md` (every example across ESP32-S3 / ESP32 / C3 / C6 / H2 / P4 at one core version)
+> [!IMPORTANT]
+> **Bluetooth Classic is an exception to the generated BLE matrices.** The
+> precompiled Classic host is supported only with Arduino-ESP32 3.3.11 and is
+> ABI-bound to ESP-IDF 5.5.5 and xtensa-esp32 GCC 14.2.0. A successful BLE build
+> on another Core version does not imply Classic compatibility. The existing
+> `COMPATIBILITY.1.2.0.md` and `BOARDS.1.2.0.md` reports predate the Classic
+> examples and do not establish a Classic compatibility range.
+
+- **Core Compatibility Matrix** workflow → `docs/COMPATIBILITY.<version>.md` (representative BLE examples across arduino-esp32 releases)
+- **Board Build Coverage** workflow → `docs/BOARDS.<version>.md` (the examples present when the workflow runs, across ESP32-S3 / ESP32 / C3 / C6 / H2 / P4 at one Core version)
 
 Both are manual (`workflow_dispatch`) because a full sweep rewrites and rebuilds
-every sketch. Consult the generated matrix for the authoritative minimum core
-version.
+every sketch. Consult the generated matrix for the BLE minimum Core version;
+Classic remains fixed to the version above.
 
 ## Getting started
 
@@ -267,4 +281,8 @@ The user-facing documents below are available in English; the remaining design d
 
 ## License
 
-MIT License
+EspBle's original code is licensed under the [MIT License](LICENSE). This
+distribution also contains bundled third-party components under their own
+licenses; they are not relicensed under MIT. See
+[Third-party notices](THIRD_PARTY_NOTICES.md), including the notices accompanying
+the vendored NimBLE source and the precompiled Classic-only Bluedroid archive.

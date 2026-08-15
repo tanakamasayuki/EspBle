@@ -71,7 +71,7 @@ API単位の対応状況と制限は[機能対応マトリクス](docs/FEATURE_M
 | BLEの公開API | 同一 | 同一 | 同一 |
 | Security / bonding | 対応 | 対応 | **不可**（上流のECC不具合） |
 | 2M / Coded PHY | 対応 | **不可**（BLE 4.2 controller） | slaveのチップとfirmware次第（代表suiteの対象外） |
-| Bluetooth Classic | 無線が無いため不可 | **対応**（SPP / HID / A2DP / AVRCP / HFP） | 不可 |
+| Bluetooth Classic | 無線が無いため不可 | **Core 3.3.11のみ対応**（SPP / HID / A2DP / AVRCP / HFP） | 不可 |
 | 検証範囲 | S3の2台で全機能をPeer test（C3 / C6 / H2はCIのbuild検証） | 2台でPeer testを両role掃引し、通った範囲のみ | 代表suite（接続、GATT、notify、MTU、Wi-Fi共存）。**C6 slave / firmware 2.12.11でのみ確認** |
 
 シリーズ共通の制限もあります。Extended / Periodic Advertisingは、Coreが同梱するNimBLEが
@@ -95,6 +95,10 @@ HID Host、BLE MIDI Device、Central / Peripheral両役割——だけを対応�
 
 **3. Bluetooth Classicが使えます。** Arduino-ESP32でBR/EDR無線を持つのはこのチップだけです。
 Classicは必要なprofileを有効にして独自buildした、名前空間化済みのBluedroid hostを使います。
+
+ここはArduinoのmixed library形式を意図的に使います。同梱NimBLE hostはsourceからcompileし、
+別途生成したClassic-only Bluedroid hostは`src/esp32/libespble_bluedroid_classic.a`として同梱します。
+build・更新条件が異なるため、両者の成果物形式は揃えません。
 
 - SPP（byte streamとArduino `Stream`）、generic HID Device / Host、A2DP raw transport、
   AVRCP CT/TG、HFP Client / Audio Gateway
@@ -150,13 +154,20 @@ pin設定を上書きします（[SDIO pinの選択と上書き](docs/ESP_HOSTED
 ### coreバージョン
 
 開発とPeerテストはarduino-esp32 3.3.11で行っています。対応するcoreバージョンの範囲とボードごとの
-ビルドカバレッジは手動管理ではなくCIで計測します。
+BLEビルドカバレッジは手動管理ではなくCIで計測します。
 
-- **Core Compatibility Matrix** ワークフロー → `docs/COMPATIBILITY.<version>.md`（S3 / C3 / C6 / H2 / P4の代表exampleをarduino-esp32の各リリースに対してビルド）
-- **Board Build Coverage** ワークフロー → `docs/BOARDS.<version>.md`（1つのcoreバージョンで全exampleをESP32-S3 / ESP32 / C3 / C6 / H2 / P4に対してビルド）
+> [!IMPORTANT]
+> **Bluetooth Classicは生成済みBLE matrixの例外です。** precompiled Classic hostの対応環境は
+> Arduino-ESP32 3.3.11のみで、ESP-IDF 5.5.5 / xtensa-esp32 GCC 14.2.0のABIに固定しています。
+> 他CoreでBLE exampleがbuildできてもClassic互換を意味しません。既存の
+> `COMPATIBILITY.1.2.0.md`と`BOARDS.1.2.0.md`はClassic example追加前の結果であり、
+> Classicの互換範囲を示すものではありません。
+
+- **Core Compatibility Matrix** ワークフロー → `docs/COMPATIBILITY.<version>.md`（代表BLE exampleをarduino-esp32の各リリースに対してビルド）
+- **Board Build Coverage** ワークフロー → `docs/BOARDS.<version>.md`（workflow実行時点のexampleを1つのCoreバージョンでESP32-S3 / ESP32 / C3 / C6 / H2 / P4に対してビルド）
 
 どちらもフルsweepが全sketchを書き換えて再ビルドするため、手動実行（`workflow_dispatch`）です。
-確定した最小coreバージョンは生成されたマトリクスを参照してください。
+BLEの最小Coreバージョンは生成されたマトリクスを参照してください。Classicは上記versionに固定します。
 
 ## はじめかた
 
@@ -235,4 +246,7 @@ void loop() {
 
 ## ライセンス
 
-MIT License
+EspBle独自コードには[MIT License](LICENSE)が適用されます。この配布物には、それぞれ上流の
+ライセンスが適用される第三者コンポーネントも含まれ、MITへ再ライセンスするものではありません。
+同梱NimBLE sourceとprecompiled Classic-only Bluedroid archiveを含む詳細は
+[第三者コンポーネントのライセンス](THIRD_PARTY_NOTICES.md)を参照してください。
