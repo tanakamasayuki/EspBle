@@ -23,20 +23,23 @@ def test_a2dp_and_avrcp_interoperate_with_the_core_bluedroid_stack(dut, peers, p
     peer.write(b"c" + sink_address + b"\n")
     peer.expect_exact("A2DPPEER_CONNECT requested=1", timeout=10)
     peer.expect(re.compile(rb"A2DPPEER_CONNECTION state=2 peer=[0-9a-f:]+"), timeout=60)
-    dut.expect(
-        re.compile(rb"A2DPSINK_CONNECTED id=\d+ peer=[0-9a-f:]+ mtu=\d+ incoming=1"),
-        timeout=60,
-    )
 
-    # Codec configuration comes from the Source's capabilities and EspBle's
-    # answer. 44.1 kHz stereo SBC is what the core's Source negotiates.
-    codec = dut.expect(
-        re.compile(
-            rb"A2DPSINK_CODEC codec=(\d+) rate=(\d+) channels=(\d+) blocks=(\d+) "
-            rb"subbands=(\d+) bitpool=(\d+)-(\d+)"
-        ),
-        timeout=60,
+    # Codec configuration and the connection event arrive in an order the two
+    # stacks decide between them, so both are awaited together rather than in a
+    # fixed sequence. 44.1 kHz stereo SBC is what the core's Source negotiates.
+    codec_pattern = re.compile(
+        rb"A2DPSINK_CODEC codec=(\d+) rate=(\d+) channels=(\d+) blocks=(\d+) "
+        rb"subbands=(\d+) bitpool=(\d+)-(\d+)"
     )
+    connected_pattern = re.compile(
+        rb"A2DPSINK_CONNECTED id=\d+ peer=[0-9a-f:]+ mtu=\d+ incoming=1"
+    )
+    first = dut.expect([codec_pattern, connected_pattern], timeout=60)
+    if first.re.pattern == codec_pattern.pattern:
+        codec = first
+        dut.expect(connected_pattern, timeout=60)
+    else:
+        codec = dut.expect(codec_pattern, timeout=60)
     assert int(codec.group(2)) == 44100, "unexpected sample rate"
     assert int(codec.group(3)) == 2, "expected a stereo configuration"
     assert int(codec.group(5)) == 8, "SBC subbands did not survive negotiation"
@@ -61,8 +64,10 @@ def test_a2dp_and_avrcp_interoperate_with_the_core_bluedroid_stack(dut, peers, p
     # RTP header, or a payload offset by the media header, fails here.
     assert media.group(4) == b"9c", "payload does not start at an SBC frame"
 
-    # AVRCP travels its own L2CAP channel: the Controller on the other stack
-    # presses Play and the Target here must report the same command and states.
+    # AVRCP travels its own L2CAP channel, brought up separately from the media
+    # one. Wait for the Controller side to report it before pressing a key, so a
+    # missing key event means a lost command rather than a race with setup.
+    peer.expect_exact("A2DPPEER_AVRCP connected=1", timeout=60)
     peer.write("p\n")
     peer.expect_exact("A2DPPEER_AVRCP_SENT key=68", timeout=20)
     dut.expect(re.compile(rb"A2DPSINK_KEY command=68 state=0 count=\d+"), timeout=20)
