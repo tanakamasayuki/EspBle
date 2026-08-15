@@ -4,17 +4,17 @@
 
 ## 目的
 
-`EspBle`は、ESP32 ArduinoでBluetooth Low Energyを利用するための汎用ライブラリ。Arduino-ESP32同梱NimBLEの低レベルな初期化、イベント、接続、GATT処理を共通化し、単純なスケッチと複合的なBLEゲートウェイの双方から使える基盤を提供する。
+`EspBle`は、ESP32 ArduinoでBluetooth Low Energyを利用するための汎用ライブラリ。NimBLE hostの低レベルな初期化、イベント、接続、GATT処理を共通化し、単純なスケッチと複合的なBLEゲートウェイの双方から使える基盤を提供する。無印ESP32ではBluetooth Classicも同じ形のAPIで扱う。
 
 USBにおける`EspUsbHost` / `EspUsbDevice`に相当する機能領域を目標とするが、機能を一括実装せず、汎用基盤を先に固定してプロファイルを追加していく。代表的な利用者は`ESP32KeyBridge`のBLE HID input / output adapter。
 
 ## 対象環境
 
 - Arduino framework / Arduino-ESP32 3.x
-- Arduino-ESP32に同梱されたNimBLE（外部NimBLE-Arduinoを必須依存にせず、BLEスタックを本ライブラリへ複製・同梱しない）
-- Arduino-ESP32がNimBLEを利用可能な構成として提供するESP32
+- NimBLE host。外部NimBLE-Arduinoは必須依存にしない。core同梱NimBLEがある構成ではそれを使い、**同梱が無い無印ESP32でだけEspBleがNimBLE hostを持ち込む**（`src/nimble_esp32/`。coreのプリビルドがBluedroid固定のため）
+- 上記のNimBLE hostが動くESP32
 
-対象可否はSoCがBLEを内蔵しているかでは決めず、**Arduino-ESP32がそのボード構成でNimBLEを提供するか**で判断する。ESP32-P4はBLEを内蔵しないが、規定のGPIOへESP32-C6などを接続したHosted BLE構成なら同じBLE APIが使えるため対象候補とする（build-only testと専用実機確認を経てから対応済みとする）。
+対象可否はSoCがBLEを内蔵しているかでは決めず、**その構成でNimBLE hostを動かせるか**で判断する。ESP32-P4はBLEを内蔵しないが、規定のGPIOへESP32-C6などを接続したHosted BLE構成で同じBLE APIが使えるため対応済みとする（1.1.0。Securityなど上流由来の制限は[既知制限](ESP_HOSTED_LIMITATIONS.ja.md)に記録する）。無印ESP32はBluetooth Classicも持つため、BLEとは別に名前空間化したClassic-only Bluedroid hostをarchiveとして同梱する。**このchip以外の生成物は変わらない。**
 
 内蔵/Hostedの差、接続可能数、PHY、Advertising機能はbackend capabilityとして扱い、**SoC名だけで利用可能機能を推測しない**。検証済みArduino-ESP32バージョンはテストの`sketch.yaml`で固定する。
 

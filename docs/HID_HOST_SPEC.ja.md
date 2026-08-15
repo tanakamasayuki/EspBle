@@ -2,6 +2,8 @@
 
 `ble.hidHost()`はBLE Central接続上のHID Serviceを横断Discoveryし、対応する全Input Reportを購読します。
 
+この文書はBLE（HOGP）側の仕様です。無印ESP32のBluetooth Classic HID Hostは`EspBleClassic`の`hidHost()`で同名・同signatureのAPIを公開し、Report Descriptorの解析とevent配送を共有します。Classic側はkeyboardとmouseだけをdecodeします（[Classic機能の棚卸し](CLASSIC_FEATURE_INVENTORY.ja.md)）。
+
 ```cpp
 ble.hidHost().onMouse([](const EspBleHidMouseEvent &event) { /* ... */ });
 ble.hidHost().discover(connectionId);

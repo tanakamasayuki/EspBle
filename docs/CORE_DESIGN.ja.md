@@ -11,10 +11,20 @@ Application / ESP32KeyBridge adapter
   Connection / Security
   GAP: Scanner / Advertiser
   EspBle stack owner
-  Arduino-ESP32同梱NimBLE（ホストAPIを直接使用）
+  NimBLE host（ホストAPIを直接使用。core同梱、無印ESP32だけEspBle同梱の`src/nimble_esp32/`）
 ```
 
-`EspBle`はスタックの唯一の所有者。Scanner、Advertiser、GATT Server、各Profileは`EspBle`から取得または登録し、個別にスタックを初期化しない。
+無印ESP32ではBluetooth Classicが同じ形で並びます。
+
+```text
+Application
+  Profile: Classic HID / SPP / A2DP / AVRCP / HFP
+  EspBleClassic stack owner
+  名前空間化したClassic-only Bluedroid host（`src/esp32/libespble_bluedroid_classic.a`）
+  HCI broker（両hostが1つのBTDM controllerを共有するときだけroutingする）
+```
+
+`EspBle`と`EspBleClassic`はそれぞれのスタックの唯一の所有者。Scanner、Advertiser、GATT Server、各Profileは所有者から取得または登録し、個別にスタックを初期化しない。
 
 ## ライフサイクル
 
@@ -61,7 +71,7 @@ Connectionはlibrary生成の安定したid、backend handle、peer addressとad
 
 公開APIはArduino-ESP32同梱BLEライブラリの型を通常利用に要求しない。backend固有のinclude、callback変換、error変換、機能差は内部層へ閉じ込める。
 
-同梱BLE API自体はBluedroid/NimBLEの両backendを扱えるが、EspBleはNimBLEだけを対象とする。`CONFIG_NIMBLE_ENABLED`やHosted BLEを示す`CONFIG_ESP_HOSTED_ENABLE_BT_NIMBLE`などのcompile-time設定を確認し、Bluedroid構成では明示的にunsupportedとする。
+同梱BLE API自体はBluedroid/NimBLEの両backendを扱えるが、EspBleのBLE側はNimBLE hostだけを対象とする。`CONFIG_NIMBLE_ENABLED`やHosted BLEを示す`CONFIG_ESP_HOSTED_ENABLE_BT_NIMBLE`などのcompile-time設定を確認する。coreのプリビルドがBluedroid固定の無印ESP32は、そのBluedroidをBLEに使うのではなく、EspBleが同梱するNimBLE hostで動かす。Bluedroidを使うのはClassic側だけで、そちらもcore内蔵ではなく名前空間化した独自archiveである。
 
 境界はnative controllerとHosted controllerの両方を許容する。ESP32-P4 + ESP32-C6のようなHosted BLEでもtransport差をアプリケーションへ露出させないが、利用可能機能とresource上限はbackend capabilityとして個別に判定する。
 

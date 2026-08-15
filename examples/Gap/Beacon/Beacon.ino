@@ -12,9 +12,11 @@
 EspBle ble;
 
 // en: Company ID 0xFFFF (test/unassigned) followed by a small payload. Replace
-//     with your assigned company ID and an iBeacon/Eddystone layout as needed.
-// ja: Company ID 0xFFFF（テスト用/未割当）＋小さなpayload。必要なら自社の割当
-//     company IDや iBeacon/Eddystone のレイアウトに置き換える。
+//     it with your assigned company ID and your own layout. For iBeacon, use
+//     EspBleIBeaconData and the Gap/IBeacon example instead of hand-packing it.
+// ja: Company ID 0xFFFF（テスト用/未割当）＋小さなpayload。自社の割当company IDと
+//     独自レイアウトに置き換える。iBeaconなら手で詰めずEspBleIBeaconDataと
+//     Gap/IBeacon exampleを使う。
 static const uint8_t manufacturerData[] = {0xFF, 0xFF, 0x01, 0x02, 0x03, 0x04};
 
 void setup()

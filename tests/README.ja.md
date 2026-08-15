@@ -31,11 +31,15 @@ uv sync
 TEST_SERIAL_PORT_S3_PEER_HOST=/dev/ttyUSB0
 TEST_SERIAL_PORT_PEER_DEVICE_S3_PEER_DEVICE=/dev/ttyUSB1
 TEST_SERIAL_PORT_P4_PEER_HOST=/dev/ttyUSB2
+TEST_SERIAL_PORT_ESP32_PEER_HOST=/dev/ttyUSB3
+TEST_SERIAL_PORT_PEER_DEVICE_ESP32_PEER_DEVICE=/dev/ttyUSB4
 TEST_WIFI_SSID=example-test-ssid
 TEST_WIFI_PASSWORD=example-test-password
 ```
 
-`host`と`device`はpytest-embedded-cli上で親側と2台目Peerを識別する既存名です。BLEのCentral/Peripheral roleを意味しません。両方へsketchを転送して実行でき、両方のSerialをpytestから観測・操作できます。初期テストでは親側をCentral、Peer側をPeripheralに固定します。
+全体は[`.env.example`](.env.example)にあります。無印ESP32の2台は、同梱NimBLE hostの掃引とClassic・dual-hostの全suiteが使います。
+
+`host`と`device`はpytest-embedded-cli上で親側と2台目Peerを識別する既存名です。BLEのCentral/Peripheral roleを意味しません。両方へsketchを転送して実行でき、両方のSerialをpytestから観測・操作できます。どちらをCentralにするかはsuiteとprofileの組み合わせで決まり、無印ESP32は`--profile`の指定でどちらの側にも置けます。
 
 ## 実行
 
@@ -81,4 +85,4 @@ Wi-Fi情報はcompile-time defineとして渡され、verboseなArduino CLI comp
 
 現行Core/ESP-Hostedの既知制限に該当するSecurityと完全な初期化・終了反復は、P4代表suiteの必須合格項目から除外しています。上流versionを更新したときに再実行し、制限が解消したか確認します。
 
-初回の`stack_smoke`は、親側をCentral、`peer_device/`側をPeripheralとしてArduino-ESP32同梱NimBLE backendのBLE APIだけで接続します。EspBle公開API実装前に、2台のポート、書き込み、無線接続、双方のSerial、テストfixtureが動くことを確認する基盤テストです。
+`stack_smoke`はEspBleを使わず、Arduino-ESP32同梱NimBLE backendのBLE APIだけで親側をCentral、`peer_device/`側をPeripheralとして接続します。2台のポート、書き込み、無線接続、双方のSerial、テストfixture自体が動くことを、libraryと切り離して確認するための土台です。他のsuiteが落ちたときに、原因がfixture側かどうかを切り分けられます。

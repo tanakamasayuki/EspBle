@@ -31,11 +31,15 @@ uv sync
 TEST_SERIAL_PORT_S3_PEER_HOST=/dev/ttyUSB0
 TEST_SERIAL_PORT_PEER_DEVICE_S3_PEER_DEVICE=/dev/ttyUSB1
 TEST_SERIAL_PORT_P4_PEER_HOST=/dev/ttyUSB2
+TEST_SERIAL_PORT_ESP32_PEER_HOST=/dev/ttyUSB3
+TEST_SERIAL_PORT_PEER_DEVICE_ESP32_PEER_DEVICE=/dev/ttyUSB4
 TEST_WIFI_SSID=example-test-ssid
 TEST_WIFI_PASSWORD=example-test-password
 ```
 
-`host` and `device` identify the parent side and the second peer on pytest-embedded-cli; they do not describe BLE central/peripheral roles. Sketches are flashed to and run on both boards, and both serial ports are observed from pytest. The initial tests fix the parent side as central and the peer side as peripheral.
+[`.env.example`](.env.example) holds the complete set. The two original-ESP32 boards are used by the bundled-NimBLE sweeps and by every Classic and dual-host suite.
+
+`host` and `device` identify the parent side and the second peer on pytest-embedded-cli; they do not describe BLE central/peripheral roles. Sketches are flashed to and run on both boards, and both serial ports are observed from pytest. Which side is the central follows from the suite and the profiles it runs with; the original ESP32 can take either side, selected with `--profile`.
 
 ## Running
 
@@ -80,3 +84,5 @@ The Wi-Fi values are passed as compile-time defines and may appear in verbose
 Arduino CLI command output. Use credentials dedicated to a disposable test AP.
 
 Security and repeated full initialization/deinitialization cases affected by the current Core/ESP-Hosted known limitations are not mandatory pass criteria for the representative P4 suite. Re-run them whenever the upstream versions change to determine whether those limitations have been resolved.
+
+`stack_smoke` uses no EspBle code: it connects the parent side as central and `peer_device/` as peripheral through the BLE API of the NimBLE backend bundled with Arduino-ESP32. It is the base that shows the two ports, flashing, the radio link, both serial monitors and the fixture itself work independently of the library, which is what tells you whether a failure elsewhere is the fixture's doing.

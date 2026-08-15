@@ -29,7 +29,7 @@ uv run --env-file .env pytest --clean
 
 `rpa_bond` is original-ESP32 only, for the reason recorded in the [test plan](../tests/TEST_PLAN.md). Without `--profile` each sketch uses its own `default_profile`, so this run drives that suite on the original-ESP32 pair rather than the S3 boards; with the pair unplugged it skips for the missing port.
 
-Next, sweep the two original-ESP32 boards (`/dev/ttyUSB0` and `/dev/ttyUSB1`) in both roles. That chip runs the NimBLE host **EspBle bundles** (`src/nimble_esp32/`) rather than the core's, so any release that touches `src/` must run it. Each sweep takes about an hour.
+Next, sweep the two original-ESP32 boards (ports come from `TEST_SERIAL_PORT_ESP32_PEER_HOST` and `TEST_SERIAL_PORT_PEER_DEVICE_ESP32_PEER_DEVICE` in `.env`) in both roles. That chip runs the NimBLE host **EspBle bundles** (`src/nimble_esp32/`) rather than the core's, so any release that touches `src/` must run it. Each sweep takes about an hour.
 
 ```sh
 # original ESP32 as the parent (central)
@@ -54,7 +54,7 @@ uv run --env-file .env pytest --clean \
   --profile esp32_peer_host --peer-profile device:s3_peer_device
 ```
 
-The exclusions and the frequency rule are in the [test plan](../tests/TEST_PLAN.md#original-esp32-regression); the policy and verification record are in the Japanese [original-ESP32 plan](PLAN_ESP32.ja.md). Running another repository's suite against the same two boards at the same time is fine (pytest arbitrates the ports). Do not use `arduino-cli upload` or `esptool` directly -- they fail instead of waiting.
+The exclusions and the frequency rule are in the [test plan](../tests/TEST_PLAN.md#original-esp32-regression); the policy and verification record are in the Japanese [original-ESP32 plan](PLAN_ESP32.ja.md). pytest holds a port exclusively, so a second pytest run against the same board waits its turn. Do not use `arduino-cli upload` or `esptool` directly -- they fail instead of waiting.
 
 If Classic is in scope, add the Classic-only and dual-host regressions on the same two original-ESP32 boards:
 

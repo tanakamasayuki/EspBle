@@ -2,6 +2,8 @@
 
 EspBleはkeyboard、mouse、gamepad、consumer control、system controlを1つのHID Serviceへ複合できるHOGP Deviceを提供します。`begin()`前に必要なprofileだけを構成します。
 
+この文書はBLE（HOGP）側の仕様です。無印ESP32のBluetooth Classic HIDは`EspBleClassic`の`hidDevice()` / `hidKeyboard()`などで同名・同signatureのAPIを公開し、Report Descriptorとreport構造を`src/EspBleHidProfile.h`で共有します。無線ごとの差（report IDの位置、SDP recordによる合成上限）は[Classic通信の入門](GUIDE_CLASSIC_BASICS.ja.md)と[HID Report Descriptorを書く](GUIDE_HID_DESCRIPTORS.ja.md)にあります。
+
 ```cpp
 ble.hidKeyboard().configure();
 ble.hidMouse().configure();

@@ -1,6 +1,6 @@
 # 用語と命名規則
 
-公開API、文書、examplesで使うBluetooth LE用語と命名規則。コアではBluetooth標準の概念を正確に表し、examplesでは利用者が役割を取り違えない読みやすさを優先する。
+公開API、文書、examplesで使うBluetooth用語と命名規則。中心はBluetooth LEで、無印ESP32のBluetooth Classicは後半の節にまとめる。コアではBluetooth標準の概念を正確に表し、examplesでは利用者が役割を取り違えない読みやすさを優先する。
 
 ## 基本原則
 
@@ -74,6 +74,26 @@ auto device = ...;   // local/peer、HID/BLEのどれか不明
 ```
 
 HID Keyboard Deviceだけを説明する短いexampleなど、ファイル名・見出し・型から役割が明らかな場合は`auto &keyboard = ble.hidKeyboard();`のような短い名前でよい。すべてのexampleへ同じ変数名を強制しない。
+
+## Bluetooth Classic（無印ESP32）
+
+Classicにも同じ規則を当て、規格側のrole名をそのまま使う。BLEと同じ概念には同じ語を使い、
+規格が別の語を持つところでは規格側に従う。
+
+| 概念 | 使用する用語 | 説明 |
+|---|---|---|
+| Classicのstack owner | `EspBleClassic` | BLE側の`EspBle`と対になる。roleを名前に固定しない |
+| 探索 | inquiry | BLEのscanに相当するが、別の手続きなのでscanと呼ばない |
+| 可視性 | discoverable / connectable | advertisingとは別概念として扱う |
+| SPPのrole | server / client | `spp().startServer()`と`spp().connect()`。GATTのClient/Serverと混同しない文脈で使う |
+| HIDのrole | HID Device / HID Host | BLE側と同じ語。無線の別はClassic HID / HOGPで示す |
+| A2DPのrole | Sink / Source | 規格の語をそのまま使い、受信側/送信側へ置き換えない |
+| AVRCPのrole | Controller (CT) / Target (TG) | 略語は初出で展開する |
+| HFPのrole | Client / Audio Gateway (AG) | HFP Clientをhands-free、AGをphoneと言い換えない |
+| 2 hostの同時利用 | dual-host | BLE hostとClassic hostが1つのcontrollerを共有する構成 |
+
+どちらの無線がどの相手に届くかは[BLEとClassicの選び方](CLASSIC_VS_BLE.ja.md)、機能ごとの検証状態は
+[Classic機能の棚卸し](CLASSIC_FEATURE_INVENTORY.ja.md)が正本。
 
 ## ESP32KeyBridge adapter
 

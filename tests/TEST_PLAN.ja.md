@@ -7,24 +7,25 @@
 BLEは接続、切断、Discovery、購読、Security、Bondingが複数の非同期イベントにまたがります。このためPeerテストを補助的なsmokeではなく、実装を進めるための主要な自動テストにします。
 
 - unit: keymap変換、HID Report Map parserなどをhost上のg++で検証する（`tests/unit/`）。
-- examples_compile: 公開APIと対象SoCのbuild回帰を検出する。`.github/workflows/compile-examples.yml`が全exampleをesp32s3 profileでコンパイルする（push/PRで自動実行。カバレッジ表のbuild列✅はこの検証を指す）。
+- examples_compile: 公開APIと対象SoCのbuild回帰を検出する。`.github/workflows/compile-examples.yml`が全exampleを、各sketchが持つprofile（無印ESP32専用のClassic exampleは`esp32`、それ以外は`esp32s3`）でコンパイルする（push/PRで自動実行。カバレッジ表のbuild列✅はこの検証を指す）。
 - peer: ESP32-S3 2台を標準fixtureとし、実際のradio、controller、host stackを通した接続を検証する。ESP32-P4 + ESP32-C6はESP-Hosted固有経路の追加fixtureとして使用する。
 - manual: Android/iOS/Windows/Linux/macOSや市販機器との相互運用を検証する。
 
-Peer不要のruntime behaviorを1台で検証する「single」層は現在使用していません。必要になった時点で追加します。
+Peerを必要としないsuiteは`peer/`の中に1台構成として置きます（`classic_hid_profiles`、`classic_a2dp_sink_profile`、`classic_radio_settings`。いずれも`peer_device/`を持ちません）。別の「single」層は設けません——fixtureも実行方法も同じで、分ける理由が無いためです。**これらへ`--peer-profile`を渡すとpytestがunknown peerとして拒否する**ので、掃引commandは分けて実行します。
 
 ## Peerハードウェア
 
-Peerテストは次の2構成を使い分けます。
+Peerテストは次の3構成を使い分けます。
 
 | fixture | 親側DUT | 2台目Peer | 目的 | 接続方針 |
 |---|---|---|---|---|
 | 標準回帰 | ESP32-S3 | ESP32-S3 | EspBleの全機能と通常のNimBLE経路 | 常時接続を推奨 |
+| 無印ESP32回帰 | ESP32 | ESP32またはESP32-S3 | EspBle同梱NimBLE host、Bluetooth Classic、dual-host | 常時接続を推奨 |
 | ESP-Hosted回帰 | ESP32-P4 + ESP32-C6 | ESP32-S3 | SDIO、ESP-Hosted、C6 controller、Wi-Fi/BLE共存 | 必要時の接続でよい |
 
 標準回帰にはEspUsbHost/EspUsbDeviceなどで常時接続されているESP32-S3 2台を共用します。BLE通信のためのボード間配線は不要です。各ボードをPCへ接続するSerial/給電だけを使用します。
 
-これに加えてmanual test用ESP32-S3が1台あります。BLEはボード間の有線接続を必要としないため、将来3台が必要なscenarioでは追加のPeerディレクトリとprofile/port設定を用意して、この1台を第3Peerとして利用できます。初期テストの必須環境は常設2台のままとし、3台構成は複数接続やBLE-to-BLE bridgeのE2E testを追加するときに使用します。
+これに加えてESP32-S3が1台あり、3台必要なscenarioの第3Peer（`s3_peer_device2` / `TEST_SERIAL_PORT_PEER_DEVICE2`）として使います。現在は`tests/manual/multi_connection`が使用しており、portが未設定なら自動でskipします。自動回帰の必須環境は常設2台のままです。
 
 pytest-embedded-cliの既存規約に従います。
 
@@ -36,7 +37,7 @@ pytest-embedded-cliの既存規約に従います。
 
 これらの`host` / `device`はUSB roleでもBLE roleでもありません。pytest-embedded-cliは両方へsketchを転送して実行し、`dut`と`peers["device"]`の両Serialを観測・操作できます。
 
-初期scenarioは親側sketchをCentral、2台目sketchをPeripheralに固定します。EspBle Centralを検証するときは親側の結果を主にassertし、EspBle Peripheralを検証するときはPeer側の結果を主にassertします。役割交換やコード配置の交換は前提にしません。
+各suiteは親側sketchをCentral、2台目sketchをPeripheralに固定します。EspBle Centralを検証するときは親側の結果を主にassertし、EspBle Peripheralを検証するときはPeer側の結果を主にassertします。1つのsuiteの中で役割やコード配置を入れ替えることはありません。**どちらの物理boardをどちらへ置くかは`--profile` / `--peer-profile`で変えられる**ので、無印ESP32の掃引は同じsuiteをrole違いで2回実行します。
 
 ## P4/C6 ESP-Hosted回帰
 
@@ -96,8 +97,8 @@ uv run --env-file .env pytest \
 
 | 役割 | profile | 対象suite |
 |---|---|---|
-| 親側(Central) | `esp32_peer_host` | EspBleを使う62 suite |
-| Peer(Peripheral) | `esp32_peer_device` | EspBleを使う64 suite |
+| 親側(Central) | `esp32_peer_host` | 親側sketchがEspBleで書かれたsuite |
+| Peer(Peripheral) | `esp32_peer_device` | Peer側sketchがEspBleで書かれたsuite |
 
 ```sh
 uv run --env-file .env pytest peer/<suite>/ --profile esp32_peer_host --peer-profile device:s3_peer_device
@@ -121,9 +122,10 @@ profileを置いていないのは次の2種類だけです。
 実行してください。`local_identity`のようにService UUIDで対象を選ぶsuiteは、前の実行のPeer firmwareが
 載ったままのボードが広告していると意図しない側を観測します。
 
-無印ESP32の2台は`/dev/ttyUSB0` / `/dev/ttyUSB1`で常設です。同じportを使う別repositoryのpytestと
-同時に走らせても構いません（ポートの調停はpytestが行います。`arduino-cli upload`や`esptool`を
-直接使うと待たずに失敗します）。
+無印ESP32の2台は常設で、portは`.env`の`TEST_SERIAL_PORT_ESP32_PEER_HOST` /
+`TEST_SERIAL_PORT_PEER_DEVICE_ESP32_PEER_DEVICE`で指定します。portはpytestが排他で掴むので、
+別のpytestを同時に走らせても待ち合わせになります。`arduino-cli upload`や`esptool`を
+直接使うと待たずに失敗するので使わないでください。
 
 | タイミング | 無印ESP32の実行 |
 |---|---|

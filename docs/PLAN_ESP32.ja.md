@@ -274,11 +274,10 @@ EspBleから削除した（ESP32KeyBridge側で検証する）。
 
 ### 解消した事象
 
-`hid_keyboard_host`をESP32 Peerで実行して失敗した回があったが、他repositoryのpytestが
-同時に走っていた時間帯だった。あちらの`.env`はinterop用にS3を`/dev/ttyACM0`——EspBle側の
-親機と同じポート——で使うため、試験中にS3を再書き込みされた可能性が高い。
-掃引と単独実行のいずれでも現在はpassする。**無印ESP32とS3で機材が完全に独立しているのは
-ESP32側の2台（`/dev/ttyUSB0` / `/dev/ttyUSB1`）だけである点に注意する。**
+`hid_keyboard_host`をESP32 Peerで実行して失敗した回があったが、同じS3のportを使う別の
+pytestが同時に走っており、試験中にS3を再書き込みされたためだった。掃引と単独実行のいずれでも
+現在はpassする。**1台のboardを同時に2つの実行が掴まないようにする**のがここで得た規則で、
+別のpytestと並行させるなら`.env`のportが重ならないことを先に確かめる。
 
 core同梱`BLE`ラッパを使うsketchは、無印ESP32ではラッパがBluedroidになるため**原理的に実行できない**
 （自前のNimBLE hostと同一controllerを共有できない）。これらの`#error`（`CONFIG_NIMBLE_ENABLED`必須）は

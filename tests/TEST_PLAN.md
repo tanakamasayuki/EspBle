@@ -7,24 +7,25 @@
 BLE connection, disconnection, discovery, subscription, security, and bonding span multiple asynchronous events. Peer tests are therefore a primary implementation tool, not merely supplementary smoke tests.
 
 - unit: validate keymap conversion, the HID Report Map parser, and similar pure logic with host-side g++ (`tests/unit/`).
-- examples_compile: detect public-API and target-SoC build regressions. `.github/workflows/compile-examples.yml` compiles every example with the esp32s3 profile on pushes and pull requests. A ✅ in the build column of the coverage table refers to this check.
+- examples_compile: detect public-API and target-SoC build regressions. `.github/workflows/compile-examples.yml` compiles every example on pushes and pull requests, each sketch with the profile it declares -- `esp32` for the original-ESP32-only Classic examples, `esp32s3` otherwise. A ✅ in the build column of the coverage table refers to this check.
 - peer: use two ESP32-S3 boards as the baseline fixture and exercise the real radio, controller, and host stack. An ESP32-P4 + ESP32-C6 fixture additionally covers the ESP-Hosted path.
 - manual: validate interoperability with Android, iOS, Windows, Linux, macOS, and commercial devices.
 
-There is currently no single-board `single` layer for runtime behavior that does not need a peer. Add it when such scenarios are needed.
+Suites that need no peer live under `peer/` as single-board suites (`classic_hid_profiles`, `classic_a2dp_sink_profile` and `classic_radio_settings`, none of which has a `peer_device/`). There is no separate `single` layer: the fixture and the way they run are the same, so splitting them buys nothing. **Passing `--peer-profile` to one of them is rejected as an unknown peer**, so run them as their own command.
 
 ## Peer Hardware
 
-Peer tests use two fixture configurations.
+Peer tests use three fixture configurations.
 
 | Fixture | Parent DUT | Second peer | Purpose | Connection policy |
 |---|---|---|---|---|
 | Baseline regression | ESP32-S3 | ESP32-S3 | All EspBle features and the normal NimBLE path | Keeping both connected is recommended |
+| Original-ESP32 regression | ESP32 | ESP32 or ESP32-S3 | The NimBLE host EspBle bundles, Bluetooth Classic, and dual-host | Keeping both connected is recommended |
 | ESP-Hosted regression | ESP32-P4 + ESP32-C6 | ESP32-S3 | SDIO, ESP-Hosted, C6 controller, and Wi-Fi/BLE coexistence | Connect only when required |
 
 The baseline reuses the two ESP32-S3 boards kept connected for EspUsbHost/EspUsbDevice. No signal wiring is required between BLE peers; each board only needs serial, power, and a connection to the test host.
 
-One additional ESP32-S3 is available for manual tests. A future three-board scenario can add another peer directory and profile/port configuration and use it as the third peer. The always-connected two-board fixture remains the minimum automated setup; use three boards for multiple connections or BLE-to-BLE bridge E2E tests.
+One more ESP32-S3 serves as the third peer (`s3_peer_device2` / `TEST_SERIAL_PORT_PEER_DEVICE2`) for scenarios that need three boards. `tests/manual/multi_connection` uses it today and skips automatically when that port is unset. The two-board fixture remains the minimum for the automated regression.
 
 The setup follows the existing pytest-embedded-cli conventions:
 
@@ -36,7 +37,7 @@ The setup follows the existing pytest-embedded-cli conventions:
 
 `host` and `device` describe neither USB roles nor BLE roles. pytest-embedded-cli flashes and runs both sketches and lets the test observe and control both `dut` and `peers["device"]` serial streams.
 
-Initial scenarios keep the parent sketch as Central and the second-board sketch as Peripheral. Assertions primarily inspect the parent when testing an EspBle Central and the peer when testing an EspBle Peripheral. The tests do not depend on swapping roles or source placement.
+Every suite keeps the parent sketch as Central and the second-board sketch as Peripheral. Assertions primarily inspect the parent when testing an EspBle Central and the peer when testing an EspBle Peripheral. Roles and source placement are never swapped within a suite. **Which physical board takes which side is chosen with `--profile` and `--peer-profile`**, which is how the original-ESP32 sweep runs the same suites once per role.
 
 ## P4/C6 ESP-Hosted Regression
 
@@ -97,8 +98,8 @@ Japanese [original-ESP32 plan](../docs/PLAN_ESP32.ja.md).
 
 | Role | profile | suites |
 |---|---|---|
-| parent (central) | `esp32_peer_host` | the 62 suites whose parent sketch uses EspBle |
-| peer (peripheral) | `esp32_peer_device` | the 64 suites whose peer sketch uses EspBle |
+| parent (central) | `esp32_peer_host` | every suite whose parent sketch is written with EspBle |
+| peer (peripheral) | `esp32_peer_device` | every suite whose peer sketch is written with EspBle |
 
 ```sh
 uv run --env-file .env pytest peer/<suite>/ --profile esp32_peer_host --peer-profile device:s3_peer_device
@@ -122,9 +123,10 @@ When re-running the same suite with the roles swapped, **flash one of the boards
 first**. A suite that selects its target by service UUID, such as `local_identity`, otherwise observes
 the board still advertising the previous run's peer firmware.
 
-The two boards are permanently wired on `/dev/ttyUSB0` and `/dev/ttyUSB1`. Running another
-repository's suite against the same ports at the same time is fine (pytest arbitrates them; using
-`arduino-cli upload` or `esptool` directly fails instead of waiting).
+The two boards stay wired; their ports come from `TEST_SERIAL_PORT_ESP32_PEER_HOST` and
+`TEST_SERIAL_PORT_PEER_DEVICE_ESP32_PEER_DEVICE` in `.env`. pytest holds a port exclusively, so a
+second pytest run against the same board waits its turn. Do not use `arduino-cli upload` or
+`esptool` directly — they fail instead of waiting.
 
 | Trigger | Original-ESP32 run |
 |---|---|

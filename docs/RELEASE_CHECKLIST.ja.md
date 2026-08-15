@@ -29,7 +29,7 @@ uv run --env-file .env pytest --clean
 
 `rpa_bond`は[テスト計画](../tests/TEST_PLAN.ja.md)に記録した理由で無印ESP32専用です。`--profile`を指定しないと各sketchの`default_profile`が使われるため、この実行ではS3ではなく無印ESP32ペアで動きます。ペアを外していればportが無いのでskipされます。
 
-次に無印ESP32の2台（`/dev/ttyUSB0` / `/dev/ttyUSB1`）で、同梱NimBLE host（`src/nimble_esp32/`）を役割ごとに掃引します。無印ESP32はhostがcore同梱ではなく**EspBleが持ち込んだもの**なので、`src/`へ変更が入るリリースでは必ず実行します。所要は各1時間程度です。
+次に無印ESP32の2台（portは`.env`の`TEST_SERIAL_PORT_ESP32_PEER_HOST` / `TEST_SERIAL_PORT_PEER_DEVICE_ESP32_PEER_DEVICE`）で、同梱NimBLE host（`src/nimble_esp32/`）を役割ごとに掃引します。無印ESP32はhostがcore同梱ではなく**EspBleが持ち込んだもの**なので、`src/`へ変更が入るリリースでは必ず実行します。所要は各1時間程度です。
 
 ```sh
 # 無印ESP32を親側(Central)に
@@ -54,7 +54,7 @@ uv run --env-file .env pytest --clean \
   --profile esp32_peer_host --peer-profile device:s3_peer_device
 ```
 
-除外の理由と実行頻度は[テスト計画](../tests/TEST_PLAN.ja.md#無印esp32回帰)、方針と検証記録は[無印ESP32対応計画](PLAN_ESP32.ja.md)を参照します。無印ESP32の2台は、同じportを使う別repositoryのpytestと同時に走らせても構いません（ポートの調停はpytestが行います。`arduino-cli upload`や`esptool`を直接使うと待たずに失敗するので使わないでください）。
+除外の理由と実行頻度は[テスト計画](../tests/TEST_PLAN.ja.md#無印esp32回帰)、方針と検証記録は[無印ESP32対応計画](PLAN_ESP32.ja.md)を参照します。portはpytestが排他で掴むので、別のpytestを同時に走らせても待ち合わせになります（`arduino-cli upload`や`esptool`を直接使うと待たずに失敗するので使わないでください）。
 
 Classicをrelease対象へ含める場合は、同じ無印ESP32 2台でClassic専用構成とdual-hostを追加実行します。
 

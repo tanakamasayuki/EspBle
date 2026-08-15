@@ -18,13 +18,13 @@ The profiles and environment variables reuse the existing EspUsbHost/EspUsbDevic
 | second peer | `s3_peer_device` | `TEST_SERIAL_PORT_PEER_DEVICE_S3_PEER_DEVICE` |
 | second peer (original ESP32) | `esp32_peer_device` | `TEST_SERIAL_PORT_PEER_DEVICE_ESP32_PEER_DEVICE` |
 
-The profile names do not describe BLE roles. Sketches are flashed to and run on both boards, and both serial ports are observed from pytest. The parent-side sketch is fixed as central and the `peer_device/` sketch as peripheral; the roles are never swapped.
+The profile names do not describe BLE roles. Sketches are flashed to and run on both boards, and both serial ports are observed from pytest. Within a suite the parent-side sketch is the central and the `peer_device/` sketch the peripheral; which physical board takes which side is chosen with `--profile` and `--peer-profile`.
 
 `pytest peer/` defaults to the two-S3 fixture. The P4 fixture may remain disconnected between runs; select it explicitly for Hosted-related changes, Core/C6 firmware updates, and release candidates. See the [tests README](../README.md) and [test policy](../TEST_PLAN.md#p4c6-esp-hosted-regression) for reference wiring, commands, frequency, and known-limit exclusions.
 
 ## Original ESP32
 
-The original ESP32 runs on the NimBLE host EspBle bundles for it (see [PLAN_ESP32.ja.md](../../docs/PLAN_ESP32.ja.md), Japanese). The two boards are permanently wired; running another repository's suite against the same ports at the same time is fine, because pytest manages the port arbitration. Do not use `arduino-cli upload` or `esptool` directly -- they fail instead of waiting.
+The original ESP32 runs on the NimBLE host EspBle bundles for it (see [PLAN_ESP32.ja.md](../../docs/PLAN_ESP32.ja.md), Japanese). The two boards stay wired. pytest holds a port exclusively, so a second pytest run against the same board waits its turn; do not use `arduino-cli upload` or `esptool` directly -- they fail instead of waiting. This chip is also the only target with a Bluetooth Classic radio, so the Classic and dual-host suites run on the same pair.
 
 ```sh
 # original ESP32 as the parent (central), S3 as the peer
@@ -38,51 +38,28 @@ uv run --env-file .env pytest peer/hid_keyboard_device/ \
   --peer-profile device:esp32_peer_device
 ```
 
-The profiles are present in `gatt_read_write`, `mtu`, `connection_parameters`, `security_bond` and `hid_keyboard_host` (both sides), plus `hid_keyboard_device` and `midi_device` (peer side only). Any other suite joins by adding the same profile to its `sketch.yaml`.
+Every suite whose sketch on a given side is written with EspBle carries the matching esp32 profile. A side without one is skipped automatically when that profile is selected, and only two cases lack it:
 
-Sketches that use the `BLE` wrapper bundled with the core -- `stack_smoke`, `advertise_payload`, and the parent side of `midi_host` -- cannot run on the original ESP32, where that wrapper is Bluedroid: two hosts cannot share one controller. They reject the build with `#error`.
+- **The side written with the `BLE` wrapper bundled with the core.** On the original ESP32 that wrapper is Bluedroid, which cannot share one controller with the NimBLE host EspBle brings, so the build is rejected with `#error`. That is the parent side of `stack_smoke`, `advertise_payload`, `hid_keyboard_device` and `midi_device`, and the peer side of `stack_smoke` and `midi_host`. **The opposite side of each is written with EspBle and does have the profile.**
+- **`phy_update`**, because the original ESP32 has a BLE 4.2 controller and no LE 2M PHY.
 
-## Test suites
+The reverse also exists: `rpa_bond` and the Classic and dual-host suites are original-ESP32 only and carry no S3 profile.
 
-- `stack_smoke`: uses only the bundled NimBLE backend BLE API to validate advertising/scan, connection, GATT read/write, both serial ports, and the two-board fixture.
-- `beacon`: a non-connectable, non-scannable beacon on the peer (`setConnectable(false)` + `setScanResponseEnabled(false)` + `setInterval(100, 150)`) broadcasting a marker service UUID and manufacturer data. The parent's scanner captures it and asserts the advertisement is neither connectable nor scannable and carries the expected manufacturer payload (company `0xFFFF` + `0x01020304`).
-- `advertise_scan`: EspBle advertising on the peer, EspBle scanner on the parent — name, 128-bit service UUID, manufacturer data, and `update()`-context delivery of scan results.
-- `lifecycle_stress`: connection-lifecycle regressions — the Disconnected event and HID host slot release survive a notification flood while `update()` is paused (drops observable via `droppedEventCount()`); repeated connect / HID discover / disconnect does not leak the `BLEClient` or its service tree; `end()`/`begin()` survive an in-flight GATT read; `connect()` to an unreachable peer fails asynchronously near the requested timeout; a second GATT operation issued while one is in flight is queued and both complete; and a silently vanished peer (radio killed without a Link Layer terminate) is detected via supervision timeout.
-- `hid_robustness`: HID host/device robustness — no input reports to unsubscribed peers, rollover (phantom) reports are not misread as all-release, the disconnect all-release event survives a full event queue, `disconnect()` of the same connection is rejected during HID discovery, and a second `begin()` with a different config fails.
-- `hid_security`: a security-enabled HID keyboard device rejects report-map reads, HID discovery, and input-report delivery over an unencrypted link.
-- `hid_boot_keyboard`: a generic GATT server emulates a boot keyboard without a report ID (no Report Reference descriptor) — discovery and input work, and input reports with a length other than 8 leave the key state unchanged and are counted by `invalidInputReportCount()`.
-- `advertise_payload`: the parent uses the bundled API's passive scan to capture the raw advertisement payload and asserts that multiple 16-bit service UUIDs are merged into a single Complete List AD structure with no duplicated AD types.
-- `battery_service`: validates standalone Battery Service one-byte reads, CCCD subscription, notifications, send completion, and unsubscribe.
-- `device_information`: validates standalone Device Information string reads and the standard 7-byte little-endian PnP ID wire format.
-- `current_time`: validates standalone Current Time 10-byte decoding, CCCD subscription, notifications, send completion, and unsubscribe.
-- `heart_rate`: validates Body Sensor Location reads and flags-driven 16-bit heart rate, Energy Expended, and RR-Interval notification decoding.
-- `environmental_sensing`: validates signed Temperature, scaled Humidity and 32-bit Pressure reads, plus Temperature notification and unsubscribe.
-- `midi_device`: a bundled-NimBLE central subscribes to the `EspBleMidiDevice` I/O characteristic and asserts the exact BLE MIDI wire bytes (header + timestamp + Note On/Off), the empty read, a multi-packet SysEx reassembled by an independent reassembler, and that a raw Control Change written by the central is decoded by the device.
-- `midi_host`: a bundled-NimBLE peripheral notifies a running-status BLE MIDI packet and `EspBleMidiHost` decodes it into two messages with correct timestamps; the host's outgoing Note On and a multi-packet SysEx reach the peripheral.
-- `health_thermometer`: the standard Health Thermometer server indicates an IEEE-11073 32-bit FLOAT Temperature Measurement; the client reads Temperature Type, subscribes to indications, and decodes 37.5 °C exactly.
-- `blood_pressure`: the standard Blood Pressure server indicates a Measurement with systolic/diastolic/mean as IEEE-11073 16-bit SFLOATs; the client reads the Feature field and decodes 120/80/93 mmHg exactly.
-- `weight_scale`: the standard Weight Scale server indicates a Measurement carrying a uint16 weight at 0.005 kg resolution; the client reads the Feature field and decodes 70.000 kg exactly.
-- `body_composition`: the standard Body Composition server indicates a Measurement carrying uint16 flags, the mandatory Body Fat Percentage (0.1 %/LSB), and the optional Weight field (bit 10); the client reads the Feature field and decodes 27.5 % body fat and 70.000 kg exactly.
-- `location_navigation`: the standard Location and Navigation server notifies a Location and Speed value carrying uint16 flags, Instantaneous Speed (1/100 m/s), and a sint32 latitude/longitude (1e-7 deg); the client reads LN Feature and decodes 5.00 m/s and the Tokyo coordinates exactly.
-- `user_data`: the standard User Data Service exposes a read/write Age, a writable First Name, and a read/write/notify Database Change Increment. The client writes First Name and a new Age, the server receives each write in `onWritten` and bumps + notifies the increment, and the client sees it climb to 2 and re-reads Age as the written 42. Validates the client-write → onWritten → notify path.
-- `alert_notification`: the standard Alert Notification Service exposes a readable Supported New Alert Category bitmask (Email + SMS/MMS, 0x0022), a notifiable New Alert, and a writable Alert Notification Control Point. The client reads the bitmask, subscribes to New Alert, and writes "Notify New Alert Immediately" for Email; the server notifies a New Alert (category 1, count 3, text "Bob") which the client decodes. Validates the Control Point write → notify path.
-- `immediate_alert`: the standard Immediate Alert Service (the Find Me target role) exposes Alert Level (0x2A06) as a Write Without Response uint8. The client writes High Alert (2) then No Alert (0) without a response, and the server observes each write in `onWritten` from loop context. Validates the write-without-response-only standard-service path.
-- `phone_alert_status`: the standard Phone Alert Status Service exposes read/notify Alert Status and Ringer Setting plus a Write Without Response Ringer Control Point. The client reads Alert Status (0x01), subscribes to Ringer Setting, reads the initial Normal setting, and drives the Control Point to Set Silent Mode (Ringer Setting notifies 0) and Cancel Silent Mode (notifies 1). Validates the Control Point write → server state change → notify path.
-- `proximity`: the Proximity profile hosts the Link Loss Service (0x1803, read/write Alert Level) and the Tx Power Service (0x1804, read-only signed-int8 Tx Power Level) on one server. The client reads the Tx Power Level (-8 dBm), reads the initial Alert Level (0), writes High Alert (2) with response, and re-reads it as 2. Validates hosting two services on one server and signed-int8 reads.
-- `reference_time_update`: the standard Reference Time Update Service exposes a Write Without Response Time Update Control Point and a readable 2-byte Time Update State. The client reads the initial Idle state (0, 0), requests a reference update (Control Point 1 → state 1, 0), then cancels it (Control Point 2 → state 0, 1), re-reading the state each time. Validates the Control Point write → read-only state transition path.
-- `bond_management`: the standard Bond Management Service exposes a readable Bond Management Feature bit field (uint24, 0x000011) and a writable Bond Management Control Point. The client reads the feature and writes op code 0x03 (Delete bond of requesting device, LE) with response; the server observes the op code in `onWritten`. Validates the feature read + control-point op code choreography (not actual bond deletion).
-- `continuous_glucose_monitoring`: the standard CGM Service exposes an E2E-CRC-protected CGM Feature and notifies a CGM Measurement carrying an SFLOAT glucose concentration, a time offset, and an appended E2E-CRC (CRC-16/MCRF4XX). The client verifies the Feature's CRC before trusting it, decodes the feature bits and type/sample location, subscribes to the Measurement, verifies its CRC, and decodes glucose (100) and time offset (5). Both boards use the shared `EspBleCgmCrc.h` codec.
-- `disconnect_reason`: validates `EspBleConnection::disconnectReason`. The peripheral initiates the disconnect, so as its initiator it reports a non-zero local-termination reason, while the central (the remote side) reports a non-zero remote-termination reason; the two codes must differ. Proves the reason is captured on both the server and client disconnection paths via the global GAP event listener.
-- `connection_parameters`: validates the connection parameters exposed on `EspBleConnection` (interval/latency/timeout) and the `updateConnectionParameters()` / `onConnectionParametersUpdated()` pair. The central reports the initial interval, requests an update to interval 80, and both the central and the peripheral report the negotiated interval of 80.
-- `phy_update`: validates the LE PHY exposed on `EspBleConnection` (txPhy/rxPhy) and the `updatePhy()` / `onPhyUpdated()` pair. The central reports the initial PHY, requests the 2M PHY, and both the central and the peripheral report the negotiated 2M PHY (tx/rx = 2).
-- `service_changed`: the client subscribes to the Generic Attribute Service Changed characteristic (0x1801/0x2A05); the server calls `notifyServicesChanged(0x0001, 0xFFFF)` and the client receives the indication and decodes the changed handle range (1..65535). Validates client-side Service Changed handling and the server-side trigger.
-- `runtime_passkey`: interactive runtime Passkey Entry. The peripheral (DisplayOnly, MITM, no static passkey) generates a random passkey per pairing and surfaces it via `onPasskeyDisplayed`; the central (KeyboardOnly, MITM, no static passkey) blocks in its backend passkey request until the test relays the displayed passkey with `providePasskey()`, after which pairing completes authenticated and bonded on both sides.
-- `numeric_comparison`: LE Secure Connections Numeric Comparison. Both devices (DisplayYesNo, MITM) display the same 6-digit value via `onNumericComparison`; the test checks the values match, confirms on both sides with `confirmNumericComparison(true)`, and pairing completes authenticated and bonded.
-- `hid_boot_protocol`: HID over GATT Boot Protocol on a keyboard peripheral. A generic GATT client reads the Protocol Mode characteristic (0x2A4E, default Report Protocol Mode), subscribes to the Boot Keyboard Input Report (0x2A22), switches the device to Boot Protocol Mode (the device observes it via `onProtocolMode()`), receives an 8-byte boot report for Shift+'a', and writes the Boot Keyboard Output Report (0x2A32) Caps Lock LED which the device sees through `onOutputReport()`.
-- `hid_custom`: a Custom HID device built with `ble.hidCustom()` from an arbitrary vendor-defined Report Descriptor (Report ID 1 with a 2-byte input and a 1-byte output composed into the HID service, so two Report characteristics share UUID 0x2A4D). A generic GATT client discovers the service, resolves each report to its distinct attribute handle, length-checks the Report Map (0x2A4B), subscribes to the input report **by handle** and decodes a custom 2-byte report (dial delta + buttons), then writes the output report **by handle** — which the device receives via `onOutputReport()`. Validates both an arbitrary multi-report descriptor and the handle-based client operations that disambiguate same-UUID characteristics.
-- `cycling_speed_cadence`: the standard CSC server notifies a multi-field Measurement (cumulative wheel/crank revolutions and event times); the client reads Sensor Location, subscribes, and decodes every field.
-- `running_speed_cadence`: the standard RSC server notifies a mixed-width Measurement (uint16 speed, uint8 cadence, optional uint16 stride length and uint32 total distance); the client reads Sensor Location, subscribes, and decodes every present field.
-- `cycling_power`: the standard Cycling Power server notifies a Measurement with 16-bit flags and a signed 16-bit instantaneous power; the client reads Sensor Location, subscribes, and decodes a negative power exactly.
-- `pulse_oximeter`: the standard Pulse Oximeter server indicates a Spot-Check Measurement whose SpO2 and pulse rate are IEEE-11073 16-bit SFLOATs; the client reads PLX Features and decodes 98 % / 60 bpm exactly.
-- `glucose`: exercises the Record Access Control Point procedure — the client writes "Report Stored Records (all)"; the server notifies one Glucose Measurement (sequence, base time, SFLOAT concentration) and then indicates the RACP response, sequenced from `onSent`. Validates the write → notify → indicate choreography.
-- `connect_disconnect`, `gatt_read_write`, `notify_indicate`, `mtu`, `security_bond`, `security_passkey`, `hid_keyboard_device`, `hid_keyboard_host`: the per-feature suites listed in the [test plan](../TEST_PLAN.md).
+## Suite layout
+
+One suite is one directory.
+
+```text
+peer/<suite>/
+  <suite>.ino        parent-side sketch
+  peer_device/       second-board sketch (absent for single-board suites)
+  sketch.yaml        the profiles it builds for, i.e. the boards it supports
+  test_<suite>.py    generates the input and decides the result
+```
+
+**What every suite covers, and what counts as a pass, is in the [test plan](../TEST_PLAN.md)** —
+this file does not repeat it. When you add a suite, add it to the test plan in both languages as
+well, so that every directory under `tests/peer` appears in both.
+
+Before writing a new suite, read "Do not wait for a startup banner" and "Anchor a trailing
+variable-length field" in the test plan. Both describe failures that happened on hardware.
