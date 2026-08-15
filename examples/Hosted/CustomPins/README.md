@@ -39,3 +39,8 @@ The pins belong to the SDIO transport shared by Wi-Fi and BLE, so this example
 uses Arduino Core's Hosted HAL instead of defining an EspBle-specific API. See
 the Japanese [ESP-Hosted setup guide](../../../docs/ESP_HOSTED_SETUP.ja.md#sdio-pinの選択と上書き)
 for the complete pin table and troubleshooting guidance.
+
+## Related guides
+
+- [ESP-Hosted setup (Japanese)](../../../docs/ESP_HOSTED_SETUP.ja.md) — wiring, versions and the C6 firmware
+- [Verified ESP-Hosted limitations (Japanese)](../../../docs/ESP_HOSTED_LIMITATIONS.ja.md) — what does not work yet, and why

@@ -1,6 +1,7 @@
 /* Vendored by tools/vendor_nimble_esp32.py -- do not edit. */
 #include <sdkconfig.h>
-#if defined(CONFIG_IDF_TARGET_ESP32) && !defined(CONFIG_NIMBLE_ENABLED)
+#if defined(CONFIG_IDF_TARGET_ESP32) && !defined(CONFIG_NIMBLE_ENABLED) && \
+    !defined(ESPBLE_CLASSIC_ONLY)
 #include "nimble_esp32/include/espble_nimble_config.h"
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
@@ -8393,7 +8394,7 @@ ble_gap_connect(uint8_t own_addr_type, const ble_addr_t *peer_addr,
 
         if (rl != NULL && rl->rl_isrpa) {
             memcpy(bhc_peer_addr.val, rl->rl_peer_rpa, BLE_DEV_ADDR_LEN);
-            bhc_peer_addr.type = rl->rl_addr_type;
+            bhc_peer_addr.type = BLE_ADDR_RANDOM;
         }
     }
 #endif
@@ -11232,4 +11233,4 @@ ble_gap_utp_send(uint8_t len, const uint8_t *data)
 }
 #endif
 
-#endif /* CONFIG_IDF_TARGET_ESP32 && !CONFIG_NIMBLE_ENABLED */
+#endif /* CONFIG_IDF_TARGET_ESP32 && !CONFIG_NIMBLE_ENABLED && !ESPBLE_CLASSIC_ONLY */

@@ -28,3 +28,8 @@ Location and Navigation Service（0x1819）のCentral / GATT Clientです。LN F
 Speed: 5.10 m/s, location: 35.681200, 139.767100
 Speed: 5.20 m/s, location: 35.681200, 139.767100
 ```
+
+## 関連するガイド
+
+- [BLE入門ガイド §4 GATT編](../../../../docs/GUIDE_BLE_BASICS.ja.md#4-gatt編--データをやり取りする) — service・characteristic・notify・MTU
+- [BLE入門ガイド §5 UUID](../../../../docs/GUIDE_BLE_BASICS.ja.md#5-uuidを理解する) — 16-bitと128-bitの関係

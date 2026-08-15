@@ -16,6 +16,7 @@ BLEの仕組み——Bluetooth Classicとの違い、GAP（探してつながる
 | キーボード・マウスとして振る舞う／入力を受け取る | 6章 HID編 | [Hid/](Hid/) |
 | BLE MIDI楽器 | 7章 BLE MIDI編 | [Midi/](Midi/) |
 | P4/C6 ESP-HostedのSDIO pinを指定する | ESP-Hostedセットアップ | [Hosted/CustomPins](Hosted/CustomPins/) |
+| Classicのinquiry・SPP・HID・音声 | [Classic通信の入門ガイド](../docs/GUIDE_CLASSIC_BASICS.ja.md) | [Classic/](Classic/) |
 
 各exampleのREADMEはそれ単体で読めるように書いてあるので、ガイドを読まずに個別のexampleから入っても構いません。
 
@@ -37,6 +38,43 @@ arduino-cli compile --profile esp32s3 examples/<path>
 |---|---|---|
 | [CompileSmoke](CompileSmoke/) | — | 最小のビルド確認。ライブラリバージョンを表示 |
 | [Hosted/CustomPins](Hosted/CustomPins/) | P4 Host | board variantと異なるESP-Hosted SDIO pinを`ble.begin()`前に上書き |
+| [Hosted/WifiCoexistence](Hosted/WifiCoexistence/) | P4 Host | 1つの共有ESP-Hosted transportでWi-FiとBLEを同時利用し、停止順序を示す |
+
+### Bluetooth Classic（無印ESP32のみ）
+
+`EspBleClassic`を使うと独自buildしたClassic hostが自動選択されます。build flagはありません。
+`EspBle`と`EspBleClassic`の両方を開始すればdual-host、片方だけなら単一hostになります。
+
+**2つの無線は届く相手が違い、それが選択の基準になります。**BLE HID（HOGP）は2015年前後以降の
+携帯・タブレット・PCが受け付けます。ClassicはBLEでは届かない相手に届きます——旧世代のゲーム機や
+古いPC、car audio、headset。さらにserial port（SPP）を提供する手段と、音声を運ぶ手段
+（A2DP、HFP）はClassicだけにあります。HID exampleは無線ごとに対になっており、呼び出しは
+両方で同じです。手元の相手に合う方を選んでください。どちらを使うか、両方にある機能の差は
+[BLEとClassic](../docs/CLASSIC_VS_BLE.ja.md)にあります。
+
+| Example | Role | 説明 |
+|---|---|---|
+| [Classic/Inquiry](Classic/Inquiry/) | GAP | device discovery。addressの入手経路 |
+| [Classic/RadioSettings](Classic/RadioSettings/) | GAP | 送信電力・page timeout・暗号鍵の最小長 |
+| [Classic/SppServer](Classic/SppServer/) | SPP Server | binary-safeなSPP echo server |
+| [Classic/SppClient](Classic/SppClient/) | SPP Client | address指定で接続し、RFCOMM channelを解決または指定する |
+| [Classic/SppStream](Classic/SppStream/) | SPP Server | SPPをArduinoの`Stream`として扱う。`Serial`向けのcodeがそのまま動く |
+| [Classic/SppPairing](Classic/SppPairing/) | SPP Server / GAP | applicationが制御するpairingとbond管理 |
+| [Classic/HidKeyboard](Classic/HidKeyboard/) | HID Device | BLE exampleと同じprofile APIによるkeyboard / mouse |
+| [Classic/HidMouse](Classic/HidMouse/) | HID Device | 移動・クリック・wheel・ドラッグ |
+| [Classic/HidGamepad](Classic/HidGamepad/) | HID Device | 軸・hat・button。BLEでは代替できない用途 |
+| [Classic/HidConsumerControl](Classic/HidConsumerControl/) | HID Device | メディアキーとシステム要求 |
+| [Classic/HidKeyboardNkro](Classic/HidKeyboardNkro/) | HID Device | N-key rollover。6キー制限が無い |
+| [Classic/HidComposite](Classic/HidComposite/) | HID Device | keyboard・mouse・メディアキーを1台で兼ねる。合成数のSDP record上限も示す |
+| [Classic/HidKeyboardHost](Classic/HidKeyboardHost/) | HID Host | 相手のReport Descriptorから復号したkeyboard / mouse event |
+| [Classic/HidVendorDevice](Classic/HidVendorDevice/) | HID Device | 任意Report DescriptorのClassic HID Device |
+| [Classic/HidVendorHost](Classic/HidVendorHost/) | HID Host | アドレス指定で接続しraw Input Reportを受信 |
+| [Classic/A2dpSinkRaw](Classic/A2dpSinkRaw/) | A2DP Sink | codec設定とencode済みSBC mediaをcallbackで受信 |
+| [Classic/A2dpSource](Classic/A2dpSource/) | A2DP Source | encode済みSBC frameをbackpressure付きで送信 |
+| [Classic/A2dpSinkAvrcp](Classic/A2dpSinkAvrcp/) | A2DP Sink / AVRCP TG | A2DP接続と再生操作・absolute volume |
+| [Classic/AvrcpController](Classic/AvrcpController/) | AVRCP CT | 相手の再生操作、status・metadata要求 |
+| [Classic/HfpClientRaw](Classic/HfpClientRaw/) | HFP Client | 単一call controlとraw CVSD/mSBC SCO transport |
+| [Classic/HfpAudioGatewayRaw](Classic/HfpAudioGatewayRaw/) | HFP Audio Gateway | 小さいtelephony modelとraw CVSD/mSBC SCO transport |
 
 ### GAP — advertise / scan / connect
 
@@ -54,6 +92,7 @@ arduino-cli compile --profile esp32s3 examples/<path>
 | [Gap/AcceptList](Gap/AcceptList/) | Peripheral | Filter Accept Listで接続できる相手を制限 |
 | [Gap/DirectedAdvertise](Gap/DirectedAdvertise/) | Peripheral | 相手を1台に指定したDirected Advertising。payloadは載らない |
 | [Gap/PrivateAddress](Gap/PrivateAddress/) | Peripheral | random static / resolvable private addressでadvertise |
+| [Gap/MultiConnection](Gap/MultiConnection/) | Central | 複数のperipheral接続を同時に保持し、接続ごとのIDで指定する |
 
 ### GATT — 基本（汎用の仕組み＋シリアル）
 
@@ -151,6 +190,7 @@ arduino-cli compile --profile esp32s3 examples/<path>
 | [Hid/KeyboardNkro](Hid/KeyboardNkro/) | HID Device | N-key rollover keyboard（29-byte bitmap report） |
 | [Hid/Mouse](Hid/Mouse/) | HID Device | 5ボタン相対mouse |
 | [Hid/ConsumerControl](Hid/ConsumerControl/) | HID Device | 音量・再生/一時停止media key |
+| [Hid/Gamepad](Hid/Gamepad/) | HID Device | 6軸・hat switch・32 button |
 | [Hid/CompositeKeyboardMouse](Hid/CompositeKeyboardMouse/) | HID Device | keyboardとmouseを1つのHID Serviceへ複合 |
 | [Hid/VendorDevice](Hid/VendorDevice/) | HID Device | Report ID 6のVendor Input / Output / Feature |
 | [Hid/VendorHost](Hid/VendorHost/) | HID Host | Vendor Input受信とOutput / Feature書込み |

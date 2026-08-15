@@ -948,3 +948,10 @@ These helpers take the generic GATT events they need as additional listeners thr
 |---|---|
 | [Midi/MidiDevice](../examples/Midi/MidiDevice/) | Sending notes as an instrument |
 | [Midi/MidiHost](../examples/Midi/MidiHost/) | Connecting to a BLE MIDI device and receiving messages |
+
+## 8. Where to go next
+
+This guide covers what each part of BLE does. For how the library behaves under
+load and at its limits — which task your callbacks run on, every queue capacity
+and what overflowing it does, backpressure, reconnection, footprint and a
+debugging playbook — see [EspBle in depth](GUIDE_ADVANCED.md).

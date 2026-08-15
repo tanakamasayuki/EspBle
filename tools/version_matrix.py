@@ -55,8 +55,8 @@ CORE_VERSION_FLOOR = (3, 2, 0)
 DEFAULT_EXAMPLES = [
     ("Smoke", "CompileSmoke"),
     ("GAP", "Gap/Connect"),
-    ("GATT Server", "Gatt/NotifyServer"),
-    ("GATT Client", "Gatt/Client"),
+    ("GATT Server", "Gatt/Basics/NotifyServer"),
+    ("GATT Client", "Gatt/Basics/Client"),
     ("Security", "Security/StaticPasskeyServer"),
     ("HID Device", "Hid/KeyboardDevice"),
     ("HID Host", "Hid/KeyboardHost"),
@@ -348,6 +348,21 @@ def main() -> int:
 
     lib_version = _read_lib_version(REPO_ROOT)
     examples_root = REPO_ROOT / "examples"
+
+    # A stale representative path used to be rendered as an innocuous
+    # "example absent" cell, letting the core matrix skip GATT entirely.
+    # `all` is discovered from the filesystem, so only an explicit/default
+    # list needs this typo/rename guard.
+    missing_examples = [
+        path for _, path in examples
+        if not (examples_root / path / "sketch.yaml").exists()
+    ]
+    if missing_examples:
+        print(
+            "Requested example(s) do not exist: " + ", ".join(missing_examples),
+            file=sys.stderr,
+        )
+        return 2
 
     print(f"Library: {lib_version}")
     print(f"Cores  : {', '.join(core_versions)}")

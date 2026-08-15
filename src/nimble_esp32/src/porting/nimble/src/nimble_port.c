@@ -1,6 +1,7 @@
 /* Vendored by tools/vendor_nimble_esp32.py -- do not edit. */
 #include <sdkconfig.h>
-#if defined(CONFIG_IDF_TARGET_ESP32) && !defined(CONFIG_NIMBLE_ENABLED)
+#if defined(CONFIG_IDF_TARGET_ESP32) && !defined(CONFIG_NIMBLE_ENABLED) && \
+    !defined(ESPBLE_CLASSIC_ONLY)
 #include "nimble_esp32/include/espble_nimble_config.h"
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
@@ -43,6 +44,9 @@
 #include "freertos/task.h"
 #if CONFIG_BT_CONTROLLER_ENABLED
 #include "esp_bt.h"
+/* The broker owns the shared controller once either host starts it, and
+ * answers whether a Classic host is linked at all. */
+#include "EspBleHciBroker.h"
 #endif
 #if !SOC_ESP_NIMBLE_CONTROLLER && CONFIG_BT_CONTROLLER_ENABLED
 #include "nimble_esp32/include/esp_nimble_hci.h"
@@ -69,6 +73,8 @@ typedef struct {
     struct ble_npl_eventq eventq;
     struct ble_npl_sem stop_sem;
     struct ble_npl_event ev_stop;
+    struct ble_npl_event ev_stop_begin;
+    int stop_result;
 #if CONFIG_BT_NIMBLE_ENABLED
     struct ble_hs_stop_listener listener;
 #endif
@@ -82,6 +88,8 @@ static struct ble_npl_eventq g_eventq_shutdown_fallback = {0};
 #define g_eventq_dflt   (ble_npl_ctx->eventq)
 #define ble_hs_stop_sem (ble_npl_ctx->stop_sem)
 #define ble_hs_ev_stop  (ble_npl_ctx->ev_stop)
+#define ble_hs_ev_stop_begin (ble_npl_ctx->ev_stop_begin)
+#define ble_hs_stop_result (ble_npl_ctx->stop_result)
 
 #if CONFIG_BT_NIMBLE_ENABLED
 #define stop_listener   (ble_npl_ctx->listener)
@@ -91,6 +99,8 @@ static struct ble_npl_eventq g_eventq_shutdown_fallback = {0};
 static struct ble_npl_eventq g_eventq_dflt;
 static struct ble_npl_sem ble_hs_stop_sem;
 static struct ble_npl_event ble_hs_ev_stop;
+static struct ble_npl_event ble_hs_ev_stop_begin;
+static int ble_hs_stop_result;
 
 #if CONFIG_BT_NIMBLE_ENABLED
 static struct ble_hs_stop_listener stop_listener;
@@ -139,7 +149,19 @@ ble_npl_reset_deinit_flag(void)
 static void
 ble_hs_stop_cb(int status, void *arg)
 {
+    ble_hs_stop_result = status;
     ble_npl_sem_release(&ble_hs_stop_sem);
+}
+
+static void
+nimble_port_stop_begin_cb(struct ble_npl_event *ev)
+{
+    (void)ev;
+    int result = ble_hs_stop(&stop_listener, ble_hs_stop_cb, NULL);
+    if (result != 0) {
+        ble_hs_stop_result = result;
+        ble_npl_sem_release(&ble_hs_stop_sem);
+    }
 }
 
 static void
@@ -283,6 +305,32 @@ esp_err_t esp_nimble_deinit(void)
 }
 
 /**
+ * @brief nimble_port_stop_controller - Stop the controller this host started
+ *
+ * Registered with the broker so the controller outlives a NimBLE-only stop
+ * whenever a Classic host is still attached.
+ *
+ * @return bool
+ */
+#if CONFIG_BT_CONTROLLER_ENABLED
+static bool
+nimble_port_stop_controller(void)
+{
+    if (esp_bt_controller_disable() != ESP_OK) {
+        ESP_LOGE(NIMBLE_PORT_LOG_TAG, "controller disable failed\n");
+        return false;
+    }
+
+    if (esp_bt_controller_deinit() != ESP_OK) {
+        ESP_LOGE(NIMBLE_PORT_LOG_TAG, "controller deinit failed\n");
+        return false;
+    }
+
+    return true;
+}
+#endif
+
+/**
  * @brief nimble_port_init - Initialize controller and NimBLE host stack
  *
  * @return esp_err_t
@@ -300,18 +348,33 @@ nimble_port_init(void)
 #endif
 
 #if CONFIG_IDF_TARGET_ESP32 && CONFIG_BT_CONTROLLER_ENABLED
-    esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);
+    /* Releasing Classic controller memory cannot be undone for the rest of the
+     * boot, so keep it whenever a Classic host is linked into the sketch. */
+    if (!espble_hci_broker_classic_host_expected()) {
+        esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);
+    }
 #endif
 #if CONFIG_BT_CONTROLLER_ENABLED
+    if (esp_bt_controller_get_status() == ESP_BT_CONTROLLER_STATUS_ENABLED) {
+        /* The Classic host started the controller and handed its shutdown to
+         * the broker.  Attach only the NimBLE host and HCI transport. */
+        if (!espble_hci_broker_has_adopted_controller()) {
+            ESP_LOGE(NIMBLE_PORT_LOG_TAG, "another stack owns the controller\n");
+            return ESP_ERR_INVALID_STATE;
+        }
+    } else {
     esp_bt_controller_config_t config_opts = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
 #if CONFIG_IDF_TARGET_ESP32
     /* EspBle: Arduino-ESP32 builds the prebuilt libraries with Bluedroid, so
      * BT_CONTROLLER_INIT_CONFIG_DEFAULT() describes the dual-mode controller
-     * (CONFIG_BTDM_CTRL_MODE_BTDM). esp_bt_controller_enable(ESP_BT_MODE_BLE)
-     * below requires the enabled mode to match the initialised one, so select
-     * BLE here and size the controller for the host's connection count. An
+     * (CONFIG_BTDM_CTRL_MODE_BTDM). esp_bt_controller_enable() below requires
+     * the enabled mode to match the initialised one, so select the mode here
+     * and size the controller for the host's connection count.  A linked
+     * Classic host needs BR/EDR too, so start the dual-mode controller on its
+     * behalf; otherwise BLE alone keeps the radio configuration minimal.  An
      * ESP-IDF build with NimBLE enabled gets both from its own sdkconfig. */
-    config_opts.mode = ESP_BT_MODE_BLE;
+    config_opts.mode = espble_hci_broker_classic_host_expected() ?
+      ESP_BT_MODE_BTDM : ESP_BT_MODE_BLE;
     config_opts.ble_max_conn = CONFIG_BT_NIMBLE_MAX_CONNECTIONS;
 #endif
 
@@ -321,7 +384,11 @@ nimble_port_init(void)
         return ret;
     }
 
+#if CONFIG_IDF_TARGET_ESP32
+    ret = esp_bt_controller_enable(config_opts.mode);
+#else
     ret = esp_bt_controller_enable(ESP_BT_MODE_BLE);
+#endif
     if (ret != ESP_OK) {
         // Deinit to free any memory the controller is using.
         if(esp_bt_controller_deinit() != ESP_OK) {
@@ -331,19 +398,24 @@ nimble_port_init(void)
         ESP_LOGE(NIMBLE_PORT_LOG_TAG, "controller enable failed\n");
         return ret;
     }
+
+    /* The broker stops the controller only after the last logical host leaves,
+     * so a Classic host attaching later keeps this controller running. */
+    if (espble_hci_broker_adopt_controller(nimble_port_stop_controller) != ESP_OK) {
+        ESP_LOGE(NIMBLE_PORT_LOG_TAG, "controller ownership transfer failed\n");
+        (void)nimble_port_stop_controller();
+        return ESP_ERR_INVALID_STATE;
+    }
+    }
 #endif
 
     ret = esp_nimble_init();
     if (ret != ESP_OK) {
 
 #if CONFIG_BT_CONTROLLER_ENABLED
-	// Disable and deinit controller to free memory
-        if(esp_bt_controller_disable() != ESP_OK) {
-            ESP_LOGE(NIMBLE_PORT_LOG_TAG, "controller disable failed\n");
-        }
-
-	if(esp_bt_controller_deinit() != ESP_OK) {
-            ESP_LOGE(NIMBLE_PORT_LOG_TAG, "controller deinit failed\n");
+	// Free the controller memory unless another host still uses it.
+        if(espble_hci_broker_shutdown_controller() == ESP_ERR_INVALID_STATE) {
+            ESP_LOGD(NIMBLE_PORT_LOG_TAG, "controller kept for the other host\n");
         }
 #endif
 
@@ -372,15 +444,14 @@ nimble_port_deinit(void)
     }
 
 #if CONFIG_BT_CONTROLLER_ENABLED
-    ret = esp_bt_controller_disable();
-    if(ret != ESP_OK) {
-        ESP_LOGE(NIMBLE_PORT_LOG_TAG, "controller disable failed\n");
-        return ret;
+    /* The broker runs the stop callback registered at init, but only once the
+     * last logical host has left.  A still-attached Classic host keeps it. */
+    ret = espble_hci_broker_shutdown_controller();
+    if(ret == ESP_ERR_INVALID_STATE) {
+        ret = ESP_OK;
     }
-
-    ret = esp_bt_controller_deinit();
     if(ret != ESP_OK) {
-        ESP_LOGE(NIMBLE_PORT_LOG_TAG, "controller deinit failed\n");
+        ESP_LOGE(NIMBLE_PORT_LOG_TAG, "controller shutdown failed\n");
         return ret;
     }
 #endif
@@ -402,16 +473,19 @@ nimble_port_stop(void)
 	return rc;
     }
 
-    /* Initiate a host stop procedure. */
-    err = ble_hs_stop(&stop_listener, ble_hs_stop_cb,
-                     NULL);
+    /* Serialize stop with callout events already dequeued by the host. */
+    ble_hs_stop_result = 0;
+    ble_npl_event_init(&ble_hs_ev_stop_begin,
+                       nimble_port_stop_begin_cb, NULL);
+    ble_npl_eventq_put(&g_eventq_dflt, &ble_hs_ev_stop_begin);
+
+    /* Wait till the host stop procedure is complete. */
+    ble_npl_sem_pend(&ble_hs_stop_sem, BLE_NPL_TIME_FOREVER);
+    err = ble_hs_stop_result;
     if (err != 0) {
         ble_npl_sem_deinit(&ble_hs_stop_sem);
         return err;
     }
-
-    /* Wait till the host stop procedure is complete */
-    ble_npl_sem_pend(&ble_hs_stop_sem, BLE_NPL_TIME_FOREVER);
 
     ble_npl_event_init(&ble_hs_ev_stop, nimble_port_stop_cb,
                        NULL);
@@ -420,6 +494,9 @@ nimble_port_stop(void)
     /* Wait till the host task services and releases the stop event. */
     ble_npl_sem_pend(&ble_hs_stop_sem, BLE_NPL_TIME_FOREVER);
 
+    /* The stop marker ran after stop_begin, so this event is no longer
+     * referenced by the host task and can safely return to the pool. */
+    ble_npl_event_deinit(&ble_hs_ev_stop_begin);
     ble_npl_sem_deinit(&ble_hs_stop_sem);
 
     return ESP_OK;
@@ -473,4 +550,4 @@ nimble_port_get_dflt_eventq(void)
     return &g_eventq_dflt;
 }
 
-#endif /* CONFIG_IDF_TARGET_ESP32 && !CONFIG_NIMBLE_ENABLED */
+#endif /* CONFIG_IDF_TARGET_ESP32 && !CONFIG_NIMBLE_ENABLED && !ESPBLE_CLASSIC_ONLY */

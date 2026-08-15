@@ -31,3 +31,7 @@ CentralとしてBLE MIDI Peripheralへ接続します。BLE MIDI Serviceをscan 
 ```
 MIDI: conn=1 status=0x90 data1=60 data2=100 ts=165
 ```
+
+## 関連するガイド
+
+- [BLE入門ガイド §7 BLE MIDI編](../../../docs/GUIDE_BLE_BASICS.ja.md#7-ble-midi編--楽器としてつながる) — packet形式とtimestamp

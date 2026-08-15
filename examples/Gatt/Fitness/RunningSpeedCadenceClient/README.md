@@ -29,3 +29,8 @@ Sensor location: 2
 Walking: 3.00 m/s, cadence 180 /min, stride 1.25 m, distance 3.0 m
 Walking: 3.00 m/s, cadence 180 /min, stride 1.25 m, distance 6.0 m
 ```
+
+## Related guides
+
+- [BLE guide §4 GATT](../../../../docs/GUIDE_BLE_BASICS.md#4-gatt--exchanging-data) — services, characteristics, notify and MTU
+- [BLE guide §5 UUIDs](../../../../docs/GUIDE_BLE_BASICS.md#5-understanding-uuids) — 16-bit and 128-bit forms

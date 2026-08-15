@@ -53,7 +53,11 @@ USBにおける`EspUsbHost` / `EspUsbDevice`に相当する機能領域を目標
 
 ## 対象外
 
-Bluetooth ClassicとClassic/BLE統合API、A2DP / SPP / HFP / AVRCP、LE Audio、Bluetooth Mesh、Matter provisioning、OTA/DFU方式の統一、Apple/Google固有サービスの標準搭載、医療機器としての適合保証、OS固有問題の完全な吸収、ESP-IDFネイティブ公開API、BLEスタックのforkまたは再配布。
+LE Audio、Bluetooth Mesh、Matter provisioning、OTA/DFU方式の統一、Apple/Google固有サービスの標準搭載、
+医療機器としての適合保証、OS固有問題の完全な吸収、ESP-IDFネイティブ公開API。無印ESP32のClassic
+SPP / HID / A2DP / AVRCP / HFPは検証済み範囲だけを対応扱いとし、機能ごとの検証状態を文書へ明記する。
+Classic・BLEの同時利用（dual-host）は実験扱いのままとする。
+codec、PCM処理、device I/OはEspBleの対象外とする。
 
 ## 成功条件
 

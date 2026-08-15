@@ -122,9 +122,9 @@ When re-running the same suite with the roles swapped, **flash one of the boards
 first**. A suite that selects its target by service UUID, such as `local_identity`, otherwise observes
 the board still advertising the previous run's peer firmware.
 
-The two boards are permanently wired on `/dev/ttyUSB0` and `/dev/ttyUSB1`. They are shared with
-EspBleBluedroid, and running both repositories' suites at the same time is fine (pytest arbitrates
-the ports).
+The two boards are permanently wired on `/dev/ttyUSB0` and `/dev/ttyUSB1`. Running another
+repository's suite against the same ports at the same time is fine (pytest arbitrates them; using
+`arduino-cli upload` or `esptool` directly fails instead of waiting).
 
 | Trigger | Original-ESP32 run |
 |---|---|
@@ -149,16 +149,6 @@ so a full sweep every time is not required -- the table above is the granularity
 - Explicitly control bond/NVS state at the start and end of security tests.
 - Allow timeouts for temporary radio delays, but do not hide defects with unlimited retries.
 - Cross-check disconnect reasons, MTU, and security state on both sides where possible.
-
-## Cross-Stack Interoperability Tests (Planned)
-
-Bundled-NimBLE-to-bundled-NimBLE tests cannot reveal every accidental dependency on NimBLE-specific behavior. Add interoperability tests against the sibling **EspBleBluedroid** library, which uses the ESP32 Bluedroid stack.
-
-- Scope: GATT Server/Client in both directions, Notify/Indicate, MTU exchange, and Pairing/Bonding.
-- Purpose: verify wire formats and procedures with a NimBLE ↔ Bluedroid combination.
-- Timing: after the EspBleBluedroid GATT implementation is operational.
-
-This extends the principle of directly implementing one side with the bundled API, but provides stronger validation because the stack itself differs. It also shows how wrapper-specific constraints, such as duplicate UUID handling, appear to another stack.
 
 ## Three-Board Peers (Manual Tests)
 
@@ -242,7 +232,7 @@ Future candidates include two Centrals connected to one Peripheral, and BLE HID 
 13. ✅ `hid_security`: a secured HID Device rejects unencrypted read, discovery, and input delivery.
 14. ✅ `hid_boot_keyboard`: Report-ID-less boot-keyboard discovery/input and invalid-length counting.
 15. ✅ `advertise_payload`: raw advertisement AD structure, single Complete List, and no duplicated AD type.
-16. ✅ host unit tests (`tests/unit/`): keymap conversion and HID Report Map parsing.
+16. ✅ host unit tests (`tests/unit/`): keymap conversion, HID Report Map parsing, codecs, the HCI router, and the HCI command scheduler.
 17. ✅ `battery_service`: standalone Battery Level read, subscription, notification, and unsubscribe.
 18. ✅ `device_information`: DIS string reads and 7-byte little-endian PnP ID decoding.
 19. ✅ `current_time`: 10-byte Current Time decoding, subscription, notification, and unsubscribe.
@@ -293,6 +283,102 @@ Future candidates include two Centrals connected to one Peripheral, and BLE HID 
 64. ✅ `persistent_subscription_overflow`: two peer identities fill the 16-record registry; the seventeenth successful subscription increments `droppedPersistentSubscriptionCount()` instead of silently losing observability.
 65. ✅ `gatt_queue_purge`: disconnect is deferred behind an in-flight GATT operation, queued operations receive explicit failure completions, the in-flight operation completes first, events are not dropped, and reconnect/discovery still work.
 66. ✅ `wifi_ble_coexistence`: on P4/C6, Wi-Fi obtains DHCP before BLE shares the Hosted transport; scan, connect, GATT read/write, subscribe, and notify work while Wi-Fi remains connected; `EspBle::end()` releases only BLE ownership and final `WiFi.STA.end()` releases the transport. S3 uses the explicit capability gate described above.
+67. ✅ `rpa_bond`: enables host-based privacy on two original ESP32 boards, verifies OTA RPAs in scan and connection results, pairs and performs encrypted GATT, reboots both ends and restores IRK/LTK encryption, then deletes the restored bond and completes a fresh pairing without leaving a stale resolving-list entry. **This suite is original-ESP32 only** and carries no S3 profile: on the S3 privacy is a controller feature, and the initiator address falls back to the identity when the peer is not in the resolving list, so the first connection after deleting the bonds cannot be required to use an RPA (advertising still uses one, so only half the check would hold). The original ESP32's host implementation puts the RPA into the random-address slot at `begin()`, so it is not role-asymmetric.
+68. ✅ `dual_host_rpa`: runs the bundled NimBLE host and custom Classic host on two original ESP32 boards, keeps the Classic HID ACL link live while pairing over host-generated RPAs, then disconnects and restores encrypted LE GATT from the bond while verifying OTA RPA address types on scan and both connection sides. It shortens each role's host timeout to two seconds, drives Classic HID reports in both directions during three consecutive RPA rotations, and verifies that preempted advertising and scanning resume after every rotation. Finite eight-second advertising and scanning remain active at three seconds but expire after their original deadline at nine seconds. It also verifies NimBLE routing of HCI LE Set Random Address and zero unknown events, queue overflows, or command-response mismatches in the broker. It reconnects bonded LE through the changed RPAs, then reboots both dual-host stacks, reconnects Classic, observes newly generated RPAs, and restores LE encryption from the persisted IRK/LTK.
+
+69. ✅ `classic_core_host_spp`: verifies **interoperation** between EspBle's own Classic host and the Bluedroid host bundled with Arduino-ESP32. The peer sketch links no EspBle at all and uses only `BluetoothSerial`, so the "both ends are the same stack" condition is gone and the SDP service record, the RFCOMM channel and the payload all cross a stack boundary. The peer connects on channel 0 so that it resolves the channel from the EspBle server's own service record, and a four-byte payload containing a zero travels both ways to show binary transparency. A disconnect from the peer must leave no session on the server, a reconnect to the same server instance must receive a new session id, and after `end()` + `begin()` on the EspBle side the same address must accept a dial-in again with no heap loss. This keeps part of interoperation continuously verified without external devices; it covers SPP only, because the core's bundled sdkconfig disables `CONFIG_BT_HID_ENABLED`.
+70. ✅ `classic_inquiry`: Classic device discovery, which is where every address-taking API starts. Judgement uses **only what the scanning side observed** — the peer merely makes itself discoverable. A duration of 0 cannot be encoded for the controller, so it is refused with `InvalidArgument` rather than starting a scan that never ends, and restarting while running is `InvalidState` because the controller has one inquiry state and not a queue. The peer's device name and Class of Device must arrive decoded (RSSI is optional in an inquiry result and is not required), a scan that ends by duration reports `cancelled=0` with zero drops while `stop()` reports `cancelled=1`, `stop()` with nothing running returns `InvalidState` instead of quietly succeeding, and scanning works again after a cancel.
+71. ✅ `classic_pairing`: application-answered Classic pairing and bond management. Both boards use `DisplayYesNo`, so both controllers show the same six digits and neither proceeds until its sketch answers — an implementation that accepts silently passes a connection test but fails this comparison-value check. Both bonds are deleted first so no residual key can shortcut the exchange. The numeric comparison must arrive on both sides with the same value, accepting must yield success with status 0 and a bond listed by address. Auto-accept is then switched off to **refuse** a pairing: the failure and a bond count of zero are verified, and a normal pairing immediately afterwards must still succeed, proving the refusal left no half state. Answering with nothing pending is refused with `InvalidState`, and deleting one bond removes only that one.
+72. ✅ `classic_hid_api`: Classic HID through the same API shape as BLE, with both sides using only BLE-side names and event types. What keeps it from being a loopback is that the Host decodes **from the Report Descriptor it received over SDP**: if the composed descriptor and the packed reports disagree, usages arrive wrong or not at all. It verifies keyboard delivery in state-then-per-usage order (the same as BLE), that layouts are independent on each side (a ja-JP `"` travels as usage 0x1f, which an en-US host names `@` and a ja-JP host names `"`), that a negative mouse value survives the descriptor's field positions as a signed value, that a held button is state rather than an edge, and that Consumer Control from the same HID Device arrives under its own report ID instead of being decoded as a keyboard. In the other direction `setKeyboardLeds()` must use the report ID the peer's descriptor declared rather than a fixed one, judged by the lock bits the device decoded. Finally `invalidInputReportCount()` must be zero.
+73. ✅ `classic_hid_control`: the HID control channel in both directions. This is a path where answers are mandatory: without one the Host waits, and early implementations had no way to answer Get_Report and sent no HID handshake for Set_Report. Get_Report is followed from the Host's request through `onReportRequested()` and `respondToReportRequest()` to the value reaching the Host, with the type and report ID matching the request and the value carrying the report ID. A request for an undeclared report ID is refused with `refuseReportRequest()` and the Host must receive a failure rather than time out. Answering with no request pending is refused with `InvalidState`, so nothing unsolicited reaches the control channel. Set_Report is verified with a Feature report, because a payload alone cannot be told from an Output report and only Feature proves the type is preserved; the report ID arrives in its own field and the value is the payload alone. Protocol mode belongs to the Host, so the device only observes it: Boot and Report switching must reach both sides and a read-back must report the mode in effect. Idle rate set and read-back, Get_Report still working after the whole exchange, and both sides disconnecting on virtual cable unplug are also verified.
+74. ✅ `classic_spp_exclusive`: SPP in a Classic-only configuration — server start, client connect, a seven-byte binary round trip containing `0x00`, disconnect, and a server that comes back on the same address after `end()` + `begin()` with the heap restored to within 8 KB. It also exercises **several services published by one device**: a second `startServer()` must take a different channel and appear as a second entry, `connectToChannel()` must reach that second service and exchange data (without a channel, discovery only returns every channel and cannot express which service is wanted), `stopServer()` must stop all of them, and a later start must publish them again. The client side allows one connection at a time, so it disconnects before dialling the second. `classic_inquiry` additionally covers the address-taking queries: an inquiry answers who is there, an SDP query answers what a device is for, and a name query answers what it calls itself. With the peer running an SPP server, the service list must contain SPP's UUID (0x1101) and the name must be obtainable directly. **Both queries wait for the scan to finish** — an inquiry and a query both need the radio, and a query during a scan is accepted but never answered. An invalid address is refused locally with `InvalidArgument`.
+75. ✅ `classic_hid_gamepad`: the Classic gamepad on hardware. The packing is shared with BLE, but Classic is the side where a Host receives the report raw, so this is where the bytes themselves can be checked. The device configures a keyboard and a gamepad (133 bytes together, which fits the SDP record) and the host prints the raw report as hex. Axis negatives must stay signed, the hat and the button bit field must sit where the descriptor declared, and the gamepad's report ID must not be confused with the keyboard's (`id=3 len=12` for the gamepad and `id=1 len=9` for the keyboard, from one record). A release must return every byte to zero. That a combination exceeding the composition limit (214 bytes of descriptor plus strings) is refused by `begin()` is fixed as the configuration of the `Classic/HidComposite` example.
+76. ✅ `classic_radio_settings`: the Classic radio and link settings on one board. Because being accepted proves nothing about being in effect, the page timeout is checked **by how long a connection attempt takes**: `connect()` to a locally administered address nothing answers must fail within three seconds at 1000 ms and take at least a second longer at the default 5120 ms. The default of 5120 ms must be readable without setting anything, because the library asks the controller at startup. Out-of-range values (5 ms and 50000 ms) are refused locally with `InvalidArgument`. Transmit power is set as a range (-12..9), as a single value (0) and as a value between two supported levels (-5, which must round to -6) and read back each time, and a range whose minimum exceeds its maximum is refused. The minimum encryption key size accepts 16 and refuses 6 and 17.
+77. ✅ `classic_spp_stream`: the SPP Arduino `Stream` adapter across two boards. The peer opens the session with the plain session API and folds what arrives into an order-sensitive checksum, so the adapter never checks itself. It verifies that `println()` becomes 14 bytes through `write(buffer, size)` including CR LF, that 2500 bytes — more than one 990-byte packet — keep their order and content across the split (the checksum matches), that `flush()` waits until `pendingWriteCount()` reaches zero, and that a write timeout of zero returns what fitted instead of waiting (the queue holds eight writes, so twelve packets must come back short, in under 200 ms). The read side uses `readStringUntil()` (which excludes the terminator) and `parseInt()` — Stream features that need nothing but `read()` and `peek()`, which is what shows the adapter is a real Stream. After `detach()` the session stays open while writes return 0, reads report nothing available, and nothing reaches the peer.
+78. ✅ `classic_hfp_client` (with the `ESPBLE_TEST_HFP_CVSD` variant `classic_hfp_cvsd` and the dual-host `ESPBLE_TEST_DUAL_HFP` build): the HFP Client and Audio Gateway across two boards. It verifies role exclusion (both roles in one process is `InvalidState`), service-level connection, outgoing, incoming, answer and end, SCO establishment with encoded payloads in both directions, and packet statistics. It also covers the Client's accompanying commands — operator name (`+COPS`), subscriber number (`+CNUM`, service type 4 for voice), memory dial, NREC and the Apple extensions. A memory dial must arrive at the Audio Gateway as `DialMemory` rather than `Dial`, so position `3` is never treated as a number. The Apple extensions have no decoder in the AG API and arrive as unknown AT text, where `XAPL` and `IPHONEACCEV` must be present. Out-of-range arguments (a negative memory position, an empty identification, a battery level of 10) are refused locally with `InvalidArgument`. In-band ring tone verifies that both states of the Audio Gateway's `setInBandRingTone()` reach the Client's `onInBandRingTone()` — telling an accessory the wrong thing makes an incoming call ring twice or not at all. After a last-voice-tag request this AG cannot satisfy, the service-level connection must survive and a following call must still work.
+
+79. ✅ `classic_hid_profiles`: that the bundled Classic host can register and release the HID Device and Host profiles, on one board. Unlike SPP, HID is the part an archive build configuration silently drops, so `begin()`, `init` and `deinit` all reporting `status=0` is the contract itself.
+
+80. ✅ `classic_a2dp_sink_profile`: the same idea for the A2DP stack and Sink on one board — stack start, Sink registration, Sink release and stack shutdown, each with `error=None` and the expected `initialized` transition.
+
+81. ✅ `classic_a2dp_media`: encoded-media transfer between an A2DP Sink and Source across two boards. It verifies the selected SBC configuration (48000 Hz, two channels, a four-byte raw config), AVRCP Play passthrough and absolute volume (77 from the Controller, 88 from the Target), the stream starting, and received packets of length 13 whose first SBC byte is `9c`. A sink delay of 1500 (150 ms) must reach the Source, and reading it back must return what was set rather than a fresh measurement. What a Target may declare is fixed by the bundled host build to volume (0x0d) alone, so declaring play status must fail with `InvalidArgument` — asserted **as the limit** rather than worked around. The transfer completes the default 100 packets (1300 bytes) with nothing missing, the Source's `would_block` count must exceed zero (the retry path really ran), and both sides' heap figures must be positive. `ESPBLE_A2DP_PACKET_TARGET` changes the packet count; a 20,000-packet run completes under the same contract.
+
+82. ✅ `dual_host_hfp`: HFP while a BLE GATT connection stays live. It verifies service-level connection, an outgoing call, bidirectional mSBC SCO payloads (codec 2, 57-byte frames) and a successful GATT read during SCO, then requires the broker diagnostics to show ACL traffic in both hosts' directions with zero unknown commands, zero host mismatches and zero queue-full events.
+
+83. ✅ `dual_host_a2dp`: likewise A2DP SBC media and AVRCP (Play, absolute volume) while a BLE GATT connection stays live — a successful GATT read during the audio link, 100 packets and 1300 bytes completed, coexistence active (`coex=1`) and no diagnostic anomalies.
+
+The experimental `dual_host_smoke` concurrently issues Classic scan-mode changes from a separate task and NimBLE `Read RSSI` commands while Classic HID and encrypted LE GATT are connected on both boards. It verifies FIFO enqueue/physical-send equality, final RSSI completion, zero broker errors, then repeats encrypted GATT and bidirectional HID traffic after every contention cycle. `ESPBLE_DUAL_CONTENTION_CYCLES` controls the repetition. A test-only dispatch hold fills the FIFO, verifies excess rejection, then verifies GATT, HID, and lifecycle recovery after discarding the deliberately unsent commands. These commands never reach the controller and neither host receives a synthetic response. Inventories collected both while connected and after both links disconnect verify that every opcode, including conditional cleanup commands, has an explicit policy; unknown or wrong-host opcodes are rejected before physical transmission only in dual-host mode. Null and oversized HID Input/Output reports are rejected locally with `InvalidArgument`, while both connections and subsequent normal traffic remain live. Pairing first uses a wrong passkey and requires failure, no encryption, zero bonds, protected-GATT rejection, and uninterrupted Classic operation on both sides; an LE-only reconnect with the new correct passkey must then restore encryption, bonding, and GATT. The test next disconnects only Classic, requires the final asynchronous HID `onConnectionFailed` notification, verifies encrypted LE GATT remains live, and immediately reconnects Classic to the correct peer with bidirectional HID traffic. Bluedroid's public HID API cannot cancel paging, so the contract uses the backend's final OPEN result instead of pretending to implement an arbitrary timeout. The test then abruptly software-resets the peer, observes both LE and BR/EDR disconnects on the survivor, restores bonded LE encryption and Classic HID without restarting the surviving hosts, and revalidates encrypted GATT plus bidirectional HID. With the callback-target lifetime barrier enabled, the lifecycle phase covers Classic-first and BLE-first shutdown, Classic reattachment, stop/re-registration, and both destructor orders, requiring no panic, watchdog, or heap loss. Persistent-NVDS `Write Local Name` is deliberately excluded because repeated use as a stress stimulus triggers a controller assertion.
+
+## Interop tests against another stack (policy)
+
+A peer test between two EspBle boards passes even when **both sides share the same
+misunderstanding**. To get past that, one side is written using only the classes
+bundled with Arduino-ESP32 (`BluetoothSerial`, the `BLE` wrapper) and the ESP-IDF
+Bluedroid APIs, and made to interoperate with EspBle. On the original ESP32 those
+bundled classes are Bluedroid, so the implementation on the other side is
+**entirely separate** from EspBle's NimBLE and custom Classic hosts.
+
+Rules:
+
+- **The other side must not link EspBle.** Two hosts cannot share one controller,
+  and the build rejects it with `#error`. That side is written with the bundled
+  classes and ESP-IDF APIs alone.
+- **The other side must not use NimBLE-specific headers.** Some of today's
+  reference-side sketches clear bonds through NimBLE headers such as
+  `<host/ble_store.h>`, which is why they cannot run on the original ESP32. An
+  interop peer clears bonds through the wrapper or a Bluedroid API instead.
+- **Assert on both sides**: EspBle's public callbacks and getters, and the other
+  side's serial output. A field only one implementation fills is not an expected
+  value; only what the specification requires of both is asserted.
+- **The other side runs on the original ESP32.** On the ESP32-S3 the bundled
+  wrapper is NimBLE, the same stack EspBle uses, so it proves nothing about stack
+  boundaries. For BLE, putting the DUT on an S3 and the peer on an original ESP32
+  gives the strongest pairing — NimBLE against Bluedroid (`--profile s3_peer_host
+  --peer-profile device:esp32_peer_device`). Classic runs on two original ESP32s.
+
+Scope and current state:
+
+| Area | What the other side uses | State |
+|---|---|---|
+| Classic SPP | `BluetoothSerial` | ✅ `classic_core_host_spp` (service-record resolution, bidirectional binary, reconnection, heap) |
+| BLE GAP / GATT | bundled `BLE` wrapper (Bluedroid on the original ESP32) | not implemented: observing advertising and scans, GATT read/write, notify/indicate, MTU, connection parameters |
+| BLE Security | bundled `BLE` wrapper plus `BLESecurity` | not implemented: Just Works, passkey, bonded reconnection |
+| BLE HID (HOGP) | bundled `BLEHIDDevice` | not implemented: whether EspBle's HID Host parses a Bluedroid device's Report Map |
+| BLE MIDI | hand-built on the bundled wrapper | not implemented: whether EspBle's MIDI Host accepts another implementation |
+| Classic A2DP / AVRCP | `esp_a2d_*` / `esp_avrc_*` (no wrapper exists) | not implemented: codec negotiation, media transfer, passthrough, absolute volume |
+| Classic HFP | `esp_hf_client_*` / `esp_hf_ag_*` | not implemented: service-level connection, calls, SCO codec, AT responses |
+| Classic HID | — | **cannot be built.** The bundled sdkconfig has `CONFIG_BT_HID_ENABLED` unset; this stays with external-device verification |
+
+Suite names follow `classic_core_host_spp`, so the name says that the other side is
+the bundled implementation. This work starts after the release, in the order BLE
+GATT → BLE Security → BLE HID → Classic A2DP/AVRCP → Classic HFP → BLE MIDI: BLE
+comes first because the bundled wrapper alone is enough to write it, with no raw C
+API, which makes it the cheapest per suite.
+
+## Do not wait for a startup banner
+
+A test that waits for a line a sketch prints once at boot misses it when the
+serial monitor attaches after the reset, and then fails for no reason of its own.
+That happened with `classic_hid_report`, `classic_spp_stream`, `classic_a2dp_media`,
+`classic_hfp_cvsd` and `dual_host_a2dp` — flash and reset timing, not a code defect.
+In a two-board suite the board flashed first boots and prints while the other one is
+still being flashed, which takes minutes for the Classic audio sketches, so its whole
+startup output is gone by the time the monitor attaches; the symptom is a completely
+empty log on exactly one side. **Synchronise with a command probe instead**: the sketch
+answers the same lines on a command (`?` in the audio suites) as well as at boot, and
+the test asks until it is answered. The `probe` fixture in `tests/conftest.py` does
+this; a test takes it as an argument. State that a sketch announces when it happens —
+a BLE link coming up, for instance — is answered by the same command, so a test asks
+for the current state rather than waiting for the announcement.
+
+## Anchor a trailing variable-length field
+
+A serial line arrives in pieces. A pattern whose last field varies in length and
+is not anchored to the newline can match while the rest of the line is still on
+its way, and it then captures a truncated value: `service_data` read
+`data=abcdef1` from a board that had printed `data=abcdef12`. End such a pattern
+with `\r?\n`. A capture followed by another literal in the same pattern is
+already safe, because the literal cannot match until it has arrived.
 
 ## Pass Criteria
 

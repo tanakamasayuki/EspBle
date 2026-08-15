@@ -35,3 +35,7 @@ Apple iBeaconをbroadcastします。non-connectable・non-scannableなadvertise
 BLE init failed: InvalidState (...)
 Advertising failed: InvalidArgument (...)
 ```
+
+## 関連するガイド
+
+- [BLE入門ガイド §2 GAP編](../../../docs/GUIDE_BLE_BASICS.ja.md#2-gap編--探してつながる) — advertising・scan・接続

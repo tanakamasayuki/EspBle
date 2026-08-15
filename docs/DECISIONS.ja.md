@@ -5,11 +5,12 @@
 ## スコープ
 
 1. Arduino向け単一ライブラリ`EspBle`として提供する。Arduino-ESP32に同梱されたNimBLEを使い、外部NimBLE-Arduinoを必須依存にしない。
-2. Bluetooth Classicは扱わない。LE Audio、Mesh、Matter provisioning、OTA/DFU方式の統一、ESP-IDF native APIも対象外。
+2. 無印ESP32に限りBluetooth Classicを段階的に扱う。最初はBLE / Classicの起動時排他、次に独自ビルドしたClassic-only Bluedroid hostでSPPとHID、最後にHCI brokerを拡張してNimBLEと同時利用する。LE Audio、Mesh、Matter provisioning、OTA/DFU方式の統一、ESP-IDF native APIは対象外。
 3. 対象可否はBLE内蔵SoCかどうかではなく、**Arduino-ESP32がNimBLEを提供する構成か**で判断する。ESP32-P4 + ESP32-C6などのHosted BLEも候補に含め、専用build/実機試験後に対応済みとする。
-4. Bluedroidが既定のSoC（無印ESP32など）でも、**NimBLE hostをライブラリ内へ同梱して対応する**（実装は[PLAN_ESP32.ja.md](PLAN_ESP32.ja.md)、未着手）。ただし**推奨は兄弟ライブラリ`EspBleBluedroid`**で、EspBle側は「NimBLEでも動かせる特殊対応」と位置づける——coreのプリビルドはBluedroidなのでhostの保守を自前で負う、Bluetooth Classicと同居できない、という2点が本質的な不利。無印ESP32はBLE 4.2 controllerのため、LE 2M / Coded PHYは使えず、タイミング依存の挙動が他ターゲットと一致する保証もない。**Peerテストで確認できたsuiteだけを対応済みとする。** 公開API差の正本は`EspBleBluedroid`側の`BLE_BACKEND_DIFFERENCES.ja.md`に置く。backend非依存の高レベルロジック（`EspBleKeymap.h`、`EspBleHidReportMap.h`、イベント値型、KeyBridge境界）は両ライブラリで共有する。
+4. Bluedroidが既定の無印ESP32では、**NimBLE hostとClassic-only Bluedroid hostをライブラリ内へ同梱する**。Classic hostはcoreと同じIDF revisionからcontroller無効・BLE無効・SPP/HID有効で再現可能にbuildし、全defined symbolを名前空間化する。同時利用はbuild flagではなくsketchが`begin()`したhost数で決まる。broker登録が1 hostならpass-through、2 host目の登録でrouting modeへ移る。controllerを起動した側が停止callbackをbrokerへ委譲し、後から入るhostはResetせずhostだけをattachする。Classicがlinkされたsketchでは、どちらが先に起動してもBTDMで起動してBLE側controller memoryを解放しない。最後のlogical hostを解除したbrokerだけがcontrollerを停止する。HCIの`can_send()`は予約操作にしない——Bluedroidは直後に送らない先読み確認にも使うため、そこでslotを占有するとNimBLEが飢餓する。HCI commandは`send()`でbroker所有FIFOへcopyし、専用送信taskがcontroller command creditとopcode応答を一元管理する。General / Page 2 / LE event maskはhost別要求をcacheし、ORしたparameterだけを物理controllerへ送る。controller継続中にClassicを再attachするときのHCI Reset、Set Controller To Host Flow Control、Host Buffer Sizeは物理送信せず、broker taskがClassicへ成功応答を返す。controller→host ACL flow controlはbrokerが所有する。どちらのhostも共有controllerではこのloopを回せない——Bluedroidは自分のtrafficしかcreditを返さず、NimBLEはLE分しか知らないため、片方に任せると共有bufferが枯渇する。brokerが`Read Buffer Size`の応答からbuffer geometryを学習し、controllerへ自分で設定し、両hostのflow control commandへは仮想応答を返し、受信したACL packet 1つごとにcreditを1つ返す（[BLE計画](PLAN_ESP32.ja.md)、[Classic計画](PLAN_ESP32_CLASSIC.ja.md)）。無印ESP32はBLE 4.2 controllerのため、LE 2M / Coded PHYは使えず、タイミング依存の挙動が他ターゲットと一致する保証もない。**Peerテストで確認できたsuiteだけを対応済みとする。** backend非依存の高レベルロジック（`EspBleKeymap.h`、`EspBleHidReportMap.h`、イベント値型、KeyBridge境界）は共有する。
 5. 公開APIはSemantic Versioningに従う。1.0.0より前の0.x系は試行段階で互換性を保証しない。
-6. Central / PeripheralとGATT Client / Serverを同じスタック所有者で扱い、APIを単一接続前提に固定しない。標準Profileと独自Serviceは同じGATT Serverへ合成できる。
+6. **Bluetooth Classicを次回releaseへ含める。** build flagは設けず、`EspBleClassic`を使うかどうかだけで決まる（既定では使われない——linkしないsketchには影響しない）。exampleもBLE側と同じ範囲まで用意する。MITのOSSであるため厳密なサポート保証や互換性保証は掲げないが、**機能ごとに「実機検証済み」「未検証」「未実装」を文書で区別する。**利用者が自分の相手機器で試すべき範囲を判断できることが目的で、検証していないものを検証済みに見せないことを優先する。releaseまでは未実装項目を減らす作業を続ける。
+7. Central / PeripheralとGATT Client / Serverを同じスタック所有者で扱い、APIを単一接続前提に固定しない。標準Profileと独自Serviceは同じGATT Serverへ合成できる。
 
 ## アーキテクチャ
 
@@ -140,8 +141,9 @@
 1. **Peerテストを補助的なsmokeではなく主要な自動テストとする。** BLEは接続・切断・Discovery・購読・Security・Bondingが複数の非同期イベントにまたがるため、実機なしでは仕様を固定できない。
 2. 常設ESP32-S3 2台を`s3_peer_host` / `s3_peer_device` profileで使う。この名前にBLE roleの意味を持たせない。親側sketchをCentral、`peer_device/`側をPeripheralに固定し、役割を交換しない。
 3. **2台で成立するものは自動テスト、3台以上が必要なものはマニュアルテストとする。** 可能なら2台での自動テストが望ましい。3台前提のscenarioは`tests/manual/`へ置き、port未設定時は自動skipする。
-4. **Peerの一方は可能な範囲で同梱BLE低レベルAPIの直接実装にし**、EspBle同士だけの自己整合テストにしない。将来は兄弟ライブラリ`EspBleBluedroid`を相手にした相互接続テストを追加する——スタックそのものが異なるため、より強い検証になる。
-5. 実装だけでは完了とせず、対応するexampleとunit/build/Peerテストを同時に更新する。
+4. **Peerの一方は可能な範囲で同梱BLE低レベルAPIの直接実装にし**、EspBle同士だけの自己整合テストにしない。
+5. **別スタックとの相互接続は、無印ESP32でArduino-ESP32同梱のclass（`BluetoothSerial`、`BLE`ラッパ）とESP-IDFのBluedroid APIを相手にして検証する。**そのchipでは同梱classがBluedroidになるため、EspBleのNimBLE / 独自Classic hostとは実装が完全に別になり、2台とも自前実装という自己整合を抜けられる。相手側sketchはEspBleをlinkせず、NimBLE固有のheaderも使わない（同一controllerを共有できないため）。対象はSPPに限らずBLEを含めて広げる。Classic HIDだけは同梱sdkconfigが`CONFIG_BT_HID_ENABLED`無効なのでこの構成では作れず、外部機器での確認に委ねる。範囲と現在地は[../tests/TEST_PLAN.ja.md](../tests/TEST_PLAN.ja.md)を正本とする。
+6. 実装だけでは完了とせず、対応するexampleとunit/build/Peerテストを同時に更新する。
 
 ## 文書構成
 
@@ -150,7 +152,7 @@
 3. **ガイドはGAP → セキュリティ → GATT → UUID → HID → BLE MIDIの章構成とする。** SMPはGAP・GATTと並ぶ独立した層であり、読者の作業順も「つながる → どこまで信頼するかを決める → 属性に要求を書く」であるため、セキュリティをGAP章の一節に押し込まない。役割分担はセキュリティ章がリンク単位の方針、GATT章が属性単位の要求（`encryptedRead`など）。
 4. **「後述」で概念説明を飛ばさない。** examplesと同じく、ガイドもその場で完結して読めることを優先する。
 5. **概念説明はガイドに一本化する。** 二重に持つと必ず食い違う（実際に同一UUID重複の記述が食い違っていた）。`examples/README`はガイドへの対応表を持つ。
-6. **利用者が読む文書は日本語と英語を同期させる。** 対象は root `README`、`docs/README`、`docs/GUIDE_BLE_BASICS`、`docs/STATUS`、`docs/FEATURE_MATRIX`、`docs/RELEASE_CHECKLIST`、`examples/README`と各example README。設計・計画文書（`API_DESIGN` / `CORE_DESIGN` / `DECISIONS` / `REQUIREMENTS` / `TERMINOLOGY` / `HID_*_SPEC` / `PLAN_*` / `TEST_PLAN`）は日本語のみとし、`README.md`にその旨を明記する。
+6. **利用者が読む文書は日本語と英語を同期させる。** 対象は root `README`、`docs/README`、`docs/GUIDE_BLE_BASICS`、`docs/GUIDE_CLASSIC_BASICS`、`docs/GUIDE_ADVANCED`、`docs/GUIDE_MIGRATION`、`docs/GUIDE_HID_DESCRIPTORS`、`docs/CLASSIC_VS_BLE`、`docs/API_DESIGN`、`docs/STATUS`、`docs/FEATURE_MATRIX`、`docs/RELEASE_CHECKLIST`、`../tests/TEST_PLAN`、`examples/README`と各example README。`API_DESIGN`は公開APIの規則であり利用者が読むため英語版を持つ。残る設計・計画文書（`CORE_DESIGN` / `DECISIONS` / `REQUIREMENTS` / `TERMINOLOGY` / `HID_*_SPEC` / `PLAN_*`）は日本語のみとし、`README.md`にその旨を明記する。
 7. **過去の経緯や完了した作業計画は残さない。** 残すのは現在成立している仕様と、その理由だけ。examplesも最終仕様のみを書き、制限があるときはなぜできないのかを書く。上書きされた判断、撤去したラッパの挙動、完了した是正計画、未提出のupstream報告案はいずれも文書に置かない（必要ならgit履歴から辿る）。
 
 8. **同じ事実を2箇所に書かない。** 使用例はヘッダとexampleとguideが持ち、設計文書には書かない——三重に持つと必ず食い違い、実際にAPI_DESIGNのサンプルが古い署名のまま残っていた。

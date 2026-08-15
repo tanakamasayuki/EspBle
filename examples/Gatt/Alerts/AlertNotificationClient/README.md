@@ -28,3 +28,8 @@ Connects to an Alert Notification Service (0x1811), reads Supported New Alert Ca
 Supported categories: 0x0022
 New Alert: category 1, count 3, text "Bob"
 ```
+
+## Related guides
+
+- [BLE guide §4 GATT](../../../../docs/GUIDE_BLE_BASICS.md#4-gatt--exchanging-data) — services, characteristics, notify and MTU
+- [BLE guide §5 UUIDs](../../../../docs/GUIDE_BLE_BASICS.md#5-understanding-uuids) — 16-bit and 128-bit forms

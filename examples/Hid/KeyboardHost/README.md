@@ -35,6 +35,15 @@ Connects to a BLE keyboard as a HID host (central): scans for the HID service `0
 
 ```
 Keyboard ready: report=1 battery=73%
+Keyboard state: modifiers=0x00 A=1 pressed=1 released=0
 Key pressed: usage=0x04 ascii=0x61
-Keyboard state: modifiers=0x02 A=1 pressed=1 released=0
 ```
+
+The state callback runs before the per-usage key events for the same report.
+`ascii` follows the modifiers in that report, so the same key reports `0x61`
+without Shift and `0x41` with it.
+
+## Related guides
+
+- [BLE guide §6 HID](../../../docs/GUIDE_BLE_BASICS.md#6-hid--acting-as-a-keyboard-or-a-mouse) — reports, descriptors and what a Host expects
+- [Writing a HID Report Descriptor](../../../docs/GUIDE_HID_DESCRIPTORS.md) — when you need your own descriptor, and how to verify it

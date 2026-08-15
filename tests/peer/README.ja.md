@@ -24,7 +24,7 @@ profile名はBLE roleを表しません。両側へsketchを転送・実行で�
 
 ## 無印ESP32
 
-無印ESP32はEspBleが同梱するNimBLE hostで動きます（[PLAN_ESP32.ja.md](../../docs/PLAN_ESP32.ja.md)）。機材はEspBleBluedroidと共用の常設2台で、両repositoryのpytestを同時に走らせても問題ありません（ポートの排他はpytest側が管理します。`arduino-cli upload`や`esptool`を直接使うと待機せずに失敗するので使わないでください）。
+無印ESP32はEspBleが同梱するNimBLE hostで動きます（[PLAN_ESP32.ja.md](../../docs/PLAN_ESP32.ja.md)）。機材は常設2台で、同じportを使う別repositoryのpytestと同時に走らせても問題ありません（ポートの排他はpytest側が管理します。`arduino-cli upload`や`esptool`を直接使うと待機せずに失敗するので使わないでください）。
 
 ```sh
 # 無印ESP32を親側(Central)、S3をPeerに

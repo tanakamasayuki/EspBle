@@ -7,7 +7,11 @@ EspBle is a general-purpose Bluetooth Low Energy library for ESP32 Arduino.
 component directly.** It does not go through Arduino-ESP32's `BLEDevice`,
 `BLEClient`, or `BLEServer` wrappers. Central and peripheral roles, GATT client
 and server operations, security, HID, and BLE MIDI share one `EspBle`
-foundation. Bluetooth Classic is not supported.
+foundation. On the original ESP32 it also offers Bluetooth Classic — SPP, HID
+device and host, A2DP, AVRCP and HFP — and running it alongside bundled NimBLE
+(dual-host) remains experimental. Which Classic features are
+hardware-verified, unverified or unimplemented is tracked per feature; see
+[BLE or Bluetooth Classic](docs/CLASSIC_VS_BLE.md).
 
 > [!IMPORTANT]
 > EspBle uses the NimBLE backend built into Arduino-ESP32. Native-controller
@@ -82,8 +86,51 @@ Its configuration is frozen to the values the other targets use, and overriding
 any of it is rejected.
 
 Support for the classic ESP32 is not on par with the other chips: EspBle carries
-the maintenance of the bundled host itself, and that host **cannot coexist with
-Bluetooth Classic** (SPP and friends). The classic ESP32
+the maintenance of the bundled hosts itself. Classic SPP (byte stream and Arduino
+`Stream`), generic HID Device/Host, A2DP raw transport, AVRCP CT/TG and HFP
+Client/Audio Gateway use a separately built Bluedroid host with those profiles
+enabled. Radio settings — transmit power, page timeout and the minimum
+encryption key size — are available too, and the composition limit of the HID
+Report Descriptor (214 bytes of descriptor plus device strings, shared with one
+SDP record) is checked before registering rather than failing silently.
+A Classic-only sketch selects this host automatically when it uses
+`EspBleClassic`, with no `build_opt.h` required.
+Classic HID has the same API shape as BLE HID: the device side offers
+`hidKeyboard()`, `hidMouse()`, `hidConsumerControl()`, `hidSystemControl()` and
+`hidGamepad()` under the same names and signatures, and the host side parses the
+Report Descriptor it receives to deliver keyboard state, per-usage keyboard
+events and mouse events. Report Descriptors and report packing come from one
+module shared by both transports.
+Which hosts run follows only what the sketch calls `begin()` on: one host makes
+the broker a pass-through, and starting both `EspBle` and `EspBleClassic` makes
+it route HCI between them. There is no build flag. Dual-host is experimental, so
+`end()` one of them and keep a single host if it misbehaves. Classic HID
+traffic together with an LE connection, repeated GATT reads, and bidirectional HID
+traffic afterwards has passed hardware tests. In Classic-only mode, encoded A2DP
+Sink/Source media transport, AVRCP playback/absolute-volume control, and HFP
+Client/Audio Gateway single-call control plus raw mSBC SCO transport also pass;
+dual-host mode also passes bidirectional mSBC SCO while an LE GATT connection
+remains usable during and after the audio link. It also passes A2DP encoded-media
+streaming and AVRCP playback/volume control while GATT reads remain usable before,
+during, and after the stream. In Classic-only mode the Audio Gateway can select
+CVSD or mSBC, and both codecs pass raw SCO transfer on hardware; external-device
+interoperability remains. The
+two HFP roles are process-wide mutually exclusive.
+Shared-command scheduling now
+uses a broker-owned FIFO and controller command credits. The broker stops the
+controller after the final host leaves, independent of host destruction order;
+event masks are merged from per-host requests, and Classic can reattach without
+resetting or reconfiguring an active LE controller. Pairing, bond persistence,
+bond reconnection, and encrypted GATT access also pass while Classic HID remains
+connected. Observed-command classification and long-duration load have completed;
+wrong-passkey and HID-connection failures recover without dropping the other host,
+and backend callback teardown has a reference-lifetime barrier. Classic is part of
+the next release, with each feature's state — hardware-verified, unverified or
+unimplemented — written down in the
+[Classic feature inventory](docs/CLASSIC_FEATURE_INVENTORY.ja.md) (Japanese).
+Incoming ACL flow control is broker-owned; outgoing buffers are not apportioned
+between the two hosts.
+See the [Classic implementation plan](docs/PLAN_ESP32_CLASSIC.ja.md). The classic ESP32
 also has a BLE 4.2 controller, so **LE 2M and LE Coded PHY are unavailable**,
 extended and periodic advertising are unavailable, and the connection limit is 3.
 Only what the on-hardware peer tests cover is considered supported (GATT
@@ -152,15 +199,22 @@ void loop() {
 
 **New to BLE? Start with the [beginner's guide to BLE](docs/GUIDE_BLE_BASICS.md)** — it explains what is actually happening, from finding a peer through to exchanging data, and links to the matching example for each topic.
 
+**Once you have a sketch that works, read [EspBle in depth](docs/GUIDE_ADVANCED.md)** — which task your callbacks run on, every capacity and what overflowing it does, backpressure, reconnection, dual-host internals, measuring footprint, and a playbook for known failure signatures.
+
 **Looking for a specific document? See the [documentation guide](docs/README.md)** — it shows the reading order and each document's role. The quickest path to "where does this project stand" is [docs/STATUS.md](docs/STATUS.md) then [docs/DECISIONS.ja.md](docs/DECISIONS.ja.md).
 
 The user-facing documents below are available in English; the remaining design documents are currently Japanese-only.
 
 - [A beginner's guide to BLE](docs/GUIDE_BLE_BASICS.md)
+- [A beginner's guide to Bluetooth Classic](docs/GUIDE_CLASSIC_BASICS.md)
+- [BLE or Bluetooth Classic](docs/CLASSIC_VS_BLE.md)
+- [EspBle in depth (advanced)](docs/GUIDE_ADVANCED.md)
+- [Coming from another library](docs/GUIDE_MIGRATION.md)
+- [Writing a HID Report Descriptor](docs/GUIDE_HID_DESCRIPTORS.md)
 - [Development status and TODO](docs/STATUS.md)
 - [Requirements](docs/REQUIREMENTS.ja.md)
 - [Core design](docs/CORE_DESIGN.ja.md)
-- [API design](docs/API_DESIGN.ja.md)
+- [API design](docs/API_DESIGN.md)
 - [HID Device specification](docs/HID_DEVICE_SPEC.ja.md)
 - [HID Host specification](docs/HID_HOST_SPEC.ja.md)
 - [Terminology and naming rules](docs/TERMINOLOGY.ja.md)

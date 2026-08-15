@@ -1,6 +1,7 @@
 /* Vendored by tools/vendor_nimble_esp32.py -- do not edit. */
 #include <sdkconfig.h>
-#if defined(CONFIG_IDF_TARGET_ESP32) && !defined(CONFIG_NIMBLE_ENABLED)
+#if defined(CONFIG_IDF_TARGET_ESP32) && !defined(CONFIG_NIMBLE_ENABLED) && \
+    !defined(ESPBLE_CLASSIC_ONLY)
 #include "nimble_esp32/include/espble_nimble_config.h"
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
@@ -811,6 +812,11 @@ ble_hs_hci_evt_le_enh_conn_complete(uint8_t subevent, const void *data,
         }
 
         struct ble_hs_resolv_entry *rl = NULL;
+        ble_addr_t peer_ota_addr = { .type = evt.peer_addr_type };
+        memcpy(peer_ota_addr.val, evt.peer_addr, BLE_DEV_ADDR_LEN);
+        if (BLE_ADDR_IS_RPA(&peer_ota_addr)) {
+            memcpy(evt.peer_rpa, evt.peer_addr, BLE_DEV_ADDR_LEN);
+        }
         ble_hs_lock();
         ble_rpa_replace_peer_params_with_rl(evt.peer_addr,
                                             &evt.peer_addr_type, &rl);
@@ -889,6 +895,11 @@ ble_hs_hci_evt_le_conn_complete(uint8_t subevent, const void *data,
         }
 
         struct ble_hs_resolv_entry *rl = NULL;
+        ble_addr_t peer_ota_addr = { .type = evt.peer_addr_type };
+        memcpy(peer_ota_addr.val, evt.peer_addr, BLE_DEV_ADDR_LEN);
+        if (BLE_ADDR_IS_RPA(&peer_ota_addr)) {
+            memcpy(evt.peer_rpa, evt.peer_addr, BLE_DEV_ADDR_LEN);
+        }
         ble_hs_lock();
         ble_rpa_replace_peer_params_with_rl(evt.peer_addr,
                                             &evt.peer_addr_type, &rl);
@@ -2246,4 +2257,4 @@ bool ble_check_adv_list(const uint8_t *addr, uint8_t addr_type)
 }
 #endif
 
-#endif /* CONFIG_IDF_TARGET_ESP32 && !CONFIG_NIMBLE_ENABLED */
+#endif /* CONFIG_IDF_TARGET_ESP32 && !CONFIG_NIMBLE_ENABLED && !ESPBLE_CLASSIC_ONLY */

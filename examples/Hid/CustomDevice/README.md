@@ -38,3 +38,8 @@ A BLE HID device over GATT (HOGP) built with an **arbitrary Report Descriptor** 
 Send 'i' to send an input report (dial +5, button 1).
 Output report id=1 len=1 value=2
 ```
+
+## Related guides
+
+- [BLE guide §6 HID](../../../docs/GUIDE_BLE_BASICS.md#6-hid--acting-as-a-keyboard-or-a-mouse) — reports, descriptors and what a Host expects
+- [Writing a HID Report Descriptor](../../../docs/GUIDE_HID_DESCRIPTORS.md) — when you need your own descriptor, and how to verify it

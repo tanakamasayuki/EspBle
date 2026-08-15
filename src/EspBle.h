@@ -19,18 +19,9 @@
 #endif
 
 #include "EspBleKeymap.h"
+#include "EspBleTypes.h"
+#include "EspBleHidProfile.h"
 #include "espble_version.h"
-
-enum class EspBleError : uint8_t
-{
-  None = 0,
-  InvalidState,
-  InvalidArgument,
-  BackendFailure,
-  ResourceExhausted,
-  NotFound,
-  Timeout,
-};
 
 enum class EspBleSecurityIoCapability : uint8_t
 {
@@ -282,32 +273,6 @@ enum EspBleHidReportType : uint8_t
   ESP_BLE_HID_REPORT_TYPE_FEATURE = 0x03,
 };
 
-static constexpr uint8_t ESP_BLE_HID_MOUSE_LEFT = 0x01;
-static constexpr uint8_t ESP_BLE_HID_MOUSE_RIGHT = 0x02;
-static constexpr uint8_t ESP_BLE_HID_MOUSE_MIDDLE = 0x04;
-static constexpr uint8_t ESP_BLE_HID_MOUSE_BACK = 0x08;
-static constexpr uint8_t ESP_BLE_HID_MOUSE_FORWARD = 0x10;
-
-static constexpr uint8_t ESP_BLE_HID_GAMEPAD_HAT_CENTER = 0x00;
-static constexpr uint8_t ESP_BLE_HID_GAMEPAD_HAT_UP = 0x01;
-static constexpr uint8_t ESP_BLE_HID_GAMEPAD_HAT_UP_RIGHT = 0x02;
-static constexpr uint8_t ESP_BLE_HID_GAMEPAD_HAT_RIGHT = 0x03;
-static constexpr uint8_t ESP_BLE_HID_GAMEPAD_HAT_DOWN_RIGHT = 0x04;
-static constexpr uint8_t ESP_BLE_HID_GAMEPAD_HAT_DOWN = 0x05;
-static constexpr uint8_t ESP_BLE_HID_GAMEPAD_HAT_DOWN_LEFT = 0x06;
-static constexpr uint8_t ESP_BLE_HID_GAMEPAD_HAT_LEFT = 0x07;
-static constexpr uint8_t ESP_BLE_HID_GAMEPAD_HAT_UP_LEFT = 0x08;
-
-static constexpr uint16_t ESP_BLE_HID_CONSUMER_CONTROL_NEXT_TRACK = 0x00b5;
-static constexpr uint16_t ESP_BLE_HID_CONSUMER_CONTROL_PREVIOUS_TRACK = 0x00b6;
-static constexpr uint16_t ESP_BLE_HID_CONSUMER_CONTROL_PLAY_PAUSE = 0x00cd;
-static constexpr uint16_t ESP_BLE_HID_CONSUMER_CONTROL_MUTE = 0x00e2;
-static constexpr uint16_t ESP_BLE_HID_CONSUMER_CONTROL_VOLUME_UP = 0x00e9;
-static constexpr uint16_t ESP_BLE_HID_CONSUMER_CONTROL_VOLUME_DOWN = 0x00ea;
-
-static constexpr uint8_t ESP_BLE_HID_SYSTEM_CONTROL_POWER_OFF = 0x01;
-static constexpr uint8_t ESP_BLE_HID_SYSTEM_CONTROL_STANDBY = 0x02;
-static constexpr uint8_t ESP_BLE_HID_SYSTEM_CONTROL_WAKE_HOST = 0x03;
 
 struct EspBleConnection
 {
@@ -610,101 +575,10 @@ struct EspBleHidVendorConfig : EspBleHidDeviceConfig
   uint8_t reportSize = 63;
 };
 
-struct EspBleHidKeyboardInputReport
-{
-  static constexpr uint8_t LeftControl = 0x01;
-  static constexpr uint8_t LeftShift = 0x02;
-  static constexpr uint8_t LeftAlt = 0x04;
-  static constexpr uint8_t LeftGui = 0x08;
-  static constexpr uint8_t RightControl = 0x10;
-  static constexpr uint8_t RightShift = 0x20;
-  static constexpr uint8_t RightAlt = 0x40;
-  static constexpr uint8_t RightGui = 0x80;
 
-  uint8_t modifiers = 0;
-  uint8_t keys[6] = {};
-};
 
-struct EspBleHidMouseReport
-{
-  uint8_t buttons = 0;
-  int8_t x = 0;
-  int8_t y = 0;
-  int8_t wheel = 0;
-};
 
-struct EspBleHidGamepadReport
-{
-  int8_t x = 0;
-  int8_t y = 0;
-  int8_t z = 0;
-  int8_t rz = 0;
-  int8_t rx = 0;
-  int8_t ry = 0;
-  uint8_t hat = ESP_BLE_HID_GAMEPAD_HAT_CENTER;
-  uint32_t buttons = 0;
-};
 
-using EspBleHidKeyboardReport = EspBleHidKeyboardInputReport;
-
-// Full NKRO keyboard state in one report: modifier byte + a bitmap of usages
-// 0x00-0xDF (the EspUsbDevice-compatible 29-byte layout). Modifier usages
-// 0xE0-0xE7 live in `modifiers`, not the bitmap, and press() / release() route
-// them there automatically. isDown() matches the Host-side
-// EspBleHidKeyboardState accessor so a Host snapshot can be replayed on a
-// Device with the same vocabulary; the bitmaps differ in size (the Host tracks
-// usages up to 0xFF, this report up to MaxBitmapUsage).
-struct EspBleHidKeyboardNkroReport
-{
-  static constexpr size_t BitmapSize = 28;
-  static constexpr uint8_t MaxBitmapUsage = 0xdf;
-
-  uint8_t modifiers = 0;
-  // A bitmap, not a usage array (see EspBleHidKeyboardState::bitmap).
-  uint8_t bitmap[BitmapSize] = {};
-
-  void clear()
-  {
-    modifiers = 0;
-    for (size_t index = 0; index < BitmapSize; ++index) bitmap[index] = 0;
-  }
-
-  // Returns false when the usage is above MaxBitmapUsage and is not a modifier
-  // (0xE0-0xE7), i.e. this report cannot represent it.
-  bool press(uint8_t usage)
-  {
-    if (usage >= 0xe0 && usage <= 0xe7)
-    {
-      modifiers |= static_cast<uint8_t>(1u << (usage - 0xe0));
-      return true;
-    }
-    if (usage > MaxBitmapUsage) return false;
-    bitmap[usage >> 3] |= static_cast<uint8_t>(1u << (usage & 7));
-    return true;
-  }
-
-  bool release(uint8_t usage)
-  {
-    if (usage >= 0xe0 && usage <= 0xe7)
-    {
-      modifiers &= static_cast<uint8_t>(~(1u << (usage - 0xe0)));
-      return true;
-    }
-    if (usage > MaxBitmapUsage) return false;
-    bitmap[usage >> 3] &= static_cast<uint8_t>(~(1u << (usage & 7)));
-    return true;
-  }
-
-  bool isDown(uint8_t usage) const
-  {
-    if (usage >= 0xe0 && usage <= 0xe7)
-    {
-      return (modifiers & static_cast<uint8_t>(1u << (usage - 0xe0))) != 0;
-    }
-    if (usage > MaxBitmapUsage) return false;
-    return (bitmap[usage >> 3] & static_cast<uint8_t>(1u << (usage & 7))) != 0;
-  }
-};
 
 // The LED state a host wrote. The library fills the flags from `leds`, so the
 // two never disagree; they are plain members rather than accessors to match the
@@ -1001,6 +875,7 @@ public:
 
 private:
   friend class EspBle;
+  friend struct EspBleImpl;
 
   explicit EspBleAdvertising(EspBle *owner);
 
@@ -1019,6 +894,13 @@ private:
     Payload &destination,
     bool includeFlags,
     const char *payloadName) const;
+  // Host-based privacy has to stop every active GAP procedure before HCI Set
+  // Random Address. NimBLE reports that stop as EPreempted; resume only an
+  // advertisement that this object still considers requested.
+  void resumeAfterPrivacyPreemption();
+  // Enforce the caller's original finite deadline even if repeated privacy
+  // preemption leaves the host procedure active past its rounded duration.
+  void expireFiniteDuration();
 
   EspBle *owner_;
   EspBleAdvertisingData data_;
@@ -1033,6 +915,8 @@ private:
   String directedAddress_;
   EspBleAddressType directedAddressType_ = EspBleAddressType::Public;
   uint8_t channelMask_ = 0;
+  bool restartAfterPreemption_ = false;
+  uint32_t advertisingDeadlineMs_ = 0;
 };
 
 class EspBleScanner
@@ -1054,10 +938,15 @@ private:
   ~EspBleScanner();
   void dispatchPendingResults();
   void flushPendingResults();
+  void resumeAfterPrivacyPreemption();
+  void expireFiniteDuration();
 
   EspBle *owner_;
   ResultCallback resultCallback_;
   EspBleScannerImpl *impl_ = nullptr;
+  EspBleScanConfig restartConfig_;
+  bool restartAfterPreemption_ = false;
+  uint32_t scanDeadlineMs_ = 0;
 };
 
 class EspBleGattServer
@@ -1635,11 +1524,11 @@ public:
   void end();
   void update();
 
-  // The address this device currently presents to peers, as a string, or an
-  // empty String before begin(). With ownAddressType = ResolvablePrivate this is
-  // the RPA in use at the moment, so it changes when the controller rotates it.
-  // Its type is the one requested through EspBleConfig::ownAddressType, reported
-  // by localAddressType().
+  // The local address exposed by the active host, or an empty String before
+  // begin(). With ResolvablePrivate, backends can expose either their identity
+  // address or the current host-generated RPA; do not use this as a stable way
+  // to observe RPA rotation. Scan / connection results carry the address seen
+  // over the air. localAddressType() reports the type requested in the config.
   String localAddress() const;
   EspBleAddressType localAddressType() const;
 

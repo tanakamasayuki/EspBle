@@ -1,6 +1,7 @@
 /* Vendored by tools/vendor_nimble_esp32.py -- do not edit. */
 #include <sdkconfig.h>
-#if defined(CONFIG_IDF_TARGET_ESP32) && !defined(CONFIG_NIMBLE_ENABLED)
+#if defined(CONFIG_IDF_TARGET_ESP32) && !defined(CONFIG_NIMBLE_ENABLED) && \
+    !defined(ESPBLE_CLASSIC_ONLY)
 #include "nimble_esp32/include/espble_nimble_config.h"
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
@@ -544,6 +545,9 @@ ble_hs_conn_addrs(const struct ble_hs_conn *conn,
     if (rl != NULL) {
         memcpy(addrs->peer_id_addr.val, rl->rl_identity_addr, BLE_DEV_ADDR_LEN);
         addrs->peer_id_addr.type = rl->rl_addr_type;
+        if (memcmp(conn->bhc_peer_rpa_addr.val, ble_hs_conn_null_addr, 6) != 0) {
+            addrs->peer_ota_addr = conn->bhc_peer_rpa_addr;
+        }
 
         if (ble_host_rpa_enabled()) {
             const uint8_t *local_id = NULL;
@@ -728,4 +732,4 @@ ble_hs_conn_deinit(void)
 }
 #endif
 
-#endif /* CONFIG_IDF_TARGET_ESP32 && !CONFIG_NIMBLE_ENABLED */
+#endif /* CONFIG_IDF_TARGET_ESP32 && !CONFIG_NIMBLE_ENABLED && !ESPBLE_CLASSIC_ONLY */

@@ -1,3 +1,7 @@
+#include <sdkconfig.h>
+
+#if !defined(ESPBLE_CLASSIC_ONLY)
+
 #include "EspBle.h"
 
 #include <soc/soc_caps.h>
@@ -28,6 +32,12 @@ extern "C" bool bleInUse(void)
 // The NimBLE host API. EspBleNimbleHost.h is the only place that knows whether
 // it comes from the core or from the copy EspBle bundles for the original ESP32.
 #include "EspBleNimbleHost.h"
+#if defined(CONFIG_IDF_TARGET_ESP32) && !defined(CONFIG_NIMBLE_ENABLED)
+// The original ESP32 uses the vendored host-based privacy implementation. Its
+// controller only sees a random address; the host generates and rotates RPAs.
+#include "nimble_esp32/include/host/ble_hs_pvcy.h"
+#define ESPBLE_NIMBLE_HOST_BASED_PRIVACY 1
+#endif
 // The NVS-backed bond store. Its initialiser has no public header in the
 // ESP-IDF build, so it is declared the way the IDF's own examples do.
 extern "C" void ble_store_config_init(void);
@@ -41,6 +51,7 @@ extern "C" void ble_store_config_init(void);
 #include <new>
 #include <utility>
 
+#include "EspBleHidProfile.h"
 #include "EspBleHidReportMap.h"
 #include "EspBleUuid.h"
 
@@ -1112,6 +1123,14 @@ struct EspBleImpl
       // Pairing input is answered from the connection's own callback: the
       // global listener is not guaranteed to see this event.
       impl->handlePasskeyAction(event->passkey.conn_handle, event->passkey.params);
+    }
+    else if (event->type == BLE_GAP_EVENT_ADV_COMPLETE &&
+             event->adv_complete.reason == BLE_HS_EPREEMPTED)
+    {
+      // Host-based RPA rotation stops advertising before HCI Set Random
+      // Address. NimBLE deliberately reports the stop to the application and
+      // does not restart it; preserve EspBle's requested advertising state.
+      impl->owner->advertising_.resumeAfterPrivacyPreemption();
     }
     return 0;
   }
@@ -4231,6 +4250,11 @@ struct EspBleHidKeyboardHostImpl
     event.type = EventType::State;
     event.state.connectionId = connectionId;
     event.state.reportId = reportId;
+    // Keep the report that produced this state, so keyboard events carry the
+    // same raw view the other report kinds already deliver. One report can
+    // produce several key events; they all point at the report they came from.
+    event.rawLength = length > sizeof(event.raw) ? sizeof(event.raw) : length;
+    memcpy(event.raw, data, event.rawLength);
     if (format.keyboardBitmap)
     {
       if (format.keyboardHasModifiers)
@@ -4865,8 +4889,18 @@ struct EspBleScannerImpl
 
   void handleReport(const ble_gap_disc_desc &report)
   {
+#if defined(ESPBLE_NIMBLE_HOST_BASED_PRIVACY)
+    // The vendored host resolves a bonded RPA before publishing the report and
+    // leaves the resolved identity in addr. Connecting to those bytes with the
+    // original random type breaks the security-record lookup. Keep the API's
+    // scan address as the address actually received over the air; NimBLE saved
+    // it expressly for this purpose before performing host-side resolution.
+    const ble_addr_t &reportAddress = report.ota_addr;
+#else
+    const ble_addr_t &reportAddress = report.addr;
+#endif
     const bool isScanResponse = report.event_type == BLE_HCI_ADV_RPT_EVTYPE_SCAN_RSP;
-    Pending *entry = findPending(report.addr.val, report.addr.type);
+    Pending *entry = findPending(reportAddress.val, reportAddress.type);
 
     if (isScanResponse)
     {
@@ -4875,8 +4909,8 @@ struct EspBleScannerImpl
         // A scan response with no advertisement to attach it to: report what it
         // carries rather than discard it.
         EspBleScanResult result;
-        result.address = formatAddress(report.addr.val);
-        result.addressType = static_cast<EspBleAddressType>(report.addr.type);
+        result.address = formatAddress(reportAddress.val);
+        result.addressType = static_cast<EspBleAddressType>(reportAddress.type);
         result.rssi = report.rssi;
         parseAdvertisingReport(report.data, report.length_data, result);
         publish(std::move(result));
@@ -4891,8 +4925,8 @@ struct EspBleScannerImpl
     }
 
     EspBleScanResult result;
-    result.address = formatAddress(report.addr.val);
-    result.addressType = static_cast<EspBleAddressType>(report.addr.type);
+    result.address = formatAddress(reportAddress.val);
+    result.addressType = static_cast<EspBleAddressType>(reportAddress.type);
     result.rssi = report.rssi;
     // The PDU type says what the advertiser accepts; the payload cannot.
     result.connectable = report.event_type == BLE_HCI_ADV_RPT_EVTYPE_ADV_IND ||
@@ -4928,8 +4962,8 @@ struct EspBleScannerImpl
       publish(std::move(entry->result));
     }
     entry->used = true;
-    entry->addressType = report.addr.type;
-    memcpy(entry->address, report.addr.val, 6);
+    entry->addressType = reportAddress.type;
+    memcpy(entry->address, reportAddress.val, 6);
     entry->result = std::move(result);
   }
 
@@ -4956,6 +4990,10 @@ struct EspBleScannerImpl
     else if (event->type == BLE_GAP_EVENT_DISC_COMPLETE)
     {
       impl->flushPending();
+      if (event->disc_complete.reason == BLE_HS_EPREEMPTED)
+      {
+        impl->scanner->resumeAfterPrivacyPreemption();
+      }
     }
     return 0;
   }
@@ -5586,8 +5624,56 @@ bool EspBleAdvertising::start(uint32_t durationSeconds)
     return false;
   }
 
+  restartAfterPreemption_ = true;
+  advertisingDeadlineMs_ = durationSeconds == 0
+    ? 0
+    : millis() + durationSeconds * 1000;
   owner_->clearError();
   return true;
+}
+
+void EspBleAdvertising::resumeAfterPrivacyPreemption()
+{
+  if (!restartAfterPreemption_ || !owner_->initialized()) return;
+
+  uint32_t remainingSeconds = 0;
+  const uint32_t originalDeadline = advertisingDeadlineMs_;
+  if (originalDeadline != 0)
+  {
+    const int32_t remainingMs =
+      static_cast<int32_t>(originalDeadline - millis());
+    if (remainingMs <= 0)
+    {
+      restartAfterPreemption_ = false;
+      advertisingDeadlineMs_ = 0;
+      return;
+    }
+    remainingSeconds =
+      (static_cast<uint32_t>(remainingMs) + 999) / 1000;
+  }
+
+  if (start(remainingSeconds))
+  {
+    // start() rounds a finite duration to seconds. Keep the original deadline
+    // so repeated rotations cannot extend the requested advertising window.
+    advertisingDeadlineMs_ = originalDeadline;
+  }
+  else
+  {
+    restartAfterPreemption_ = false;
+    advertisingDeadlineMs_ = 0;
+  }
+}
+
+void EspBleAdvertising::expireFiniteDuration()
+{
+  if (advertisingDeadlineMs_ == 0 ||
+      static_cast<int32_t>(millis() - advertisingDeadlineMs_) < 0)
+    return;
+
+  restartAfterPreemption_ = false;
+  advertisingDeadlineMs_ = 0;
+  (void)ble_gap_adv_stop();
 }
 
 bool EspBleAdvertising::stop()
@@ -5597,6 +5683,8 @@ bool EspBleAdvertising::stop()
     owner_->setError(EspBleError::InvalidState, "BLE stack is not initialized");
     return false;
   }
+  restartAfterPreemption_ = false;
+  advertisingDeadlineMs_ = 0;
   const int backendCode = ble_gap_adv_stop();
   // BLE_HS_EALREADY simply means it was not advertising.
   if (backendCode != 0 && backendCode != BLE_HS_EALREADY)
@@ -5677,8 +5765,55 @@ bool EspBleScanner::start(const EspBleScanConfig &config)
     return false;
   }
 
+  restartConfig_ = config;
+  restartAfterPreemption_ = true;
+  scanDeadlineMs_ = config.durationSeconds == 0
+    ? 0
+    : millis() + config.durationSeconds * 1000;
   owner_->clearError();
   return true;
+}
+
+void EspBleScanner::resumeAfterPrivacyPreemption()
+{
+  if (!restartAfterPreemption_ || !owner_->initialized()) return;
+
+  EspBleScanConfig config = restartConfig_;
+  const uint32_t originalDeadline = scanDeadlineMs_;
+  if (originalDeadline != 0)
+  {
+    const int32_t remainingMs =
+      static_cast<int32_t>(originalDeadline - millis());
+    if (remainingMs <= 0)
+    {
+      restartAfterPreemption_ = false;
+      scanDeadlineMs_ = 0;
+      return;
+    }
+    config.durationSeconds =
+      (static_cast<uint32_t>(remainingMs) + 999) / 1000;
+  }
+
+  if (start(config))
+  {
+    scanDeadlineMs_ = originalDeadline;
+  }
+  else
+  {
+    restartAfterPreemption_ = false;
+    scanDeadlineMs_ = 0;
+  }
+}
+
+void EspBleScanner::expireFiniteDuration()
+{
+  if (scanDeadlineMs_ == 0 ||
+      static_cast<int32_t>(millis() - scanDeadlineMs_) < 0)
+    return;
+
+  restartAfterPreemption_ = false;
+  scanDeadlineMs_ = 0;
+  (void)ble_gap_disc_cancel();
 }
 
 bool EspBleScanner::stop()
@@ -5690,6 +5825,8 @@ bool EspBleScanner::stop()
   }
   // Cancelling a scan that is not running reports BLE_HS_EALREADY, which is the
   // requested state rather than a failure.
+  restartAfterPreemption_ = false;
+  scanDeadlineMs_ = 0;
   const int status = ble_gap_disc_cancel();
   if (status != 0 && status != BLE_HS_EALREADY)
   {
@@ -6763,99 +6900,15 @@ bool EspBleHidKeyboard::realize()
     return false;
   }
 
-  static const uint8_t keyboardMap[] = {
-    0x05, 0x01,       // Usage Page (Generic Desktop)
-    0x09, 0x06,       // Usage (Keyboard)
-    0xa1, 0x01,       // Collection (Application)
-    0x85, 0x01,       // Report ID
-    0x05, 0x07,       // Usage Page (Keyboard)
-    0x19, 0xe0,       // Usage Minimum (Left Control)
-    0x29, 0xe7,       // Usage Maximum (Right GUI)
-    0x15, 0x00,       // Logical Minimum (0)
-    0x25, 0x01,       // Logical Maximum (1)
-    0x75, 0x01,       // Report Size (1)
-    0x95, 0x08,       // Report Count (8)
-    0x81, 0x02,       // Input (Data, Variable, Absolute)
-    0x95, 0x01,       // Report Count (1)
-    0x75, 0x08,       // Report Size (8)
-    0x81, 0x01,       // Input (Constant)
-    0x95, 0x06,       // Report Count (6)
-    0x75, 0x08,       // Report Size (8)
-    0x15, 0x00,       // Logical Minimum (0)
-    0x25, 0x65,       // Logical Maximum (101)
-    0x05, 0x07,       // Usage Page (Keyboard)
-    0x19, 0x00,       // Usage Minimum (0)
-    0x29, 0x65,       // Usage Maximum (101)
-    0x81, 0x00,       // Input (Data, Array)
-    0x95, 0x05,       // Report Count (5)
-    0x75, 0x01,       // Report Size (1)
-    0x05, 0x08,       // Usage Page (LEDs)
-    0x19, 0x01,       // Usage Minimum (Num Lock)
-    0x29, 0x05,       // Usage Maximum (Kana)
-    0x91, 0x02,       // Output (Data, Variable, Absolute)
-    0x95, 0x01,       // Report Count (1)
-    0x75, 0x03,       // Report Size (3)
-    0x91, 0x01,       // Output (Constant)
-    0xc0              // End Collection
-  };
-  static const uint8_t nkroKeyboardMap[] = {
-    0x05,0x01, 0x09,0x06, 0xa1,0x01, 0x85,0x01,
-    0x05,0x07, 0x19,0xe0, 0x29,0xe7, 0x15,0x00, 0x25,0x01,
-    0x75,0x01, 0x95,0x08, 0x81,0x02,
-    0x05,0x08, 0x19,0x01, 0x29,0x05, 0x95,0x05, 0x75,0x01,
-    0x91,0x02, 0x95,0x01, 0x75,0x03, 0x91,0x01,
-    0x05,0x07, 0x19,0x00, 0x29,0xdf, 0x15,0x00, 0x25,0x01,
-    0x75,0x01, 0x95,0xe0, 0x81,0x02, 0xc0
-  };
-  static const uint8_t mouseMap[] = {
-    0x05,0x01, 0x09,0x02, 0xa1,0x01, 0x85,0x02, 0x09,0x01, 0xa1,0x00,
-    0x05,0x09, 0x19,0x01, 0x29,0x05, 0x15,0x00, 0x25,0x01, 0x95,0x05,
-    0x75,0x01, 0x81,0x02, 0x95,0x01, 0x75,0x03, 0x81,0x01, 0x05,0x01,
-    0x09,0x30, 0x09,0x31, 0x09,0x38, 0x15,0x81, 0x25,0x7f, 0x75,0x08,
-    0x95,0x03, 0x81,0x06, 0xc0, 0xc0};
-  static const uint8_t gamepadMap[] = {
-    0x05,0x01, 0x09,0x05, 0xa1,0x01, 0x85,0x03, 0x15,0x81, 0x25,0x7f,
-    0x09,0x30, 0x09,0x31, 0x09,0x32, 0x09,0x35, 0x09,0x33, 0x09,0x34,
-    0x75,0x08, 0x95,0x06, 0x81,0x02, 0x15,0x00, 0x25,0x08, 0x35,0x00,
-    0x46,0x3b,0x01, 0x65,0x14, 0x09,0x39, 0x75,0x08, 0x95,0x01,
-    0x81,0x02, 0x65,0x00, 0x05,0x09, 0x19,0x01, 0x29,0x20, 0x15,0x00,
-    0x25,0x01, 0x75,0x01, 0x95,0x20, 0x81,0x02, 0xc0};
-  static const uint8_t consumerMap[] = {
-    0x05,0x0c, 0x09,0x01, 0xa1,0x01, 0x85,0x04, 0x15,0x00, 0x26,0xff,0x03,
-    0x19,0x00, 0x2a,0xff,0x03, 0x75,0x10, 0x95,0x01, 0x81,0x00, 0xc0};
-  static const uint8_t systemMap[] = {
-    0x05,0x01, 0x09,0x80, 0xa1,0x01, 0x85,0x05, 0x15,0x00, 0x25,0x03,
-    0x19,0x00, 0x29,0x03, 0x75,0x08, 0x95,0x01, 0x81,0x00, 0xc0};
-  uint8_t vendorMap[] = {
-    0x06,0x00,0xff, 0x09,0x01, 0xa1,0x01, 0x85,0x06,
-    0x15,0x00, 0x26,0xff,0x00, 0x75,0x08,
-    0x09,0x01, 0x95,0x3f, 0x81,0x02,
-    0x09,0x02, 0x95,0x3f, 0x91,0x02,
-    0x09,0x03, 0x95,0x3f, 0xb1,0x02, 0xc0};
-  vendorMap[19] = impl_->vendorReportSize;
-  vendorMap[25] = impl_->vendorReportSize;
-  vendorMap[31] = impl_->vendorReportSize;
-  struct MapPart { const uint8_t *data; size_t length; };
-  const MapPart keyboardPart = impl_->keyboardNkro
-    ? MapPart{nkroKeyboardMap, sizeof(nkroKeyboardMap)}
-    : MapPart{keyboardMap, sizeof(keyboardMap)};
-  const MapPart maps[] = {keyboardPart, {mouseMap,sizeof(mouseMap)},
-    {gamepadMap,sizeof(gamepadMap)}, {consumerMap,sizeof(consumerMap)},
-    {systemMap,sizeof(systemMap)}, {vendorMap,sizeof(vendorMap)}};
-  impl_->reportMapLength = 0;
-  for (uint8_t index = 0; index < EspBleHidDeviceManagerImpl::ProfileCount; ++index)
-  {
-    if ((impl_->profileMask & static_cast<uint8_t>(1u << index)) == 0) continue;
-    const size_t mapOffset = impl_->reportMapLength;
-    memcpy(impl_->reportMap + impl_->reportMapLength, maps[index].data, maps[index].length);
-    impl_->reportMapLength += maps[index].length;
-    if (index == 1)
-    {
-      impl_->reportMap[mapOffset + 17] = impl_->mouseButtonCount;
-      impl_->reportMap[mapOffset + 23] = impl_->mouseButtonCount;
-      impl_->reportMap[mapOffset + 31] = static_cast<uint8_t>(8 - impl_->mouseButtonCount);
-    }
-  }
+  // The descriptors and the composition rules are shared with the Classic HID
+  // Device so both transports put the same bytes on the wire.
+  EspBleHidDescriptorSelection selection;
+  selection.profileMask = impl_->profileMask;
+  selection.keyboardNkro = impl_->keyboardNkro;
+  selection.mouseButtonCount = impl_->mouseButtonCount;
+  selection.vendorReportSize = impl_->vendorReportSize;
+  impl_->reportMapLength = espBleHidComposeDescriptor(
+    selection, impl_->reportMap, sizeof(impl_->reportMap));
   // Append the user's custom Report Descriptor after the built-in profile maps.
   if (impl_->customReportMapLength > 0 &&
       impl_->reportMapLength + impl_->customReportMapLength <= sizeof(impl_->reportMap))
@@ -8668,6 +8721,8 @@ void EspBleHidHost::dispatchPendingEvents()
             EspBleHidKeyboardEvent keyboardEvent;
             keyboardEvent.connectionId = event.state.connectionId;
             keyboardEvent.reportId = event.state.reportId;
+            keyboardEvent.rawData = event.raw;
+            keyboardEvent.rawLength = event.rawLength;
             keyboardEvent.usage = usage;
             keyboardEvent.modifiers = event.state.modifiers;
             keyboardEvent.pressed = pressed;
@@ -8910,8 +8965,9 @@ bool EspBle::begin(const EspBleConfig &config)
 
   // Address privacy: present a random static address, or a rotating Resolvable
   // Private Address, instead of the factory public address. Both need a random
-  // static identity set first; for RPA the controller then derives the rotating
-  // addresses from it. Applied before any advertising/scanning starts.
+  // static identity set first. The usual controller-based path derives RPAs in
+  // the controller; the original ESP32's vendored host does it in software.
+  // Applied before any advertising/scanning starts.
   if (config.ownAddressType != EspBleOwnAddressType::Public)
   {
     ble_addr_t randomAddress{};
@@ -8922,12 +8978,22 @@ bool EspBle::begin(const EspBleConfig &config)
       setError(EspBleError::BackendFailure, "failed to set a random device address");
       return false;
     }
-    // Every supported SoC generates the Resolvable Private Address in the
-    // controller (the original ESP32, whose controller cannot, has no NimBLE
-    // build and is rejected at compile time).
+#if defined(ESPBLE_NIMBLE_HOST_BASED_PRIVACY)
+    if (config.ownAddressType == EspBleOwnAddressType::ResolvablePrivate &&
+        ble_hs_pvcy_rpa_config(NIMBLE_HOST_ENABLE_RPA) != 0)
+    {
+      stopNimbleHost();
+      setError(EspBleError::BackendFailure, "failed to enable host-based address privacy");
+      return false;
+    }
+#endif
     const uint8_t ownType =
       config.ownAddressType == EspBleOwnAddressType::ResolvablePrivate
+#if defined(ESPBLE_NIMBLE_HOST_BASED_PRIVACY)
+        ? BLE_OWN_ADDR_RANDOM
+#else
         ? BLE_OWN_ADDR_RPA_RANDOM_DEFAULT
+#endif
         : BLE_OWN_ADDR_RANDOM;
     if (ble_hs_id_copy_addr(ownType & 1, nullptr, nullptr) != 0)
     {
@@ -8952,7 +9018,11 @@ bool EspBle::begin(const EspBleConfig &config)
     ? BLE_OWN_ADDR_PUBLIC
     : (config.ownAddressType == EspBleOwnAddressType::RandomStatic
          ? BLE_OWN_ADDR_RANDOM
+#if defined(ESPBLE_NIMBLE_HOST_BASED_PRIVACY)
+         : BLE_OWN_ADDR_RANDOM);
+#else
          : BLE_OWN_ADDR_RPA_RANDOM_DEFAULT);
+#endif
   impl_->securityEnabled = config.security.enabled;
   impl_->pairOnConnect = config.security.pairOnConnect;
   impl_->persistentSubscriptionsEnabled = config.persistentSubscriptions;
@@ -9058,10 +9128,14 @@ void EspBle::end()
   {
     ble_gap_disc_cancel();
   }
+  scanner_.restartAfterPreemption_ = false;
+  scanner_.scanDeadlineMs_ = 0;
   if (advertising_.isAdvertising())
   {
     ble_gap_adv_stop();
   }
+  advertising_.restartAfterPreemption_ = false;
+  advertising_.advertisingDeadlineMs_ = 0;
 
   if (impl_ != nullptr)
   {
@@ -9187,6 +9261,8 @@ void EspBle::drainPendingDisconnects()
 
 void EspBle::update()
 {
+  advertising_.expireFiniteDuration();
+  scanner_.expireFiniteDuration();
   cancelExpiredConnectAttempt();
   expireGattOperation();
   pumpGattQueue();
@@ -11240,3 +11316,5 @@ void EspBle::setError(EspBleError error, const char *detail)
   lastError_ = error;
   lastErrorDetail_ = detail == nullptr ? "" : detail;
 }
+
+#endif // !ESPBLE_CLASSIC_ONLY

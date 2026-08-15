@@ -27,3 +27,8 @@ Standard Current Time Service (0x1805) peripheral. Current Time (0x2A2B) is a re
 Send 't' to advance one second and notify subscribers.
 Time: 2026-07-19 12:34:57 (notification accepted: 1)
 ```
+
+## Related guides
+
+- [BLE guide §4 GATT](../../../../docs/GUIDE_BLE_BASICS.md#4-gatt--exchanging-data) — services, characteristics, notify and MTU
+- [BLE guide §5 UUIDs](../../../../docs/GUIDE_BLE_BASICS.md#5-understanding-uuids) — 16-bit and 128-bit forms

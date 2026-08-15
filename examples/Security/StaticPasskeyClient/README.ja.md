@@ -39,3 +39,7 @@ Send 'c' while disconnected to clear all bonds.
 Security established: encrypted=1 authenticated=1 bonded=1
 Protected value: MITM protected value
 ```
+
+## 関連するガイド
+
+- [BLE入門ガイド §3 セキュリティ編](../../../docs/GUIDE_BLE_BASICS.ja.md#3-セキュリティ編--つながった相手をどこまで信頼するか) — pairing・bond・IO capability

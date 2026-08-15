@@ -38,3 +38,8 @@
 Send 'i' to send an input report (dial +5, button 1).
 Output report id=1 len=1 value=2
 ```
+
+## 関連するガイド
+
+- [BLE入門ガイド §6 HID編](../../../docs/GUIDE_BLE_BASICS.ja.md#6-hid編--キーボードやマウスとして振る舞う) — reportとdescriptor、Hostが期待するもの
+- [HID Report Descriptorを書く](../../../docs/GUIDE_HID_DESCRIPTORS.ja.md) — 自作descriptorの書き方と確かめ方

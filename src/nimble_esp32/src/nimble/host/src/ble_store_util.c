@@ -1,6 +1,7 @@
 /* Vendored by tools/vendor_nimble_esp32.py -- do not edit. */
 #include <sdkconfig.h>
-#if defined(CONFIG_IDF_TARGET_ESP32) && !defined(CONFIG_NIMBLE_ENABLED)
+#if defined(CONFIG_IDF_TARGET_ESP32) && !defined(CONFIG_NIMBLE_ENABLED) && \
+    !defined(ESPBLE_CLASSIC_ONLY)
 #include "nimble_esp32/include/espble_nimble_config.h"
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
@@ -239,6 +240,16 @@ ble_store_util_delete_peer(const ble_addr_t *peer_id_addr)
                 ble_hs_unlock();
             }
             return rc;
+        }
+    } else {
+        /* Restored IRKs can exist in the host resolving list without a
+         * peer-device record.  Deleting the persisted bond must remove
+         * that entry too, otherwise the next pairing is rejected as a
+         * duplicate and keeps using the stale IRK. */
+        rc = ble_hs_resolv_list_rmv(peer_id_addr->type,
+                                    peer_id_addr->val);
+        if (rc != 0 && rc != BLE_HS_ENOENT) {
+            BLE_HS_LOG(DEBUG, "Restored peer was not removed from RL \n");
         }
     }
     if (needs_unlock) {
@@ -481,4 +492,4 @@ ble_store_util_status_rr(struct ble_store_status_event *event, void *arg)
     }
 }
 
-#endif /* CONFIG_IDF_TARGET_ESP32 && !CONFIG_NIMBLE_ENABLED */
+#endif /* CONFIG_IDF_TARGET_ESP32 && !CONFIG_NIMBLE_ENABLED && !ESPBLE_CLASSIC_ONLY */

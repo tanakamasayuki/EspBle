@@ -29,3 +29,8 @@ Speed: 30.00 km/h  Cadence: 90 rpm  Power: 250 W
 Speed: 31.00 km/h  Cadence: 90 rpm  Power: 250 W
 ...
 ```
+
+## Related guides
+
+- [BLE guide §4 GATT](../../../../docs/GUIDE_BLE_BASICS.md#4-gatt--exchanging-data) — services, characteristics, notify and MTU
+- [BLE guide §5 UUIDs](../../../../docs/GUIDE_BLE_BASICS.md#5-understanding-uuids) — 16-bit and 128-bit forms

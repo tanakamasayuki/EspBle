@@ -1,6 +1,7 @@
 /* Vendored by tools/vendor_nimble_esp32.py -- do not edit. */
 #include <sdkconfig.h>
-#if defined(CONFIG_IDF_TARGET_ESP32) && !defined(CONFIG_NIMBLE_ENABLED)
+#if defined(CONFIG_IDF_TARGET_ESP32) && !defined(CONFIG_NIMBLE_ENABLED) && \
+    !defined(ESPBLE_CLASSIC_ONLY)
 #include "nimble_esp32/include/espble_nimble_config.h"
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
@@ -24,6 +25,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <string.h>
+#include "EspBleHciBroker.h"
 #include "nimble_esp32/include/sysinit/sysinit.h"
 #include "nimble_esp32/include/syscfg/syscfg.h"
 #include "nimble_esp32/include/stats/stats.h"
@@ -803,6 +805,9 @@ ble_hs_start(void)
         return rc;
     }
 
+    espble_hci_broker_set_receive_enabled(
+        ESPBLE_HCI_HOST_NIMBLE, true);
+
     ble_hs_parent_task = ble_npl_get_current_task_id();
 
 #if MYNEWT_VAL(SELFTEST)
@@ -1189,4 +1194,4 @@ ble_hs_deinit(void)
 #endif
 }
 
-#endif /* CONFIG_IDF_TARGET_ESP32 && !CONFIG_NIMBLE_ENABLED */
+#endif /* CONFIG_IDF_TARGET_ESP32 && !CONFIG_NIMBLE_ENABLED && !ESPBLE_CLASSIC_ONLY */

@@ -35,3 +35,7 @@ Those three fields are all it prints. To see **every field** — service UUIDs, 
 70:04:1d:32:99:a0 RSSI=-78
 ...
 ```
+
+## Related guides
+
+- [BLE guide §2 GAP](../../../docs/GUIDE_BLE_BASICS.md#2-gap--finding-and-connecting) — advertising, scanning and connecting

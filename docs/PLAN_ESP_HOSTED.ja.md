@@ -135,13 +135,13 @@ C6側Slave 2.3.2は、検証中に2.12.11へ更新した。
 | --- | --- | --- |
 | P4 `CompileSmoke` | 成功 | 317,952 bytes、global 22,532 bytes |
 | S3 `CompileSmoke` | 成功 | 274,253 bytes、global 21,920 bytes |
-| host unit test | 7 passed | `uv run --env-file .env pytest unit/` |
-| P4/S3 connect/disconnect | 1 passed | scan、接続、切断を確認 |
-| P4/S3 GATT・notify・MTU | 4 passed | read/write、notify/indicate、MTU交換を確認 |
-| P4/S3 Security非依存の追加coverage | 23 passed | GAP/controller 9、advertising 6、GATT state 8 |
-| P4 Wi-Fi + S3 BLE共存 | 1 passed | DHCP、GATT read/write/notify、BLE終了後のWi-Fi維持、最終解放を確認 |
-| P4/S3 Security・HID・lifecycle | 7 passed / 3 failed | 下記既知制限を検出 |
-| S3/S3 Security回帰 | 1 passed | 通常Controller構成ではbond成功 |
+| host unit test | 成功 | `uv run --env-file .env pytest unit/` |
+| P4/S3 connect/disconnect | 成功 | scan、接続、切断を確認 |
+| P4/S3 GATT・notify・MTU | 成功 | read/write、notify/indicate、MTU交換を確認 |
+| P4/S3 Security非依存の追加coverage | 成功 | GAP/controller、advertising、GATT stateを確認 |
+| P4 Wi-Fi + S3 BLE共存 | 成功 | DHCP、GATT read/write/notify、BLE終了後のWi-Fi維持、最終解放を確認 |
+| P4/S3 Security・HID・lifecycle | 既知制限あり | 下記既知制限を検出 |
+| S3/S3 Security回帰 | 成功 | 通常Controller構成ではbond成功 |
 
 ### 確認できた既知制限
 
@@ -165,13 +165,12 @@ C6側Slave 2.3.2は、検証中に2.12.11へ更新した。
 2. `end()` / `begin()`の繰り返し
    - 1回目の再初期化は成功したが、2回目にESP-Hosted SDIO driverの
      `sdio_mempool_create`がメモリ確保失敗でassertした。
-   - Slave 2.12.11への更新後は対象testの単独実行が1回成功したが、lifecycle suite
-     全体では7 passed / 1 failedとなり、同じassertが再現した。解消済みとは扱わない。
+   - Slave 2.12.11への更新後は対象testの単独実行が成功したが、lifecycle suite
+     全体では同じassertが再現した。解消済みとは扱わない。
    - Arduino coreにもsecond initが未修正である旨のコメントがあり、EspBle外の
      Hosted transport再初期化制限と判断する。
-   - deinit後に250 ms待機してもlifecycle suiteは`7 passed / 1 failed`で同じassertが
-     再現した。非同期cleanup待ちでは回避できない。
-   - `end()`でHostedを解放しない切り分けではlifecycle suiteが`8 passed`となったが、
+   - deinit後に250 ms待機してもlifecycle suiteで同じassertが再現した。非同期cleanup待ちでは回避できない。
+   - `end()`でHostedを解放しない切り分けではlifecycle suiteが成功したが、
      電力・SDIO resource・Wi-Fi共有時の意味を変えるため初期実装には入れない。
      通常の1回だけの`begin()`運用は成功している。
    - ESP-Hosted-MCU 2.12.12には、各init/deinit cycleでshared channel mempoolが漏れる

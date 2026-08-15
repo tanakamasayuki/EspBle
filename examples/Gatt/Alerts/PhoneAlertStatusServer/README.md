@@ -27,3 +27,8 @@ Standard Phone Alert Status Service (0x180E) peripheral. Alert Status (0x2A3F) a
 Silent Mode
 Normal Mode
 ```
+
+## Related guides
+
+- [BLE guide §4 GATT](../../../../docs/GUIDE_BLE_BASICS.md#4-gatt--exchanging-data) — services, characteristics, notify and MTU
+- [BLE guide §5 UUIDs](../../../../docs/GUIDE_BLE_BASICS.md#5-understanding-uuids) — 16-bit and 128-bit forms

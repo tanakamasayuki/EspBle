@@ -1,6 +1,7 @@
 /* Vendored by tools/vendor_nimble_esp32.py -- do not edit. */
 #include <sdkconfig.h>
-#if defined(CONFIG_IDF_TARGET_ESP32) && !defined(CONFIG_NIMBLE_ENABLED)
+#if defined(CONFIG_IDF_TARGET_ESP32) && !defined(CONFIG_NIMBLE_ENABLED) && \
+    !defined(ESPBLE_CLASSIC_ONLY)
 #include "nimble_esp32/include/espble_nimble_config.h"
 /*
  * Copyright 2020 Espressif Systems (Shanghai) PTE LTD
@@ -402,11 +403,14 @@ ble_rpa_find_rl_from_peer_records(uint8_t *peer_addr, uint8_t *peer_addr_type)
             rl = ble_hs_resolv_list_find(p_dev_rec->identity_addr);
             if (rl) {
                 memcpy(peer_addr, p_dev_rec->identity_addr, BLE_DEV_ADDR_LEN);
-                *peer_addr_type = p_dev_rec->peer_sec.peer_addr.type;
+                /* The resolving list is restored from the canonical security
+                 * record.  The auxiliary peer record can still carry the OTA
+                 * random type from before identity exchange. */
+                *peer_addr_type = rl->rl_addr_type;
             } else if ((rl = ble_hs_resolv_list_find(p_dev_rec->pseudo_addr))
                        != NULL) {
                 memcpy(peer_addr, p_dev_rec->identity_addr, BLE_DEV_ADDR_LEN);
-                *peer_addr_type = p_dev_rec->peer_sec.peer_addr.type;
+                *peer_addr_type = rl->rl_addr_type;
             } else {
                 /* Peer record exists, but RL does not
                  * exist, remove peer record */
@@ -1082,7 +1086,6 @@ ble_hs_resolv_rpa_addr(uint8_t *addr, uint8_t addr_type) {
     for (i = 1; i < g_ble_hs_resolv_data.rl_cnt; ++i) {
         if(ble_hs_resolv_rpa(addr, rl->rl_peer_irk) == 0) {
             memcpy(g_ble_hs_resolv_list[i].rl_peer_rpa, addr, BLE_DEV_ADDR_LEN);
-            g_ble_hs_resolv_list[i].rl_addr_type = addr_type;
             return rl;
         }
 
@@ -1175,4 +1178,4 @@ void ble_hs_resolv_deinit(void)
 }
 #endif  /* if MYNEWT_VAL(BLE_HOST_BASED_PRIVACY) */
 
-#endif /* CONFIG_IDF_TARGET_ESP32 && !CONFIG_NIMBLE_ENABLED */
+#endif /* CONFIG_IDF_TARGET_ESP32 && !CONFIG_NIMBLE_ENABLED && !ESPBLE_CLASSIC_ONLY */

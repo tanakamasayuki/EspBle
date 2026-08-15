@@ -57,10 +57,12 @@ INCLUDE_PREFIX = "nimble_esp32/include/"
 GUARD_OPEN = (
     "/* Vendored by tools/vendor_nimble_esp32.py -- do not edit. */\n"
     "#include <sdkconfig.h>\n"
-    "#if defined(CONFIG_IDF_TARGET_ESP32) && !defined(CONFIG_NIMBLE_ENABLED)\n"
+    "#if defined(CONFIG_IDF_TARGET_ESP32) && !defined(CONFIG_NIMBLE_ENABLED) && \\\n"
+    "    !defined(ESPBLE_CLASSIC_ONLY)\n"
     '#include "' + INCLUDE_PREFIX + 'espble_nimble_config.h"\n'
 )
-GUARD_CLOSE = "\n#endif /* CONFIG_IDF_TARGET_ESP32 && !CONFIG_NIMBLE_ENABLED */\n"
+GUARD_CLOSE = ("\n#endif /* CONFIG_IDF_TARGET_ESP32 && !CONFIG_NIMBLE_ENABLED && "
+               "!ESPBLE_CLASSIC_ONLY */\n")
 
 # --- file lists (transcribed from the esp-idf CMakeLists) ---------------------
 
@@ -198,6 +200,214 @@ INCLUDE_DIRS = [
 PATCHES = [
     (
         "porting/nimble/src/nimble_port.c",
+        "    struct ble_npl_sem stop_sem;\n"
+        "    struct ble_npl_event ev_stop;\n",
+        "    struct ble_npl_sem stop_sem;\n"
+        "    struct ble_npl_event ev_stop;\n"
+        "    struct ble_npl_event ev_stop_begin;\n"
+        "    int stop_result;\n",
+        "store the host-task stop request in the restartable NimBLE context",
+    ),
+    (
+        "porting/nimble/src/nimble_port.c",
+        "#define ble_hs_ev_stop  (ble_npl_ctx->ev_stop)\n",
+        "#define ble_hs_ev_stop  (ble_npl_ctx->ev_stop)\n"
+        "#define ble_hs_ev_stop_begin (ble_npl_ctx->ev_stop_begin)\n"
+        "#define ble_hs_stop_result (ble_npl_ctx->stop_result)\n",
+        "expose the restartable host-task stop request",
+    ),
+    (
+        "porting/nimble/src/nimble_port.c",
+        "static struct ble_npl_sem ble_hs_stop_sem;\n"
+        "static struct ble_npl_event ble_hs_ev_stop;\n",
+        "static struct ble_npl_sem ble_hs_stop_sem;\n"
+        "static struct ble_npl_event ble_hs_ev_stop;\n"
+        "static struct ble_npl_event ble_hs_ev_stop_begin;\n"
+        "static int ble_hs_stop_result;\n",
+        "store the host-task stop request in the static NimBLE context",
+    ),
+    (
+        "porting/nimble/src/nimble_port.c",
+        "static void\n"
+        "ble_hs_stop_cb(int status, void *arg)\n"
+        "{\n"
+        "    ble_npl_sem_release(&ble_hs_stop_sem);\n"
+        "}\n\n"
+        "static void\n"
+        "nimble_port_stop_cb(struct ble_npl_event *ev)\n",
+        "static void\n"
+        "ble_hs_stop_cb(int status, void *arg)\n"
+        "{\n"
+        "    ble_hs_stop_result = status;\n"
+        "    ble_npl_sem_release(&ble_hs_stop_sem);\n"
+        "}\n\n"
+        "static void\n"
+        "nimble_port_stop_begin_cb(struct ble_npl_event *ev)\n"
+        "{\n"
+        "    (void)ev;\n"
+        "    int result = ble_hs_stop(&stop_listener, ble_hs_stop_cb, NULL);\n"
+        "    if (result != 0) {\n"
+        "        ble_hs_stop_result = result;\n"
+        "        ble_npl_sem_release(&ble_hs_stop_sem);\n"
+        "    }\n"
+        "}\n\n"
+        "static void\n"
+        "nimble_port_stop_cb(struct ble_npl_event *ev)\n",
+        "start host shutdown on the NimBLE event task to serialize its queue",
+    ),
+    (
+        "porting/nimble/src/nimble_port.c",
+        "    /* Initiate a host stop procedure. */\n"
+        "    err = ble_hs_stop(&stop_listener, ble_hs_stop_cb,\n"
+        "                     NULL);\n"
+        "    if (err != 0) {\n"
+        "        ble_npl_sem_deinit(&ble_hs_stop_sem);\n"
+        "        return err;\n"
+        "    }\n\n"
+        "    /* Wait till the host stop procedure is complete */\n"
+        "    ble_npl_sem_pend(&ble_hs_stop_sem, BLE_NPL_TIME_FOREVER);\n",
+        "    /* Serialize stop with callout events already dequeued by the host. */\n"
+        "    ble_hs_stop_result = 0;\n"
+        "    ble_npl_event_init(&ble_hs_ev_stop_begin,\n"
+        "                       nimble_port_stop_begin_cb, NULL);\n"
+        "    ble_npl_eventq_put(&g_eventq_dflt, &ble_hs_ev_stop_begin);\n\n"
+        "    /* Wait till the host stop procedure is complete. */\n"
+        "    ble_npl_sem_pend(&ble_hs_stop_sem, BLE_NPL_TIME_FOREVER);\n"
+        "    err = ble_hs_stop_result;\n"
+        "    if (err != 0) {\n"
+        "        ble_npl_sem_deinit(&ble_hs_stop_sem);\n"
+        "        return err;\n"
+        "    }\n",
+        "serialize NimBLE stop initiation with event queue consumption",
+    ),
+    (
+        "porting/nimble/src/nimble_port.c",
+        "    ble_npl_sem_pend(&ble_hs_stop_sem, BLE_NPL_TIME_FOREVER);\n\n"
+        "    ble_npl_sem_deinit(&ble_hs_stop_sem);\n\n"
+        "    return ESP_OK;\n",
+        "    ble_npl_sem_pend(&ble_hs_stop_sem, BLE_NPL_TIME_FOREVER);\n\n"
+        "    /* The stop marker ran after stop_begin, so this event is no longer\n"
+        "     * referenced by the host task and can safely return to the pool. */\n"
+        "    ble_npl_event_deinit(&ble_hs_ev_stop_begin);\n"
+        "    ble_npl_sem_deinit(&ble_hs_stop_sem);\n\n"
+        "    return ESP_OK;\n",
+        "release the serialized stop request only after the host task exits",
+    ),
+    (
+        "nimble/host/src/ble_hs.c",
+        "#include <string.h>\n",
+        "#include <string.h>\n#include \"EspBleHciBroker.h\"\n",
+        "expose NimBLE receive readiness to the dual-host broker",
+    ),
+    (
+        "nimble/host/src/ble_hs.c",
+        "    if (rc != 0) {\n"
+        "        return rc;\n"
+        "    }\n\n"
+        "    ble_hs_parent_task = ble_npl_get_current_task_id();\n",
+        "    if (rc != 0) {\n"
+        "        return rc;\n"
+        "    }\n\n"
+        "    espble_hci_broker_set_receive_enabled(\n"
+        "        ESPBLE_HCI_HOST_NIMBLE, true);\n\n"
+        "    ble_hs_parent_task = ble_npl_get_current_task_id();\n",
+        "open NimBLE receive delivery only after the host enters ON state",
+    ),
+    (
+        "nimble/host/src/ble_hs_stop.c",
+        "#include <assert.h>\n",
+        "#include <assert.h>\n#include \"EspBleHciBroker.h\"\n",
+        "expose NimBLE stop completion to the dual-host broker",
+    ),
+    (
+        "nimble/host/src/ble_hs_stop.c",
+        "    ble_hs_unlock();\n\n"
+        "    SLIST_FOREACH(listener, &slist, link) {\n",
+        "    ble_hs_unlock();\n\n"
+        "    espble_hci_broker_set_receive_enabled(\n"
+        "        ESPBLE_HCI_HOST_NIMBLE, false);\n\n"
+        "    SLIST_FOREACH(listener, &slist, link) {\n",
+        "close NimBLE receive delivery as soon as the host reaches OFF state",
+    ),
+    (
+        "esp-idf/esp_nimble_hci.c",
+        "void bt_record_hci_data(uint8_t *data, uint16_t len)\n",
+        "static void bt_record_hci_data(uint8_t *data, uint16_t len)\n",
+        "keep NimBLE's HCI logging helper private when Bluedroid is linked too",
+    ),
+    (
+        "porting/nimble/src/nimble_port.c",
+        "#if CONFIG_IDF_TARGET_ESP32 && CONFIG_BT_CONTROLLER_ENABLED\n"
+        "    esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);\n"
+        "#endif\n",
+        "#if CONFIG_IDF_TARGET_ESP32 && CONFIG_BT_CONTROLLER_ENABLED\n"
+        "    /* Releasing Classic controller memory cannot be undone for the rest of the\n"
+        "     * boot, so keep it whenever a Classic host is linked into the sketch. */\n"
+        "    if (!espble_hci_broker_classic_host_expected()) {\n"
+        "        esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);\n"
+        "    }\n"
+        "#endif\n",
+        "keep Classic controller memory whenever a Classic host is linked",
+    ),
+    (
+        "porting/nimble/src/nimble_port.c",
+        "#if CONFIG_BT_CONTROLLER_ENABLED\n"
+        "#include \"esp_bt.h\"\n"
+        "#endif\n",
+        "#if CONFIG_BT_CONTROLLER_ENABLED\n"
+        "#include \"esp_bt.h\"\n"
+        "/* The broker owns the shared controller once either host starts it, and\n"
+        " * answers whether a Classic host is linked at all. */\n"
+        "#include \"EspBleHciBroker.h\"\n"
+        "#endif\n",
+        "reach the broker from the NimBLE port",
+    ),
+    (
+        "porting/nimble/src/nimble_port.c",
+        " * @brief nimble_port_init - Initialize controller and NimBLE host stack\n"
+        " *\n"
+        " * @return esp_err_t\n"
+        " */\n"
+        "esp_err_t\n"
+        "nimble_port_init(void)\n"
+        "{\n",
+        " * @brief nimble_port_stop_controller - Stop the controller this host started\n"
+        " *\n"
+        " * Registered with the broker so the controller outlives a NimBLE-only stop\n"
+        " * whenever a Classic host is still attached.\n"
+        " *\n"
+        " * @return bool\n"
+        " */\n"
+        "#if CONFIG_BT_CONTROLLER_ENABLED\n"
+        "static bool\n"
+        "nimble_port_stop_controller(void)\n"
+        "{\n"
+        "    if (esp_bt_controller_disable() != ESP_OK) {\n"
+        "        ESP_LOGE(NIMBLE_PORT_LOG_TAG, \"controller disable failed\\n\");\n"
+        "        return false;\n"
+        "    }\n"
+        "\n"
+        "    if (esp_bt_controller_deinit() != ESP_OK) {\n"
+        "        ESP_LOGE(NIMBLE_PORT_LOG_TAG, \"controller deinit failed\\n\");\n"
+        "        return false;\n"
+        "    }\n"
+        "\n"
+        "    return true;\n"
+        "}\n"
+        "#endif\n"
+        "\n"
+        "/**\n"
+        " * @brief nimble_port_init - Initialize controller and NimBLE host stack\n"
+        " *\n"
+        " * @return esp_err_t\n"
+        " */\n"
+        "esp_err_t\n"
+        "nimble_port_init(void)\n"
+        "{\n",
+        "give the broker a stop callback for a controller NimBLE started",
+    ),
+    (
+        "porting/nimble/src/nimble_port.c",
         "    esp_bt_controller_config_t config_opts = BT_CONTROLLER_INIT_CONFIG_DEFAULT();\n"
         "\n"
         "    ret = esp_bt_controller_init(&config_opts);\n",
@@ -205,16 +415,439 @@ PATCHES = [
         "#if CONFIG_IDF_TARGET_ESP32\n"
         "    /* EspBle: Arduino-ESP32 builds the prebuilt libraries with Bluedroid, so\n"
         "     * BT_CONTROLLER_INIT_CONFIG_DEFAULT() describes the dual-mode controller\n"
-        "     * (CONFIG_BTDM_CTRL_MODE_BTDM). esp_bt_controller_enable(ESP_BT_MODE_BLE)\n"
-        "     * below requires the enabled mode to match the initialised one, so select\n"
-        "     * BLE here and size the controller for the host's connection count. An\n"
+        "     * (CONFIG_BTDM_CTRL_MODE_BTDM). esp_bt_controller_enable() below requires\n"
+        "     * the enabled mode to match the initialised one, so select the mode here\n"
+        "     * and size the controller for the host's connection count.  A linked\n"
+        "     * Classic host needs BR/EDR too, so start the dual-mode controller on its\n"
+        "     * behalf; otherwise BLE alone keeps the radio configuration minimal.  An\n"
         "     * ESP-IDF build with NimBLE enabled gets both from its own sdkconfig. */\n"
-        "    config_opts.mode = ESP_BT_MODE_BLE;\n"
+        "    config_opts.mode = espble_hci_broker_classic_host_expected() ?\n"
+        "      ESP_BT_MODE_BTDM : ESP_BT_MODE_BLE;\n"
         "    config_opts.ble_max_conn = CONFIG_BT_NIMBLE_MAX_CONNECTIONS;\n"
         "#endif\n"
         "\n"
         "    ret = esp_bt_controller_init(&config_opts);\n",
-        "the prebuilt controller is configured for dual mode, but the host runs BLE only",
+        "size the prebuilt dual-mode controller for the hosts the sketch links",
+    ),
+    (
+        "porting/nimble/src/nimble_port.c",
+        "#if CONFIG_BT_CONTROLLER_ENABLED\n"
+        "    esp_bt_controller_config_t config_opts = BT_CONTROLLER_INIT_CONFIG_DEFAULT();\n",
+        "#if CONFIG_BT_CONTROLLER_ENABLED\n"
+        "    if (esp_bt_controller_get_status() == ESP_BT_CONTROLLER_STATUS_ENABLED) {\n"
+        "        /* The Classic host started the controller and handed its shutdown to\n"
+        "         * the broker.  Attach only the NimBLE host and HCI transport. */\n"
+        "        if (!espble_hci_broker_has_adopted_controller()) {\n"
+        "            ESP_LOGE(NIMBLE_PORT_LOG_TAG, \"another stack owns the controller\\n\");\n"
+        "            return ESP_ERR_INVALID_STATE;\n"
+        "        }\n"
+        "    } else {\n"
+        "    esp_bt_controller_config_t config_opts = BT_CONTROLLER_INIT_CONFIG_DEFAULT();\n",
+        "attach to a running controller the Classic host already owns",
+    ),
+    (
+        "porting/nimble/src/nimble_port.c",
+        "    ret = esp_bt_controller_enable(ESP_BT_MODE_BLE);\n",
+        "#if CONFIG_IDF_TARGET_ESP32\n"
+        "    ret = esp_bt_controller_enable(config_opts.mode);\n"
+        "#else\n"
+        "    ret = esp_bt_controller_enable(ESP_BT_MODE_BLE);\n"
+        "#endif\n",
+        "enable the controller in the mode it was initialised with",
+    ),
+    (
+        "porting/nimble/src/nimble_port.c",
+        "        return ret;\n"
+        "    }\n"
+        "#endif\n"
+        "\n"
+        "    ret = esp_nimble_init();\n",
+        "        return ret;\n"
+        "    }\n"
+        "\n"
+        "    /* The broker stops the controller only after the last logical host leaves,\n"
+        "     * so a Classic host attaching later keeps this controller running. */\n"
+        "    if (espble_hci_broker_adopt_controller(nimble_port_stop_controller) != ESP_OK) {\n"
+        "        ESP_LOGE(NIMBLE_PORT_LOG_TAG, \"controller ownership transfer failed\\n\");\n"
+        "        (void)nimble_port_stop_controller();\n"
+        "        return ESP_ERR_INVALID_STATE;\n"
+        "    }\n"
+        "    }\n"
+        "#endif\n"
+        "\n"
+        "    ret = esp_nimble_init();\n",
+        "hand a NimBLE-started controller to the broker and close the branch",
+    ),
+    (
+        "porting/nimble/src/nimble_port.c",
+        "#if CONFIG_BT_CONTROLLER_ENABLED\n"
+        "\t// Disable and deinit controller to free memory\n"
+        "        if(esp_bt_controller_disable() != ESP_OK) {\n"
+        "            ESP_LOGE(NIMBLE_PORT_LOG_TAG, \"controller disable failed\\n\");\n"
+        "        }\n"
+        "\n"
+        "\tif(esp_bt_controller_deinit() != ESP_OK) {\n"
+        "            ESP_LOGE(NIMBLE_PORT_LOG_TAG, \"controller deinit failed\\n\");\n"
+        "        }\n"
+        "#endif\n",
+        "#if CONFIG_BT_CONTROLLER_ENABLED\n"
+        "\t// Free the controller memory unless another host still uses it.\n"
+        "        if(espble_hci_broker_shutdown_controller() == ESP_ERR_INVALID_STATE) {\n"
+        "            ESP_LOGD(NIMBLE_PORT_LOG_TAG, \"controller kept for the other host\\n\");\n"
+        "        }\n"
+        "#endif\n",
+        "do not tear down a shared controller after NimBLE init failure",
+    ),
+    (
+        "porting/nimble/src/nimble_port.c",
+        "#if CONFIG_BT_CONTROLLER_ENABLED\n"
+        "    ret = esp_bt_controller_disable();\n"
+        "    if(ret != ESP_OK) {\n"
+        "        ESP_LOGE(NIMBLE_PORT_LOG_TAG, \"controller disable failed\\n\");\n"
+        "        return ret;\n"
+        "    }\n"
+        "\n"
+        "    ret = esp_bt_controller_deinit();\n"
+        "    if(ret != ESP_OK) {\n"
+        "        ESP_LOGE(NIMBLE_PORT_LOG_TAG, \"controller deinit failed\\n\");\n"
+        "        return ret;\n"
+        "    }\n"
+        "#endif\n",
+        "#if CONFIG_BT_CONTROLLER_ENABLED\n"
+        "    /* The broker runs the stop callback registered at init, but only once the\n"
+        "     * last logical host has left.  A still-attached Classic host keeps it. */\n"
+        "    ret = espble_hci_broker_shutdown_controller();\n"
+        "    if(ret == ESP_ERR_INVALID_STATE) {\n"
+        "        ret = ESP_OK;\n"
+        "    }\n"
+        "    if(ret != ESP_OK) {\n"
+        "        ESP_LOGE(NIMBLE_PORT_LOG_TAG, \"controller shutdown failed\\n\");\n"
+        "        return ret;\n"
+        "    }\n"
+        "#endif\n",
+        "leave the shared controller running when only the NimBLE host stops",
+    ),
+    (
+        "nimble/host/src/ble_hs_startup.c",
+        "#include \"ble_hs_priv.h\"\n",
+        "#include \"ble_hs_priv.h\"\n"
+        "#include \"EspBleHciBroker.h\"\n",
+        "ask the broker whether the Classic host already shares the controller",
+    ),
+    (
+        "nimble/host/src/ble_hs_startup.c",
+        "    rc = ble_hs_startup_reset_tx();\n"
+        "    if (rc != 0) {\n"
+        "        return rc;\n"
+        "    }\n",
+        "    /* A physical HCI Reset would tear down the Classic host's controller\n"
+        "     * state, so skip it whenever that host is already attached. */\n"
+        "    if (!espble_hci_broker_host_registered(ESPBLE_HCI_HOST_CLASSIC)) {\n"
+        "        rc = ble_hs_startup_reset_tx();\n"
+        "        if (rc != 0) {\n"
+        "            return rc;\n"
+        "        }\n"
+        "    }\n",
+        "do not reset the controller underneath an attached Classic host",
+    ),
+    (
+        "porting/npl/freertos/src/npl_os_freertos.c",
+        "        count = uxQueueMessagesWaitingFromISR(eventq->q);\n"
+        "        for (i = 0; i < count; i++) {\n"
+        "            ret = xQueueReceiveFromISR(eventq->q, &tmp_ev, &woken2);\n"
+        "            BLE_LL_ASSERT(ret == pdPASS);\n",
+        "        count = uxQueueMessagesWaitingFromISR(eventq->q);\n"
+        "        for (i = 0; i < count; i++) {\n"
+        "            ret = xQueueReceiveFromISR(eventq->q, &tmp_ev, &woken2);\n"
+        "            /* The queue is only sampled, not locked against the host\n"
+        "             * task on the other core, so it can drain between the\n"
+        "             * count and this receive.  Removal is best effort. */\n"
+        "            if (ret != pdPASS) {\n"
+        "                break;\n"
+        "            }\n",
+        "stop rotating instead of asserting when the ISR event queue drains early",
+    ),
+    (
+        "porting/npl/freertos/src/npl_os_freertos.c",
+        "        count = uxQueueMessagesWaiting(eventq->q);\n"
+        "        for (i = 0; i < count; i++) {\n"
+        "            ret = xQueueReceive(eventq->q, &tmp_ev, 0);\n"
+        "            BLE_LL_ASSERT(ret == pdPASS);\n",
+        "        count = uxQueueMessagesWaiting(eventq->q);\n"
+        "        for (i = 0; i < count; i++) {\n"
+        "            ret = xQueueReceive(eventq->q, &tmp_ev, 0);\n"
+        "            /* ble_npl_mut is a function-local spinlock, so it does not\n"
+        "             * serialize this rotation against the host task dequeuing\n"
+        "             * on the other core.  A concurrent dequeue empties the\n"
+        "             * queue early; stop instead of asserting. */\n"
+        "            if (ret != pdPASS) {\n"
+        "                break;\n"
+        "            }\n",
+        "stop rotating instead of asserting when the event queue drains early",
+    ),
+    (
+        "nimble/host/src/ble_sm.c",
+        "        ble_hs_unlock();\n\n"
+        "        if (proc == NULL) {\n"
+        "            break;\n"
+        "        }\n",
+        "        ble_hs_unlock();\n\n"
+        "        if (proc == NULL) {\n"
+        "            /* An unsolicited controller encryption event has no SM\n"
+        "             * procedure to retire, but it still changes GAP security\n"
+        "             * state and must be reported to the application. */\n"
+        "            if (res && res->enc_cb) {\n"
+        "                if (res->app_status != BLE_HS_ENOTCONN) {\n"
+        "                    ble_gap_pairing_complete_event(conn_handle, res->sm_err);\n"
+        "                }\n"
+        "                ble_gap_enc_event(conn_handle, res->app_status,\n"
+        "                                  res->restore, res->bonded);\n"
+        "            }\n"
+        "            break;\n"
+        "        }\n",
+        "deliver successful controller encryption changes without an SM procedure",
+    ),
+    (
+        "nimble/host/src/ble_sm.c",
+        "    struct ble_sm_proc *proc;\n"
+        "    int authenticated;\n"
+        "    int bonded;\n"
+        "    int key_size;\n\n"
+        "    memset(&res, 0, sizeof res);\n\n"
+        "    /* Assume no change in authenticated and bonded statuses. */\n"
+        "    authenticated = 0;\n"
+        "    bonded = 0;\n"
+        "    key_size = 0;\n\n"
+        "    ble_hs_lock();\n",
+        "    struct ble_sm_proc *proc;\n"
+        "    struct ble_store_value_sec stored_bond;\n"
+        "    int authenticated;\n"
+        "    int bonded;\n"
+        "    int key_size;\n"
+        "    int stored_bond_valid;\n\n"
+        "    memset(&res, 0, sizeof res);\n\n"
+        "    /* If no local procedure survives until Encryption Change, recover\n"
+        "     * the established security properties from the peer's bond.  The\n"
+        "     * lookup must run without the host mutex held. */\n"
+        "    stored_bond_valid = evt_status == 0 && encrypted &&\n"
+        "        ble_sm_read_bond(conn_handle, &stored_bond) == 0;\n\n"
+        "    /* Assume no change in authenticated and bonded statuses. */\n"
+        "    authenticated = 0;\n"
+        "    bonded = 0;\n"
+        "    key_size = 0;\n\n"
+        "    ble_hs_lock();\n",
+        "prepare stored bond metadata for an unsolicited encryption change",
+    ),
+    (
+        "nimble/host/src/ble_sm.c",
+        "            break;\n"
+        "        }\n"
+        "    }\n\n"
+        "    if (evt_status == 0) {\n",
+        "            break;\n"
+        "        }\n"
+        "    } else if (stored_bond_valid) {\n"
+        "        authenticated = stored_bond.authenticated;\n"
+        "        bonded = 1;\n"
+        "        key_size = stored_bond.key_size;\n"
+        "        res.restore = 1;\n"
+        "    }\n\n"
+        "    if (evt_status == 0) {\n",
+        "restore bond flags when Encryption Change arrives without an SM procedure",
+    ),
+    (
+        "nimble/host/src/ble_gap.c",
+        "        if (rl != NULL && rl->rl_isrpa) {\n"
+        "            memcpy(bhc_peer_addr.val, rl->rl_peer_rpa, BLE_DEV_ADDR_LEN);\n"
+        "            bhc_peer_addr.type = rl->rl_addr_type;\n"
+        "        }\n",
+        "        if (rl != NULL && rl->rl_isrpa) {\n"
+        "            memcpy(bhc_peer_addr.val, rl->rl_peer_rpa, BLE_DEV_ADDR_LEN);\n"
+        "            bhc_peer_addr.type = BLE_ADDR_RANDOM;\n"
+        "        }\n",
+        "send a resolved peer RPA to the controller with its OTA random type",
+    ),
+    (
+        "nimble/host/src/ble_hs_resolv.c",
+        "        if(ble_hs_resolv_rpa(addr, rl->rl_peer_irk) == 0) {\n"
+        "            memcpy(g_ble_hs_resolv_list[i].rl_peer_rpa, addr, BLE_DEV_ADDR_LEN);\n"
+        "            g_ble_hs_resolv_list[i].rl_addr_type = addr_type;\n"
+        "            return rl;\n",
+        "        if(ble_hs_resolv_rpa(addr, rl->rl_peer_irk) == 0) {\n"
+        "            memcpy(g_ble_hs_resolv_list[i].rl_peer_rpa, addr, BLE_DEV_ADDR_LEN);\n"
+        "            return rl;\n",
+        "do not overwrite a resolved peer's identity type with its RPA type",
+    ),
+    (
+        "nimble/host/src/ble_hs_hci_evt.c",
+        "        struct ble_hs_resolv_entry *rl = NULL;\n"
+        "        ble_hs_lock();\n"
+        "        ble_rpa_replace_peer_params_with_rl(evt.peer_addr,\n",
+        "        struct ble_hs_resolv_entry *rl = NULL;\n"
+        "        ble_addr_t peer_ota_addr = { .type = evt.peer_addr_type };\n"
+        "        memcpy(peer_ota_addr.val, evt.peer_addr, BLE_DEV_ADDR_LEN);\n"
+        "        if (BLE_ADDR_IS_RPA(&peer_ota_addr)) {\n"
+        "            memcpy(evt.peer_rpa, evt.peer_addr, BLE_DEV_ADDR_LEN);\n"
+        "        }\n"
+        "        ble_hs_lock();\n"
+        "        ble_rpa_replace_peer_params_with_rl(evt.peer_addr,\n",
+        "preserve the peer OTA RPA before enhanced connection resolution",
+    ),
+    (
+        "nimble/host/src/ble_hs_hci_evt.c",
+        "        struct ble_hs_resolv_entry *rl = NULL;\n"
+        "        ble_hs_lock();\n"
+        "        ble_rpa_replace_peer_params_with_rl(evt.peer_addr,\n",
+        "        struct ble_hs_resolv_entry *rl = NULL;\n"
+        "        ble_addr_t peer_ota_addr = { .type = evt.peer_addr_type };\n"
+        "        memcpy(peer_ota_addr.val, evt.peer_addr, BLE_DEV_ADDR_LEN);\n"
+        "        if (BLE_ADDR_IS_RPA(&peer_ota_addr)) {\n"
+        "            memcpy(evt.peer_rpa, evt.peer_addr, BLE_DEV_ADDR_LEN);\n"
+        "        }\n"
+        "        ble_hs_lock();\n"
+        "        ble_rpa_replace_peer_params_with_rl(evt.peer_addr,\n",
+        "preserve the peer OTA RPA before legacy connection resolution",
+    ),
+    (
+        "nimble/host/src/ble_hs_conn.c",
+        "        memcpy(addrs->peer_id_addr.val, rl->rl_identity_addr, BLE_DEV_ADDR_LEN);\n"
+        "        addrs->peer_id_addr.type = rl->rl_addr_type;\n\n"
+        "        if (ble_host_rpa_enabled()) {\n",
+        "        memcpy(addrs->peer_id_addr.val, rl->rl_identity_addr, BLE_DEV_ADDR_LEN);\n"
+        "        addrs->peer_id_addr.type = rl->rl_addr_type;\n"
+        "        if (memcmp(conn->bhc_peer_rpa_addr.val, ble_hs_conn_null_addr, 6) != 0) {\n"
+        "            addrs->peer_ota_addr = conn->bhc_peer_rpa_addr;\n"
+        "        }\n\n"
+        "        if (ble_host_rpa_enabled()) {\n",
+        "report the preserved OTA RPA in host-based connection descriptions",
+    ),
+    (
+        "nimble/host/src/ble_hs_resolv.c",
+        "            if (rl) {\n"
+        "                memcpy(peer_addr, p_dev_rec->identity_addr, BLE_DEV_ADDR_LEN);\n"
+        "                *peer_addr_type = p_dev_rec->peer_sec.peer_addr.type;\n",
+        "            if (rl) {\n"
+        "                memcpy(peer_addr, p_dev_rec->identity_addr, BLE_DEV_ADDR_LEN);\n"
+        "                /* The resolving list is restored from the canonical security\n"
+        "                 * record.  The auxiliary peer record can still carry the OTA\n"
+        "                 * random type from before identity exchange. */\n"
+        "                *peer_addr_type = rl->rl_addr_type;\n",
+        "use the canonical resolving-list identity type after RPA resolution",
+    ),
+    (
+        "nimble/host/src/ble_hs_resolv.c",
+        "                memcpy(peer_addr, p_dev_rec->identity_addr, BLE_DEV_ADDR_LEN);\n"
+        "                *peer_addr_type = p_dev_rec->peer_sec.peer_addr.type;\n"
+        "            } else {\n",
+        "                memcpy(peer_addr, p_dev_rec->identity_addr, BLE_DEV_ADDR_LEN);\n"
+        "                *peer_addr_type = rl->rl_addr_type;\n"
+        "            } else {\n",
+        "use the canonical resolving-list identity type for pseudo-address lookup",
+    ),
+    (
+        "nimble/host/src/ble_store_util.c",
+        "        rc = ble_rpa_remove_peer_dev_rec(peer_rec);\n"
+        "        if (rc != 0) {\n"
+        "            if (needs_unlock) {\n"
+        "                ble_hs_unlock();\n"
+        "            }\n"
+        "            return rc;\n"
+        "        }\n"
+        "    }\n"
+        "    if (needs_unlock) {\n",
+        "        rc = ble_rpa_remove_peer_dev_rec(peer_rec);\n"
+        "        if (rc != 0) {\n"
+        "            if (needs_unlock) {\n"
+        "                ble_hs_unlock();\n"
+        "            }\n"
+        "            return rc;\n"
+        "        }\n"
+        "    } else {\n"
+        "        /* Restored IRKs can exist in the host resolving list without a\n"
+        "         * peer-device record.  Deleting the persisted bond must remove\n"
+        "         * that entry too, otherwise the next pairing is rejected as a\n"
+        "         * duplicate and keeps using the stale IRK. */\n"
+        "        rc = ble_hs_resolv_list_rmv(peer_id_addr->type,\n"
+        "                                    peer_id_addr->val);\n"
+        "        if (rc != 0 && rc != BLE_HS_ENOENT) {\n"
+        "            BLE_HS_LOG(DEBUG, \"Restored peer was not removed from RL \\n\");\n"
+        "        }\n"
+        "    }\n"
+        "    if (needs_unlock) {\n",
+        "remove a restored resolving-list entry even without a peer record",
+    ),
+    (
+        "esp-idf/esp_nimble_hci.c",
+        '#include "esp_bt.h"\n#endif\n',
+        '#include "esp_bt.h"\n#endif\n#include "EspBleHciBroker.h"\n',
+        "route the vendored NimBLE host through EspBle's injectable HCI broker",
+    ),
+    (
+        "esp-idf/esp_nimble_hci.c",
+        "    esp_vhci_host_send_packet(data, len);\n",
+        "    espble_hci_broker_send(ESPBLE_HCI_HOST_NIMBLE, data, len);\n",
+        "route NimBLE HCI transmission through the broker",
+    ),
+    (
+        "esp-idf/esp_nimble_hci.c",
+        "esp_vhci_host_check_send_available()",
+        "espble_hci_broker_can_send(ESPBLE_HCI_HOST_NIMBLE)",
+        "route the first NimBLE VHCI availability check through the broker",
+    ),
+    (
+        "esp-idf/esp_nimble_hci.c",
+        "esp_vhci_host_check_send_available()",
+        "espble_hci_broker_can_send(ESPBLE_HCI_HOST_NIMBLE)",
+        "route the second NimBLE VHCI availability check through the broker",
+    ),
+    (
+        "esp-idf/esp_nimble_hci.c",
+        "static void dummy_controller_rcv_pkt_ready(void)\n"
+        "{\n"
+        "  /* Dummy function */\n"
+        "}\n\n",
+        "",
+        "let the broker own the physical VHCI dummy callback",
+    ),
+    (
+        "esp-idf/esp_nimble_hci.c",
+        "static int dummy_host_rcv_pkt(uint8_t *data, uint16_t len)\n"
+        "{\n"
+        "    /* Dummy function */\n"
+        "    return 0;\n"
+        "}\n\n",
+        "",
+        "let the broker own the physical VHCI dummy receiver",
+    ),
+    (
+        "esp-idf/esp_nimble_hci.c",
+        "static const esp_vhci_host_callback_t vhci_host_cb = {\n"
+        "    .notify_host_send_available = controller_rcv_pkt_ready,\n"
+        "    .notify_host_recv = host_rcv_pkt,\n"
+        "};\n\n"
+        "static const esp_vhci_host_callback_t dummy_vhci_host_cb = {\n"
+        "    .notify_host_send_available = dummy_controller_rcv_pkt_ready,\n"
+        "    .notify_host_recv = dummy_host_rcv_pkt,\n"
+        "};\n",
+        "static const espble_hci_host_callbacks_t vhci_host_cb = {\n"
+        "    .notify_send_available = controller_rcv_pkt_ready,\n"
+        "    .notify_receive = host_rcv_pkt,\n"
+        "};\n",
+        "register NimBLE as a logical broker host instead of a physical VHCI host",
+    ),
+    (
+        "esp-idf/esp_nimble_hci.c",
+        "esp_vhci_host_register_callback(&vhci_host_cb)",
+        "espble_hci_broker_register(ESPBLE_HCI_HOST_NIMBLE, &vhci_host_cb)",
+        "attach the NimBLE callback to the broker",
+    ),
+    (
+        "esp-idf/esp_nimble_hci.c",
+        "    ble_transport_deinit();\n\n"
+        "    esp_vhci_host_register_callback(&dummy_vhci_host_cb);\n",
+        "    espble_hci_broker_unregister(ESPBLE_HCI_HOST_NIMBLE);\n\n"
+        "    ble_transport_deinit();\n",
+        "detach NimBLE from the broker before disabling its receive transport",
     ),
 ]
 

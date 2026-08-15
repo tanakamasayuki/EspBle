@@ -29,3 +29,8 @@ CGM Feature: 0x001000 (E2E-CRC verified)
 Glucose: 100 mg/dL at +10 min
 Glucose: 101 mg/dL at +15 min
 ```
+
+## 関連するガイド
+
+- [BLE入門ガイド §4 GATT編](../../../../docs/GUIDE_BLE_BASICS.ja.md#4-gatt編--データをやり取りする) — service・characteristic・notify・MTU
+- [BLE入門ガイド §5 UUID](../../../../docs/GUIDE_BLE_BASICS.ja.md#5-uuidを理解する) — 16-bitと128-bitの関係

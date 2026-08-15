@@ -6,7 +6,10 @@ ESP32 Arduino向けの汎用Bluetooth Low Energyライブラリです。**Arduin
 CoreへESP-IDF componentとして組み込まれているNimBLE Host APIを直接呼び出します。**
 Arduino-ESP32同梱の`BLEDevice` / `BLEClient` / `BLEServer`などのラッパを経由せず、
 Central / Peripheral、GATT Client / Server、Security、HID、BLE MIDIを1つの
-`EspBle`基盤上で扱います。Bluetooth Classicには対応しません。
+`EspBle`基盤上で扱います。無印ESP32ではBluetooth Classic——SPP、HID device / host、
+A2DP、AVRCP、HFP——も利用でき、同梱NimBLEとの同時利用（dual-host）は実験扱いです。
+Classicは機能ごとに実機検証済み / 未検証 / 未実装を明記しています。
+[BLEとClassicの選び方](docs/CLASSIC_VS_BLE.ja.md)を参照してください。
 
 > [!IMPORTANT]
 > EspBleはArduino-ESP32 Core内のNimBLE backendを使用します。内蔵BLE Controller構成の
@@ -70,7 +73,24 @@ EspBleがNimBLE Host（`src/nimble_esp32/`、esp-idfがpinするesp-nimbleと同
 を同梱して動かします。設定値は他ターゲットと同一に固定し、利用者の上書きは拒否します。
 
 無印ESP32の対応は他のチップと同格ではありません。EspBleがhostを同梱するため
-そのhostの保守をライブラリ側で負い、**Bluetooth Classic（SPP等）とは同居できません**。
+そのhostの保守をライブラリ側で負います。Classic SPP（byte streamとArduino `Stream`）、
+generic HID Device/Host、A2DP raw transport、AVRCP CT/TG、HFP Client/Audio Gatewayは、
+必要なprofileを有効にして独自ビルドした別のBluedroid hostを使います。送信電力・page timeout・
+暗号鍵の最小長も設定でき、HID Report Descriptorの合成上限（descriptorとdevice名などで214 byte、
+1つのSDP recordを共有）は登録前に検査して黙って失敗しないようにしています。
+`EspBleClassic`を使うClassic-only sketchはこのhostを自動選択し、`build_opt.h`を必要としません。
+HIDはBLEと同じAPI形状です。device側は`hidKeyboard()` / `hidMouse()` / `hidConsumerControl()` /
+`hidSystemControl()` / `hidGamepad()`をBLEと同名・同signatureで使え、host側は受け取った
+Report Descriptorを解析してkeyboard stateとusage単位のevent、mouse eventを配送します。
+Report Descriptorとreport packingは両transportで同じmoduleを共有します。
+どちらを使うかの判断と、両方にある機能の差は[BLEとClassicの選び方](docs/CLASSIC_VS_BLE.ja.md)にあります。
+どちらのhostで動くかはsketchが何を`begin()`したかだけで決まります。片方だけを`begin()`すれば
+brokerはpass-throughの単一host、`EspBle`と`EspBleClassic`の両方を`begin()`すればbrokerがHCIを
+routingするdual-hostになります。build flagはありません。dual-hostは実験扱いなので、
+不安定な場合は一方を`end()`してもう一方だけを使ってください。Classic HID通信中のLE接続、GATT read反復、
+HID双方向通信、BLE接続を維持したClassic host再attach、Classic接続中のBLE pairing・bond再接続・暗号化必須GATT readまで実機検証済みです。Classic-onlyではA2DP Sink/Sourceのencode済みmedia転送、AVRCPの再生操作・absolute volume、HFP Client/Audio Gatewayの単一call controlとraw mSBC/CVSD SCO transportも確認済みです。Audio Gatewayの`preferredAudioCodec`でmSBCまたはCVSDを選べます。dual-hostでもBLE GATT接続を維持したmSBC SCO双方向通信に加え、A2DP encode済みmedia転送とAVRCP操作を行い、各audio linkの接続中・切断後にGATTが継続することを確認しました。外部HFP機器との相互運用確認は残します。HFPの2 roleはprocess-wideで排他です。共有command scheduler、host要求event maskのunion、再attach時のHCI Resetとflow-control設定の仮想完了、最後のhostがcontrollerを停止するlifecycleを実装し、観測commandの分類と長時間負荷試験も完了しています。誤passkeyとHID接続失敗からの復旧、backend callback解除時の参照寿命barrierも検証済みです。Classicは次回releaseの対象で、機能ごとに実機検証済み / 未検証 / 未実装を
+[棚卸し](docs/CLASSIC_FEATURE_INVENTORY.ja.md)へ明記します。dual-hostの受信ACL flow controlはbrokerが所有しますが、送信側bufferは2つのhost間で按分していません。詳細は
+[Classic実装計画](docs/PLAN_ESP32_CLASSIC.ja.md)にあります。
 加えて無印ESP32はBLE 4.2 controllerのため**LE 2M / Coded PHYが使えず**、
 Extended / Periodic Advertisingも使えません。同時接続数の上限は3です。
 実機Peerテストで確認できた範囲
@@ -137,9 +157,16 @@ void loop() {
 
 **BLEがはじめての方は[BLE通信の入門ガイド](docs/GUIDE_BLE_BASICS.ja.md)から** — 相手を探すところからデータのやり取りまで、何が起きているのかを説明し、話題ごとに対応するexampleへ案内します。
 
+**動くsketchができたあとは[EspBleを深く使う](docs/GUIDE_ADVANCED.ja.md)へ** — callbackがどのtaskで動くか、queueの上限と満杯時の挙動、backpressure、再接続、dual-hostの内部、sizeの測り方、既知の不具合の見取り図をまとめています。
+
 **特定の文書を探すときは[ドキュメント案内](docs/README.ja.md)へ** — 読む順序と各文書の役割をまとめています。「今どこまで進んでいるか」を最短で把握するには [docs/STATUS.ja.md](docs/STATUS.ja.md) → [docs/DECISIONS.ja.md](docs/DECISIONS.ja.md) の順です。
 
 - [BLE通信の入門ガイド](docs/GUIDE_BLE_BASICS.ja.md)
+- [Classic通信の入門ガイド](docs/GUIDE_CLASSIC_BASICS.ja.md)
+- [BLEとClassicの選び方](docs/CLASSIC_VS_BLE.ja.md)
+- [EspBleを深く使う（上級）](docs/GUIDE_ADVANCED.ja.md)
+- [他のライブラリからの移行](docs/GUIDE_MIGRATION.ja.md)
+- [HID Report Descriptorを書く](docs/GUIDE_HID_DESCRIPTORS.ja.md)
 - [開発状況とTODO](docs/STATUS.ja.md)
 - [要件](docs/REQUIREMENTS.ja.md)
 - [コア設計](docs/CORE_DESIGN.ja.md)

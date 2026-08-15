@@ -1,6 +1,7 @@
 /* Vendored by tools/vendor_nimble_esp32.py -- do not edit. */
 #include <sdkconfig.h>
-#if defined(CONFIG_IDF_TARGET_ESP32) && !defined(CONFIG_NIMBLE_ENABLED)
+#if defined(CONFIG_IDF_TARGET_ESP32) && !defined(CONFIG_NIMBLE_ENABLED) && \
+    !defined(ESPBLE_CLASSIC_ONLY)
 #include "nimble_esp32/include/espble_nimble_config.h"
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
@@ -1088,6 +1089,16 @@ ble_sm_process_result(uint16_t conn_handle, struct ble_sm_result *res,
         ble_hs_unlock();
 
         if (proc == NULL) {
+            /* An unsolicited controller encryption event has no SM
+             * procedure to retire, but it still changes GAP security
+             * state and must be reported to the application. */
+            if (res && res->enc_cb) {
+                if (res->app_status != BLE_HS_ENOTCONN) {
+                    ble_gap_pairing_complete_event(conn_handle, res->sm_err);
+                }
+                ble_gap_enc_event(conn_handle, res->app_status,
+                                  res->restore, res->bonded);
+            }
             break;
         }
 
@@ -1286,11 +1297,19 @@ ble_sm_enc_event_rx(uint16_t conn_handle, uint8_t evt_status, int encrypted)
 {
     struct ble_sm_result res;
     struct ble_sm_proc *proc;
+    struct ble_store_value_sec stored_bond;
     int authenticated;
     int bonded;
     int key_size;
+    int stored_bond_valid;
 
     memset(&res, 0, sizeof res);
+
+    /* If no local procedure survives until Encryption Change, recover
+     * the established security properties from the peer's bond.  The
+     * lookup must run without the host mutex held. */
+    stored_bond_valid = evt_status == 0 && encrypted &&
+        ble_sm_read_bond(conn_handle, &stored_bond) == 0;
 
     /* Assume no change in authenticated and bonded statuses. */
     authenticated = 0;
@@ -1352,6 +1371,11 @@ ble_sm_enc_event_rx(uint16_t conn_handle, uint8_t evt_status, int encrypted)
             res.sm_err = BLE_SM_ERR_UNSPECIFIED;
             break;
         }
+    } else if (stored_bond_valid) {
+        authenticated = stored_bond.authenticated;
+        bonded = 1;
+        key_size = stored_bond.key_size;
+        res.restore = 1;
     }
 
     if (evt_status == 0) {
@@ -3486,4 +3510,4 @@ ble_sm_get_static_passkey_config(uint32_t *passkey, bool *enabled)
 #endif
 #endif
 
-#endif /* CONFIG_IDF_TARGET_ESP32 && !CONFIG_NIMBLE_ENABLED */
+#endif /* CONFIG_IDF_TARGET_ESP32 && !CONFIG_NIMBLE_ENABLED && !ESPBLE_CLASSIC_ONLY */

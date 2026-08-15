@@ -36,3 +36,7 @@ A GATT server (peripheral) requiring MITM-authenticated pairing with a static 6-
 Enter passkey 438209 on the peer.
 Security established: encrypted=1 authenticated=1 bonded=1
 ```
+
+## Related guides
+
+- [BLE guide §3 Security](../../../docs/GUIDE_BLE_BASICS.md#3-security--how-far-to-trust-the-peer-you-connected-to) — pairing, bonding and IO capabilities

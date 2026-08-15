@@ -1,6 +1,7 @@
 /* Vendored by tools/vendor_nimble_esp32.py -- do not edit. */
 #include <sdkconfig.h>
-#if defined(CONFIG_IDF_TARGET_ESP32) && !defined(CONFIG_NIMBLE_ENABLED)
+#if defined(CONFIG_IDF_TARGET_ESP32) && !defined(CONFIG_NIMBLE_ENABLED) && \
+    !defined(ESPBLE_CLASSIC_ONLY)
 #include "nimble_esp32/include/espble_nimble_config.h"
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
@@ -26,6 +27,7 @@
 #include "nimble_esp32/include/host/ble_hs.h"
 #include "nimble_esp32/include/host/ble_hs_hci.h"
 #include "ble_hs_priv.h"
+#include "EspBleHciBroker.h"
 #include "nimble_esp32/include/host/ble_hs_log.h"
 #if MYNEWT_VAL(BLE_ISO)
 #include "nimble_esp32/include/host/ble_hs_iso.h"
@@ -508,9 +510,13 @@ ble_hs_startup_go(void)
     int key_rc;
     int rc;
 
-    rc = ble_hs_startup_reset_tx();
-    if (rc != 0) {
-        return rc;
+    /* A physical HCI Reset would tear down the Classic host's controller
+     * state, so skip it whenever that host is already attached. */
+    if (!espble_hci_broker_host_registered(ESPBLE_HCI_HOST_CLASSIC)) {
+        rc = ble_hs_startup_reset_tx();
+        if (rc != 0) {
+            return rc;
+        }
     }
 
     rc = ble_hs_startup_read_local_ver_tx();
@@ -593,4 +599,4 @@ ble_hs_startup_go(void)
     return 0;
 }
 
-#endif /* CONFIG_IDF_TARGET_ESP32 && !CONFIG_NIMBLE_ENABLED */
+#endif /* CONFIG_IDF_TARGET_ESP32 && !CONFIG_NIMBLE_ENABLED && !ESPBLE_CLASSIC_ONLY */

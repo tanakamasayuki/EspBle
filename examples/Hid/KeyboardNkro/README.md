@@ -39,3 +39,8 @@ A BLE HID keyboard over GATT (HOGP) that uses the 29-byte NKRO (N-key rollover) 
 ```
 Send 'n' for eight simultaneous keys, 'r' to release all.
 ```
+
+## Related guides
+
+- [BLE guide §6 HID](../../../docs/GUIDE_BLE_BASICS.md#6-hid--acting-as-a-keyboard-or-a-mouse) — reports, descriptors and what a Host expects
+- [Writing a HID Report Descriptor](../../../docs/GUIDE_HID_DESCRIPTORS.md) — when you need your own descriptor, and how to verify it

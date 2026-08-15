@@ -33,14 +33,27 @@ jobs:
           path: ~/.arduino15
           key: arduino-esp32-${{ hashFiles('examples/CompileSmoke/sketch.yaml') }}
 
-      - name: Compile all examples (esp32s3 profile)
+      - name: Compile all examples
         run: |
           set -euo pipefail
           status=0
           for sketch in $(find examples -name sketch.yaml -printf '%h\n' | sort); do
-            echo "::group::${sketch}"
-            if ! arduino-cli compile --profile esp32s3 "${sketch}"; then
-              echo "::error::compile failed: ${sketch}"
+            # Most examples build for esp32s3. Classic examples only run on the
+            # original ESP32, so they ship an esp32 profile instead; fall back to
+            # each sketch's default profile rather than failing on a missing one.
+            if grep -qE '^[[:space:]]+esp32s3:' "${sketch}/sketch.yaml"; then
+              profile=esp32s3
+            else
+              profile=$(grep -oP '^default_profile:\s*\K\S+' "${sketch}/sketch.yaml" || true)
+            fi
+            if [ -z "${profile}" ]; then
+              echo "::error::no usable profile: ${sketch}"
+              status=1
+              continue
+            fi
+            echo "::group::${sketch} (${profile})"
+            if ! arduino-cli compile --profile "${profile}" "${sketch}"; then
+              echo "::error::compile failed: ${sketch} (${profile})"
               status=1
             fi
             echo "::endgroup::"

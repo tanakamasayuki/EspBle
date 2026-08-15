@@ -77,3 +77,8 @@ gattServer.onRead([](const EspBleGattReadRequest &request) {
 Connection 1 wrote: hello from Central
 Descriptor 10da4dd2-8eaa-4c69-9003-676174747277 wrote: descriptor value
 ```
+
+## 関連するガイド
+
+- [BLE入門ガイド §4 GATT編](../../../../docs/GUIDE_BLE_BASICS.ja.md#4-gatt編--データをやり取りする) — service・characteristic・notify・MTU
+- [BLE入門ガイド §5 UUID](../../../../docs/GUIDE_BLE_BASICS.ja.md#5-uuidを理解する) — 16-bitと128-bitの関係

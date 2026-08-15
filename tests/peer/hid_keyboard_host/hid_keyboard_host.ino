@@ -46,13 +46,19 @@ void setup()
       callbackContext());
   });
   keyboard.onKeyboard([](const EspBleHidKeyboardEvent &event) {
+    // raw is the report this event was decoded from, the same view the other
+    // report kinds deliver. Several key events can share one report.
     Serial.printf(
-      "HOST_KEY usage=%u ascii=%u pressed=%u released=%u modifiers=%u context=%s\n",
+      "HOST_KEY usage=%u ascii=%u pressed=%u released=%u modifiers=%u "
+      "raw=%u:%02x%02x context=%s\n",
       event.usage,
       event.ascii,
       event.pressed ? 1 : 0,
       event.released ? 1 : 0,
       event.modifiers,
+      static_cast<unsigned>(event.rawLength),
+      event.rawLength > 0 ? event.rawData[0] : 0,
+      event.rawLength > 2 ? event.rawData[2] : 0,
       callbackContext());
   });
   keyboard.onMouse([](const EspBleHidMouseEvent &event) {

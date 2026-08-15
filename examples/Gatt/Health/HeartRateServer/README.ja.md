@@ -29,3 +29,8 @@ Send '+' or '-' to change the heart rate and notify subscribers.
 Heart rate: 71 bpm (notification accepted: 1)
 Heart rate: 72 bpm (notification accepted: 1)
 ```
+
+## 関連するガイド
+
+- [BLE入門ガイド §4 GATT編](../../../../docs/GUIDE_BLE_BASICS.ja.md#4-gatt編--データをやり取りする) — service・characteristic・notify・MTU
+- [BLE入門ガイド §5 UUID](../../../../docs/GUIDE_BLE_BASICS.ja.md#5-uuidを理解する) — 16-bitと128-bitの関係

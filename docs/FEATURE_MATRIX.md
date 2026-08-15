@@ -117,19 +117,22 @@ An overview of what EspBle supports: the BLE equivalents of what EspUsbHost / Es
 | Reading the disconnect reason | ✅ | `EspBleConnection::disconnectReason` (the backend/HCI reason code, in onDisconnected). Both the server and client paths are peer-verified |
 | GATT Service Changed | ✅ | The server sends the 0x1801/0x2A05 indication with `notifyServicesChanged()`; a client can subscribe, receive it and decode the range. Peer-verified (rediscovery on receipt is the application's decision) |
 
-## Bluetooth Classic (BR/EDR) — none of it is supportable
+## Bluetooth Classic (BR/EDR) — original ESP32 only
 
-EspBle uses NimBLE (BLE only), and the initial targets such as the ESP32-S3 have no Bluetooth Classic radio. Everything below is therefore **unsupportable** and is not part of EspBle's remit (out of scope per DECISIONS).
+ESP32-S3/C3/C6/H2 and similar targets have no Bluetooth Classic radio. On the original ESP32, using `EspBleClassic`
+automatically selects the custom-built Classic-only Bluedroid host. Classic is in scope for the next release with no support or compatibility guarantee; what each ⚠️ row states is what has been verified on hardware, and interoperability with external devices is unverified. Dual-host support remains experimental.
 
 | Feature | Status | Notes |
 |---|---|---|
-| Bluetooth Classic (BR/EDR) in general | ❌ | NimBLE is BLE-only. The S3/C3/C6/H2 have no Classic radio |
-| A2DP (audio streaming) | ❌ | A Classic profile |
-| HFP (hands-free) | ❌ | A Classic profile |
-| AVRCP (media control) | ❌ | A Classic profile |
-| SPP (Serial Port Profile) | ❌ | A Classic profile. NUS and similar serve as the BLE alternative |
-| Classic HID (BT HID) | ❌ | A Classic profile. HOGP serves as the BLE alternative |
-| Automatic Classic / BLE switching (dual mode) | ❌ | Out of scope |
+| Bluetooth Classic (BR/EDR) in general | ⚠️ | Selected automatically when `EspBleClassic` is used on the original ESP32; unsupported on other SoCs |
+| A2DP (audio streaming) | ⚠️ | Sink/Source SBC negotiation and encoded-payload transport; codec/PCM/device I/O stays in another library |
+| HFP (hands-free) | ⚠️ | Client/Audio Gateway SLC, outgoing/incoming/answer/end, selectable CVSD/mSBC raw SCO, role exclusion, and the Client's operator name, subscriber number, memory dial, NREC and Apple battery reporting are implemented and hardware-verified; call waiting and three-way calling (CHLD, BTRH) are not implemented, and external-device interoperability remains |
+| AVRCP (media control) | ⚠️ | CT/TG passthrough, metadata/play-status requests, and absolute volume; external-target metadata interoperability remains |
+| SPP (Serial Port Profile) | ⚠️ | Classic-only Server/Client transport verified on hardware. `EspBleClassicSppStream` presents a session as an Arduino `Stream` (a write becomes one packet, and the outgoing queue is finite). Use NUS or similar on BLE |
+| Classic HID (BT HID) | ⚠️ | Classic-only generic Device/Host and the control channel (Get_Report / Set_Report / protocol mode / idle rate / virtual cable unplug) verified on hardware. How many profiles can be composed is capped by the SDP record at 214 bytes of descriptor plus strings, and the host side decodes keyboard and mouse only. Use HOGP on BLE |
+| Classic device discovery / pairing / bond | ⚠️ | Inquiry (name, Class of Device, RSSI), SDP queries, IO capability selection, application answers for numeric comparison and passkey, and bond listing and removal verified on hardware; legacy PIN pairing is refused |
+| Classic radio and link settings | ⚠️ | Transmit power (range or single value), page timeout and minimum encryption key size verified on hardware; connected RSSI, QoS, AFH and EIR composition stay unexposed |
+| Simultaneous Classic / BLE (dual host) | ⚠️ | Experimental, with no build flag — which hosts a sketch starts decides it; HID/security/lifecycle, bidirectional HFP mSBC SCO, A2DP encoded-media streaming, AVRCP control, and GATT reads during and after each audio link are hardware-verified |
 
 ## Notes
 

@@ -26,3 +26,8 @@ Standard Immediate Alert Service (0x1802) peripheral — the Find Me profile **t
 Alert Level: 2 (High Alert)
 Alert Level: 0 (No Alert)
 ```
+
+## Related guides
+
+- [BLE guide §4 GATT](../../../../docs/GUIDE_BLE_BASICS.md#4-gatt--exchanging-data) — services, characteristics, notify and MTU
+- [BLE guide §5 UUIDs](../../../../docs/GUIDE_BLE_BASICS.md#5-understanding-uuids) — 16-bit and 128-bit forms

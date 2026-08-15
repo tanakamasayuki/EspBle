@@ -1,5 +1,7 @@
 # API Design
 
+> English: [API_DESIGN.md](API_DESIGN.md)
+
 公開APIの**設計規則**を記録する。具体的なclass名とsignatureは`src/EspBle.h`を正とし、使い方は[../examples/](../examples/)と[GUIDE_BLE_BASICS.ja.md](GUIDE_BLE_BASICS.ja.md)が示す。**この文書に使用例を書かない**——ヘッダとexampleと三重に持つと必ず食い違う（実際にここのサンプルが古い署名のまま残っていた）。
 
 判断の理由は[DECISIONS.ja.md](DECISIONS.ja.md)、用語は[TERMINOLOGY.ja.md](TERMINOLOGY.ja.md)に従う。

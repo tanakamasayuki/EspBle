@@ -29,3 +29,8 @@ Current Time: 2026-07-19 12:34:56 weekday=7 fraction=0/256 reason=0x01
 Current Time subscription: ready
 Current Time changed: 2026-07-19 12:34:57 weekday=7 fraction=0/256 reason=0x01
 ```
+
+## 関連するガイド
+
+- [BLE入門ガイド §4 GATT編](../../../../docs/GUIDE_BLE_BASICS.ja.md#4-gatt編--データをやり取りする) — service・characteristic・notify・MTU
+- [BLE入門ガイド §5 UUID](../../../../docs/GUIDE_BLE_BASICS.ja.md#5-uuidを理解する) — 16-bitと128-bitの関係

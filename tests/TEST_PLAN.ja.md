@@ -121,8 +121,9 @@ profileを置いていないのは次の2種類だけです。
 実行してください。`local_identity`のようにService UUIDで対象を選ぶsuiteは、前の実行のPeer firmwareが
 載ったままのボードが広告していると意図しない側を観測します。
 
-無印ESP32の2台は`/dev/ttyUSB0` / `/dev/ttyUSB1`で常設です。EspBleBluedroidと機材を共用しますが、
-両repositoryのpytestを同時に走らせても構いません（ポートの調停はpytestが行います）。
+無印ESP32の2台は`/dev/ttyUSB0` / `/dev/ttyUSB1`で常設です。同じportを使う別repositoryのpytestと
+同時に走らせても構いません（ポートの調停はpytestが行います。`arduino-cli upload`や`esptool`を
+直接使うと待たずに失敗します）。
 
 | タイミング | 無印ESP32の実行 |
 |---|---|
@@ -147,16 +148,6 @@ profileを置いていないのは次の2種類だけです。
 - Securityテストは開始時と終了時のBond/NVS状態を明示する。
 - radio環境による一時的な遅延にtimeoutは許すが、無制限retryで不具合を隠さない。
 - 接続・切断理由、MTU、Security状態を可能な限り両側で照合する。
-
-## 他スタックとの相互接続テスト（予定）
-
-同梱NimBLEどうしの通信だけでは、EspBleが「NimBLEの癖に依存した実装」になっていても気づけません。兄弟ライブラリの**EspBleBluedroid**（ESP32のBluedroidスタック版）を相手にした相互接続テストを追加します。
-
-- 対象: GATTのServer/Client両方向、Notify/Indicate、MTU交換、Pairing/Bonding
-- 位置づけ: NimBLE ↔ Bluedroid の組み合わせで、wire形式と手続きが仕様どおりかを確認する
-- 実施時期: EspBleBluedroid側のGATTが動作するようになってから
-
-既存の「可能な範囲で一方をArduino-ESP32同梱BLE APIの直接実装にする」という原則の延長ですが、**スタックそのものが異なる**点でより強い検証になります。同梱wrapper由来の制約（同一UUIDの扱いなど）が、相手スタックでどう見えるかの確認にも使えます。
 
 ## 3台Peer（manual test）
 
@@ -240,7 +231,7 @@ profileを置いていないのは次の2種類だけです。
 13. ✅ `hid_security`: security有効HID Deviceが未暗号化linkのRead/Discovery/Inputを拒否。
 14. ✅ `hid_boot_keyboard`: Report IDなしboot keyboardのDiscoveryと入力、長さ異常reportのカウント。
 15. ✅ `advertise_payload`: raw advertisementのAD構造検証（単一Complete List、type重複なし）。
-16. ✅ host unit test（`tests/unit/`）: keymap変換（Unicode 4-plane、AltGr、文字ペアCapsLock）とHID Report Map parser。
+16. ✅ host unit test（`tests/unit/`）: keymap変換（Unicode 4-plane、AltGr、文字ペアCapsLock）、HID Report Map parser、各codec、HCI router、HCI command scheduler。
 17. ✅ `battery_service`: standalone Battery LevelのRead、CCCD購読、Notification、解除。
 18. ✅ `device_information`: standalone DISの文字列Readと7-byte little-endian PnP ID decode。
 19. ✅ `current_time`: standalone Current Timeの10-byte decode、CCCD購読、Notification、解除。
@@ -299,6 +290,212 @@ profileを置いていないのは次の2種類だけです。
 65. ✅ `gatt_queue_purge`: 接続が終わるときに未処理のGATT操作がどうなるかの検証。どちらも壊れても静かなので、症状が出るまで気づけない経路。**(a) GATT op実行中の`disconnect()`はrejectされず遅延実行される**——rejectしてfalseを返すと、切断を要求した直後のアプリには「まだ繋がっている」と読めてしまう。**(b) queue済みで未開始のopは落とされ、それぞれに失敗完了が届く**——黙って捨てると、アプリは永遠に来ないcallbackを待つことになり、生存接続の前に詰まったままになる。1つの手順で両方を見る: 4件のreadを積み（1件が電波に出て3件がキューに残る）、直後に`disconnect()`を呼ぶ。3件は要求時点で落とされ`InvalidState`＋"connection closed before the queued GATT operation started"が届き、電波に出ていた1件は**打ち切られず正常完了**する。その成功が切断より**先に**届くことが遅延実行の証拠になる（workerの下で接続を壊していたら成立しない）。`droppedEventCount()`が0であること（イベントキュー溢れで見落としていないこと）と、その後の再接続・Discoveryが通ること（ATT slotが握られたままになっていないこと）も確認。
 
 66. ✅ `wifi_ble_coexistence`: P4/C6 ESP-Hosted固有のWi-Fi/BLE共存と共有transport lifecycleを検証。P4でWi-Fiを先に開始してDHCP取得後、同じHosted transportへBLEを追加し、S3 Peerとのscan、接続、GATT read/write、subscribe、notificationがWi-Fi接続を維持したまま成功することを確認する。接続中の`EspBle::end()`はBLE所有分だけを解放してWi-Fiとtransportを維持し、最後の`WiFi.STA.end()`でtransportが解放されることも確認する。資格情報はgit管理外の`.env`からcompile-time defineへ渡す。
+
+67. ✅ `rpa_bond`: 無印ESP32のhost-based privacyを両側で有効化し、scan・接続でOTA RPA（random型、上位bit `01`）を確認する。
+    **このsuiteは無印ESP32専用**で、S3のprofileを持たない。S3ではprivacyがcontroller側の実装になり、
+    **接続先がresolving listに無いときはinitiator addressがidentityへfallbackする**ため、bondを消した
+    直後の初回接続でRPAを要求できない（advertisingはRPAのままなので、片側だけ通ってしまう）。
+    無印ESP32のhost実装はbegin()でRPAをrandom address slotへ入れるので、role非対称にならない。初回pairingと暗号化GATT read/write後に両端を再起動し、NVSから復元したIRK/LTKで再暗号化する。続いて復元済みbondを削除し、stale resolving-list entryを残さず新規pairingできることまで確認する。
+68. ✅ `dual_host_rpa`: 無印ESP32 2台で同梱NimBLE hostと独自Classic hostを同時起動する。Classic HID ACLを維持したままhost生成RPAでpairingし、scanと双方connectionのOTA RPA型を検査する。LE切断後もClassic接続を残し、保存bondから暗号化GATTを再確立する。両roleのhost timeoutを2秒へ短縮し、3周期連続のRPA rotationごとにClassic HID reportを双方向送信しながら、preemptされたadvertising/scanが毎回再開することを確認する。有限8秒のadvertising/scanは3秒後に稼働、元deadlineを越えた9秒後に停止すること、HCI `LE Set Random Address`がNimBLEへ配送されbrokerの未知event・queue overflow・応答不一致が0であることも検査する。変化後のRPAからbond済みLEへ再接続し、最後に両dual-host stackを再起動してClassic再接続、新しいRPAの観測、永続IRK/LTKからのLE暗号化復元を行い、両transportが同時接続中であることを確認する。
+
+69. ✅ `classic_core_host_spp`: EspBleの独自Classic hostと、Arduino-ESP32同梱Bluedroid hostの
+    **相互接続**を確認する。peer sketchはEspBleを一切linkせず`BluetoothSerial`だけを使うため、
+    2台とも同じstackという条件が外れ、SDP service record、RFCOMM channel、双方向payloadが
+    すべてstack境界を越える。peerはchannel 0で接続してEspBle server側のservice recordから
+    channelを解決させ、両方向で0 byteを含む4 byte payloadを送ってbinary透過性を確認する。
+    peerからの切断でserver側sessionが残らないこと、同じserver instanceへの再接続で新しい
+    session idが振られること、EspBle側stackを`end()`+`begin()`し直しても同じaddressで
+    再びdial-inできheapが減らないことも確認する。外部機器が無くても相互運用の一部を
+    継続的に検証できる位置づけで、対象はSPPのみ——core同梱sdkconfigは`CONFIG_BT_HID_ENABLED`が
+    無効なのでClassic HIDはこの構成では試験できない。
+
+70. ✅ `classic_inquiry`: Classicのdevice discoveryを検証する。address指定のAPIはすべてここから
+    始まるので、**scanする側が観測した内容だけ**を判定にする（peerは発見可能にするだけ）。
+    duration 0はcontrollerへ符号化できないため、終わらないscanを始める代わりに`InvalidArgument`で
+    拒否すること、実行中の再開始が`InvalidState`になること（controllerのinquiry状態は1つで
+    queueではない）を確認する。peerのdevice nameとClass of Deviceが復号されて届くこと
+    （RSSIはinquiry resultで任意なので必須にしない）、durationで自然終了したときは
+    `cancelled=0` / dropped=0、`stop()`したときは`cancelled=1`と区別できること、
+    停止していない状態の`stop()`が黙って成功せず`InvalidState`を返すこと、
+    cancel後も再びscanできることを確認する。
+
+71. ✅ `classic_pairing`: applicationが応答するClassic pairingとbond管理を検証する。両基板を
+    DisplayYesNoにするので両側のcontrollerが同じ6桁を出し、どちらもsketchが答えるまで進めない
+    ——黙って承諾する実装は接続testなら通ってしまうが、この比較値の一致確認では落ちる。
+    残留鍵で再接続されないよう最初に両側のbondを削除してから、numeric comparisonが両側へ
+    同じ値で届くこと、承諾でsuccess=1・status=0になりbondがaddressで一覧できることを確認する。
+    続いて自動承諾を切って**拒否**し、pairing失敗とbond数0を確認したうえで、その直後に
+    通常のpairingが成立すること（拒否が中途半端な状態を残していないこと）を確認する。
+    保留が無い状態での応答は`InvalidState`で拒否し、bondの個別削除が対象1件だけを消すことも確認する。
+
+72. ✅ `classic_hid_api`: ClassicのHIDをBLEと同じAPI形状で使えることを検証する。両側とも
+    BLE側と同名の呼び出し・同じevent型だけを使う。loopbackにならないのは、Host側が
+    **SDPで受け取ったReport Descriptorを解析して**復号するからで、合成したdescriptorと
+    packingした報告が食い違えばusageが違う値で届くか届かなくなる。keyboardはstate→usage単位
+    eventの順（BLEと同順）で配送されること、layoutがdeviceとhostで独立していること
+    （device側ja-JPの`"`はusage 0x1fとして飛び、hostがen-USなら`@`、ja-JPへ変えると`"`と解釈する）、
+    mouseの負値がdescriptorのfield位置経由でも符号付きのまま届くこと、押しっぱなしのbuttonが
+    edgeではなくstateとして保たれること、Consumer Controlが同じHID Deviceからkeyboardではなく
+    自分のreport IDで届くことを確認する。逆方向として`setKeyboardLeds()`を送り、hostが固定値ではなく
+    相手のdescriptorが宣言したreport IDを使うこと（deviceが復号したlock bitで判定する）を確認する。
+    最後に`invalidInputReportCount()`が0であることも確認する。
+
+73. ✅ `classic_hid_control`: HIDの制御チャネルを両方向で検証する。ここは応答が必須の経路で、
+    返さなければHostは待ち続ける——実装当初はGet_Reportに応答手段が無く、Set_Reportへ
+    HID handshakeも返していなかった。Get_ReportはHostが要求→deviceが`onReportRequested()`で
+    受けて`respondToReportRequest()`で答える→Hostへ値が届くところまで見る。応答は要求と同じ
+    typeとreport IDで、値はreport ID込みで届く。宣言していないreport IDへの要求は
+    `refuseReportRequest()`で断り、Hostが「失敗」として受け取ること（無応答でtimeoutしないこと）を
+    確認する。要求が無い状態での応答は`InvalidState`で拒否する——制御チャネルへ勝手なreportを
+    流さないため。Set_ReportはFeature reportで検証する。payloadだけではOutput reportと区別できず、
+    typeが保たれることの確認にはFeatureが必要である。report IDは専用fieldで届き、valueはpayloadのみ。
+    protocol modeはHostが決めるものなのでdeviceはobserveだけを行い、Boot / Reportの切替が
+    両側へ反映されることと、読み戻しが「今有効なmode」を返すことを確認する。idle rateの設定・読み戻し、
+    一連の制御交換の後にGet_Reportが再び通ること、virtual cable unplugで両側が切断されることも確認する。
+
+74. ✅ `classic_spp_exclusive`: Classic単独構成でのSPPを検証する。server起動、client接続、
+    `0x00`を含む7 byteのbinary往復、切断、`end()`+`begin()`後に同じaddressで再びserverが立ち
+    heapが戻ること（8 KB以内）を確認する。あわせて**1 deviceで複数serviceを公開する**経路を通す。
+    2つ目の`startServer()`が別channelを得て一覧に2件並ぶこと、`connectToChannel()`でその2つ目へ
+    到達してデータが往復すること（channel指定が無いとdiscoveryは全channelを返すだけで、
+    どのserviceへ繋ぎたいか表せない）、`stopServer()`が全serviceを止め、その後の再startで
+    再び公開されることを確認する。client側は同時1接続なので、2つ目へ繋ぐ前に切断する。
+
+    `classic_inquiry`にはaddress指定の照会も含める。inquiryが「誰が居るか」を答えるのに対し、
+    SDP照会は「何のためのdeviceか」、name照会は「何と名乗るか」を答える。peerがSPP serverを
+    動かしているので、service一覧にSPPのUUID（0x1101）が含まれることと、名前が直接取得できることを
+    確認する。**scan完了を待ってから照会する**——inquiryとSDPは両方が無線を使い、scan中の照会は
+    受理されるのに応答が来ない。不正なaddressは送信前に`InvalidArgument`で拒否することも確認する。
+
+75. ✅ `classic_hid_gamepad`: Classicのgamepadを実機で検証する。BLE側と同じpackingを共有して
+    いても、Hostがrawで受けるのはClassicだけなので、byte列そのものを照合できるのはここである。
+    deviceはkeyboardとgamepadをconfigureし（この2つで133 byteなのでSDP recordに収まる）、
+    hostは`onInputReport()`のrawを16進で出す。軸の負値が符号付きのまま、hatとbutton bit fieldが
+    宣言どおりの位置に入り、gamepadのreport IDがkeyboardのそれと混ざらないことを確認する
+    （`id=3 len=12`のgamepadと`id=1 len=9`のkeyboardが同じrecordから届く）。releaseで全byteが
+    0に戻ることも見る。合成の上限（descriptor + 文字列で214 byte）を超える組み合わせを
+    `begin()`が拒否することは、`Classic/HidComposite` exampleの構成として固定してある。
+
+76. ✅ `classic_radio_settings`: Classicの無線・link設定を1基板で検証する。受理されたことは
+    反映を意味しないため、page timeoutは**接続試行の所要時間で**確かめる。誰も応答しない
+    locally administered addressへ`connect()`し、1000 msでは3秒以内に失敗し、既定の5120 msでは
+    それより1秒以上長くかかることを見る。起動時にlibraryがcontrollerへ照会するため、何も
+    設定しない状態で既定値5120 msが読めることも確認する。範囲外（5 msと50000 ms）は送信前に
+    `InvalidArgument`で拒否する。送信電力は範囲指定（-12〜9）、単一値（0）、対応levelの間の値
+    （-5→-6へ丸め）を設定して読み戻し、最小が最大を超える指定を拒否する。暗号鍵の最小長は
+    16を受理し、6と17を拒否する。
+
+77. ✅ `classic_spp_stream`: SPPのArduino `Stream` adapterを2基板で検証する。sessionを開くのは
+    peer側のsession APIで、届いたbyteを数えて順序に依存するchecksum（Adler方式）へ畳み込むため、
+    adapterが自分を検証する形にならない。`println()`が`write(buffer, size)`経由でCR LF込み
+    14 byteになること、1 packet（990 byte）を超える2500 byteが分割されても順序と内容が保たれること
+    （checksumが一致する）、`flush()`が送信完了まで待って`pendingWriteCount()`が0になること、
+    write timeoutを0にすると入り切らないwriteが待たずに「書けた分」を返すこと（queueは8本なので
+    12 packet要求は必ず不足する。所要時間も200 ms未満であることを見る）を確認する。読み側は
+    `readStringUntil()`（終端は含まない）と`parseInt()`——`read()` / `peek()`だけで動くStreamの
+    機能なので、adapterが本物のStreamであることの確認になる。`detach()`後はsessionが開いたままでも
+    write 0・available 0になり、peer側に何も届かないことも確認する。
+
+78. ✅ `classic_hfp_client`（`ESPBLE_TEST_HFP_CVSD`付きの`classic_hfp_cvsd`、dual-host版の
+    `ESPBLE_TEST_DUAL_HFP`を含む）: HFP ClientとAudio Gatewayを2基板で組み合わせる。role排他
+    （同一processでClientとAGの両方は`InvalidState`）、SLC確立、発信・着信・応答・終了、
+    SCO確立とencode済みpayloadの双方向、packet統計を確認する。あわせてClient側の付随command
+    ——operator名（`+COPS`）、subscriber番号（`+CNUM`、service type 4 = voice）、memory dial、
+    NREC、Apple拡張——を確認する。memory dialはAG側が`Dial`ではなく`DialMemory`として受け、
+    位置`3`が番号として扱われないことを見る。Apple拡張はAG側にdecoderが無いためunknown AT text
+    として届き、`XAPL`と`IPHONEACCEV`が含まれることを確認する。範囲外の引数（memory位置の負値、
+    空のidentification、battery level 10）は送信前に`InvalidArgument`で拒否する。AGが満たせない
+    last voice tag要求の後もSLCが生き、続く発信が通ることも確認する。in-band ring toneは
+    AG側の`setInBandRingTone()`の真偽が両方Client側の`onInBandRingTone()`へ届くことを見る
+    ——鳴らす側を誤って伝えると、二重に鳴るか呼出音が鳴らない。
+
+79. ✅ `classic_hid_profiles`: 独自Classic hostでHID DeviceとHostのprofileが登録・解除できることを
+    1基板で確認する。SPPと違いHIDはarchiveのbuild設定で落ちやすいため、`begin()` / `init` /
+    `deinit`がすべて`status=0`で通ることそのものが契約になる。
+
+80. ✅ `classic_a2dp_sink_profile`: 同じ趣旨でA2DP stackとSinkの初期化・終了を1基板で確認する。
+    stack起動、Sink登録、Sink解除、stack終了の順で`error=None`と`initialized`の遷移を見る。
+
+81. ✅ `classic_a2dp_media`: A2DP Sink / Sourceのencode済みmedia転送を2基板で検証する。SBCの
+    選択結果（48000 Hz・2 channel、raw config 4 byte）、AVRCPのPlay passthroughとabsolute volume
+    （Controller側77、Target側88）、streamの開始、受信packetのlength 13とSBC先頭byte `9c`を確認する。
+    sink delayは1500（150 ms）を設定してSource側へ届き、読み戻しが測定値ではなく設定値を返すことを
+    見る。Target側が宣言できるnotificationは同梱host buildの都合でvolume（0x0d）だけなので、
+    play statusを宣言する要求は`InvalidArgument`で拒否されることを**上限として**確認する。
+    転送は既定100 packet（1300 byte）を欠損なく完走し、Source側の`would_block`が0より大きいこと
+    （retry経路が実際に走ったこと）と両側のheapが正であることを見る。`ESPBLE_A2DP_PACKET_TARGET`で
+    packet数を変更でき、20,000 packetの連続転送も同じ契約で完走している。
+
+82. ✅ `dual_host_hfp`: BLE GATT接続を維持したままHFPを動かす。SLC確立、発信、mSBC SCO
+    （codec=2、frame 57 byte）の双方向payload、SCO中のGATT read成功を確認し、brokerの診断で
+    両host方向のACL送受信が0より大きく、未知command・host不一致・queue満杯がすべて0であることを見る。
+
+83. ✅ `dual_host_a2dp`: 同じくBLE GATT接続を維持したままA2DP SBC mediaとAVRCP（Play、absolute
+    volume）を動かす。audio link中のGATT read成功、100 packet・1300 byteの完走、coexistence有効
+    （`coex=1`）と診断の異常0を確認する。
+
+実験用 `dual_host_smoke` は、まず両側のClassic bondを削除して**初回pairingから**接続する——bondが残っているとpairingのHCI経路（link key応答とSSP応答）が走らず、brokerのpolicyに穴があっても通ってしまうため。そのうえでClassic HIDと暗号化LE GATTを接続した両基板で、別taskのClassic scan mode切替とNimBLE `Read RSSI`を同時発行する。FIFO投入数＝物理送信数、最終RSSI成功、broker error 0を確認し、各競合サイクル直後に暗号化GATT readとHID双方向通信を再検証する。`ESPBLE_DUAL_CONTENTION_CYCLES`で反復数を変更できる。さらにtest-onlyのdispatch holdでFIFO満杯と超過拒否を作り、未送信command破棄後のGATT/HID/lifecycle復帰を確認する。偽commandはcontrollerへ送らず、hostへ偽応答も返さない。接続中と両transport切断後にinventoryを取得し、条件付きcleanup commandを含む全opcodeが明示policy内であることも検証する。未知／別host opcodeはdual-host時だけ物理送信前に拒否する。nullと上限超過のHID Input / Output reportを送信前に`InvalidArgument`で拒否し、両接続と直後の通常通信が維持されることも確認する。BLE pairingは最初に誤passkeyを入力して双方の失敗、未暗号化、bond 0、保護GATT拒否とClassic継続を確認し、LE再接続後の正しいpasskeyで暗号化・bond・GATTを復旧する。続いてClassicだけを切断し、最終OPEN失敗の非同期`onConnectionFailed`通知、暗号化LE GATTの継続、正しいpeerへのClassic再接続とHID双方向復旧を確認する。Bluedroid公開HID APIではpage中の接続試行を取り消せないため、独自timeoutによる疑似cancelは試験契約にせずbackendの最終OPEN結果を境界とする。その後peerをsoftware resetで突然消失させ、生存側でLE / BR-EDR双方の切断を検出し、保存bondからBLE暗号化とClassic HIDを再接続してGATT/HID通信を復旧する。lifecycle部はcallback targetの参照寿命barrierを有効にした状態でClassic先行／BLE先行停止、Classic再attach、停止・再登録、両destructor順を通し、panic、watchdog、heap低下がないことを確認する。永続NVDSへ触れる`Write Local Name`はcontroller assertionを起こすため、負荷刺激には使わない。
+
+## 別スタックとの相互接続テスト（方針）
+
+EspBle同士のPeerテストは、両側が同じ実装なので**同じ誤解を共有していても通ります**。それを抜ける
+ために、片側をArduino-ESP32同梱のclass（`BluetoothSerial`、`BLE`ラッパ）とESP-IDFのBluedroid API
+だけで書き、EspBleと相互接続させます。無印ESP32では同梱classがBluedroidになるので、
+**EspBleのNimBLE host / 独自Classic hostとは実装が完全に別**になります。
+
+規則:
+
+- **相手側sketchはEspBleをlinkしない。**同一controllerを2つのhostで共有できないためで、
+  `#error`で拒否されます。相手側は同梱classとESP-IDF APIだけで完結させます。
+- **相手側sketchにNimBLE固有のheaderを使わない。**現在の基準側sketchのいくつかは
+  `<host/ble_store.h>`のようなNimBLEのheaderでbondを消しているため、無印ESP32では動きません。
+  相互接続用の相手側は、bond削除もwrapperまたはBluedroid APIの手段に置き換えます。
+- **判定は両側から取る。** EspBle側の公開API（callbackとgetter）と、相手側のserial出力の両方を
+  assertします。片方の実装しか埋めないfieldは期待値にせず、**仕様が両者に要求する一致**だけを
+  判定します。
+- **相手側profileは無印ESP32に限る。** ESP32-S3では同梱wrapperがNimBLEになり、EspBleと同じstackに
+  なるので別スタック検証になりません。BLEのsuiteはDUTをS3、相手を無印ESP32にすると
+  「NimBLE ↔ Bluedroid」で最も強い組み合わせになります（`--profile s3_peer_host
+  --peer-profile device:esp32_peer_device`）。Classicは両側とも無印ESP32です。
+
+対象範囲と現在地:
+
+| 領域 | 相手側で使うもの | 状態 |
+|---|---|---|
+| Classic SPP | `BluetoothSerial` | ✅ `classic_core_host_spp`（service record解決、双方向binary、再接続、heap） |
+| BLE GAP / GATT | 同梱`BLE`ラッパ（無印ESP32＝Bluedroid） | 未実装。advertising / scanの観測、GATT read / write、notify / indicate、MTU、接続parameter |
+| BLE Security | 同梱`BLE`ラッパ + `BLESecurity` | 未実装。Just Works、passkey、bond再接続 |
+| BLE HID（HOGP） | 同梱`BLEHIDDevice` | 未実装。EspBleのHID HostがBluedroid製deviceのReport Mapを解析できるか |
+| BLE MIDI | 同梱`BLE`ラッパで手組み | 未実装。EspBleのMIDI Hostが別実装deviceを受けられるか |
+| Classic A2DP / AVRCP | `esp_a2d_*` / `esp_avrc_*`（wrapperは無い） | 未実装。codec negotiation、media転送、passthrough、absolute volume |
+| Classic HFP | `esp_hf_client_*` / `esp_hf_ag_*` | 未実装。SLC、発着信、SCO codec、AT応答 |
+| Classic HID | ― | **作れない。**同梱sdkconfigは`CONFIG_BT_HID_ENABLED`が無効。外部機器での確認に委ねる |
+
+suite名は`classic_core_host_spp`の形に揃え、相手側が同梱実装であることが名前から分かるようにします。
+着手はrelease後で、優先順位はBLE GATT → BLE Security → BLE HID → Classic A2DP/AVRCP → Classic HFP
+→ BLE MIDIとします。BLEを先に置くのは、同梱wrapperだけで書ける（C APIを直接叩く必要がない）ため
+1 suiteあたりの費用が最も小さいからです。
+
+## 起動banner待ちを避ける
+
+sketchが起動時に1度だけ出す行を待つtestは、serial monitorがreset後に接続すると取りこぼして
+落ちます。実際に`classic_hid_report`、`classic_spp_stream`、`classic_a2dp_media`、
+`classic_hfp_cvsd`、`dual_host_a2dp`で発生しました（いずれもcode側の不具合ではなくflashと
+resetのタイミング）。2台構成では先にflashが終わった側がbootして出力する間、もう1台のflashが
+続いており、Classic audioのsketchでは数分かかるため、monitorが接続する頃には起動時出力が
+すべて流れています。症状は片側のlogだけが完全に空になることです。したがって**同期はcommand
+probeで行います**。sketch側は起動時だけでなくcommand（audio系は`?`）でも同じ行を返し、test側は
+答えが来るまで数回問い合わせます。実装は`tests/conftest.py`の`probe` fixtureで、必要なtestが
+引数に取ります。BLE linkの確立のように「起きた瞬間に1度だけ知らせる」状態も同じcommandで
+現在値を答えるようにし、testは通知を待たずに状態を問い合わせます。
+
+## 末尾の可変長fieldは行末で止める
+
+serialの1行は分割して届きます。patternの最後のfieldが可変長で、しかも改行で止めていないと、
+行の残りが届く前にmatchが確定し、切り詰めた値を取り出します。`service_data`では
+`data=abcdef12`と出力した相手から`data=abcdef1`を読み取りました。この形のpatternは`\r?\n`で
+終端します。captureの後ろに同じpattern内の別リテラルが続く場合は、そのリテラルが届くまで
+matchしないので問題ありません。
 
 ## 合格条件
 
