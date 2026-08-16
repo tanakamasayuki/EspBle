@@ -185,32 +185,28 @@ the bilingual [Hosted/CustomPins example](examples/Hosted/CustomPins/)).
 
 ### Core version
 
-Development and the peer tests run on arduino-esp32 3.3.11. The supported
-core-version range and per-board build coverage for BLE are measured by CI, not
-maintained by hand.
+Development and the peer tests run on arduino-esp32 3.3.11. The minimum
+supported core differs per chip, and the reason is always the same question:
+who brings the BLE host.
 
-> [!IMPORTANT]
-> **On the original ESP32, the supported core range is 3.2.0 and newer — for BLE
-> and Classic alike.** The precompiled Classic host is built with ESP-IDF 5.5.5
-> and xtensa-esp32 GCC 14.2.0, but the API headers it was built against ship in
-> `src/esp32/include/`, so its declarations and struct layouts cannot drift with
-> the core version; only stable platform APIs (FreeRTOS and the like) come from
-> the core. Measured: 3.2.0 through 3.3.11 all compile and link, and 3.2.1,
-> 3.3.0, 3.3.10 and 3.3.11 are hardware-verified. Below 3.2.0 is unmeasured and
-> stops at an `#error` that says so.
->
-> The exception is **HFP audio (SCO), which needs 3.3.9 or newer**: the prebuilt
-> controller the core ships was built with the PCM audio path (for an external
-> codec chip) up to 3.3.8, so it cannot carry the HCI-path SCO EspBle uses.
-> This is outside what EspBle can change. The measurements are in the Japanese
-> [core-version test plan](docs/PLAN_CORE_VERSION_MATRIX.ja.md).
+| Target | Where the host comes from | Minimum core | Why there |
+| --- | --- | --- | --- |
+| Original ESP32 (BLE / Classic) | **EspBle bundles it** (NimBLE source + Classic archive) | **3.2.0** | Nearly independent of the core version: the Classic host ships the API headers it was built against in `src/esp32/include/`, so declarations and struct layouts cannot drift, and only stable platform APIs (FreeRTOS and the like) come from the core. Below 3.2.0 is unmeasured and stops at an `#error` that says so |
+| Original ESP32, HFP audio (SCO) only | Same, but the controller is the core's | **3.3.9** | Cores up to 3.3.8 ship a prebuilt controller built with the PCM audio path (for an external codec chip), which cannot carry the HCI-path SCO EspBle uses. Bundling the host does not help: the controller binary belongs to the core |
+| ESP32-S3 / C3 / C6 / H2 | **The core's bundled NimBLE** | **3.3.0** | The 3.2.x-generation prebuilt libraries were built with Bluedroid as the BLE host, so the NimBLE EspBle calls does not exist there. The core switched to NimBLE in 3.3.0. Those versions stop at the `EspBle requires the NimBLE backend` `#error` |
+| ESP32-P4 (+C6 ESP-Hosted) | **The core provides it** (NimBLE over Hosted) | **3.3.1** | 3.3.0 does not provide NimBLE for the P4's Hosted configuration |
+
+The original-ESP32 range is measured: 3.2.0 through 3.3.11 all compile and link,
+and 3.2.1 / 3.3.0 / 3.3.10 / 3.3.11 are hardware-verified (Japanese
+[core-version test plan](docs/PLAN_CORE_VERSION_MATRIX.ja.md)). The other chips'
+ranges are measured by CI.
 
 - **Core Compatibility Matrix** workflow → `docs/COMPATIBILITY.<version>.md` (representative BLE examples across arduino-esp32 releases)
 - **Board Build Coverage** workflow → `docs/BOARDS.<version>.md` (the examples present when the workflow runs, across ESP32-S3 / ESP32 / C3 / C6 / H2 / P4 at one Core version)
 
 Both are manual (`workflow_dispatch`) because a full sweep rewrites and rebuilds
-every sketch. Consult the generated matrix for the BLE minimum Core version;
-Classic remains fixed to the version above.
+every sketch. Cores newer than 3.3.11 are treated as unverified rather than
+known-broken: on the original ESP32 they build with a `#warning`.
 
 ## Getting started
 

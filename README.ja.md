@@ -153,27 +153,26 @@ pin設定を上書きします（[SDIO pinの選択と上書き](docs/ESP_HOSTED
 
 ### coreバージョン
 
-開発とPeerテストはarduino-esp32 3.3.11で行っています。対応するcoreバージョンの範囲とボードごとの
-BLEビルドカバレッジは手動管理ではなくCIで計測します。
+開発とPeerテストはarduino-esp32 3.3.11で行っています。対応下限はチップごとに違い、
+その理由は「BLE hostを誰が持ってくるか」で決まります。
 
-> [!IMPORTANT]
-> **無印ESP32の対応Coreは3.2.0以上です（BLEもClassicも）。** precompiled Classic hostは
-> ESP-IDF 5.5.5 / xtensa-esp32 GCC 14.2.0でbuildしていますが、buildに使ったAPI headerを
-> `src/esp32/include/`へ同梱しているため、宣言と構造体レイアウトがCoreの版でずれることは
-> ありません。CoreからはFreeRTOS等の安定APIだけを使います。実測では3.2.0〜3.3.11の
-> compile / linkが全て通り、3.2.1 / 3.3.0 / 3.3.10 / 3.3.11は実機でも確認済みです。
-> 3.2.0未満は未測定のため理由付きの`#error`で止まります。
->
-> 例外は**HFP audio（SCO）で、3.3.9以上が必要**です。Coreが同梱するprebuilt controllerが
-> 3.3.8以前はPCM audio path（外部codec chip向け）でbuildされており、EspBleが使うHCI経由の
-> SCOをcontrollerが受けられないためです。これはEspBle側では変更できません。
-> 測定の詳細は[core版数のテスト計画](docs/PLAN_CORE_VERSION_MATRIX.ja.md)にあります。
+| 対象 | hostの出所 | 最小Core | なぜそこか |
+| --- | --- | --- | --- |
+| 無印ESP32（BLE / Classic） | **EspBleが持ち込む**（NimBLE source + Classic archive） | **3.2.0** | Coreの版にほぼ依存しないため。Classic hostはbuildに使ったAPI headerを`src/esp32/include/`へ同梱していて宣言と構造体レイアウトがずれず、CoreからはFreeRTOS等の安定APIだけを使う。3.2.0未満は未測定で、理由付きの`#error`で止まる |
+| 無印ESP32のHFP audio（SCO）のみ | 同上（ただしcontrollerはCore同梱） | **3.3.9** | 3.3.8以前のCoreはprebuilt controllerがPCM audio path（外部codec chip向け）でbuildされており、EspBleが使うHCI経由のSCOを受けられない。hostを持ち込んでいても、controllerのbinaryはCore側なので変更できない |
+| ESP32-S3 / C3 / C6 / H2 | **Core同梱のNimBLE** | **3.3.0** | 3.2.x世代のprebuilt libraryはBLE hostがBluedroidで、EspBleが呼ぶNimBLEが存在しない。CoreがNimBLEへ切り替えたのが3.3.0。該当版では`EspBle requires the NimBLE backend`の`#error`で止まる |
+| ESP32-P4（+C6 ESP-Hosted） | **Coreが提供**（Hosted経由のNimBLE） | **3.3.1** | 3.3.0のP4はHosted構成のNimBLEが未提供 |
+
+無印ESP32の範囲は実測です。3.2.0〜3.3.11のcompile / linkが全て通り、3.2.1 / 3.3.0 /
+3.3.10 / 3.3.11は実機でも確認済みです（[core版数のテスト計画](docs/PLAN_CORE_VERSION_MATRIX.ja.md)）。
+他チップの範囲はCIが計測します。
 
 - **Core Compatibility Matrix** ワークフロー → `docs/COMPATIBILITY.<version>.md`（代表BLE exampleをarduino-esp32の各リリースに対してビルド）
 - **Board Build Coverage** ワークフロー → `docs/BOARDS.<version>.md`（workflow実行時点のexampleを1つのCoreバージョンでESP32-S3 / ESP32 / C3 / C6 / H2 / P4に対してビルド）
 
 どちらもフルsweepが全sketchを書き換えて再ビルドするため、手動実行（`workflow_dispatch`）です。
-BLEの最小Coreバージョンは生成されたマトリクスを参照してください。Classicは上記versionに固定します。
+なお3.3.11より新しいCoreは、壊れると分かっているのではなく未検証という扱いで、
+無印ESP32では`#warning`を出したうえでbuildは通します。
 
 ## はじめかた
 
