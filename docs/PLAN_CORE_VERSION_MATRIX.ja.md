@@ -366,6 +366,34 @@ GATT、pairing、HID over GATT、BLE MIDI、SPP、A2DP、HFPが版をまたい�
 
 軸Aの厳しさは通信仕様ではなくbuild時のIDF依存から来ている、という切り分けの根拠になります。
 
+### 機能ごとに下限が違う: HFPのSCO audio（2026-08-16）
+
+3.3.0で`classic_hfp_client`だけが落ちました。単独実行でも再現し、SCOが`state=1` / `codec=0`の
+まま確立しません。原因はEspBle側ではなく、**Coreが同梱するprebuilt controllerの設定**でした。
+
+| Core世代 | prebuilt sdkconfig |
+| --- | --- |
+| 3.3.0〜3.3.6（`esp32-arduino-libs` packaging） | `CONFIG_BT_HFP_AUDIO_DATA_PATH_PCM=y` |
+| 3.3.8以降（`esp32-libs` packaging） | `CONFIG_BT_HFP_AUDIO_DATA_PATH_HCI=y` + `CONFIG_BT_HFP_WBS_ENABLE=y` |
+
+古いCoreのcontrollerはSCO音声を外部codec chipへ流すPCM pathでbuildされています。EspBleのHFPは
+raw SCOをHCI経由で運ぶので、controllerが合意しない限りaudio linkは張れません。
+
+**これはarchiveでもsource持ち込みでも解決しません。** controllerは常にCore側のbinaryだからです。
+host側の配布形式を変えても届かない領域がある、という切り分けとして重要です。
+
+ただしこの設定差だけでは全部を説明できません。版ごとに単独実行した結果は次のとおりです。
+
+| Core | HFP client suite | 止まり方 |
+| --- | --- | --- |
+| 3.3.0 / 3.3.6 | ❌ | SCOが`state=1 codec=0`のまま。controllerがPCM path |
+| 3.3.8 | ❌（2回とも再現） | `hfpAudioGateway().begin()`がClient起動後も成功し、HFP役割の排他が効かない |
+| 3.3.9 / 3.3.10 | ✅ | — |
+
+3.3.8の件はCoreの設定では説明できません。排他はEspBle内部の`activateHfpAg()`が決めるので、
+**3.3.11では表面化していない競合が`src/`側にある可能性**が残ります。配布形式の判断とは独立した
+調査項目として扱います。HFPの実機確認済み下限は3.3.9です。
+
 ## 残っているリスク
 
 - L0のPASSは「buildできる」であって「動く」ではありません。archiveはIDFのheaderに従って

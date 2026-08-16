@@ -397,6 +397,11 @@ uv run --env-file .env pytest peer/gatt_read_write/ \
   --profile esp32_peer_host --peer-profile device:s3_peer_device --core-version 3.3.10
 ```
 
+**Never run two pytest sessions against the same suite at once.** The device lock serialises the
+ports, but the sketch.yaml rewrite and the build directory are shared, so one session's rewrite lands
+in the other's compile. It shows up as `cannot specify '-o' with '-c' ... with multiple files`, which
+says nothing about the core version. Different suites run in parallel safely.
+
 An original-ESP32 DUT only builds on 3.3.11, because the Classic sources under `src/`
 are always compiled; the reasoning and measurements are in the Japanese
 [core-version test plan](../docs/PLAN_CORE_VERSION_MATRIX.ja.md). So `--core-version`

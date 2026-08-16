@@ -522,6 +522,10 @@ uv run --env-file .env pytest peer/gatt_read_write/ \
   --profile esp32_peer_host --peer-profile device:s3_peer_device --core-version 3.3.10
 ```
 
+**同じsuiteへ2つのpytestを同時に走らせないでください。** portはdevice lockで直列化されますが、
+sketch.yamlの再pinとbuild directoryは共有のままなので、片方の書き換えがもう片方のcompileへ混ざります。
+症状は版とは無関係な`cannot specify '-o' with '-c' ... with multiple files`です。別々のsuiteなら並行できます。
+
 無印ESP32のDUTは3.3.11でしか動きません（`src/`のClassic sourceが必ずcompileされるため。理由と
 実測は[core版数のテスト計画](../docs/PLAN_CORE_VERSION_MATRIX.ja.md)）。したがって`--core-version`が
 意味を持つのは、その制約を再確認するときと、他のSoCを対象にするときです。`--peer-core-version`は

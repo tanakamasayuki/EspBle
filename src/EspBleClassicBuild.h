@@ -4,16 +4,18 @@
 #include <esp_arduino_version.h>
 #include <sdkconfig.h>
 
-// The Classic host ships as an archive built against ESP-IDF v5.5.5, which only
-// Arduino-ESP32 3.3.11 carries, and this file is compiled for every original-ESP32
-// sketch -- BLE-only ones included, because Arduino builds every .cpp under src/.
-// Older cores therefore stop with an error about a missing header
-// (esp32-hal-alloc-bt-classic-mem.h, added in 3.3.9) or a missing constant
-// (ESP_HIDD_APP_DESC_LIST_LEN_MAX, added in ESP-IDF v5.5.5; 3.3.9 and 3.3.10 carry
-// v5.5.4). Neither message says what is actually wrong, so say it here.
+// The Classic host ships as an archive built against ESP-IDF v5.5.5, and this file
+// is compiled for every original-ESP32 sketch -- BLE-only ones included, because
+// Arduino builds every .cpp under src/. Cores in the 3.3 line all carry ESP-IDF
+// 5.5, where the differences are names rather than layouts and are handled in
+// EspBleClassicCoreCompat.h. Arduino-ESP32 3.2 and older carry ESP-IDF 5.4, whose
+// Bluetooth callback structures have different members (esp_hf_cb_param_t gained
+// preferred_frame_size in 5.5), so the archive would read them at the wrong
+// offsets. That is a wrong build rather than a missing name, and the error the
+// compiler gives says nothing about it.
 #if defined(CONFIG_IDF_TARGET_ESP32) && defined(CONFIG_BT_CLASSIC_ENABLED)
-#if ESP_ARDUINO_VERSION < ESP_ARDUINO_VERSION_VAL(3, 0, 0)
-#error "EspBle on the original ESP32 requires Arduino-ESP32 3.3.11. Older cores cannot build it, whether or not the sketch uses Bluetooth Classic."
+#if ESP_ARDUINO_VERSION < ESP_ARDUINO_VERSION_VAL(3, 3, 0)
+#error "EspBle on the original ESP32 requires Arduino-ESP32 3.3.0 or newer. Cores below it carry ESP-IDF 5.4, whose Bluetooth structures do not match the bundled Classic host. This applies whether or not the sketch uses Bluetooth Classic."
 #elif ESP_ARDUINO_VERSION > ESP_ARDUINO_VERSION_VAL(3, 3, 11)
 // Newer cores are not blocked, because only their ABI is unverified, not known
 // to be wrong. A silent mismatch would be worse than saying so.
