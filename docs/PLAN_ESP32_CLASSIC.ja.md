@@ -149,6 +149,8 @@ Classic archiveはIDF / Arduino Core / GCC ABIをpinし、全defined symbolの�
 clean再生成をrelease gateとする。ESP-IDFへupstreamする場合はbinaryを提案するのではなく、host分離、HCI
 broker、公開API境界のsource差分をcomponentとして切り出す。形式の再評価はABI更新、Bluedroid hostの独立
 component化、またはNimBLE archive化に明確な保守上の利益が出た場合だけ行う。
+2026-08-16、Coreバージョン互換の実測でこの再評価条件に達した。調査と案の比較は
+[配布形式の再評価](PLAN_CLASSIC_HOST_DISTRIBUTION.ja.md)を正本とする。
 
 Classic Audioの責務分離、external codec API、archiveへ追加するKconfig、実装順は
 [Classic Audio拡張計画](PLAN_ESP32_CLASSIC_AUDIO.ja.md)を正本とする。
