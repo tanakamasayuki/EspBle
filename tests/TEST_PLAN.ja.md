@@ -465,12 +465,12 @@ EspBle同士のPeerテストは、両側が同じ実装なので**同じ誤解�
 | 領域 | 相手側で使うもの | 状態 |
 |---|---|---|
 | Classic SPP | `BluetoothSerial` | ✅ `classic_core_host_spp`（service record解決、双方向binary、再接続、heap） |
-| BLE GAP / GATT | 同梱`BLE`ラッパ（無印ESP32＝Bluedroid） | 未実装。advertising / scanの観測、GATT read / write、notify / indicate、MTU、接続parameter |
-| BLE Security | 同梱`BLE`ラッパ + `BLESecurity` | 未実装。Just Works、passkey、bond再接続 |
-| BLE HID（HOGP） | 同梱`BLEHIDDevice` | 未実装。EspBleのHID HostがBluedroid製deviceのReport Mapを解析できるか |
-| BLE MIDI | 同梱`BLE`ラッパで手組み | 未実装。EspBleのMIDI Hostが別実装deviceを受けられるか |
-| Classic A2DP / AVRCP | `esp_a2d_*` / `esp_avrc_*`（wrapperは無い） | 未実装。codec negotiation、media転送、passthrough、absolute volume |
-| Classic HFP | `esp_hf_client_*` / `esp_hf_ag_*` | 未実装。SLC、発着信、call control、AT応答まで。**SCO payloadの往復は対象外**——core 3.3.11のesp32は`CONFIG_BT_HFP_AUDIO_DATA_PATH_PCM`でbuildされており、相手側はSCOをHCIへ出さず外部codec chipへ流すため |
+| BLE GAP / GATT | 同梱`BLE`ラッパ（無印ESP32＝Bluedroid） | ✅ `core_host_gatt`（advertising観測、discovery（3 characteristic＋CCCD）、read、0x00入りwrite、notify、indicate、購読解除、値更新、再接続） |
+| BLE Security | 同梱`BLE`ラッパ + `BLESecurity` | ✅ `core_host_security`（両側bond全消し→初回pairing、相手の`auth_mode`でLE Secure Connections＋bondingを確認、暗号化必須attributeのread、再接続でのkey復元） |
+| BLE HID（HOGP） | 同梱`BLEHIDDevice` | ✅ `core_host_hid`（Bluedroid製Report Mapの解析、report ID無しで`report_id=0`、output reportとbattery levelの検出、key・modifier、LED出力の逆方向） |
+| BLE MIDI | 同梱`BLE`ラッパで手組み | ✅ `core_host_midi`（他実装が組んだheader/timestamp、running status、SysExのchunk配送の解釈と、EspBleが組んだpacketの相手側での受信） |
+| Classic A2DP / AVRCP | `esp_a2d_source_*`（wrapperは無い） | ✅ `core_host_a2dp`（SBC negotiation 44100Hz/stereo、encode済みframe受信＝先頭がsyncword `0x9c`、suspend、切断）。**AVRCPは対象外**——このペアではどちらのstackもAVCTPを開かない（core SourceはAVRCPを開始せず、EspBle SinkはA2DP initiatorのときだけ開始する）ため、keyを送っても相手のlocal受理を見るだけになる。EspBleのAVRCPは`classic_a2dp_media`と手動相互運用で担保する |
+| Classic HFP | `esp_hf_ag_*` | ✅ `core_host_hfp`（SLC確立とfeature交換、着信のindicatorとcaller識別、応答（ATA）、終話（CHUP）、発信（ATD）とAGが解釈した番号、切断）。**SCO payloadの往復は対象外**——core 3.3.11のesp32は`CONFIG_BT_HFP_AUDIO_DATA_PATH_PCM`でbuildされており、相手側はSCOをHCIへ出さず外部codec chipへ流すため。EspBleのraw SCO transportは`classic_hfp_client`で担保する |
 | Classic HID | ― | **作れない。**同梱sdkconfigは`CONFIG_BT_HID_ENABLED`が無効。外部機器での確認に委ねる |
 
 着手前に確認済みの前提（2026-08-16、Core 3.3.11 / 無印ESP32）:
@@ -491,10 +491,17 @@ EspBle同士のPeerテストは、両側が同じ実装なので**同じ誤解�
 - core同梱sdkconfigは`CONFIG_BT_SPP_ENABLED` / `CONFIG_BT_A2DP_ENABLE` / `CONFIG_BT_HFP_ENABLE`
   （Client/AGとも）が有効、`CONFIG_BT_HID_ENABLED`は無効、HFPのaudio pathはPCM。
 
-suite名は`classic_core_host_spp`の形に揃え、相手側が同梱実装であることが名前から分かるようにします。
-着手はrelease後で、優先順位はBLE GATT → BLE Security → BLE HID → Classic A2DP/AVRCP → Classic HFP
-→ BLE MIDIとします。BLEを先に置くのは、同梱wrapperだけで書ける（C APIを直接叩く必要がない）ため
-1 suiteあたりの費用が最も小さいからです。
+suite名は`core_host_*`（Classic SPPだけは先行して作った`classic_core_host_spp`）に揃え、相手側が
+同梱実装であることが名前から分かるようにします。2026-08-16に上表の6 suiteを追加し、すべて実機で
+通しました。相手側sketchを書くときに引っかかった点は次のとおりです。
+
+- **Core同梱のBTライブラリをlinkしないsketchでは、Coreが起動時にClassic BTメモリを解放する。**
+  ESP-IDFのC APIを直叩きする相手側は`esp32-hal-alloc-bt-classic-mem.h`をincludeしないと
+  `btStart()`が失敗する。
+- **AGはSLC確立中の`AT+CIND?` / `AT+COPS?`へ応答する必要がある。**応答しないとnegotiationが
+  完了せず、RFCOMMまで繋がってから切断される。
+- **AVRCP TGのsupported command集合はallowed集合の丸写しでは`ESP_ERR_NOT_SUPPORTED`になる。**
+  PLAY/PAUSE/STOPのように明示して組む。
 
 ## 起動banner待ちを避ける
 

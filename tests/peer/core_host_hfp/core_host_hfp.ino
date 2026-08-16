@@ -97,8 +97,9 @@ void loop()
     }
     else if (command.startsWith("c"))
     {
-      Serial.printf("HFPCLIENT_CONNECT requested=%u\n",
-        bluetooth.hfpClient().connect(command.substring(1).c_str()) ? 1 : 0);
+      const bool accepted = bluetooth.hfpClient().connect(command.substring(1).c_str());
+      Serial.printf("HFPCLIENT_CONNECT requested=%u error=%s:%s\n", accepted ? 1 : 0,
+        bluetooth.lastErrorName(), bluetooth.lastErrorDetail().c_str());
     }
     else if (command == "a")
     {

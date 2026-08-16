@@ -17,8 +17,14 @@ attribution files alongside the source:
 - [Notice and attributions](src/nimble_esp32/NOTICE)
 - [Pinned upstream versions](src/nimble_esp32/VERSIONS)
 
+This vendored copy is modified by EspBle's reproducible vendoring process: it
+rewrites include paths, adds original-ESP32 and configuration guards, and
+applies the local patches recorded in `tools/vendor_nimble_esp32.py`.
+
 無印ESP32向けに同梱するNimBLE hostソースのライセンス、帰属表示、固定した上流versionは、
 ソースと同じディレクトリに収録しています。
+この同梱copyにはEspBleの再現可能なvendoring処理による変更があり、include pathの書換え、
+無印ESP32・設定guardの追加、`tools/vendor_nimble_esp32.py`に記録したlocal patchを適用しています。
 
 ## Precompiled Classic-only Bluedroid host / Classic専用Bluedroid host
 

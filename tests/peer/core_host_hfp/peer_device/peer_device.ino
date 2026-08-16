@@ -61,7 +61,10 @@ void agCallback(esp_hf_cb_event_t event, esp_hf_cb_param_t *param)
   {
     case ESP_HF_CONNECTION_STATE_EVT:
       slcConnected = param->conn_stat.state == ESP_HF_CONNECTION_STATE_SLC_CONNECTED;
-      if (slcConnected) memcpy(clientAddress, param->conn_stat.remote_bda, 6);
+      // Remember the address as soon as the link exists: the SLC queries below
+      // arrive before the connection reaches its service-level state.
+      if (param->conn_stat.state != ESP_HF_CONNECTION_STATE_DISCONNECTED)
+        memcpy(clientAddress, param->conn_stat.remote_bda, 6);
       Serial.printf("HFPPEER_CONNECTION state=%d peer=%s\n", param->conn_stat.state,
         addressText(param->conn_stat.remote_bda).c_str());
       break;
@@ -92,6 +95,31 @@ void agCallback(esp_hf_cb_event_t event, esp_hf_cb_param_t *param)
       Serial.printf("HFPPEER_HANGUP count=%u\n", endedCalls);
       esp_hf_ag_end_call(clientAddress, 0, 0, ESP_HF_CALL_STATUS_NO_CALLS,
         ESP_HF_CALL_SETUP_STATUS_IDLE, nullptr, ESP_HF_CALL_ADDR_TYPE_UNKNOWN);
+      break;
+    case ESP_HF_CIND_RESPONSE_EVT:
+      // The Client asks for the indicator values during SLC setup. An AG that
+      // does not answer leaves the negotiation unfinished and the link drops,
+      // which is what happens without this branch.
+      Serial.println("HFPPEER_CIND_QUERY");
+      esp_hf_ag_cind_response(clientAddress, ESP_HF_CALL_STATUS_NO_CALLS,
+        ESP_HF_CALL_SETUP_STATUS_IDLE, ESP_HF_NETWORK_STATE_AVAILABLE, 4,
+        ESP_HF_ROAMING_STATUS_INACTIVE, 4, ESP_HF_CALL_HELD_STATUS_NONE);
+      break;
+    case ESP_HF_COPS_RESPONSE_EVT:
+      Serial.println("HFPPEER_COPS_QUERY");
+      esp_hf_ag_cops_response(clientAddress, const_cast<char *>("EspBle"));
+      break;
+    case ESP_HF_CLCC_RESPONSE_EVT:
+      Serial.println("HFPPEER_CLCC_QUERY");
+      esp_hf_ag_clcc_response(clientAddress, 1, ESP_HF_CURRENT_CALL_DIRECTION_INCOMING,
+        ESP_HF_CURRENT_CALL_STATUS_ACTIVE, ESP_HF_CURRENT_CALL_MODE_VOICE,
+        ESP_HF_CURRENT_CALL_MPTY_TYPE_SINGLE, const_cast<char *>("5551234"),
+        ESP_HF_CALL_ADDR_TYPE_UNKNOWN);
+      break;
+    case ESP_HF_CNUM_RESPONSE_EVT:
+      Serial.println("HFPPEER_CNUM_QUERY");
+      esp_hf_ag_cnum_response(clientAddress, const_cast<char *>("5550000"), 129,
+        ESP_HF_SUBSCRIBER_SERVICE_TYPE_VOICE);
       break;
     case ESP_HF_UNAT_RESPONSE_EVT:
       // An AT command the backend does not decode. Answering it is what keeps

@@ -23,6 +23,7 @@ CLASSIC_SOURCES = sorted(SRC.glob("EspBleClassic*.cpp"))
 
 # Prefixes of the Bluedroid public API the Classic host provides.
 BLUEDROID_PREFIXES = (
+    "esp_ble_",
     "esp_bt_gap_",
     "esp_bt_hid_device_",
     "esp_bt_hid_host_",

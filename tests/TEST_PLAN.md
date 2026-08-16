@@ -343,12 +343,12 @@ Scope and current state:
 | Area | What the other side uses | State |
 |---|---|---|
 | Classic SPP | `BluetoothSerial` | ✅ `classic_core_host_spp` (service-record resolution, bidirectional binary, reconnection, heap) |
-| BLE GAP / GATT | bundled `BLE` wrapper (Bluedroid on the original ESP32) | not implemented: observing advertising and scans, GATT read/write, notify/indicate, MTU, connection parameters |
-| BLE Security | bundled `BLE` wrapper plus `BLESecurity` | not implemented: Just Works, passkey, bonded reconnection |
-| BLE HID (HOGP) | bundled `BLEHIDDevice` | not implemented: whether EspBle's HID Host parses a Bluedroid device's Report Map |
-| BLE MIDI | hand-built on the bundled wrapper | not implemented: whether EspBle's MIDI Host accepts another implementation |
-| Classic A2DP / AVRCP | `esp_a2d_*` / `esp_avrc_*` (no wrapper exists) | not implemented: codec negotiation, media transfer, passthrough, absolute volume |
-| Classic HFP | `esp_hf_client_*` / `esp_hf_ag_*` | not implemented: service-level connection, calls, call control and AT responses only. **SCO payload exchange is out of scope** — the esp32 target of Core 3.3.11 is built with `CONFIG_BT_HFP_AUDIO_DATA_PATH_PCM`, so the peer routes SCO to an external codec chip rather than over HCI |
+| BLE GAP / GATT | bundled `BLE` wrapper (Bluedroid on the original ESP32) | ✅ `core_host_gatt` (advertising observed, discovery of three characteristics plus the CCCD, read, a write containing 0x00, notify, indicate, unsubscribe, value update, reconnection) |
+| BLE Security | bundled `BLE` wrapper plus `BLESecurity` | ✅ `core_host_security` (both bond lists cleared, first pairing, the peer's `auth_mode` checked for LE Secure Connections and bonding, an encryption-required attribute read, encryption restored from stored keys on reconnect) |
+| BLE HID (HOGP) | bundled `BLEHIDDevice` | ✅ `core_host_hid` (a Bluedroid Report Map parsed, `report_id=0` for a descriptor without report IDs, output report and battery level discovered, keys and modifiers decoded, LED output in the reverse direction) |
+| BLE MIDI | hand-built on the bundled wrapper | ✅ `core_host_midi` (header and timestamp bytes framed by another implementation, running status, SysEx delivered in chunks, and packets EspBle framed received by that implementation) |
+| Classic A2DP / AVRCP | `esp_a2d_source_*` (no wrapper exists) | ✅ `core_host_a2dp` (SBC negotiated at 44100 Hz stereo, encoded frames received starting at the `0x9c` syncword, suspend, disconnect). **AVRCP is out of scope here**: neither stack opens AVCTP in this pairing — the core's Source does not initiate it and EspBle's Sink does so only as the A2DP initiator — so a key press would only exercise the peer's local acceptance. EspBle's AVRCP is covered by `classic_a2dp_media` and by manual interoperability |
+| Classic HFP | `esp_hf_ag_*` | ✅ `core_host_hfp` (service-level connection and feature exchange, an incoming call's indicator and caller identity, answering with ATA, ending with CHUP, dialling with ATD and the number the AG parsed, disconnect). **SCO payload exchange is out of scope** — the esp32 target of Core 3.3.11 is built with `CONFIG_BT_HFP_AUDIO_DATA_PATH_PCM`, so the peer routes SCO to an external codec chip rather than over HCI; EspBle's raw SCO transport is covered by `classic_hfp_client` |
 | Classic HID | — | **cannot be built.** The bundled sdkconfig has `CONFIG_BT_HID_ENABLED` unset; this stays with external-device verification |
 
 Checked before starting (2026-08-16, Core 3.3.11 on the original ESP32):
@@ -363,11 +363,18 @@ Checked before starting (2026-08-16, Core 3.3.11 on the original ESP32):
   `CONFIG_BT_HFP_ENABLE` (both roles) enabled, `CONFIG_BT_HID_ENABLED` disabled, and
   the HFP audio path set to PCM.
 
-Suite names follow `classic_core_host_spp`, so the name says that the other side is
-the bundled implementation. This work starts after the release, in the order BLE
-GATT → BLE Security → BLE HID → Classic A2DP/AVRCP → Classic HFP → BLE MIDI: BLE
-comes first because the bundled wrapper alone is enough to write it, with no raw C
-API, which makes it the cheapest per suite.
+Suite names follow `core_host_*` (`classic_core_host_spp` came first and kept its
+name), so the name says that the other side is the bundled implementation. The six
+suites in the table above were added on 2026-08-16 and all pass on hardware. Writing
+the peer sketches turned up three things worth knowing:
+
+- **The Core releases the Classic BT memory at startup unless a Bluetooth library is
+  linked.** A peer that calls the ESP-IDF C API directly must include
+  `esp32-hal-alloc-bt-classic-mem.h` or `btStart()` fails.
+- **An AG has to answer `AT+CIND?` and `AT+COPS?` during SLC setup.** Without those
+  responses the negotiation never finishes and the link drops after RFCOMM comes up.
+- **An AVRCP Target's supported-command set cannot be a copy of the allowed set**; that
+  returns `ESP_ERR_NOT_SUPPORTED`. Build it explicitly (PLAY/PAUSE/STOP).
 
 ## Do not wait for a startup banner
 

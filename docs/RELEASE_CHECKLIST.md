@@ -121,6 +121,7 @@ Record the date and OS/device version for each result.
 ## Final Checks
 
 - Run `python tools/verify_classic_archive.py`; the archive, manifest, licenses, build inputs and symbol inventory must match.
+- Run `python tools/release_hooks/pre_bump.py`; every Classic host call must be namespaced, the ESP32 final ELF must use only the bundled host, and the non-ESP32 map must exclude it.
 - Run `git diff --check` and a link/reference audit; exclude build artifacts, caches, and local-profile-only changes.
 
 ## Workflows
@@ -129,6 +130,6 @@ These run in GitHub Actions. Running them locally first would not change the res
 
 - `board-matrix.yml`: regenerate the board set and settle `docs/BOARDS.<version>.md`.
 - `core-matrix.yml`: recheck the supported Arduino-ESP32 versions and settle `docs/COMPATIBILITY.<version>.md`.
-- `compile-examples.yml`: run the Classic archive integrity/final-link gate, then compile every example across the release board set.
+- `compile-examples.yml`: run the Classic archive integrity, source namespace and final-link gates, then compile every example across the release board set.
 - `release.yml`: run the same Classic gate through the pre-bump hook, preview the version change, then create the version update, release branch, tag, and GitHub release.
 - After publication, verify the Arduino Library Manager version and compile the minimal example from the published package.

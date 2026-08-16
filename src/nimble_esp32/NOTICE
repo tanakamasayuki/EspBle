@@ -7,3 +7,8 @@ The Apache Software Foundation (http://www.apache.org/).
 
 Portions of this software were developed at
 Runtime Inc, copyright 2015.
+
+This vendored copy is not byte-for-byte identical to upstream. EspBle's
+vendoring process rewrites include paths, adds original-ESP32 and configuration
+guards, and applies the local patches recorded in tools/vendor_nimble_esp32.py.
+The pinned upstream revisions are recorded in VERSIONS.

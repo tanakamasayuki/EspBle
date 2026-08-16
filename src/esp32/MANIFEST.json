@@ -83,23 +83,72 @@
       "members": 5,
       "non_empty": 3,
       "empty": 2,
-      "license": "Apache-2.0"
+      "license": "Apache-2.0",
+      "source_files": [
+        "components/bt/common/osi/list.c",
+        "components/bt/host/bluedroid/btc/profile/std/hid/bta_hh_co.c",
+        "components/bt/host/bluedroid/btc/core/btc_sec.c",
+        "components/bt/host/bluedroid/hci/hci_audio.c",
+        "components/bt/host/bluedroid/stack/gatt/gatt_sr_hash.c"
+      ]
     },
-    "tinycrypt_mixed": {
-      "members": 15,
-      "non_empty": 14,
+    "tinycrypt_intel": {
+      "members": 10,
+      "non_empty": 10,
+      "empty": 0,
+      "licenses": [
+        "Apache-2.0",
+        "BSD-3-Clause"
+      ],
+      "source_files": [
+        "components/bt/common/tinycrypt/src/aes_decrypt.c",
+        "components/bt/common/tinycrypt/src/aes_encrypt.c",
+        "components/bt/common/tinycrypt/src/cbc_mode.c",
+        "components/bt/common/tinycrypt/src/ccm_mode.c",
+        "components/bt/common/tinycrypt/src/cmac_mode.c",
+        "components/bt/common/tinycrypt/src/ctr_mode.c",
+        "components/bt/common/tinycrypt/src/hmac.c",
+        "components/bt/common/tinycrypt/src/hmac_prng.c",
+        "components/bt/common/tinycrypt/src/sha256.c",
+        "components/bt/common/tinycrypt/src/utils.c"
+      ]
+    },
+    "tinycrypt_intel_and_mackay": {
+      "members": 4,
+      "non_empty": 3,
       "empty": 1,
       "licenses": [
         "Apache-2.0",
         "BSD-3-Clause",
         "BSD-2-Clause"
+      ],
+      "source_files": [
+        "components/bt/common/tinycrypt/src/ecc.c",
+        "components/bt/common/tinycrypt/src/ecc_dh.c",
+        "components/bt/common/tinycrypt/src/ecc_dsa.c",
+        "components/bt/common/tinycrypt/src/ecc_platform_specific.c"
+      ]
+    },
+    "tinycrypt_chris_morrison": {
+      "members": 1,
+      "non_empty": 1,
+      "empty": 0,
+      "licenses": [
+        "Apache-2.0",
+        "BSD-2-Clause"
+      ],
+      "source_files": [
+        "components/bt/common/tinycrypt/src/ctr_prng.c"
       ]
     },
     "brian_gladman_aes": {
       "members": 1,
       "non_empty": 0,
       "empty": 1,
-      "license": "LicenseRef-Brian-Gladman-AES"
+      "license": "LicenseRef-Brian-Gladman-AES",
+      "source_files": [
+        "components/bt/host/bluedroid/stack/smp/aes.c"
+      ]
     }
   },
   "license_files": [

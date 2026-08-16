@@ -23,7 +23,7 @@ def test_hfp_interoperates_with_the_core_bluedroid_audio_gateway(dut, peers, pro
     # feature exchange, indicator discovery, indicator activation — run between
     # the two independently built stacks.
     dut.write(b"c" + ag_address + b"\n")
-    dut.expect_exact("HFPCLIENT_CONNECT requested=1", timeout=10)
+    dut.expect(re.compile(rb"HFPCLIENT_CONNECT requested=1"), timeout=10)
     peer.expect(re.compile(rb"HFPPEER_CONNECTION state=2 peer=[0-9a-f:]+"), timeout=60)
     connection = dut.expect(
         re.compile(rb"HFPCLIENT_CONNECTION state=3 peer=[0-9a-f:]+ features=(\d+)"),

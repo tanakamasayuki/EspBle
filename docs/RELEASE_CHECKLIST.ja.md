@@ -124,6 +124,7 @@ done
 ## 最終確認
 
 - `python tools/verify_classic_archive.py`でarchive、manifest、license、build input、symbol inventoryの固定値が一致する。
+- `python tools/release_hooks/pre_bump.py`でClassic host呼出しがすべてnamespace化され、ESP32最終ELFが同梱hostだけを使い、非ESP32のmapがarchiveを含まないことを確認する。
 - `git diff --check`とリンク検索を行い、意図しないbuild artifact、cache、local profile固有の変更がないことを確認する。
 
 ## workflow
@@ -133,6 +134,6 @@ done
 
 - `board-matrix.yml`: 対象boardを再生成し、`docs/BOARDS.<version>.md`を確定する。
 - `core-matrix.yml`: Arduino-ESP32対応versionを再検証し、`docs/COMPATIBILITY.<version>.md`を確定する。
-- `compile-examples.yml`: Classic archiveのintegrity / final-link gate後、release対象board全体でexample compile。
+- `compile-examples.yml`: Classic archiveのintegrity / source namespace / final-link gate後、release対象board全体でexample compile。
 - `release.yml`: pre-bump hookで同じClassic gateを通した後、bump scriptのpreviewでversion変更を確認し、version、CHANGELOG、release branch、tag、GitHub releaseを作成する。
 - 公開後にArduino Library Managerから取得できるversionと最小exampleのcompileを確認する。

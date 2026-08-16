@@ -44,6 +44,7 @@ Examples are grouped by area. Each standard-service directory holds a matching
 ### Bluetooth Classic (original ESP32 only)
 
 Using `EspBleClassic` selects the separately built Classic host automatically.
+The precompiled host is supported only with Arduino-ESP32 3.3.11.
 There is no build flag: starting both `EspBle` and `EspBleClassic` is what makes
 a sketch dual-host, and starting one is what makes it single-host.
 

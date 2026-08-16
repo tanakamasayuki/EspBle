@@ -11,6 +11,7 @@ on:
       - "tools/classic_bluedroid_host/**"
       - "tools/verify_classic_archive.py"
       - "tools/release_hooks/pre_bump.py"
+      - "tests/unit/hci_router/test_classic_namespaced_calls.py"
       - ".github/workflows/compile-examples.yml"
   pull_request:
     paths:
@@ -21,6 +22,7 @@ on:
       - "tools/classic_bluedroid_host/**"
       - "tools/verify_classic_archive.py"
       - "tools/release_hooks/pre_bump.py"
+      - "tests/unit/hci_router/test_classic_namespaced_calls.py"
       - ".github/workflows/compile-examples.yml"
   workflow_dispatch:
 

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import runpy
 import shutil
 import subprocess
 import sys
@@ -12,6 +13,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 VERIFY = ROOT / "tools" / "verify_classic_archive.py"
+NAMESPACE_TEST = ROOT / "tests" / "unit" / "hci_router" / "test_classic_namespaced_calls.py"
+NAMESPACE_TEST_NAMES = (
+    "test_every_bluedroid_call_is_namespaced",
+    "test_the_check_can_see_the_calls_it_guards",
+)
 
 
 def run(command: list[str]) -> None:
@@ -27,8 +33,19 @@ def one_output(build_dir: Path, suffix: str) -> Path:
     return matches[0]
 
 
+def verify_namespaced_calls() -> None:
+    namespace = runpy.run_path(str(NAMESPACE_TEST))
+    for name in NAMESPACE_TEST_NAMES:
+        test = namespace.get(name)
+        if not callable(test):
+            raise RuntimeError(f"required namespace test is missing: {name}")
+        test()
+    print("Classic source namespace guard OK")
+
+
 def main() -> int:
     run([sys.executable, str(VERIFY)])
+    verify_namespaced_calls()
 
     arduino_cli = shutil.which("arduino-cli")
     if not arduino_cli:
