@@ -190,12 +190,19 @@ core-version range and per-board build coverage for BLE are measured by CI, not
 maintained by hand.
 
 > [!IMPORTANT]
-> **Bluetooth Classic is an exception to the generated BLE matrices.** The
-> precompiled Classic host is supported only with Arduino-ESP32 3.3.11 and is
-> ABI-bound to ESP-IDF 5.5.5 and xtensa-esp32 GCC 14.2.0. A successful BLE build
-> on another Core version does not imply Classic compatibility. The existing
-> `COMPATIBILITY.1.2.0.md` and `BOARDS.1.2.0.md` reports predate the Classic
-> examples and do not establish a Classic compatibility range.
+> **On the original ESP32, Arduino-ESP32 3.3.11 is required even for BLE-only
+> sketches.** Arduino compiles every `.cpp` under a library's `src/`, so the
+> Classic sources are always built. Measured: 3.3.10 and older do not compile.
+> 3.3.9 and 3.3.10 ship ESP-IDF v5.5.4, which lacks
+> `ESP_HIDD_APP_DESC_LIST_LEN_MAX`; 3.3.8 and older also lack
+> `esp32-hal-alloc-bt-classic-mem.h`. Below 3.3.11 the build stops at an `#error`
+> that says so. Other SoCs use the host their Core ships and carry no such
+> restriction; their range is what the generated matrices report.
+>
+> The precompiled Classic host is ABI-bound to ESP-IDF 5.5.5 and xtensa-esp32
+> GCC 14.2.0. The existing `COMPATIBILITY.1.2.0.md` and `BOARDS.1.2.0.md` reports
+> predate the Classic examples, and their original-ESP32 columns no longer match
+> the implementation.
 
 - **Core Compatibility Matrix** workflow → `docs/COMPATIBILITY.<version>.md` (representative BLE examples across arduino-esp32 releases)
 - **Board Build Coverage** workflow → `docs/BOARDS.<version>.md` (the examples present when the workflow runs, across ESP32-S3 / ESP32 / C3 / C6 / H2 / P4 at one Core version)

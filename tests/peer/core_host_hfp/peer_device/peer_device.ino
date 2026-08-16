@@ -8,8 +8,13 @@
 // codec chip instead of over HCI and an application here never sees it.
 #include <Arduino.h>
 // Without this the Core releases the Classic BT memory during startup, because
-// this sketch links none of the Bluetooth libraries that would claim it.
+// this sketch links none of the Bluetooth libraries that would claim it. Cores
+// that predate the header never release that memory, so its absence needs no
+// replacement -- this sketch is also built against older cores to measure which
+// of them still interoperate.
+#if __has_include(<esp32-hal-alloc-bt-classic-mem.h>)
 #include <esp32-hal-alloc-bt-classic-mem.h>
+#endif
 #include <esp32-hal-bt.h>
 #include <esp_bt_device.h>
 #include <esp_bt_main.h>

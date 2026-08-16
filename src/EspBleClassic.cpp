@@ -16,7 +16,12 @@
   (defined(ESPBLE_CLASSIC_ONLY) || defined(ESPBLE_ENABLE_CLASSIC) || \
    defined(ESPBLE_CLASSIC_CUSTOM_HOST))
 #define ESPBLE_CLASSIC_BACKEND_AVAILABLE 1
+// Arduino-ESP32 3.3.9 added this header, and with it the startup path that
+// releases the Classic BT memory unless a library claims it. Cores without the
+// header never release that memory, so there is nothing to claim there.
+#if __has_include(<esp32-hal-alloc-bt-classic-mem.h>)
 #include <esp32-hal-alloc-bt-classic-mem.h>
+#endif
 #include <esp32-hal-bt.h>
 // Transmit power is a controller setting, so it comes from the controller header
 // and needs no namespacing: only the host archive is built separately.
@@ -274,7 +279,15 @@ const ClassicHostPresence classicHostPresence;
 // controller so the sketch can start BLE before, after, or alongside Classic.
 bt_mode controllerStartMode()
 {
+#if __has_include(<esp32-hal-alloc-bt-classic-mem.h>)
   return bleInUse() ? BT_MODE_BTDM : BT_MODE_CLASSIC_BT;
+#else
+  // Cores without that header have no way to ask whether a BLE host is linked.
+  // Dual mode is the answer that keeps every sketch working: it costs the BLE
+  // controller memory a Classic-only sketch could have reclaimed, where the
+  // other choice would break any sketch that also starts BLE.
+  return BT_MODE_BTDM;
+#endif
 }
 #endif
 

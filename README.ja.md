@@ -157,11 +157,16 @@ pin設定を上書きします（[SDIO pinの選択と上書き](docs/ESP_HOSTED
 BLEビルドカバレッジは手動管理ではなくCIで計測します。
 
 > [!IMPORTANT]
-> **Bluetooth Classicは生成済みBLE matrixの例外です。** precompiled Classic hostの対応環境は
-> Arduino-ESP32 3.3.11のみで、ESP-IDF 5.5.5 / xtensa-esp32 GCC 14.2.0のABIに固定しています。
-> 他CoreでBLE exampleがbuildできてもClassic互換を意味しません。既存の
-> `COMPATIBILITY.1.2.0.md`と`BOARDS.1.2.0.md`はClassic example追加前の結果であり、
-> Classicの互換範囲を示すものではありません。
+> **無印ESP32では、BLEだけを使う場合もArduino-ESP32 3.3.11が必要です。** Arduinoはライブラリの
+> `src/`にある`.cpp`をすべてcompileするので、Classicのsourceが必ず巻き込まれます。実測では
+> 3.3.10以前はcompileが通りません。3.3.9 / 3.3.10は同梱ESP-IDFがv5.5.4で
+> `ESP_HIDD_APP_DESC_LIST_LEN_MAX`を持たず、3.3.8以前は`esp32-hal-alloc-bt-classic-mem.h`が
+> ありません。3.3.11未満では理由付きの`#error`で止まります。他のSoCはCore同梱hostを使うため
+> この制約はなく、範囲は生成matrixのとおりです。
+>
+> precompiled Classic hostはESP-IDF 5.5.5 / xtensa-esp32 GCC 14.2.0のABIに固定しています。
+> 既存の`COMPATIBILITY.1.2.0.md`と`BOARDS.1.2.0.md`はClassic example追加前の結果で、
+> 無印ESP32列は現在の実装と一致していません。
 
 - **Core Compatibility Matrix** ワークフロー → `docs/COMPATIBILITY.<version>.md`（代表BLE exampleをarduino-esp32の各リリースに対してビルド）
 - **Board Build Coverage** ワークフロー → `docs/BOARDS.<version>.md`（workflow実行時点のexampleを1つのCoreバージョンでESP32-S3 / ESP32 / C3 / C6 / H2 / P4に対してビルド）

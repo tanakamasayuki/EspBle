@@ -98,6 +98,20 @@ uv run --env-file .env pytest --clean \
 
 P4 fixtureの条件とpinは[ESP-Hostedセットアップ](ESP_HOSTED_SETUP.ja.md)、実行頻度と必須合格範囲は[テスト計画](../tests/TEST_PLAN.ja.md#p4c6-esp-hosted回帰)を参照します。[既知制限](ESP_HOSTED_LIMITATIONS.ja.md)に該当するSecurityと完全な初期化・終了反復は現在のrelease gateには含めませんが、CoreまたはC6 firmwareを更新した場合は再実行して解消の有無を確認します。
 
+無印ESP32のcore版数gate（実機不要）。`src/`はArduinoの仕様上Classicのsourceも必ずcompileされるため、
+このboardではBLEだけのsketchも同じ版数制約を受けます。3.3.11以外が落ちること、3.3.11で全passすることを
+確認します。理由と実測は[core版数のテスト計画](PLAN_CORE_VERSION_MATRIX.ja.md)にあります。
+
+```sh
+python3 tools/version_matrix.py \
+  --core-versions 3.3.9,3.3.10,3.3.11 --targets esp32 \
+  --examples CompileSmoke,Gap/Connect,Security/StaticPasskeyServer,Classic/SppServer,Classic/HidKeyboard,Classic/A2dpSinkAvrcp \
+  --output /tmp/esp32_core_matrix.md
+```
+
+`docs/COMPATIBILITY.<version>.md`の無印ESP32列は、Classicが`src/`へ入る前の結果のままです。
+releaseでは`core-matrix.yml`を回して再生成し、この列が変わることを確認します。
+
 全exampleのESP32-S3 compile:
 
 ```sh

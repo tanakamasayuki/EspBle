@@ -96,6 +96,23 @@ uv run --env-file .env pytest --clean \
 
 See the [ESP-Hosted setup guide (Japanese)](ESP_HOSTED_SETUP.ja.md) for fixture and pin requirements, the [test policy](../tests/TEST_PLAN.md#p4c6-esp-hosted-regression) for frequency and pass criteria, and the [known limitations (Japanese)](ESP_HOSTED_LIMITATIONS.ja.md) for current exclusions. Security and repeated full initialization/deinitialization cases affected by those limitations are not current release gates; re-run them after any Core or C6 firmware update to check whether the limitation has been resolved.
 
+Core-version gate for the original ESP32 (no hardware). Arduino builds every `.cpp`
+under `src/`, so the Classic sources are compiled even for BLE-only sketches and this
+board carries the same version constraint either way. Check that everything below
+3.3.11 fails and that 3.3.11 passes; the reasoning and measurements are in the
+Japanese [core-version test plan](PLAN_CORE_VERSION_MATRIX.ja.md).
+
+```sh
+python3 tools/version_matrix.py \
+  --core-versions 3.3.9,3.3.10,3.3.11 --targets esp32 \
+  --examples CompileSmoke,Gap/Connect,Security/StaticPasskeyServer,Classic/SppServer,Classic/HidKeyboard,Classic/A2dpSinkAvrcp \
+  --output /tmp/esp32_core_matrix.md
+```
+
+The original-ESP32 column of `docs/COMPATIBILITY.<version>.md` still holds results from
+before Classic entered `src/`. Run `core-matrix.yml` at release time and confirm that
+column changes.
+
 Compile every example for ESP32-S3:
 
 ```sh

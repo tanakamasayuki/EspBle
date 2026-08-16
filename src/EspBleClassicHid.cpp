@@ -45,6 +45,7 @@
 #include <esp_gap_bt_api.h>
 #include <esp_hidd_api.h>
 #include <esp_hidh_api.h>
+#include "EspBleClassicCoreCompat.h"
 #else
 #define ESPBLE_CLASSIC_HID_BACKEND_AVAILABLE 0
 #endif

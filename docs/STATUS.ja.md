@@ -44,6 +44,13 @@ BLE MIDIはbackend非依存のpacket codec（timestamp・running status・複数
   このhostのサポートや互換性は保証しません。そのぶん**機能ごとの状態——実機検証済み / 未検証 /
   未実装——を[Classic機能の棚卸し](CLASSIC_FEATURE_INVENTORY.ja.md)に明記**します。外部機器との相互運用は
   未検証です。BLEとClassicの同時利用もflagは不要で（`begin()`したhostで決まります）、ただし実験扱いのままです。
+- 無印ESP32では、BLEだけを使う場合もArduino-ESP32 3.3.11が必要です。Arduinoが`src/`の`.cpp`を
+  すべてcompileするためClassicのsourceが必ず巻き込まれ、3.3.10以前はcompileできません
+  （3.3.9 / 3.3.10は同梱IDFがv5.5.4で`ESP_HIDD_APP_DESC_LIST_LEN_MAX`が無く、3.3.8以前は
+  `esp32-hal-alloc-bt-classic-mem.h`が無い）。BLE代表7 example + Classic 9 exampleを
+  3.2.1 / 3.3.8 / 3.3.9 / 3.3.10 / 3.3.11で実測した結果で、3.3.11以外は全滅です。
+  3.3.11未満は理由付きの`#error`、3.3.11超は未検証である旨の`#warning`を出します。
+  他のSoCはCore同梱hostを使うためこの制約はありません。
 - Core 3.3.11のP4/C6 ESP-Hosted構成では、同梱ESP-IDF 5.5.5のTinyCrypt/ECC不具合で
   LE Secure ConnectionsがDHKey check failureとなるため、Security、bonding、それを
   前提とするHIDは未対応です。ESP-IDF `release/v5.5`では`9fd7cb7`で修正済みですが、

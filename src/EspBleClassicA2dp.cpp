@@ -27,6 +27,7 @@
 #define esp_bt_gap_set_scan_mode espble_bd_esp_bt_gap_set_scan_mode
 #include <esp_a2dp_api.h>
 #include <esp_gap_bt_api.h>
+#include "EspBleClassicCoreCompat.h"
 #else
 #define ESPBLE_CLASSIC_A2DP_BACKEND_AVAILABLE 0
 #endif

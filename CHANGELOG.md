@@ -17,6 +17,19 @@
 - (JA) NimBLE sourceとprecompiled Classic-only Bluedroid hostを組み合わせる意図的なmixed
   distribution、ClassicのArduino-ESP32 3.3.11限定契約を明記した。archiveの機械可読な来歴、
   第三者ライセンス全文、integrity / final-linkの自動gateも追加した。
+- (EN) Building for the original ESP32 with a core older than Arduino-ESP32 3.3.11 now
+  stops at an error that says so, and a newer core warns that it is unverified. Arduino
+  compiles every source under a library's `src/`, so the Classic host's sources are built
+  even for BLE-only sketches: 3.3.9 and 3.3.10 ship ESP-IDF v5.5.4 and fail on a missing
+  `ESP_HIDD_APP_DESC_LIST_LEN_MAX`, and 3.3.8 and older fail earlier on a missing
+  `esp32-hal-alloc-bt-classic-mem.h`. Neither message explained the real cause. Other
+  SoCs are unaffected.
+- (JA) 無印ESP32をArduino-ESP32 3.3.11より古いcoreでbuildすると、理由を書いたerrorで止まるように
+  した。新しいcoreは未検証である旨のwarningを出す。Arduinoはライブラリの`src/`にあるsourceを
+  すべてcompileするため、BLEだけのsketchでもClassic hostのsourceがbuildされる。3.3.9 / 3.3.10は
+  同梱ESP-IDFがv5.5.4で`ESP_HIDD_APP_DESC_LIST_LEN_MAX`が無く、3.3.8以前はさらに手前の
+  `esp32-hal-alloc-bt-classic-mem.h`で落ちる。どちらのmessageも本当の原因を説明しなかった。
+  他のSoCへの影響は無い。
 
 ### Bluetooth Classic on the original ESP32 / 無印ESP32のBluetooth Classic
 

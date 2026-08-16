@@ -9,8 +9,13 @@
 // Arduino-ESP32 3.3.11 releases the Classic BT memory during startup unless a
 // Bluetooth library is linked, and a sketch that calls the ESP-IDF API directly
 // links none. This header's constructor is what declares the memory as in use;
-// without it btStart() fails before any of the code below runs.
+// without it btStart() fails before any of the code below runs. Cores that
+// predate the header never release that memory, so its absence needs no
+// replacement -- this sketch is also built against older cores to measure which
+// of them still interoperate.
+#if __has_include(<esp32-hal-alloc-bt-classic-mem.h>)
 #include <esp32-hal-alloc-bt-classic-mem.h>
+#endif
 #include <esp32-hal-bt.h>
 #include <esp_a2dp_api.h>
 #include <esp_avrc_api.h>

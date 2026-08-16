@@ -503,6 +503,31 @@ suite名は`core_host_*`（Classic SPPだけは先行して作った`classic_cor
 - **AVRCP TGのsupported command集合はallowed集合の丸写しでは`ESP_ERR_NOT_SUPPORTED`になる。**
   PLAY/PAUSE/STOPのように明示して組む。
 
+## Coreバージョンを変えて回す
+
+sketch.yamlのpinを実行中だけ書き換えるoptionが2つあります。指定しなければ何も書き換えません。
+
+| option | 対象 | 用途 |
+| --- | --- | --- |
+| `--core-version=X` | DUTのsketch.yaml | ライブラリ自身を古いCoreで動かせるか |
+| `--peer-core-version=X` | peerのsketch.yaml | 古いCoreで作られた相手と繋がるか |
+
+DUTとpeerを分けて指定できます。DUTを古くするときにS3のpeerまで古くすると、S3ではCore同梱の
+NimBLEが無くcompileできないためです。書き換えはcollect後・compile前に行い、session終了時に
+戻します。原本は`/tmp/espble-core-version-backup/`にも退避するので、processごと落ちた場合は
+そこから戻せます。実行後は`git status`が空であることを確認してください。
+
+```sh
+uv run --env-file .env pytest peer/gatt_read_write/ \
+  --profile esp32_peer_host --peer-profile device:s3_peer_device --core-version 3.3.10
+```
+
+無印ESP32のDUTは3.3.11でしか動きません（`src/`のClassic sourceが必ずcompileされるため。理由と
+実測は[core版数のテスト計画](../docs/PLAN_CORE_VERSION_MATRIX.ja.md)）。したがって`--core-version`が
+意味を持つのは、その制約を再確認するときと、他のSoCを対象にするときです。`--peer-core-version`は
+peerがEspBleをlinkしないsuite（`core_host_*`と`classic_core_host_spp`）で使い、実行頻度はmanualです。
+毎回の回帰は3.3.11のままにします。
+
 ## 起動banner待ちを避ける
 
 sketchが起動時に1度だけ出す行を待つtestは、serial monitorがreset後に接続すると取りこぼして

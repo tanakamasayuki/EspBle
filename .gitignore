@@ -15,6 +15,10 @@ arduino_secrets.h
 *.txt
 !keywords.txt
 !src/esp32/LICENSES/*.txt
+# Build inputs for the Classic host archive. verify_classic_archive.py checks
+# these by hash, so a checkout without them fails the release gate.
+!tools/classic_bluedroid_host/CMakeLists.txt
+!tools/classic_bluedroid_host/main/CMakeLists.txt
 
 # Release helper cache
 tools/cache/

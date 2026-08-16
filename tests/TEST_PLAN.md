@@ -376,6 +376,35 @@ the peer sketches turned up three things worth knowing:
 - **An AVRCP Target's supported-command set cannot be a copy of the allowed set**; that
   returns `ESP_ERR_NOT_SUPPORTED`. Build it explicitly (PLAY/PAUSE/STOP).
 
+## Running against another core version
+
+Two options rewrite the sketch.yaml pins for the duration of a run. Without them
+nothing is rewritten.
+
+| Option | Applies to | Question it answers |
+| --- | --- | --- |
+| `--core-version=X` | the DUT's sketch.yaml | can the library itself run on an older core |
+| `--peer-core-version=X` | the peers' sketch.yaml | does it interoperate with a peer built by an older core |
+
+They are separate because moving the DUT to an older core must not move an S3 peer
+with it: an S3 has no bundled NimBLE below 3.3.0 and cannot compile. The rewrite
+happens after collection and before any compile, and is undone when the session
+ends; the originals are also copied to `/tmp/espble-core-version-backup/` so a hard
+kill can be recovered by hand. Check that `git status` is clean afterwards.
+
+```sh
+uv run --env-file .env pytest peer/gatt_read_write/ \
+  --profile esp32_peer_host --peer-profile device:s3_peer_device --core-version 3.3.10
+```
+
+An original-ESP32 DUT only builds on 3.3.11, because the Classic sources under `src/`
+are always compiled; the reasoning and measurements are in the Japanese
+[core-version test plan](../docs/PLAN_CORE_VERSION_MATRIX.ja.md). So `--core-version`
+is useful for re-confirming that constraint and for other SoCs, while
+`--peer-core-version` is used with the suites whose peer links no EspBle
+(`core_host_*` and `classic_core_host_spp`). Both are manual runs: the routine
+regression stays on 3.3.11.
+
 ## Do not wait for a startup banner
 
 A test that waits for a line a sketch prints once at boot misses it when the

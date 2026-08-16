@@ -94,8 +94,12 @@ sketch数 × version数だけprofileが増えます。
 `tests/conftest.py`へ次の2つのoptionを足します。既定値なしで、指定しなければ
 sketch.yamlには一切触りません。
 
-- `--core-version=X`: DUTとpeerの両方のpinをXにする（軸A用）
+- `--core-version=X`: DUT sketchのpinだけXにする（軸A用。peerは3.3.11のまま）
 - `--peer-core-version=X`: peer sketchのpinだけXにする（軸B用。DUTは3.3.11のまま）
+- 両方渡せばsuite全体が古いCoreになる
+
+DUTとpeerを別に指定できる必要があります。たとえば軸AでDUTを3.2.1にするとき、S3のpeerまで
+3.2.1にすると、S3ではCore同梱NimBLEが無くcompileできません（`src/EspBle.h:18`のbackend検査）。
 
 session単位のfixtureで、collectされたsuiteのsketch.yamlだけをsnapshotし、書き換え、
 teardownで復元します。事故防止は4段構えにします。
@@ -244,16 +248,128 @@ P1を先頭に置いているのは、そこが唯一「利用者が既に動く
 | [テスト計画](../tests/TEST_PLAN.ja.md) | L1 / L2の実行方法と頻度 |
 | [リリースチェックリスト](RELEASE_CHECKLIST.ja.md) | L0をreleaseの手順として追加 |
 
-## 想定される結果とリスク
+## 実測結果
 
-- BLEは3.2.x系でもcompileが通っています。持ち込みNimBLEがsourceで、Coreへの依存が
-  controller境界に寄っているためです。実機でも動く可能性は十分ありますが、
-  **確かめるまでは「動く」と書けません。** いま公開している表がそう読めてしまうのが問題です。
-- Classicは3.3.x系ならlinkが通り、3.2.x系はundefined referenceで落ちる形がもっともありそうです。
-  同じIDF 5.5系でも、patch間でinline関数やstruct layoutが変われば通りません。
-- 危険なのは、linkが通ってruntimeで壊れる場合です。archiveはIDFのheaderに従って
-  struct layoutを焼き込んでいるので、layoutが変わった相手とlinkできてしまうと、
-  症状はcompile errorではなく実行時の異常として出ます。**L0のPASSを対応の根拠にせず、
-  必ずL1まで進める**のはこのためです。
+### P0-1: profile pinは隔離される（2026-08-16）
+
+repo外へ複製したsketchのpinを3.2.1にしてcompileし、導入先を確認しました。
+
+```
+Used platform  Version  Path
+esp32:esp32    3.2.1    /home/mt/.arduino15/internal/esp32_esp32_3.2.1_db7af308ecb78b10
+```
+
+`~/.arduino15/packages/esp32/hardware/esp32/`は3.3.11のままです。pinしたversionは
+arduino-cliがprofile専用の格納先へ入れ、通常環境のcoreを置き換えません。一度入れれば
+そこに残るので、2回目以降のdownloadも起きません。案3（実行時に書き換えて復元）で進めます。
+
+同時に、Classicの最初の実測が取れました。3.2.1ではlink以前にcompileが止まります。
+
+```
+/home/mt/dev/EspBle/src/EspBleClassic.cpp:19:10: fatal error:
+  esp32-hal-alloc-bt-classic-mem.h: No such file or directory
+```
+
+archiveのABIまで到達する前に、EspBle自身のClassic sourceがCore 3.3.x系のheaderを
+要求して落ちています。利用者にはheaderが無いとしか見えないので、`#error`で理由を出す
+価値がここで裏付けられました。
+
+### P1: BLEのsuiteも3.2.1では動かせない（2026-08-16）
+
+無印ESP32をDUT、S3をPeerにして代表smokeを`--core-version 3.2.1`で実行したところ、
+5 suiteすべてがcompileの時点で失敗しました。原因はP0-1と同一です。
+
+```
+src/EspBleClassic.cpp:19:10: fatal error: esp32-hal-alloc-bt-classic-mem.h: No such file or directory
+```
+
+BLEしか使わないsketchでも、Arduinoはライブラリの`src/`にある`.cpp`をすべてcompileします。
+無印ESP32では`CONFIG_BT_CLASSIC_ENABLED`により`EspBleClassic.cpp`の中身が有効になるので、
+**Classicを使うかどうかに関係なく**このheaderが要ります。
+
+そのheaderは[arduino-esp32 #12574](https://github.com/espressif/arduino-esp32/pull/12574)で
+**3.3.9に追加**されたものです（3.3.8以前のtagには存在しません）。
+
+したがって現在の`src/`は、無印ESP32ではcore 3.3.9以上を必須にしています。
+[COMPATIBILITY.1.2.0.md](COMPATIBILITY.1.2.0.md)のesp32列が3.2.0から✅なのは、
+Classicが`src/`へ入る前に生成された表だからで、**現在の実装とは一致していません**。
+releaseまでに再生成が必要です。
+
+### L0: 無印ESP32のcompile matrix（2026-08-16）
+
+BLE代表7 example + Classic 9 exampleを、無印ESP32向けに5 versionでcompileしました。
+**16 example × 3.2.1 / 3.3.8 / 3.3.9 / 3.3.10 がすべて失敗、3.3.11だけ全passです。**
+理由は2つに分かれます。
+
+| core | 同梱ESP-IDF | `esp32-hal-alloc-bt-classic-mem.h` | `ESP_HIDD_APP_DESC_LIST_LEN_MAX` | 結果 |
+| --- | --- | --- | --- | --- |
+| 3.2.1 | v5.4系 | 無 | 無 | ❌ header |
+| 3.3.8 | v5.5系 | 無 | 無 | ❌ header |
+| 3.3.9 | v5.5.4 | 有 | 無 | ❌ 定数 |
+| 3.3.10 | v5.5.4 | 有 | 無 | ❌ 定数 |
+| 3.3.11 | v5.5.5 | 有 | 有（2048） | ✅ |
+
+```
+src/EspBleClassicHid.cpp:720:37: error: 'ESP_HIDD_APP_DESC_LIST_LEN_MAX' was not declared in this scope
+```
+
+`ESP_HIDD_APP_DESC_LIST_LEN_MAX`はESP-IDF v5.5.5で入った定数で、archiveをbuildしたIDFと
+同じ版です。3.3.9 / 3.3.10はv5.5.4なので、headerを通過しても次で止まります。
+
+つまり「Arduino-ESP32 3.3.11のみ」という宣言は正しく、**無印ESP32ではBLEだけを使う場合も
+同じ制約**です。当初この計画で疑っていた「compileが通るのに実機未検証」という危険な
+状態は、無印ESP32には存在しませんでした。危険なのは公開済みの表のほうです。
+
+### 壁の実体は3つの小さなAPIずれだった（2026-08-16）
+
+「3.3.11のみ」は狭すぎるという指摘を受けて、止まっている箇所を1つずつ潰して測り直しました。
+出てきたのはABIの不一致ではなく、Core同梱IDFのheaderにある**名前の増減**だけです。
+
+| 版 | 止まった箇所 | 性質 | 対処 |
+| --- | --- | --- | --- |
+| 3.3.8以下 | `esp32-hal-alloc-bt-classic-mem.h`が無い | Core 3.3.9で新設されたheader | `__has_include`。無い版はそもそもClassic BTメモリを解放しない |
+| 3.3.8以下 | `bleInUse()`が無い | 同じheader由来 | 無い版はdual modeで起動（BLEを使うsketchを壊さない側へ倒す） |
+| 3.3.10以下 | `ESP_HIDD_APP_DESC_LIST_LEN_MAX`が無い | ESP-IDF v5.5.5で追加 | 2048を自前定義。SDP padの上限はrecordを持つhost側の値 |
+| 3.3.0 | `ESP_A2D_SBC_CIE_ALLOC_MTHD_SNR`が無く`SRN` | v5.5.5での綴り修正（値は同じ0x2） | aliasを定義 |
+
+shimは[EspBleClassicCoreCompat.h](../src/EspBleClassicCoreCompat.h)へ集約しました。3.3.11では
+どちらの名前もCore側に存在するため、shimは`#ifndef`で無効になります。**現行の対応版に対する
+挙動変更はありません。**
+
+そのうえでcompile matrixを取り直すと、**3.3.0から3.3.11までbuildもlinkも通ります**。
+5.5.5でbuildしたarchiveは、5.5.4以前のIDFを載せたCoreとlinkできています。
+
+実機も確認しました。DUTを3.3.10でbuildしたBLE代表smokeは**4 passed（9:00）**で、
+GATT read/write、bonding、MTUが通っています。
+
+Classicは無印ESP32 2台とも3.3.10でbuildし、`classic_inquiry` / `classic_pairing` /
+`classic_spp_stream` / `classic_hid_api` / `classic_a2dp_media` / `classic_hfp_client`の
+**6 suiteすべてが通りました**。まとめて実行したときは`classic_inquiry`だけが
+`INQUIRY_READY`をbuffer空でtimeoutしましたが、単独実行では3:39で通ります。
+[起動banner待ち](../tests/TEST_PLAN.ja.md#起動banner待ちを避ける)の取りこぼしで、
+3.3.10の退行ではありません（このsuiteは`probe`化がまだ済んでいない側です）。
+
+つまり**3.3.10はbuildできるだけでなく、BLEもClassicも実機で動きます。**
+
+### 版数guardの追加
+
+失敗の理由が利用者に伝わらないので、`EspBleClassicBuild.h`へguardを入れました。
+3.3.11未満は`#error`、3.3.11超は`#warning`です。後者を止めないのは、ABIが未検証であって
+壊れると分かったわけではないからで、黙って食い違うよりは言うほうがましだという判断です。
+
+### L2: 相手を3.3.10でbuildしても繋がる（2026-08-16）
+
+DUTを3.3.11のEspBle、peerを`--peer-core-version 3.3.10`でbuildして、peerがEspBleをlinkしない
+7 suite（`core_host_gatt` / `core_host_security` / `core_host_hid` / `core_host_midi` /
+`core_host_a2dp` / `core_host_hfp` / `classic_core_host_spp`）を実行し、**7 passed（18:55）**でした。
+GATT、pairing、HID over GATT、BLE MIDI、SPP、A2DP、HFPが版をまたいで噛み合っています。
+
+軸Aの厳しさは通信仕様ではなくbuild時のIDF依存から来ている、という切り分けの根拠になります。
+
+## 残っているリスク
+
+- L0のPASSは「buildできる」であって「動く」ではありません。archiveはIDFのheaderに従って
+  struct layoutを焼き込んでいるので、layoutが変わった相手とlinkできてしまうと、症状は
+  compile errorではなく実行時の異常として出ます。**linkが通ったversionは必ずL1まで進めます。**
 - L2が落ちた場合、原因がCore側にある可能性があります。EspBle側を変更する前に、
   同じ古いCore同士（peerを2台とも古いCoreにする）で再現するかを確認します。
