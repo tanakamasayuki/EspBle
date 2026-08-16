@@ -117,8 +117,17 @@ void removeAllBonds()
   }
   free(list);
   bondedFlag = false;
+  // The removal is queued to the Bluedroid task, so the count read right after
+  // the call still includes the entry being removed. Wait for the list to
+  // actually drain instead of reporting the stale number.
+  int remaining = esp_ble_get_bond_device_num();
+  for (unsigned attempt = 0; attempt < 40 && remaining > 0; ++attempt)
+  {
+    delay(50);
+    remaining = esp_ble_get_bond_device_num();
+  }
   Serial.printf("SECPEER_BONDS_CLEARED removed=%u remaining=%d\n", removed,
-    esp_ble_get_bond_device_num());
+    remaining);
 }
 
 void setup()

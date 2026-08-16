@@ -39,6 +39,7 @@ The design documents are written in Japanese. This guide lists them and shows th
 | Original-ESP32 support: policy, upstream sources, verification plan (Japanese) | [PLAN_ESP32.ja.md](PLAN_ESP32.ja.md) |
 | Original-ESP32 Classic implementation plan: distribution form and stages (Japanese) | [PLAN_ESP32_CLASSIC.ja.md](PLAN_ESP32_CLASSIC.ja.md) |
 | Classic Audio (A2DP / AVRCP / HFP) expansion plan (Japanese) | [PLAN_ESP32_CLASSIC_AUDIO.ja.md](PLAN_ESP32_CLASSIC_AUDIO.ja.md) |
+| Bundled hosts against other Arduino-ESP32 core versions: test plan (Japanese) | [PLAN_CORE_VERSION_MATRIX.ja.md](PLAN_CORE_VERSION_MATRIX.ja.md) |
 | ESP32-P4 / ESP-Hosted support plan (Japanese) | [PLAN_ESP_HOSTED.ja.md](PLAN_ESP_HOSTED.ja.md) |
 | Coexistence research and hardware validation record for NimBLE plus Classic (Japanese) | [TECHNICAL_VALIDATION_ESP32_CLASSIC.ja.md](TECHNICAL_VALIDATION_ESP32_CLASSIC.ja.md) |
 | A2DP validation and fix request sent to PCMFlowBluetooth (Japanese) | [REQUEST_PCMFLOWBLUETOOTH_A2DP_VALIDATION.ja.md](REQUEST_PCMFLOWBLUETOOTH_A2DP_VALIDATION.ja.md) |
