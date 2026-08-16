@@ -14,18 +14,28 @@ BLE-named objects in the static archive; a Classic-only final link does not sele
 them. The artifact's complete provenance, hashes and license inventory are in
 [`MANIFEST.json`](MANIFEST.json), [`NOTICE`](NOTICE) and [`LICENSES/`](LICENSES/).
 
+[`include/`](include/) holds the Bluedroid API headers the archive was built
+against, copied byte-identically from the same ESP-IDF by
+`tools/vendor_classic_contract.py`. The Classic sources include these instead of
+the core's copies, so the declarations and struct layouts always match what the
+archive baked in, whatever Arduino-ESP32 version the sketch compiles against.
+Do not edit them; regenerating the archive refreshes them together with it, and
+`tools/verify_classic_archive.py` checks the pair.
+
 To regenerate it, install and export ESP-IDF v5.5.5, then run:
 
 ```sh
 tools/build_classic_bluedroid_host.sh
 ```
 
-The output is ABI-bound to ESP-IDF v5.5.5 and xtensa-esp32 GCC 14.2.0 and is
-supported only with Arduino-ESP32 3.3.11. Other Core versions are outside the
-Classic compatibility contract. The build script rejects a different IDF tag, a
-dirty IDF
-checkout, or a different compiler instead of silently producing an incompatible
-library. It also checks the required HCI, SPP, HID, A2DP, AVRCP and HFP symbols and prints the archive
+The output is ABI-bound to ESP-IDF v5.5.5 and xtensa-esp32 GCC 14.2.0. Because
+the compile-time contract ships in `include/`, the archive's remaining coupling
+to the core is a small set of stable platform APIs (FreeRTOS, NVS, esp_timer,
+heap, logging); the core-version range this actually supports is measured, not
+assumed — see the Japanese
+[core-version test plan](../../docs/PLAN_CORE_VERSION_MATRIX.ja.md). The build
+script rejects a different IDF tag, a dirty IDF checkout, or a different
+compiler instead of silently producing an incompatible library. It also checks the required HCI, SPP, HID, A2DP, AVRCP and HFP symbols and prints the archive
 size, global-symbol count and SHA-256 digest.
 
 EspBle intentionally uses Arduino's mixed-library layout: the original ESP32's

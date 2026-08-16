@@ -402,13 +402,13 @@ ports, but the sketch.yaml rewrite and the build directory are shared, so one se
 in the other's compile. It shows up as `cannot specify '-o' with '-c' ... with multiple files`, which
 says nothing about the core version. Different suites run in parallel safely.
 
-An original-ESP32 DUT only builds on 3.3.11, because the Classic sources under `src/`
-are always compiled; the reasoning and measurements are in the Japanese
-[core-version test plan](../docs/PLAN_CORE_VERSION_MATRIX.ja.md). So `--core-version`
-is useful for re-confirming that constraint and for other SoCs, while
-`--peer-core-version` is used with the suites whose peer links no EspBle
-(`core_host_*` and `classic_core_host_spp`). Both are manual runs: the routine
-regression stays on 3.3.11.
+An original-ESP32 DUT supports cores 3.2.0 and newer (the measurement record is
+the Japanese [core-version test plan](../docs/PLAN_CORE_VERSION_MATRIX.ja.md);
+HFP audio alone needs 3.3.9 because of the core's prebuilt controller). Use
+`--core-version` to re-confirm the lower end of that range on hardware, and
+`--peer-core-version` with the suites whose peer links no EspBle (`core_host_*`
+and `classic_core_host_spp`). Both are manual runs: the routine regression stays
+on 3.3.11.
 
 ## Do not wait for a startup banner
 

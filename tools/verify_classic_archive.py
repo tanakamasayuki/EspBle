@@ -44,6 +44,27 @@ EXPECTED_BUILD_INPUT_FILES = {
     "../../tools/classic_bluedroid_host/main/CMakeLists.txt",
     "../../tools/classic_bluedroid_host/main/link_check.c",
 }
+# The Bluedroid API headers the archive was built against, vendored by
+# tools/vendor_classic_contract.py so the compile-time contract cannot drift
+# with the Arduino-ESP32 core version. Regenerating the archive must refresh
+# these together with it.
+EXPECTED_CONTRACT_HEADER_FILES = {
+    "include/esp_a2dp_api.h",
+    "include/esp_a2dp_legacy_api.h",
+    "include/esp_avrc_api.h",
+    "include/esp_bluedroid_hci.h",
+    "include/esp_bt_defs.h",
+    "include/esp_bt_main.h",
+    "include/esp_gap_bt_api.h",
+    "include/esp_hf_ag_api.h",
+    "include/esp_hf_ag_legacy_api.h",
+    "include/esp_hf_client_api.h",
+    "include/esp_hf_client_legacy_api.h",
+    "include/esp_hf_defs.h",
+    "include/esp_hidd_api.h",
+    "include/esp_hidh_api.h",
+    "include/esp_spp_api.h",
+}
 EXPECTED_KCONFIG = {
     "CONFIG_BT_CONTROLLER_DISABLED": True,
     "CONFIG_BT_BLUEDROID_ENABLED": True,
@@ -218,6 +239,14 @@ def verify_manifest_contract(manifest: dict[str, object]) -> None:
         "required build input inventory differs",
     )
 
+    contract = manifest["contract_headers"]
+    require(isinstance(contract, dict), "contract_headers must be an object")
+    contract_files = {str(record["file"]) for record in contract["files"]}
+    require(
+        contract_files == EXPECTED_CONTRACT_HEADER_FILES,
+        "vendored contract header inventory differs",
+    )
+
     license_records = manifest["license_files"]
     require(isinstance(license_records, list), "license_files must be an array")
     records_by_file = {str(record["file"]): record for record in license_records}
@@ -371,6 +400,22 @@ def verify_archive(manifest: dict[str, object]) -> None:
 
     for record in manifest["build_inputs"]:
         verify_recorded_file(base, record, "build input")
+    contract_records = manifest["contract_headers"]["files"]
+    for record in contract_records:
+        verify_recorded_file(base, record, "contract header")
+    recorded_headers = {
+        resolve_recorded_path(base, str(record["file"]))
+        for record in contract_records
+    }
+    actual_headers = {
+        path.resolve()
+        for path in (base / "include").iterdir()
+        if path.is_file()
+    }
+    require(
+        actual_headers == recorded_headers,
+        "include/ directory and manifest contract headers differ",
+    )
     license_records = manifest["license_files"]
     for record in license_records:
         verify_recorded_file(base, record, "license file")

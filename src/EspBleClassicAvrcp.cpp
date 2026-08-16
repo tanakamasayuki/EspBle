@@ -39,7 +39,7 @@
   espble_bd_esp_avrc_tg_set_psth_cmd_filter
 #define esp_avrc_tg_get_rn_evt_cap espble_bd_esp_avrc_tg_get_rn_evt_cap
 #define esp_avrc_tg_set_rn_evt_cap espble_bd_esp_avrc_tg_set_rn_evt_cap
-#include <esp_avrc_api.h>
+#include "esp32/include/esp_avrc_api.h"
 #else
 #define ESPBLE_CLASSIC_AVRCP_BACKEND_AVAILABLE 0
 #endif

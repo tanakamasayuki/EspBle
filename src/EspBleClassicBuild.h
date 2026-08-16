@@ -6,16 +6,16 @@
 
 // The Classic host ships as an archive built against ESP-IDF v5.5.5, and this file
 // is compiled for every original-ESP32 sketch -- BLE-only ones included, because
-// Arduino builds every .cpp under src/. Cores in the 3.3 line all carry ESP-IDF
-// 5.5, where the differences are names rather than layouts and are handled in
-// EspBleClassicCoreCompat.h. Arduino-ESP32 3.2 and older carry ESP-IDF 5.4, whose
-// Bluetooth callback structures have different members (esp_hf_cb_param_t gained
-// preferred_frame_size in 5.5), so the archive would read them at the wrong
-// offsets. That is a wrong build rather than a missing name, and the error the
-// compiler gives says nothing about it.
+// Arduino builds every .cpp under src/. The declarations and struct layouts the
+// archive was built with are vendored in src/esp32/include/, so the compile-time
+// contract no longer drifts with the core version; what remains from the core is
+// the small stable-API import surface the archive links against and the prebuilt
+// controller. The floor below reflects what hardware verification has covered,
+// not a known breakage -- adjust it when the measured range in
+// docs/PLAN_CORE_VERSION_MATRIX.ja.md changes.
 #if defined(CONFIG_IDF_TARGET_ESP32) && defined(CONFIG_BT_CLASSIC_ENABLED)
-#if ESP_ARDUINO_VERSION < ESP_ARDUINO_VERSION_VAL(3, 3, 0)
-#error "EspBle on the original ESP32 requires Arduino-ESP32 3.3.0 or newer. Cores below it carry ESP-IDF 5.4, whose Bluetooth structures do not match the bundled Classic host. This applies whether or not the sketch uses Bluetooth Classic."
+#if ESP_ARDUINO_VERSION < ESP_ARDUINO_VERSION_VAL(3, 2, 0)
+#error "EspBle on the original ESP32 requires Arduino-ESP32 3.2.0 or newer. This applies whether or not the sketch uses Bluetooth Classic."
 #elif ESP_ARDUINO_VERSION > ESP_ARDUINO_VERSION_VAL(3, 3, 11)
 // Newer cores are not blocked, because only their ABI is unverified, not known
 // to be wrong. A silent mismatch would be worse than saying so.

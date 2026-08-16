@@ -150,6 +150,12 @@ for symbol in \
   fi
 done
 
+# The compile-time contract ships next to the archive: refresh the vendored API
+# headers from the same IDF checkout so the pair can never go out of step. The
+# script also rewrites the contract_headers section of MANIFEST.json.
+python3 "$script_dir/vendor_classic_contract.py" \
+  --source "$IDF_PATH/components/bt/host/bluedroid/api/include/api"
+
 archive_size=$(wc -c < "$output" | tr -d '[:space:]')
 archive_sha256=$(sha256sum "$output" | awk '{print $1}')
 defined_count=$(wc -l < "$defined_symbols" | tr -d '[:space:]')

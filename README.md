@@ -190,19 +190,20 @@ core-version range and per-board build coverage for BLE are measured by CI, not
 maintained by hand.
 
 > [!IMPORTANT]
-> **On the original ESP32, Arduino-ESP32 3.3.11 is required even for BLE-only
-> sketches.** Arduino compiles every `.cpp` under a library's `src/`, so the
-> Classic sources are always built. Measured: 3.3.10 and older do not compile.
-> 3.3.9 and 3.3.10 ship ESP-IDF v5.5.4, which lacks
-> `ESP_HIDD_APP_DESC_LIST_LEN_MAX`; 3.3.8 and older also lack
-> `esp32-hal-alloc-bt-classic-mem.h`. Below 3.3.11 the build stops at an `#error`
-> that says so. Other SoCs use the host their Core ships and carry no such
-> restriction; their range is what the generated matrices report.
+> **On the original ESP32, the supported core range is 3.2.0 and newer — for BLE
+> and Classic alike.** The precompiled Classic host is built with ESP-IDF 5.5.5
+> and xtensa-esp32 GCC 14.2.0, but the API headers it was built against ship in
+> `src/esp32/include/`, so its declarations and struct layouts cannot drift with
+> the core version; only stable platform APIs (FreeRTOS and the like) come from
+> the core. Measured: 3.2.0 through 3.3.11 all compile and link, and 3.2.1,
+> 3.3.0, 3.3.10 and 3.3.11 are hardware-verified. Below 3.2.0 is unmeasured and
+> stops at an `#error` that says so.
 >
-> The precompiled Classic host is ABI-bound to ESP-IDF 5.5.5 and xtensa-esp32
-> GCC 14.2.0. The existing `COMPATIBILITY.1.2.0.md` and `BOARDS.1.2.0.md` reports
-> predate the Classic examples, and their original-ESP32 columns no longer match
-> the implementation.
+> The exception is **HFP audio (SCO), which needs 3.3.9 or newer**: the prebuilt
+> controller the core ships was built with the PCM audio path (for an external
+> codec chip) up to 3.3.8, so it cannot carry the HCI-path SCO EspBle uses.
+> This is outside what EspBle can change. The measurements are in the Japanese
+> [core-version test plan](docs/PLAN_CORE_VERSION_MATRIX.ja.md).
 
 - **Core Compatibility Matrix** workflow → `docs/COMPATIBILITY.<version>.md` (representative BLE examples across arduino-esp32 releases)
 - **Board Build Coverage** workflow → `docs/BOARDS.<version>.md` (the examples present when the workflow runs, across ESP32-S3 / ESP32 / C3 / C6 / H2 / P4 at one Core version)

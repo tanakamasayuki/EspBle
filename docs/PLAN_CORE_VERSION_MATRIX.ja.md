@@ -397,6 +397,36 @@ host側の配布形式を変えても届かない領域がある、という切�
 この実測を受けた配布形式（archive / source / 折衷）の比較と推奨は
 [Classic host配布形式の再評価](PLAN_CLASSIC_HOST_DISTRIBUTION.ja.md)が正本です。
 
+### 案D実施後の再測定（2026-08-16）
+
+契約15 headerを`src/esp32/include/`へvendorし（`tools/vendor_classic_contract.py`、
+IDF v5.5.5とbyte一致）、`src/`のbluedroid API includeを自前へ張り替えた結果です。
+
+- **3.2.x（IDF 5.4）のcompile失敗は消えました。** 構造体メンバ差はcoreのheaderを読んで
+  いたことが原因で、契約が自前になると発生源ごと消えます。
+- 残った差は**link時のundefined `esp_log` 1個**でした。archiveの外部import 89 symbolの
+  うち、IDF 5.4のcoreに無いのはこれだけです（IDF 5.5で入ったlog v2の入口）。
+  `src/EspBleClassicLogCompat.c`（3.3.0未満のcoreでだけ実体を持つ転送関数）で解消。
+- compile matrixは**3.2.0 / 3.2.1 / 3.3.0 / 3.3.8 / 3.3.11 × 7 example（BLE + Classic全profile）で
+  全pass**。
+- 実機: 3.3.11の出荷状態（repinなし）でClassic 6 suite **6 passed**（回帰なし）。
+  3.2.1でBLE代表smoke **4 passed**（持ち込みNimBLE × IDF 5.4 coreの初の実機通過）、
+  Classic 5 suite（inquiry / pairing / SPP stream / HID / A2DP media）**5 passed**。
+- 版数guardの下限は3.2.0へ変更（それ未満は未測定のため`#error`のまま）。
+- 3.2.xのcontrollerもPCM pathのため、**HFP audioの実機下限3.3.9は不変**です。
+
+### 確定した対応範囲（2026-08-16）
+
+| Core | IDF | compile/link | BLE実機 | Classic実機（HFP audio除く） | HFP audio |
+| --- | --- | --- | --- | --- | --- |
+| 3.2.0 | 5.4 | ✅ | — | — | 対象外（controller PCM） |
+| 3.2.1 | 5.4 | ✅ | ✅ 4 passed | ✅ 5 passed | 対象外（同上） |
+| 3.3.0 | 5.5 | ✅ | ✅ 4 passed | ✅ 5 passed | 対象外（同上） |
+| 3.3.8 | 5.5.4 | ✅ | — | — | ✗ 排他問題（EspBle側疑い、独立調査） |
+| 3.3.9 | 5.5.4 | ✅ | — | — | ✅ |
+| 3.3.10 | 5.5.4 | ✅ | ✅ 4 passed | ✅ 6 suite | ✅ |
+| 3.3.11 | 5.5.5 | ✅ | 全回帰 | ✅ 6 passed（契約vendor後の回帰） | ✅ |
+
 ## 残っているリスク
 
 - L0のPASSは「buildできる」であって「動く」ではありません。archiveはIDFのheaderに従って

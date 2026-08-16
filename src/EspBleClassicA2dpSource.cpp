@@ -22,8 +22,7 @@
 #define esp_a2d_source_init espble_bd_esp_a2d_source_init
 #define esp_a2d_source_register_stream_endpoint \
   espble_bd_esp_a2d_source_register_stream_endpoint
-#include <esp_a2dp_api.h>
-#include "EspBleClassicCoreCompat.h"
+#include "esp32/include/esp_a2dp_api.h"
 #else
 #define ESPBLE_CLASSIC_A2DP_SOURCE_BACKEND_AVAILABLE 0
 #endif

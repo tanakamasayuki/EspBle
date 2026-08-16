@@ -17,19 +17,25 @@
 - (JA) NimBLE sourceとprecompiled Classic-only Bluedroid hostを組み合わせる意図的なmixed
   distribution、ClassicのArduino-ESP32 3.3.11限定契約を明記した。archiveの機械可読な来歴、
   第三者ライセンス全文、integrity / final-linkの自動gateも追加した。
-- (EN) Building for the original ESP32 with a core older than Arduino-ESP32 3.3.11 now
-  stops at an error that says so, and a newer core warns that it is unverified. Arduino
-  compiles every source under a library's `src/`, so the Classic host's sources are built
-  even for BLE-only sketches: 3.3.9 and 3.3.10 ship ESP-IDF v5.5.4 and fail on a missing
-  `ESP_HIDD_APP_DESC_LIST_LEN_MAX`, and 3.3.8 and older fail earlier on a missing
-  `esp32-hal-alloc-bt-classic-mem.h`. Neither message explained the real cause. Other
-  SoCs are unaffected.
-- (JA) 無印ESP32をArduino-ESP32 3.3.11より古いcoreでbuildすると、理由を書いたerrorで止まるように
-  した。新しいcoreは未検証である旨のwarningを出す。Arduinoはライブラリの`src/`にあるsourceを
-  すべてcompileするため、BLEだけのsketchでもClassic hostのsourceがbuildされる。3.3.9 / 3.3.10は
-  同梱ESP-IDFがv5.5.4で`ESP_HIDD_APP_DESC_LIST_LEN_MAX`が無く、3.3.8以前はさらに手前の
-  `esp32-hal-alloc-bt-classic-mem.h`で落ちる。どちらのmessageも本当の原因を説明しなかった。
-  他のSoCへの影響は無い。
+- (EN) Widened the original ESP32's supported core range from 3.3.11 alone to
+  Arduino-ESP32 3.2.0 and newer, measured rather than assumed. The Bluedroid API
+  headers the precompiled Classic host was built against now ship in
+  `src/esp32/include/` and the Classic sources include those instead of the
+  core's copies, so the compile-time contract no longer drifts with the core
+  version; a small compat source supplies IDF 5.5's `esp_log` on IDF 5.4 cores.
+  3.2.0–3.3.11 all compile and link, and 3.2.1 / 3.3.0 / 3.3.10 / 3.3.11 are
+  hardware-verified. HFP audio (SCO) needs 3.3.9 or newer, because older cores
+  ship a prebuilt controller built with the PCM audio path — outside what a host
+  library can change. Below 3.2.0 stops at an `#error` that says so; newer,
+  unverified cores get a `#warning`. Other SoCs are unaffected.
+- (JA) 無印ESP32の対応Coreを3.3.11のみからArduino-ESP32 3.2.0以上へ広げた（仮定ではなく実測）。
+  precompiled Classic hostのbuildに使ったBluedroid API headerを`src/esp32/include/`へ同梱し、
+  Classic sourceがCore側の同名headerではなくこちらを読むようにしたため、compile時の契約が
+  Coreの版でずれなくなった。IDF 5.4系のcoreにはIDF 5.5の`esp_log`が無いので、小さな互換sourceで
+  補う。3.2.0〜3.3.11のcompile / linkが全て通り、3.2.1 / 3.3.0 / 3.3.10 / 3.3.11は実機確認済み。
+  HFP audio（SCO）だけは3.3.9以上が必要で、古いCoreのprebuilt controllerがPCM audio pathで
+  buildされているためであり、host library側では変更できない。3.2.0未満は理由を書いた`#error`で
+  止まり、未検証の新しいcoreは`#warning`を出す。他のSoCへの影響は無い。
 
 ### Bluetooth Classic on the original ESP32 / 無印ESP32のBluetooth Classic
 

@@ -41,8 +41,8 @@
 #define esp_hf_ag_vra_control espble_bd_esp_hf_ag_vra_control
 #define esp_bt_gap_set_scan_mode espble_bd_esp_bt_gap_set_scan_mode
 extern "C" uint8_t espble_bd_btc_conf_hf_force_wbs;
-#include <esp_hf_ag_api.h>
-#include <esp_gap_bt_api.h>
+#include "esp32/include/esp_hf_ag_api.h"
+#include "esp32/include/esp_gap_bt_api.h"
 #else
 #define ESPBLE_CLASSIC_HFP_AG_BACKEND_AVAILABLE 0
 #endif

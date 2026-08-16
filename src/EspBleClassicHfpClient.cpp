@@ -49,7 +49,7 @@
 #define esp_hf_client_stop_voice_recognition \
   espble_bd_esp_hf_client_stop_voice_recognition
 #define esp_hf_client_volume_update espble_bd_esp_hf_client_volume_update
-#include <esp_hf_client_api.h>
+#include "esp32/include/esp_hf_client_api.h"
 #else
 #define ESPBLE_CLASSIC_HFP_CLIENT_BACKEND_AVAILABLE 0
 #endif

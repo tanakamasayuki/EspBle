@@ -42,10 +42,9 @@
   espble_bd_esp_bt_hid_device_report_error
 #define esp_bt_hid_device_virtual_cable_unplug \
   espble_bd_esp_bt_hid_device_virtual_cable_unplug
-#include <esp_gap_bt_api.h>
-#include <esp_hidd_api.h>
-#include <esp_hidh_api.h>
-#include "EspBleClassicCoreCompat.h"
+#include "esp32/include/esp_gap_bt_api.h"
+#include "esp32/include/esp_hidd_api.h"
+#include "esp32/include/esp_hidh_api.h"
 #else
 #define ESPBLE_CLASSIC_HID_BACKEND_AVAILABLE 0
 #endif

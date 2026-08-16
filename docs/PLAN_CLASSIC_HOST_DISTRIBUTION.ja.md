@@ -147,3 +147,26 @@ archiveはそのまま、**契約の15 headerをv5.5.5からvendor**し、`src/`
 この推奨を採る場合の実施順は、(1) 15 headerのvendorとinclude張り替え、(2) MANIFESTと
 `verify_classic_archive.py`へのheader hash追加、(3) 3.3.0〜3.3.11のmatrix再実行と
 3.2.xの再測定、(4) 文書反映、です。
+
+## 実施結果（2026-08-16）
+
+案Dを実装し、想定を上回る結果になりました。
+
+- `tools/vendor_classic_contract.py`が15 headerを`src/esp32/include/`へvendor
+  （IDF v5.5.5とbyte一致、hashで照合可能）。`src/`のbluedroid API include 14箇所を
+  自前パスへ張り替え、shim 3件（`EspBleClassicCoreCompat.h`）は吸収して削除。
+  `verify_classic_archive.py`はheaderのinventory / hash / `include/`実体の三重照合を行い、
+  `build_classic_bluedroid_host.sh`は再生成時に同じIDFからheaderを再vendorする。
+- **IDF 5.4世代（Core 3.2.x）が対応範囲に入りました。** 契約が自前になると3.2.xの
+  compile失敗は発生源ごと消え、残った差はlink時のundefined **`esp_log` 1個**
+  （IDF 5.5で入ったlog v2の入口）だけでした。`EspBleClassicLogCompat.c`（3.3.0未満の
+  coreでだけ実体を持つ30行の転送）で解消。「archiveは1つのIDF世代しか支えられない」
+  という本文書の前提は、契約をvendorしない場合にだけ成り立つ制約だったことになります。
+- 実測: compile matrixは3.2.0〜3.3.11で全pass。実機は3.3.11の出荷状態で回帰6 passed、
+  3.2.1でBLE 4 passed + Classic 5 passed。確定表は
+  [core版数のテスト計画](PLAN_CORE_VERSION_MATRIX.ja.md)にあります。
+- HFP audio（3.3.9未満のcontrollerがPCM path）はどの配布形式でも動かない領域として確定。
+
+IDF 6系Coreへの生存可能性は、これで「仮説」から「有望な仮説」になりました。5.4と5.5の
+世代差がheader契約 + `esp_log` 1個で吸収できた以上、6でも同じ規模である可能性が
+高いためです。判断の引き金（6系Core previewでの実測、破綻時のC移行）は変わりません。

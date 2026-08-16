@@ -36,7 +36,7 @@
   "build_inputs": [
     {
       "file": "../../tools/build_classic_bluedroid_host.sh",
-      "sha256": "115f33f2824399f6f803a5b99c2dde22cb381f7e7278f4af110b423b5469fb36"
+      "sha256": "92fc3bc19e61e1f304b87fbf192b6d2d93f05a5865cd7c766e3454d3cd978a99"
     },
     {
       "file": "../../tools/classic_bluedroid_host/CMakeLists.txt",
@@ -209,5 +209,71 @@
     "smp_encrypt_data",
     "smp_get_local_oob_data",
     "smp_save_secure_connections_long_term_key"
-  ]
+  ],
+  "contract_headers": {
+    "description": "Bluedroid API headers the archive was built against, copied byte-identically from the pinned upstream so the compile-time contract cannot drift with the Arduino-ESP32 core version.",
+    "upstream_directory": "components/bt/host/bluedroid/api/include/api",
+    "files": [
+      {
+        "file": "include/esp_a2dp_api.h",
+        "sha256": "e7a9373561a245abd89fd80ff0e794d8ab0e7945427b8d5358f933086ba84e60"
+      },
+      {
+        "file": "include/esp_a2dp_legacy_api.h",
+        "sha256": "5955ffe305d4b0ecf07041501ca1038b1a546b3c851a3ef8d3dc16a1afa387e7"
+      },
+      {
+        "file": "include/esp_avrc_api.h",
+        "sha256": "b8b043822ec0385a30ad6a26ea0dc766312cbda09befef00a238a7ec84ffd271"
+      },
+      {
+        "file": "include/esp_bluedroid_hci.h",
+        "sha256": "4eab85c82e3b6bc62a152aa818cfd71c6ab02d6ea8ae3f2a78d947a33e03d34e"
+      },
+      {
+        "file": "include/esp_bt_defs.h",
+        "sha256": "c8d76cdf5a6fdc21c4488dcdd61984f720c1a3e3f1c873533dbaa7d30ae49d0e"
+      },
+      {
+        "file": "include/esp_bt_main.h",
+        "sha256": "592479eeafa1e64c0a59520e8a6e96b503a725aad6a0366e7c4916ec3207e277"
+      },
+      {
+        "file": "include/esp_gap_bt_api.h",
+        "sha256": "a4007b28f547c13e9fc2bb076993ae0ef8a296be107fe9e80aa303903f73da6d"
+      },
+      {
+        "file": "include/esp_hf_ag_api.h",
+        "sha256": "98ca72109df47974768d7a097ff54e891d3f61f9a1fec07c89e5c1bcc6427ca6"
+      },
+      {
+        "file": "include/esp_hf_ag_legacy_api.h",
+        "sha256": "36a45ee1b55be15de4ae0704c98c2f87f4514e633c0c1bd5d186f5bef7345168"
+      },
+      {
+        "file": "include/esp_hf_client_api.h",
+        "sha256": "e9eb8dcbcb01a4514974f539bc6f9dc968ec4f82fd7f941d737482d543efa4ec"
+      },
+      {
+        "file": "include/esp_hf_client_legacy_api.h",
+        "sha256": "c47fdf76e2c3ee2e295d640e3700ea061b7d006fdb35fbaf6a494662fec4739d"
+      },
+      {
+        "file": "include/esp_hf_defs.h",
+        "sha256": "d9e56950b93f05cb57703cdba6da3c1cffb3967969897db573392b8b55455439"
+      },
+      {
+        "file": "include/esp_hidd_api.h",
+        "sha256": "d1b41ffe0be66de5b9558297fc834642b56bdfd0b62e083c4a1301ee645895ce"
+      },
+      {
+        "file": "include/esp_hidh_api.h",
+        "sha256": "92477f8601d54e46be56853f7b83844104b32cc4c312fe2bf58a1893d9cf97b4"
+      },
+      {
+        "file": "include/esp_spp_api.h",
+        "sha256": "598683eac2a0c6a97d5bffa1ad331e6478b64338aca280480f5691ae0d88ad3f"
+      }
+    ]
+  }
 }

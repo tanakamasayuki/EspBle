@@ -74,12 +74,12 @@
 #define esp_spp_start_srv espble_bd_esp_spp_start_srv
 #define esp_spp_stop_srv espble_bd_esp_spp_stop_srv
 #define esp_spp_write espble_bd_esp_spp_write
-#include <esp_bluedroid_hci.h>
+#include "esp32/include/esp_bluedroid_hci.h"
 #include "EspBleHciBroker.h"
 #endif
-#include <esp_bt_main.h>
-#include <esp_gap_bt_api.h>
-#include <esp_spp_api.h>
+#include "esp32/include/esp_bt_main.h"
+#include "esp32/include/esp_gap_bt_api.h"
+#include "esp32/include/esp_spp_api.h"
 #else
 #define ESPBLE_CLASSIC_BACKEND_AVAILABLE 0
 #endif

@@ -44,13 +44,13 @@ BLE MIDIはbackend非依存のpacket codec（timestamp・running status・複数
   このhostのサポートや互換性は保証しません。そのぶん**機能ごとの状態——実機検証済み / 未検証 /
   未実装——を[Classic機能の棚卸し](CLASSIC_FEATURE_INVENTORY.ja.md)に明記**します。外部機器との相互運用は
   未検証です。BLEとClassicの同時利用もflagは不要で（`begin()`したhostで決まります）、ただし実験扱いのままです。
-- 無印ESP32では、BLEだけを使う場合もArduino-ESP32 3.3.11が必要です。Arduinoが`src/`の`.cpp`を
-  すべてcompileするためClassicのsourceが必ず巻き込まれ、3.3.10以前はcompileできません
-  （3.3.9 / 3.3.10は同梱IDFがv5.5.4で`ESP_HIDD_APP_DESC_LIST_LEN_MAX`が無く、3.3.8以前は
-  `esp32-hal-alloc-bt-classic-mem.h`が無い）。BLE代表7 example + Classic 9 exampleを
-  3.2.1 / 3.3.8 / 3.3.9 / 3.3.10 / 3.3.11で実測した結果で、3.3.11以外は全滅です。
-  3.3.11未満は理由付きの`#error`、3.3.11超は未検証である旨の`#warning`を出します。
-  他のSoCはCore同梱hostを使うためこの制約はありません。
+- 無印ESP32の対応Coreは3.2.0以上です（BLEもClassicも）。Classic hostのbuildに使った
+  Bluedroid API headerを`src/esp32/include/`へ同梱しているため、宣言と構造体レイアウトは
+  Coreの版に依存しません。実測で3.2.0〜3.3.11のcompile / linkが全て通り、3.2.1 / 3.3.0 /
+  3.3.10 / 3.3.11は実機（BLE代表smokeとClassic主要suite）でも確認済みです。例外はHFP audio
+  （SCO）で、3.3.8以前のCoreはprebuilt controllerがPCM audio pathのため使えず、実機確認済みの
+  下限は3.3.9です。3.2.0未満は未測定のため理由付きの`#error`、3.3.11超は未検証である旨の
+  `#warning`を出します。測定記録は[core版数のテスト計画](PLAN_CORE_VERSION_MATRIX.ja.md)です。
 - Core 3.3.11のP4/C6 ESP-Hosted構成では、同梱ESP-IDF 5.5.5のTinyCrypt/ECC不具合で
   LE Secure ConnectionsがDHKey check failureとなるため、Security、bonding、それを
   前提とするHIDは未対応です。ESP-IDF `release/v5.5`では`9fd7cb7`で修正済みですが、

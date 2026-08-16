@@ -157,16 +157,17 @@ pin設定を上書きします（[SDIO pinの選択と上書き](docs/ESP_HOSTED
 BLEビルドカバレッジは手動管理ではなくCIで計測します。
 
 > [!IMPORTANT]
-> **無印ESP32では、BLEだけを使う場合もArduino-ESP32 3.3.11が必要です。** Arduinoはライブラリの
-> `src/`にある`.cpp`をすべてcompileするので、Classicのsourceが必ず巻き込まれます。実測では
-> 3.3.10以前はcompileが通りません。3.3.9 / 3.3.10は同梱ESP-IDFがv5.5.4で
-> `ESP_HIDD_APP_DESC_LIST_LEN_MAX`を持たず、3.3.8以前は`esp32-hal-alloc-bt-classic-mem.h`が
-> ありません。3.3.11未満では理由付きの`#error`で止まります。他のSoCはCore同梱hostを使うため
-> この制約はなく、範囲は生成matrixのとおりです。
+> **無印ESP32の対応Coreは3.2.0以上です（BLEもClassicも）。** precompiled Classic hostは
+> ESP-IDF 5.5.5 / xtensa-esp32 GCC 14.2.0でbuildしていますが、buildに使ったAPI headerを
+> `src/esp32/include/`へ同梱しているため、宣言と構造体レイアウトがCoreの版でずれることは
+> ありません。CoreからはFreeRTOS等の安定APIだけを使います。実測では3.2.0〜3.3.11の
+> compile / linkが全て通り、3.2.1 / 3.3.0 / 3.3.10 / 3.3.11は実機でも確認済みです。
+> 3.2.0未満は未測定のため理由付きの`#error`で止まります。
 >
-> precompiled Classic hostはESP-IDF 5.5.5 / xtensa-esp32 GCC 14.2.0のABIに固定しています。
-> 既存の`COMPATIBILITY.1.2.0.md`と`BOARDS.1.2.0.md`はClassic example追加前の結果で、
-> 無印ESP32列は現在の実装と一致していません。
+> 例外は**HFP audio（SCO）で、3.3.9以上が必要**です。Coreが同梱するprebuilt controllerが
+> 3.3.8以前はPCM audio path（外部codec chip向け）でbuildされており、EspBleが使うHCI経由の
+> SCOをcontrollerが受けられないためです。これはEspBle側では変更できません。
+> 測定の詳細は[core版数のテスト計画](docs/PLAN_CORE_VERSION_MATRIX.ja.md)にあります。
 
 - **Core Compatibility Matrix** ワークフロー → `docs/COMPATIBILITY.<version>.md`（代表BLE exampleをarduino-esp32の各リリースに対してビルド）
 - **Board Build Coverage** ワークフロー → `docs/BOARDS.<version>.md`（workflow実行時点のexampleを1つのCoreバージョンでESP32-S3 / ESP32 / C3 / C6 / H2 / P4に対してビルド）
