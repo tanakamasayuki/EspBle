@@ -12,13 +12,10 @@ temp/
 .vscode/
 arduino_secrets.h
 *.bat
-*.txt
-!keywords.txt
-!src/esp32/LICENSES/*.txt
-# Build inputs for the Classic host archive. verify_classic_archive.py checks
-# these by hash, so a checkout without them fails the release gate.
-!tools/classic_bluedroid_host/CMakeLists.txt
-!tools/classic_bluedroid_host/main/CMakeLists.txt
+# No blanket *.txt rule: the .txt files worth ignoring all live under directories
+# ignored above or under tools/cache/ below, while keywords.txt, the license texts
+# and the Classic host's CMakeLists.txt are files the release gates require. A
+# blanket rule hid the latter two until CI failed on a clean checkout.
 
 # Release helper cache
 tools/cache/
