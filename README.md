@@ -84,7 +84,7 @@ suite plus host-side unit tests. What is covered per SoC is in
 | Public BLE API | Same | Same | Same |
 | Security / bonding | Supported | Supported | **Unavailable** (upstream ECC defect) |
 | 2M / Coded PHY | Supported | **Unavailable** (BLE 4.2 controller) | Depends on the slave chip and its firmware (outside the representative suite) |
-| Bluetooth Classic | No BR/EDR radio | **Core 3.3.11 only** (SPP / HID / A2DP / AVRCP / HFP) | No BR/EDR radio |
+| Bluetooth Classic | No BR/EDR radio | **Supported** (SPP / HID / A2DP / AVRCP / HFP; core 3.2.0+, HFP audio 3.3.8+) | No BR/EDR radio |
 | Verified scope | Every feature, on a two-S3 peer suite (C3 / C6 / H2 are build-verified in CI) | A two-board peer sweep in both roles; only what passes counts | Representative suite (connect, GATT, notify, MTU, Wi-Fi coexistence), **verified only with a C6 slave on firmware 2.12.11** |
 
 Some limits apply across the whole family. Extended and periodic advertising are unavailable on
@@ -192,7 +192,7 @@ who brings the BLE host.
 | Target | Where the host comes from | Minimum core | Why there |
 | --- | --- | --- | --- |
 | Original ESP32 (BLE / Classic) | **EspBle bundles it** (NimBLE source + Classic archive) | **3.2.0** | Nearly independent of the core version: the Classic host ships the API headers it was built against in `src/esp32/include/`, so declarations and struct layouts cannot drift, and only stable platform APIs (FreeRTOS and the like) come from the core. Below 3.2.0 is unmeasured and stops at an `#error` that says so |
-| Original ESP32, HFP audio (SCO) only | Same, but the controller is the core's | **3.3.9** | Cores up to 3.3.8 ship a prebuilt controller built with the PCM audio path (for an external codec chip), which cannot carry the HCI-path SCO EspBle uses. Bundling the host does not help: the controller binary belongs to the core |
+| Original ESP32, HFP audio (SCO) only | Same, but the controller is the core's | **3.3.8** | Cores up to 3.3.7 ship a prebuilt controller built with the PCM audio path (for an external codec chip), which cannot carry the HCI-path SCO EspBle uses. Bundling the host does not help: the controller binary belongs to the core |
 | ESP32-S3 / C3 / C6 / H2 | **The core's bundled NimBLE** | **3.3.0** | The 3.2.x-generation prebuilt libraries were built with Bluedroid as the BLE host, so the NimBLE EspBle calls does not exist there. The core switched to NimBLE in 3.3.0. Those versions stop at the `EspBle requires the NimBLE backend` `#error` |
 | ESP32-P4 (+C6 ESP-Hosted) | **The core provides it** (NimBLE over Hosted) | **3.3.1** | 3.3.0 does not provide NimBLE for the P4's Hosted configuration |
 

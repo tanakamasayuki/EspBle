@@ -48,8 +48,8 @@ BLE MIDIはbackend非依存のpacket codec（timestamp・running status・複数
   Bluedroid API headerを`src/esp32/include/`へ同梱しているため、宣言と構造体レイアウトは
   Coreの版に依存しません。実測で3.2.0〜3.3.11のcompile / linkが全て通り、3.2.1 / 3.3.0 /
   3.3.10 / 3.3.11は実機（BLE代表smokeとClassic主要suite）でも確認済みです。例外はHFP audio
-  （SCO）で、3.3.8以前のCoreはprebuilt controllerがPCM audio pathのため使えず、実機確認済みの
-  下限は3.3.9です。3.2.0未満は未測定のため理由付きの`#error`、3.3.11超は未検証である旨の
+  （SCO）で、3.3.7以前のCoreはprebuilt controllerがPCM audio pathのため使えず、実機確認済みの
+  下限は3.3.8です。3.2.0未満は未測定のため理由付きの`#error`、3.3.11超は未検証である旨の
   `#warning`を出します。測定記録は[core版数のテスト計画](PLAN_CORE_VERSION_MATRIX.ja.md)です。
 - Core 3.3.11のP4/C6 ESP-Hosted構成では、同梱ESP-IDF 5.5.5のTinyCrypt/ECC不具合で
   LE Secure ConnectionsがDHKey check failureとなるため、Security、bonding、それを

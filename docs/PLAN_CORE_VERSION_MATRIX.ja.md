@@ -390,9 +390,36 @@ host側の配布形式を変えても届かない領域がある、という切�
 | 3.3.8 | ❌（2回とも再現） | `hfpAudioGateway().begin()`がClient起動後も成功し、HFP役割の排他が効かない |
 | 3.3.9 / 3.3.10 | ✅ | — |
 
-3.3.8の件はCoreの設定では説明できません。排他はEspBle内部の`activateHfpAg()`が決めるので、
-**3.3.11では表面化していない競合が`src/`側にある可能性**が残ります。配布形式の判断とは独立した
-調査項目として扱います。HFPの実機確認済み下限は3.3.9です。
+3.3.8の件は当初「排他の不発」と読みましたが、調査の結果**誤読**でした。実体は次のとおりです。
+
+1. serialを直接開いてreset直後を取ると、DUTは起動時に
+   `HFP_CLIENT_STACK_FAILED failed to start the Classic controller; Classic memory may
+   already be released`を1度だけ出して、setupを離脱していました。この行はmonitor接続前に
+   流れて失われます（既知の起動banner競合）。
+2. sketchの`?`応答は、setupが離脱すると**既定値のまま**`ag=1 error=None`を返し続けます。
+   これが「AG beginが通ってしまった」ように見えた正体です。排他は実行すらされていません。
+   peer側の「正しく見えた」応答も同じ既定値で、**期待値と偶然一致していただけ**でした。
+   両ボードとも同じ理由で死んでいました。
+3. 根本原因はCoreのBTメモリ保持機構の**過渡期**です。`btInUse()`は3.3.6以前は無条件`true`、
+   3.3.9以降は分割header（`esp32-hal-alloc-bt-classic-mem.h`等）のconstructorで立てる方式で、
+   EspBleは両方に対応済みでした。しかし**3.3.7 / 3.3.8だけは単一flag（`_btLibraryInUse`）を
+   `esp32-hal-bt-mem.h`で立てる中間方式**で、EspBleはこのheaderを知らず、flagが立たないまま
+   `initArduino()`がBTDM全メモリ（BLE込み）を解放していました。
+
+つまりEspBleの排他logicに問題はなく、**3.3.7 / 3.3.8ではHFPどころかBLEもClassicも起動できて
+いなかった**ことになります（compile matrixでは見えず、3.3.8の実機はこのsuiteしか回していなかった）。
+対処は`esp32-hal-bt-mem.h`を`__has_include`の連鎖へ追加（`EspBle.cpp`と`EspBleClassic.cpp`）。
+修正後の3.3.8実機はHFP suiteが**1 passed（3:02）**で、SCO audioの実流通
+（`state=2 codec=2 frame=57`）まで確認しました。3.3.8のcontrollerはHCI audio pathなので、
+**HFP audioの実機確認済み下限は3.3.9から3.3.8へ下がります**。
+
+3.3.7も測定しました: `esp32-hal-bt-mem.h`を持つ（同じ過渡機構＝同じ修正が効く）、
+CompileSmokeのcompile通過、ただしcontrollerは`CONFIG_BT_HFP_AUDIO_DATA_PATH_PCM=y`なので
+HFP audioは対象外のままです。
+
+副産物として、test観測の罠を1つ記録します: sketchの`?`応答が既定値と「正常時の値」を区別
+できない形だと、起動失敗が別の失敗（今回なら排他）に化けます。状態報告には「stackが起動
+したか」を含めるべきで、既存suiteの`probe`化TODOと合わせて見直します。
 
 この実測を受けた配布形式（archive / source / 折衷）の比較と推奨は
 [Classic host配布形式の再評価](PLAN_CLASSIC_HOST_DISTRIBUTION.ja.md)が正本です。
@@ -422,7 +449,8 @@ IDF v5.5.5とbyte一致）、`src/`のbluedroid API includeを自前へ張り替
 | 3.2.0 | 5.4 | ✅ | — | — | 対象外（controller PCM） |
 | 3.2.1 | 5.4 | ✅ | ✅ 4 passed | ✅ 5 passed | 対象外（同上） |
 | 3.3.0 | 5.5 | ✅ | ✅ 4 passed | ✅ 5 passed | 対象外（同上） |
-| 3.3.8 | 5.5.4 | ✅ | — | — | ✗ 排他問題（EspBle側疑い、独立調査） |
+| 3.3.7 | 5.5.4 | ✅ | — | ✅ 2 passed（bt-mem修正後） | 対象外（controller PCM） |
+| 3.3.8 | 5.5.4 | ✅ | ✅ 3 passed（bt-mem修正後） | HFP suiteで確認 | ✅（bt-mem修正後、SCO実流通） |
 | 3.3.9 | 5.5.4 | ✅ | — | — | ✅ |
 | 3.3.10 | 5.5.4 | ✅ | ✅ 4 passed | ✅ 6 suite | ✅ |
 | 3.3.11 | 5.5.5 | ✅ | 全回帰 | ✅ 6 passed（契約vendor後の回帰） | ✅ |

@@ -71,7 +71,7 @@ API単位の対応状況と制限は[機能対応マトリクス](docs/FEATURE_M
 | BLEの公開API | 同一 | 同一 | 同一 |
 | Security / bonding | 対応 | 対応 | **不可**（上流のECC不具合） |
 | 2M / Coded PHY | 対応 | **不可**（BLE 4.2 controller） | slaveのチップとfirmware次第（代表suiteの対象外） |
-| Bluetooth Classic | 無線が無いため不可 | **Core 3.3.11のみ対応**（SPP / HID / A2DP / AVRCP / HFP） | 不可 |
+| Bluetooth Classic | 無線が無いため不可 | **対応**（SPP / HID / A2DP / AVRCP / HFP。Core 3.2.0以上、HFP audioのみ3.3.8以上） | 不可 |
 | 検証範囲 | S3の2台で全機能をPeer test（C3 / C6 / H2はCIのbuild検証） | 2台でPeer testを両role掃引し、通った範囲のみ | 代表suite（接続、GATT、notify、MTU、Wi-Fi共存）。**C6 slave / firmware 2.12.11でのみ確認** |
 
 シリーズ共通の制限もあります。Extended / Periodic Advertisingは、Coreが同梱するNimBLEが
@@ -159,7 +159,7 @@ pin設定を上書きします（[SDIO pinの選択と上書き](docs/ESP_HOSTED
 | 対象 | hostの出所 | 最小Core | なぜそこか |
 | --- | --- | --- | --- |
 | 無印ESP32（BLE / Classic） | **EspBleが持ち込む**（NimBLE source + Classic archive） | **3.2.0** | Coreの版にほぼ依存しないため。Classic hostはbuildに使ったAPI headerを`src/esp32/include/`へ同梱していて宣言と構造体レイアウトがずれず、CoreからはFreeRTOS等の安定APIだけを使う。3.2.0未満は未測定で、理由付きの`#error`で止まる |
-| 無印ESP32のHFP audio（SCO）のみ | 同上（ただしcontrollerはCore同梱） | **3.3.9** | 3.3.8以前のCoreはprebuilt controllerがPCM audio path（外部codec chip向け）でbuildされており、EspBleが使うHCI経由のSCOを受けられない。hostを持ち込んでいても、controllerのbinaryはCore側なので変更できない |
+| 無印ESP32のHFP audio（SCO）のみ | 同上（ただしcontrollerはCore同梱） | **3.3.8** | 3.3.7以前のCoreはprebuilt controllerがPCM audio path（外部codec chip向け）でbuildされており、EspBleが使うHCI経由のSCOを受けられない。hostを持ち込んでいても、controllerのbinaryはCore側なので変更できない |
 | ESP32-S3 / C3 / C6 / H2 | **Core同梱のNimBLE** | **3.3.0** | 3.2.x世代のprebuilt libraryはBLE hostがBluedroidで、EspBleが呼ぶNimBLEが存在しない。CoreがNimBLEへ切り替えたのが3.3.0。該当版では`EspBle requires the NimBLE backend`の`#error`で止まる |
 | ESP32-P4（+C6 ESP-Hosted） | **Coreが提供**（Hosted経由のNimBLE） | **3.3.1** | 3.3.0のP4はHosted構成のNimBLEが未提供 |
 

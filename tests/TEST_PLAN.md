@@ -404,7 +404,7 @@ says nothing about the core version. Different suites run in parallel safely.
 
 An original-ESP32 DUT supports cores 3.2.0 and newer (the measurement record is
 the Japanese [core-version test plan](../docs/PLAN_CORE_VERSION_MATRIX.ja.md);
-HFP audio alone needs 3.3.9 because of the core's prebuilt controller). Use
+HFP audio alone needs 3.3.8 because of the core's prebuilt controller). Use
 `--core-version` to re-confirm the lower end of that range on hardware, and
 `--peer-core-version` with the suites whose peer links no EspBle (`core_host_*`
 and `classic_core_host_spp`). Both are manual runs: the routine regression stays

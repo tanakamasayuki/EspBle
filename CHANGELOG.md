@@ -24,18 +24,25 @@
   core's copies, so the compile-time contract no longer drifts with the core
   version; a small compat source supplies IDF 5.5's `esp_log` on IDF 5.4 cores.
   3.2.0–3.3.11 all compile and link, and 3.2.1 / 3.3.0 / 3.3.10 / 3.3.11 are
-  hardware-verified. HFP audio (SCO) needs 3.3.9 or newer, because older cores
-  ship a prebuilt controller built with the PCM audio path — outside what a host
-  library can change. Below 3.2.0 stops at an `#error` that says so; newer,
-  unverified cores get a `#warning`. Other SoCs are unaffected.
+  hardware-verified. Arduino-ESP32 3.3.7 and 3.3.8 use a transitional
+  BT-memory-claim scheme (`esp32-hal-bt-mem.h`); EspBle now participates in it,
+  where previously the whole controller memory was released before `setup()` and
+  neither BLE nor Classic could start on those two versions. HFP audio (SCO)
+  needs 3.3.8 or newer, because up to 3.3.7 the prebuilt controller is built
+  with the PCM audio path — outside what a host library can change. Below 3.2.0
+  stops at an `#error` that says so; newer, unverified cores get a `#warning`.
+  Other SoCs are unaffected.
 - (JA) 無印ESP32の対応Coreを3.3.11のみからArduino-ESP32 3.2.0以上へ広げた（仮定ではなく実測）。
   precompiled Classic hostのbuildに使ったBluedroid API headerを`src/esp32/include/`へ同梱し、
   Classic sourceがCore側の同名headerではなくこちらを読むようにしたため、compile時の契約が
   Coreの版でずれなくなった。IDF 5.4系のcoreにはIDF 5.5の`esp_log`が無いので、小さな互換sourceで
   補う。3.2.0〜3.3.11のcompile / linkが全て通り、3.2.1 / 3.3.0 / 3.3.10 / 3.3.11は実機確認済み。
-  HFP audio（SCO）だけは3.3.9以上が必要で、古いCoreのprebuilt controllerがPCM audio pathで
-  buildされているためであり、host library側では変更できない。3.2.0未満は理由を書いた`#error`で
-  止まり、未検証の新しいcoreは`#warning`を出す。他のSoCへの影響は無い。
+  Arduino-ESP32 3.3.7 / 3.3.8はBTメモリ保持が過渡期の方式（`esp32-hal-bt-mem.h`）で、
+  従来はEspBleがこれに参加せずcontrollerメモリが`setup()`前に解放され、この2版では
+  BLEもClassicも起動できなかった。今回から参加する。HFP audio（SCO）だけは3.3.8以上が
+  必要で、3.3.7以前のprebuilt controllerがPCM audio pathでbuildされているためであり、
+  host library側では変更できない。3.2.0未満は理由を書いた`#error`で止まり、未検証の
+  新しいcoreは`#warning`を出す。他のSoCへの影響は無い。
 
 ### Bluetooth Classic on the original ESP32 / 無印ESP32のBluetooth Classic
 

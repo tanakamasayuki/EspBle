@@ -48,7 +48,7 @@ For how to run them see [tests/TEST_PLAN.md](../tests/TEST_PLAN.md); for the rel
   not depend on the core version. Measured: 3.2.0 through 3.3.11 all compile and
   link, and 3.2.1 / 3.3.0 / 3.3.10 / 3.3.11 are hardware-verified (representative
   BLE smoke plus the main Classic suites). The exception is HFP audio (SCO), whose
-  hardware-verified floor is 3.3.9: cores up to 3.3.8 ship a prebuilt controller
+  hardware-verified floor is 3.3.8: cores up to 3.3.7 ship a prebuilt controller
   built with the PCM audio path, which cannot carry it. Below 3.2.0 is unmeasured
   and stops at an `#error` that says why; above 3.3.11 a `#warning` states the
   version is unverified. The measurement record is the Japanese

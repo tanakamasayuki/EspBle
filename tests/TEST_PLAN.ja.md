@@ -528,7 +528,7 @@ sketch.yamlの再pinとbuild directoryは共有のままなので、片方の書
 
 無印ESP32のDUTの対応Coreは3.2.0以上です（実測記録は
 [core版数のテスト計画](../docs/PLAN_CORE_VERSION_MATRIX.ja.md)。HFP audioだけはcontrollerの
-都合で3.3.9以上）。`--core-version`はこの範囲の下限側を実機で再確認するときに使います。
+都合で3.3.8以上）。`--core-version`はこの範囲の下限側を実機で再確認するときに使います。
 `--peer-core-version`はpeerがEspBleをlinkしないsuite（`core_host_*`と`classic_core_host_spp`）で
 使い、実行頻度はどちらもmanualです。毎回の回帰は3.3.11のままにします。
 

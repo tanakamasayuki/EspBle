@@ -21,6 +21,11 @@
 // header never release that memory, so there is nothing to claim there.
 #if __has_include(<esp32-hal-alloc-bt-classic-mem.h>)
 #include <esp32-hal-alloc-bt-classic-mem.h>
+#elif __has_include(<esp32-hal-bt-mem.h>)
+// Arduino-ESP32 3.3.7 / 3.3.8 use a transitional single flag for all of the
+// BTDM memory instead of the split classic/BLE claims. The constructor in this
+// header is what keeps it from being released before setup() runs.
+#include <esp32-hal-bt-mem.h>
 #endif
 #include <esp32-hal-bt.h>
 // Transmit power is a controller setting, so it comes from the controller header

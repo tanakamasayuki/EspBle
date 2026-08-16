@@ -21,6 +21,12 @@
 // bundled BLE wrapper any more.
 #if __has_include("esp32-hal-alloc-ble-mem.h")
 #include "esp32-hal-alloc-ble-mem.h"
+#elif __has_include("esp32-hal-bt-mem.h")
+// Arduino-ESP32 3.3.7 and 3.3.8 use a transitional scheme: one flag for all of
+// the BTDM memory, set by this header's constructor. A library that skips it
+// loses the whole controller memory before setup() runs -- BLE and Classic
+// alike -- and btStart()/controller init fail with nothing pointing here.
+#include "esp32-hal-bt-mem.h"
 #else
 // Older cores decide with this weak hook instead.
 extern "C" bool bleInUse(void)
