@@ -1,6 +1,8 @@
 # Changelog / 変更履歴
 
 ## Unreleased
+
+## 1.3.0
 - (EN) No breaking change: every public declaration of 1.2.0 keeps its signature,
   so sketches written against 1.2.0 compile unchanged. Targets other than the
   original ESP32 produce the same BLE binaries; everything below concerns the
