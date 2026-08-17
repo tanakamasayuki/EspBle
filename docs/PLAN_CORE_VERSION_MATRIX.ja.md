@@ -332,9 +332,9 @@ src/EspBleClassicHid.cpp:720:37: error: 'ESP_HIDD_APP_DESC_LIST_LEN_MAX' was not
 | 3.3.10以下 | `ESP_HIDD_APP_DESC_LIST_LEN_MAX`が無い | ESP-IDF v5.5.5で追加 | 2048を自前定義。SDP padの上限はrecordを持つhost側の値 |
 | 3.3.0 | `ESP_A2D_SBC_CIE_ALLOC_MTHD_SNR`が無く`SRN` | v5.5.5での綴り修正（値は同じ0x2） | aliasを定義 |
 
-shimは[EspBleClassicCoreCompat.h](../src/EspBleClassicCoreCompat.h)へ集約しました。3.3.11では
-どちらの名前もCore側に存在するため、shimは`#ifndef`で無効になります。**現行の対応版に対する
-挙動変更はありません。**
+shimは当時`EspBleClassicCoreCompat.h`へ集約しました（3.3.11ではどちらの名前もCore側に
+存在するため`#ifndef`で無効）。**このheaderは案Dの実施で不要になり削除済みです**——契約header
+（`src/esp32/include/`）がv5.5.5の名前を常に提供するため、shimの出番自体が消えました。
 
 そのうえでcompile matrixを取り直すと、**3.3.0から3.3.11までbuildもlinkも通ります**。
 5.5.5でbuildしたarchiveは、5.5.4以前のIDFを載せたCoreとlinkできています。

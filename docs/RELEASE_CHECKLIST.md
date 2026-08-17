@@ -16,7 +16,7 @@ Use this checklist before releasing EspBle. The GitHub Actions workflows and `to
 - `library.properties` `name`, `version`, `sentence`, `paragraph`, `architectures`, and `includes` match the public package.
 - `keywords.txt` includes the main classes, report/event types, accessors, and callback/listener APIs.
 - Generated `docs/BOARDS.<version>.md` / `docs/COMPATIBILITY.<version>.md` files match the release version and current example set.
-- User-facing Classic documentation consistently says Arduino-ESP32 3.3.11 only, with an ESP-IDF 5.5.5 / GCC 14.2.0 ABI, and does not present the BLE Core matrix as Classic compatibility.
+- User-facing Classic documentation consistently states the measured support range (core 3.2.0 and newer, HFP audio 3.3.8 and newer; the archive is built with ESP-IDF 5.5.5 / GCC 14.2.0 and ships its contract headers).
 - The release zip contains the root `THIRD_PARTY_NOTICES.md`, Classic `NOTICE` / `MANIFEST.json` / `LICENSES/`, and NimBLE `LICENSE` / `NOTICE`, matching the manifest's license inventory.
 - If Classic is in scope, regenerate its archive from clean ESP-IDF v5.5.5 / GCC 14.2.0 inputs, verify its SHA-256 and required prefixed symbols, link a final ESP32 consumer, and prove that other SoCs do not link it. The authoritative procedure is [CLASSIC_HOST_BUILD.ja.md](CLASSIC_HOST_BUILD.ja.md) (Japanese).
 
@@ -36,16 +36,22 @@ Next, sweep the two original-ESP32 boards (ports come from `TEST_SERIAL_PORT_ESP
 ```sh
 # original ESP32 as the parent (central)
 uv run --env-file .env pytest --clean peer/ \
+  --ignore=peer/classic_hid_profiles --ignore=peer/classic_a2dp_sink_profile \
+  --ignore=peer/classic_radio_settings \
   --profile esp32_peer_host --peer-profile device:s3_peer_device
 
 # original ESP32 as the peer (peripheral)
 uv run --env-file .env pytest --clean peer/ \
+  --ignore=peer/classic_hid_profiles --ignore=peer/classic_a2dp_sink_profile \
+  --ignore=peer/classic_radio_settings \
   --profile s3_peer_host --peer-profile device:esp32_peer_device
 ```
 
-A suite without an esp32 profile for that role skips itself, so no exclusions are needed. What skips
-is the side written against the core's bundled `BLE` wrapper -- unusable on the original ESP32, where
-that wrapper is Bluedroid -- and `phy_update`, which requires the 2M PHY.
+A suite without an esp32 profile for that role skips itself. What skips is the side written
+against the core's bundled `BLE` wrapper -- unusable on the original ESP32, where that wrapper is
+Bluedroid -- and `phy_update`, which requires the 2M PHY. The three `--ignore`d suites have no
+peer sketch, so they error as "unknown peer" instead of skipping; they run in the Classic
+single-board command below.
 
 For a documentation-only release that does not touch `src/`, the representative smoke set is enough (about 15 minutes for both roles).
 
@@ -113,12 +119,17 @@ The original-ESP32 column of `docs/COMPATIBILITY.<version>.md` still holds resul
 before Classic entered `src/`. Run `core-matrix.yml` at release time and confirm that
 column shows ✅ from 3.2.0 up.
 
-Compile every example for ESP32-S3:
+Compile every example. The Classic examples are original-ESP32-only and carry no
+`esp32s3` profile, so fall back to each sketch's `default_profile`, the same way
+`compile-examples.yml` does:
 
 ```sh
-set -euo pipefail
+set -uo pipefail
 for sketch in $(find examples -name sketch.yaml -printf '%h\n' | sort); do
-  arduino-cli compile --profile esp32s3 "$sketch"
+  profile=esp32s3
+  grep -q "^  esp32s3:" "$sketch/sketch.yaml" ||
+    profile=$(grep -oP '^default_profile:\s*\K\S+' "$sketch/sketch.yaml")
+  arduino-cli compile --profile "$profile" "$sketch"
 done
 ```
 

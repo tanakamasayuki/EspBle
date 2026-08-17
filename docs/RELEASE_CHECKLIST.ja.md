@@ -16,7 +16,8 @@ EspBleをリリースする前の確認項目です。GitHub Actionsと`tools/`�
 - `library.properties`の`name`、`version`、`sentence`、`paragraph`、`architectures`、`includes`が公開内容と一致している。
 - `keywords.txt`に主要class、report/event型、accessor、callback/listener APIが含まれている。
 - 生成済みの`docs/BOARDS.<version>.md` / `docs/COMPATIBILITY.<version>.md`がリリース対象versionと現在のexample集合を反映している。
-- Classicの利用者向け文書が「Arduino-ESP32 3.3.11のみ対応、ESP-IDF 5.5.5 / GCC 14.2.0 ABI固定」で一致し、BLEのCore互換matrixをClassic互換と読めない。
+- Classicの利用者向け文書が実測済みの対応範囲（Core 3.2.0以上、HFP audioのみ3.3.8以上、
+  archiveはESP-IDF 5.5.5 / GCC 14.2.0でbuildし契約headerを同梱）で一致している。
 - release zipにrootの`THIRD_PARTY_NOTICES.md`、Classic archive横の`NOTICE` / `MANIFEST.json` / `LICENSES/`、NimBLE横の`LICENSE` / `NOTICE`がすべて入り、manifestのlicense inventoryと一致している。
 - Classicをrelease対象へ含める場合、[archive再生成手順](CLASSIC_HOST_BUILD.ja.md)どおりcleanなESP-IDF v5.5.5 / GCC 14.2.0から一時生成し、格納済み`libespble_bluedroid_classic.a`とのSHA-256一致、必須prefixed symbol、最終ESP32 link、他SoC非リンクを確認する。
 
@@ -36,16 +37,21 @@ uv run --env-file .env pytest --clean
 ```sh
 # 無印ESP32を親側(Central)に
 uv run --env-file .env pytest --clean peer/ \
+  --ignore=peer/classic_hid_profiles --ignore=peer/classic_a2dp_sink_profile \
+  --ignore=peer/classic_radio_settings \
   --profile esp32_peer_host --peer-profile device:s3_peer_device
 
 # 無印ESP32をPeer(Peripheral)に
 uv run --env-file .env pytest --clean peer/ \
+  --ignore=peer/classic_hid_profiles --ignore=peer/classic_a2dp_sink_profile \
+  --ignore=peer/classic_radio_settings \
   --profile s3_peer_host --peer-profile device:esp32_peer_device
 ```
 
-その役割のesp32 profileを持たないsuiteは自動的にskipされるので、除外指定は不要です。
-skipされるのは、core同梱`BLE`ラッパで書かれた側（無印ESP32ではラッパがBluedroidになり実行不可）と、
-2M PHYを要求する`phy_update`です。
+その役割のesp32 profileを持たないsuiteは自動的にskipされます。skipされるのは、core同梱`BLE`
+ラッパで書かれた側（無印ESP32ではラッパがBluedroidになり実行不可）と、2M PHYを要求する
+`phy_update`です。`--ignore`の3つはpeer sketchを持たない単独suiteで、skipではなく
+「unknown peer」のerrorになるため除外します（後述のClassic単独commandで実行します）。
 
 `src/`に触れない文書だけの変更では、代表suiteのsmokeで足ります（両役割で15分程度）。
 
@@ -112,12 +118,16 @@ python3 tools/version_matrix.py \
 `docs/COMPATIBILITY.<version>.md`の無印ESP32列は、Classicが`src/`へ入る前の結果のままです。
 releaseでは`core-matrix.yml`を回して再生成し、この列が3.2.0以上で✅になることを確認します。
 
-全exampleのESP32-S3 compile:
+全exampleのcompile。Classic exampleは無印ESP32専用で`esp32s3` profileを持たないため、
+CIの`compile-examples.yml`と同じく各sketchの`default_profile`へfallbackします。
 
 ```sh
-set -euo pipefail
+set -uo pipefail
 for sketch in $(find examples -name sketch.yaml -printf '%h\n' | sort); do
-  arduino-cli compile --profile esp32s3 "$sketch"
+  profile=esp32s3
+  grep -q "^  esp32s3:" "$sketch/sketch.yaml" ||
+    profile=$(grep -oP '^default_profile:\s*\K\S+' "$sketch/sketch.yaml")
+  arduino-cli compile --profile "$profile" "$sketch"
 done
 ```
 
