@@ -26,7 +26,6 @@ PCs. This side is the Target: the phone presses play, this board hears about it.
 - `onPassthrough()` — play, pause, next and the rest, as key press and release
 - `onVolumeChanged()` — `remoteCommand` tells a commanded change from a reported
   one
-- `bluetooth.avrcp().setAbsoluteVolume(value)` — report this device's volume
 
 ## Notes
 
@@ -36,7 +35,10 @@ unavailable when the source establishes the audio profile.
 **A Target may only declare volume-change notifications on this build** — the
 bundled Classic host allows nothing else, `supportedNotifications()` reports the
 allowed set, and declaring anything else is refused with a message saying so.
-Sending metadata or play-status as a Target has no backend API at all.
+Sending metadata or play-status as a Target has no backend API at all. To report
+this device's own volume to the source, call
+`bluetooth.avrcp().setAbsoluteVolume(value)` — this sketch receives volume
+commands but does not send its own reports.
 
 To send keys rather than receive them, this device would be the Controller; see
 [AvrcpController](../AvrcpController/).

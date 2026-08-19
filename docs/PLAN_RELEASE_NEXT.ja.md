@@ -1,7 +1,7 @@
-# 次回リリース前タスクリスト（1.3.0候補）
+# 次回リリース前タスクリスト
 
-現在公開済みのversionは1.2.0です。Classic / dual-hostを含む機能追加を次回公開へ含める場合は1.3.0を
-候補としますが、versionはrelease開始時にCHANGELOGと公開範囲を確認して確定します。
+現在公開済みのversionは1.3.0で、Classic / dual-host（実験扱い）を含めて公開済みです。
+次回のversionはrelease開始時にCHANGELOGと公開範囲を確認して確定します。
 
 この文書は「未完了のrelease gate」を追跡する正本です。テストやexampleの総数は記録しません。
 増減する集計値ではなく、必要な範囲をどの条件で通したかを結果として残します。
@@ -11,7 +11,7 @@
 - BLE/GATT/Security/HID/MIDIの公開済み機能はv1.2.0までに提供済み。
 - 無印ESP32向け同梱NimBLE hostはCentral / Peripheral両roleで実機回帰済み。
 - Classic-only Bluedroid archive、SPP、HID Device/Host、dual-host HCI brokerは実装・実機検証済み。
-  Classicは次回releaseの対象で、BLEとClassicの同時利用（dual-host）だけを実験扱いとして残す。
+  Classicは1.3.0で公開済みで、BLEとClassicの同時利用（dual-host）だけを実験扱いとして残す。
 - Classic-onlyを実用範囲へ広げる次の対象はA2DP/AVRCP/HFP。Bluetooth media payloadまでをEspBleの
   責務とし、PCM処理とdevice I/OはPCMFlow等の独立libraryへ委ねる方針を確定した。
 - A2DP Sink / Sourceのraw transport APIとESP32同士の実機media転送、AVRCP CT/TGのpassthroughと
@@ -87,7 +87,7 @@ release対象board全体でのexample compileはworkflowが行うため、gate�
 | 未完了 | BLE HID Device | 外部Host 2種類以上でkeyboard/mouse/consumer、切断、bond再接続 |
 | 未完了 | BLE HID Host | 市販BLE keyboardで入力、modifier、LED、切断release、bond再接続 |
 | 未完了 | BLE Security / GATT | 外部実装でJust Works、passkey、scan、read/write、notify |
-| 未完了 | Classic相互運用 | 次回releaseへClassicを含める場合、外部Classic HID/SPP/A2DP/AVRCP実装で対象profileを確認 |
+| 未完了 | Classic相互運用 | 外部Classic HID/SPP/A2DP/AVRCP実装で対象profileを確認（Classic自体は1.3.0で公開済み） |
 
 結果には実施日、機器、OS、Bluetooth stack/versionを記録します。
 

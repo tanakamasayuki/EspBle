@@ -1,5 +1,7 @@
 # Release Checklist
 
+> 日本語版: [RELEASE_CHECKLIST.ja.md](RELEASE_CHECKLIST.ja.md)
+
 Use this checklist before releasing EspBle. The GitHub Actions workflows and `tools/` bump scripts come from the shared release toolkit and should not be edited during a normal release.
 
 ## Preflight
@@ -18,7 +20,7 @@ Use this checklist before releasing EspBle. The GitHub Actions workflows and `to
 - Generated `docs/BOARDS.<version>.md` / `docs/COMPATIBILITY.<version>.md` files match the release version and current example set.
 - User-facing Classic documentation consistently states the measured support range (core 3.2.0 and newer, HFP audio 3.3.8 and newer; the archive is built with ESP-IDF 5.5.5 / GCC 14.2.0 and ships its contract headers).
 - The release zip contains the root `THIRD_PARTY_NOTICES.md`, Classic `NOTICE` / `MANIFEST.json` / `LICENSES/`, and NimBLE `LICENSE` / `NOTICE`, matching the manifest's license inventory.
-- If Classic is in scope, regenerate its archive from clean ESP-IDF v5.5.5 / GCC 14.2.0 inputs, verify its SHA-256 and required prefixed symbols, link a final ESP32 consumer, and prove that other SoCs do not link it. The authoritative procedure is [CLASSIC_HOST_BUILD.ja.md](CLASSIC_HOST_BUILD.ja.md) (Japanese).
+- If Classic is in scope, regenerate its archive temporarily from clean ESP-IDF v5.5.5 / GCC 14.2.0 inputs, verify its SHA-256 matches the stored `libespble_bluedroid_classic.a` and the required prefixed symbols are present, link a final ESP32 consumer, and prove that other SoCs do not link it. The authoritative procedure is [CLASSIC_HOST_BUILD.ja.md](CLASSIC_HOST_BUILD.ja.md) (Japanese).
 
 ## Automated Tests
 
@@ -86,6 +88,10 @@ uv run --env-file .env pytest --clean -s \
   peer/dual_host_a2dp/ \
   --profile esp32_peer_host --peer-profile device:esp32_peer_device
 ```
+
+Passing `--peer-profile device:...` to a suite with no peer sketch, such as
+`classic_hid_profiles`, makes pytest reject it as an unknown peer. Do not merge
+the two commands above into one.
 
 Complete the hours-long soak under the conditions in the Japanese
 [Classic handoff](HANDOFF_ESP32_CLASSIC.ja.md) before code freeze. Re-run the normal regression above on the release candidate and retain its soak logs, heap samples and broker diagnostics in the technical-validation record.
@@ -159,5 +165,5 @@ These run in GitHub Actions. Running them locally first would not change the res
 - `board-matrix.yml`: regenerate the board set and settle `docs/BOARDS.<version>.md`.
 - `core-matrix.yml`: recheck the supported Arduino-ESP32 versions and settle `docs/COMPATIBILITY.<version>.md`.
 - `compile-examples.yml`: run the Classic archive integrity, source namespace and final-link gates, then compile every example across the release board set.
-- `release.yml`: run the same Classic gate through the pre-bump hook, preview the version change, then create the version update, release branch, tag, and GitHub release.
+- `release.yml`: run the same Classic gate through the pre-bump hook, preview the version change, then create the version update, CHANGELOG, release branch, tag, and GitHub release.
 - After publication, verify the Arduino Library Manager version and compile the minimal example from the published package.

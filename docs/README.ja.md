@@ -30,7 +30,7 @@ EspBleの開発ドキュメント一覧と、初見の人が状況を把握す�
 | BLEとClassicのどちらを使うか、両方にある機能の差 | [CLASSIC_VS_BLE.ja.md](CLASSIC_VS_BLE.ja.md)（英語版: [CLASSIC_VS_BLE.md](CLASSIC_VS_BLE.md)） |
 | 他のライブラリ（`BLEDevice`系 / NimBLE-Arduino / `BluetoothSerial`）からの移行 | [GUIDE_MIGRATION.ja.md](GUIDE_MIGRATION.ja.md)（英語版: [GUIDE_MIGRATION.md](GUIDE_MIGRATION.md)） |
 | EspBleの上級ガイド（実行model / 上限 / backpressure / 再接続 / dual-host内部 / size / 不具合の見取り図） | [GUIDE_ADVANCED.ja.md](GUIDE_ADVANCED.ja.md)（英語版: [GUIDE_ADVANCED.md](GUIDE_ADVANCED.md)） |
-| Classic通信の入門ガイド（inquiry / 無線設定 / SPP / security / HID / A2DP / HFP） | [GUIDE_CLASSIC_BASICS.ja.md](GUIDE_CLASSIC_BASICS.ja.md)（英語版: [GUIDE_CLASSIC_BASICS.md](GUIDE_CLASSIC_BASICS.md)） |
+| Classic通信の入門ガイド（inquiry / 無線設定 / SPP / security / HID / A2DP / HFP。無印ESP32のみ） | [GUIDE_CLASSIC_BASICS.ja.md](GUIDE_CLASSIC_BASICS.ja.md)（英語版: [GUIDE_CLASSIC_BASICS.md](GUIDE_CLASSIC_BASICS.md)） |
 | テスト方針・カバレッジ | [../tests/TEST_PLAN.ja.md](../tests/TEST_PLAN.ja.md) |
 | 次回リリースまでに残っている作業 | [PLAN_RELEASE_NEXT.ja.md](PLAN_RELEASE_NEXT.ja.md) |
 | リリース前の確認手順 | [RELEASE_CHECKLIST.ja.md](RELEASE_CHECKLIST.ja.md) |
@@ -45,7 +45,7 @@ EspBleの開発ドキュメント一覧と、初見の人が状況を把握す�
 | 1.0.0リリース時の作業計画（履歴） | [PLAN_RELEASE_1_0_0.ja.md](PLAN_RELEASE_1_0_0.ja.md) |
 | 無印ESP32でNimBLEとClassicを共存させる調査・技術検証 | [TECHNICAL_VALIDATION_ESP32_CLASSIC.ja.md](TECHNICAL_VALIDATION_ESP32_CLASSIC.ja.md) |
 | 無印ESP32 Classic作業の引き継ぎ・未完了事項 | [HANDOFF_ESP32_CLASSIC.ja.md](HANDOFF_ESP32_CLASSIC.ja.md) |
-| Classicの公開API・未公開機能の棚卸し | [CLASSIC_FEATURE_INVENTORY.ja.md](CLASSIC_FEATURE_INVENTORY.ja.md) |
+| Classicの公開範囲と、実機検証済み / 未検証 / 未実装の棚卸し | [CLASSIC_FEATURE_INVENTORY.ja.md](CLASSIC_FEATURE_INVENTORY.ja.md) |
 | Classic-only Bluedroid `.a`の再生成 | [CLASSIC_HOST_BUILD.ja.md](CLASSIC_HOST_BUILD.ja.md) |
 | ESP32-P4 / ESP-Hostedの準備、対応version、C6更新 | [ESP_HOSTED_SETUP.ja.md](ESP_HOSTED_SETUP.ja.md) |
 | ESP32-P4 / ESP-Hostedの実機確認済み制限 | [ESP_HOSTED_LIMITATIONS.ja.md](ESP_HOSTED_LIMITATIONS.ja.md) |
@@ -60,4 +60,4 @@ EspBleの開発ドキュメント一覧と、初見の人が状況を把握す�
 
 ## 現在の一言サマリ
 
-**BLE共通基盤と複合HID Device / Hostは公開済み**です。無印ESP32のClassicは次回リリースの対象で、機能ごとの検証状態を[棚卸し](CLASSIC_FEATURE_INVENTORY.ja.md)に明記しています。BLEとClassicの同時利用（dual-host）は実機検証済みですが実験扱いのままです。自動回帰は一通り通っており、残っているのは外部機器との相互運用です。
+**BLE共通基盤と複合HID Device / Hostは公開済み**です。無印ESP32のClassicは1.3.0で公開済みで、機能ごとの検証状態を[棚卸し](CLASSIC_FEATURE_INVENTORY.ja.md)に明記しています。BLEとClassicの同時利用（dual-host）は実機検証済みですが実験扱いのままです。自動回帰は一通り通っており、残っているのは外部機器との相互運用です。

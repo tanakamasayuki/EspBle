@@ -136,8 +136,8 @@ forms.
 Which radio suits which peer is covered in
 [BLE or Bluetooth Classic](docs/CLASSIC_VS_BLE.md), and each feature's state —
 hardware-verified, unverified or unimplemented — is written down in the Japanese
-[Classic feature inventory](docs/CLASSIC_FEATURE_INVENTORY.ja.md). Classic is part
-of the next release.
+[Classic feature inventory](docs/CLASSIC_FEATURE_INVENTORY.ja.md). Classic has
+shipped since 1.3.0.
 
 **Running BLE and Classic together (dual-host) is experimental.** Which hosts run
 follows only what the sketch calls `begin()` on; there is no build flag. With one
@@ -168,7 +168,7 @@ supplies. **In this setup the BLE radio work happens on the slave, not on the P4
 > Core 3.3.11 prebuilt libraries for the P4 carry `esp32c6` as the default slave
 > target, but from ESP-Hosted 2.12.2 the Core asks the attached co-processor for its
 > target name and picks the update firmware by that name, so a slave other than the
-> C6 is possible in principle. **EspBle's peer tests cover P4 + C6 only.**
+> C6 — a C5, for example — is possible in principle. **EspBle's peer tests cover P4 + C6 only.**
 
 Verified host/slave versions, the slave firmware update procedure and the supported
 subset are in the Japanese [ESP-Hosted setup guide](docs/ESP_HOSTED_SETUP.ja.md).
@@ -197,7 +197,7 @@ who brings the BLE host.
 | ESP32-P4 (+C6 ESP-Hosted) | **The core provides it** (NimBLE over Hosted) | **3.3.1** | 3.3.0 does not provide NimBLE for the P4's Hosted configuration |
 
 The original-ESP32 range is measured: 3.2.0 through 3.3.11 all compile and link,
-and 3.2.1 / 3.3.0 / 3.3.10 / 3.3.11 are hardware-verified (Japanese
+and 3.2.1 / 3.3.0 / 3.3.7 / 3.3.8 / 3.3.10 / 3.3.11 are hardware-verified (Japanese
 [core-version test plan](docs/PLAN_CORE_VERSION_MATRIX.ja.md)). The other chips'
 ranges are measured by CI.
 
@@ -277,6 +277,8 @@ The user-facing documents below are available in English; the remaining design d
 - [Feature support matrix](docs/FEATURE_MATRIX.md)
 - [Test plan](tests/TEST_PLAN.md)
 - [Release checklist](docs/RELEASE_CHECKLIST.md)
+- [ESP32-P4 / ESP-Hosted setup](docs/ESP_HOSTED_SETUP.ja.md) (Japanese)
+- [ESP32-P4 / ESP-Hosted known limitations](docs/ESP_HOSTED_LIMITATIONS.ja.md) (Japanese)
 
 ## Sibling libraries
 

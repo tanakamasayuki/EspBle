@@ -46,7 +46,8 @@ noise reductionを戻す呼び出しはありません——要求はその接�
 **`onAudio()`から戻る前にSCO payloadをcopyしてください。**`badFrame`を保てば、mSBC decoderが
 クリックノイズにせず欠損を補えます。
 
-通話待ち・三者通話（CHLD、BTRH）は未実装です。
+ClientもAudio Gatewayと同じく意図的に単一call modelです。通話待ち・三者通話（CHLD、BTRH）は
+未実装です。
 
 ## 関連するガイド
 

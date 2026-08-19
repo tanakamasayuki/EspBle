@@ -20,5 +20,7 @@ Minimal build-check sketch. It only includes `EspBle.h` and prints the library v
 ## Expected Serial output
 
 ```
-EspBle 0.1.0
+EspBle <version>
 ```
+
+`<version>` is the library version defined in `espble_version.h`.

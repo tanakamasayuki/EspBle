@@ -61,7 +61,7 @@
 - Profileは`EspBle`から取得したhandleを`begin()`前に`configure()`する。`configured()`で状態を確認できる。
 - 送信系は同期`bool`（受理）＋非同期イベント（結果）の分離に従う。ただしHIDの`setKeyboardLeds()`のようにWrite Without Responseで撃つものは、受理だけを返して配達確認をしないことを文書で明示する。
 - Profileは汎用GATT callbackを**listenerとして**使い、primaryを独占しない。
-- 詳細は[HID_DEVICE_SPEC.ja.md](HID_DEVICE_SPEC.ja.md) / [HID_HOST_SPEC.ja.md](HID_HOST_SPEC.ja.md)。
+- 詳細は[HID_DEVICE_SPEC.ja.md](HID_DEVICE_SPEC.ja.md) / [HID_HOST_SPEC.ja.md](HID_HOST_SPEC.ja.md)。Report Descriptorを自作する場合は[HID descriptorガイド](GUIDE_HID_DESCRIPTORS.ja.md)を参照。
 
 ## 拡張するとき
 

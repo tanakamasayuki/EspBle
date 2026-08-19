@@ -1,5 +1,7 @@
 # リリースチェックリスト
 
+> English: [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md)
+
 EspBleをリリースする前の確認項目です。GitHub Actionsと`tools/`のbump scriptは共通release toolkit由来のため、通常のリリース作業では編集しません。
 
 ## 事前確認

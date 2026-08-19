@@ -159,6 +159,12 @@ fieldがdescriptorの宣言位置にあるか、profile間でreport IDが混ざ�
 `hid-recorder`でHostが受け取ったdescriptorと届くreportの両方を確認できます。usageの選び方が
 妥当かどうかは、携帯やPCに聞くのが一番早く、byteをいくら検算しても分かりません。
 
+**descriptorを変えたら必ず再ペアリングする。**HostはReport Mapをbondごとにキャッシュします——
+Windows、Android、macOS、iOS、BlueZのいずれもpairing時に一度だけ解析し、その結果を使い続けます。
+descriptorを変えた後は、device側のbond削除だけでは足りません。Host側でもdeviceを削除
+（ペアリング解除、「登録解除」）してからpairし直さないと、Hostは新しいreportを古いlayoutで
+読み続けます。「descriptorを直したら動かなくなった」は、ほぼ確実にこれです。
+
 失敗の見え方:
 
 | 症状 | ありがちな原因 |
@@ -168,6 +174,7 @@ fieldがdescriptorの宣言位置にあるか、profile間でreport IDが混ざ�
 | 値が両極に飛ぶ | 負値を送るのにfieldが符号なし（Logical Minimum 0）、または`Report Size`が狭い |
 | あるbuttonが効かない | bit fieldのcountとusage範囲が食い違い、そのbitが別のusageに属している |
 | 最初のreportしか届かない | Hostがそのreportのcharacteristicを購読していない（BLE）、または宣言とdescriptorでsizeが違う |
+| descriptorを変えるまで動いていたのに、変えたらfieldが崩れた | Hostがpairing時にキャッシュしたReport Mapを使い続けている——Host側でペアリングを解除してpairし直す |
 | `begin()`が`ResourceExhausted`を返す（Classic） | 214 byteのSDP予算 |
 
 ## 7. チェックリスト

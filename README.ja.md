@@ -111,7 +111,7 @@ build・更新条件が異なるため、両者の成果物形式は揃えませ
 
 どちらを選ぶかと、両方にある機能の差は[BLEとClassicの選び方](docs/CLASSIC_VS_BLE.ja.md)、
 機能ごとの「実機検証済み / 未検証 / 未実装」は[Classic機能の棚卸し](docs/CLASSIC_FEATURE_INVENTORY.ja.md)に
-書いてあります。Classicは次回releaseの対象です。
+書いてあります。Classicは1.3.0から同梱されています。
 
 **BLEとClassicの同時利用（dual-host）は実験扱いです。** どちらのhostが動くかはsketchが何を
 `begin()`したかだけで決まり、build flagはありません。片方だけなら間に入るHCI brokerはpass-through、
@@ -163,8 +163,8 @@ pin設定を上書きします（[SDIO pinの選択と上書き](docs/ESP_HOSTED
 | ESP32-S3 / C3 / C6 / H2 | **Core同梱のNimBLE** | **3.3.0** | 3.2.x世代のprebuilt libraryはBLE hostがBluedroidで、EspBleが呼ぶNimBLEが存在しない。CoreがNimBLEへ切り替えたのが3.3.0。該当版では`EspBle requires the NimBLE backend`の`#error`で止まる |
 | ESP32-P4（+C6 ESP-Hosted） | **Coreが提供**（Hosted経由のNimBLE） | **3.3.1** | 3.3.0のP4はHosted構成のNimBLEが未提供 |
 
-無印ESP32の範囲は実測です。3.2.0〜3.3.11のcompile / linkが全て通り、3.2.1 / 3.3.0 /
-3.3.10 / 3.3.11は実機でも確認済みです（[core版数のテスト計画](docs/PLAN_CORE_VERSION_MATRIX.ja.md)）。
+無印ESP32の範囲は実測です。3.2.0〜3.3.11のcompile / linkが全て通り、3.2.1 / 3.3.0 / 3.3.7 /
+3.3.8 / 3.3.10 / 3.3.11は実機でも確認済みです（[core版数のテスト計画](docs/PLAN_CORE_VERSION_MATRIX.ja.md)）。
 他チップの範囲はCIが計測します。
 
 - **Core Compatibility Matrix** ワークフロー → `docs/COMPATIBILITY.<version>.md`（代表BLE exampleをarduino-esp32の各リリースに対してビルド）

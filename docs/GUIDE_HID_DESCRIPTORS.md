@@ -183,6 +183,13 @@ that a release returns every byte to zero.
 reports as they arrive; a phone or a PC tells you whether your usages were chosen
 sensibly, which no amount of byte checking can.
 
+**Re-pair after every descriptor change.** Hosts cache the Report Map per bond —
+Windows, Android, macOS, iOS and BlueZ all parse it once at pairing and keep
+using that parse. After changing the descriptor, deleting the bond on the device
+is not enough: remove (unpair, "forget") the device on the Host as well, then
+pair again, or the Host keeps reading the new reports with the old layout. A
+device that worked until you fixed the descriptor is this, almost always.
+
 What failure looks like:
 
 | Symptom | Likely cause |
@@ -192,6 +199,7 @@ What failure looks like:
 | Values jump between extremes | Field declared unsigned (Logical Minimum 0) while you send negatives, or `Report Size` too small |
 | A button does nothing | Bitfield count and usage range disagree, so your bit belongs to another usage |
 | Only the first report ever arrives | The Host is not subscribed to that report's characteristic (BLE), or your declaration and the descriptor disagree on the size |
+| It worked until the descriptor changed, now fields are garbled | The Host is still using the Report Map it cached at pairing — unpair on the Host and pair again |
 | `begin()` returns `ResourceExhausted` (Classic) | The 214-byte SDP budget |
 
 ## 7. Checklist

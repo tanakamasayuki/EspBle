@@ -13,7 +13,7 @@ A2DP Sink/Source、AVRCP CT/TG、HFP Client/Audio Gateway（いずれもexternal
 
 host構成はsketchが`begin()`したhostだけで決まり、build flagはありません。1 hostならbrokerは
 pass-through、`EspBle`と`EspBleClassic`の両方をbeginすればbrokerがHCIをroutingします。
-無印ESP32以外はcore同梱NimBLE経路を変更しません。Classicは次回releaseへ含めます
+無印ESP32以外はcore同梱NimBLE経路を変更しません。Classicは1.3.0 releaseへ含めました
 （[決定台帳](DECISIONS.ja.md)のスコープ6）。dual-hostも同梱しますが、検証はEspBle同士と
 core内蔵host相手までで、**外部機器との相互運用は未検証**です。不安定な場合は一方を`end()`して
 単一hostで使います。

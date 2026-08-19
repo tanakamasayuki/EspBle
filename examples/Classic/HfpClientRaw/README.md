@@ -53,7 +53,8 @@ request lasts for the connection.
 **Copy the SCO payload before returning from `onAudio()`.** Keep `badFrame` so an
 mSBC decoder can conceal the loss instead of clicking.
 
-Call waiting and three-way calling (CHLD, BTRH) are not implemented.
+The Client keeps a single-call model on purpose, matching the Audio Gateway:
+call waiting and three-way calling (CHLD, BTRH) are not implemented.
 
 ## Related guides
 

@@ -27,7 +27,7 @@ The design documents are written in Japanese. This guide lists them and shows th
 | Writing and verifying a HID Report Descriptor | [GUIDE_HID_DESCRIPTORS.md](GUIDE_HID_DESCRIPTORS.md) |
 | HID spec (Device / Host) | [HID_DEVICE_SPEC.ja.md](HID_DEVICE_SPEC.ja.md) / [HID_HOST_SPEC.ja.md](HID_HOST_SPEC.ja.md) |
 | BLE communication beginner guide: GAP / security / GATT / UUID / HID / BLE MIDI | [GUIDE_BLE_BASICS.md](GUIDE_BLE_BASICS.md) |
-| Bluetooth Classic beginner guide: inquiry / SPP / HID / A2DP / HFP (original ESP32 only) | [GUIDE_CLASSIC_BASICS.md](GUIDE_CLASSIC_BASICS.md) |
+| Bluetooth Classic beginner guide: inquiry / radio settings / SPP / security / HID / A2DP / HFP (original ESP32 only) | [GUIDE_CLASSIC_BASICS.md](GUIDE_CLASSIC_BASICS.md) |
 | Migrating from another library (`BLEDevice`, NimBLE-Arduino, `BluetoothSerial`) | [GUIDE_MIGRATION.md](GUIDE_MIGRATION.md) |
 | EspBle in depth: execution model, capacities, backpressure, reconnection, dual-host internals, footprint, debugging | [GUIDE_ADVANCED.md](GUIDE_ADVANCED.md) |
 | Choosing between BLE and Classic, and what differs where both exist | [CLASSIC_VS_BLE.md](CLASSIC_VS_BLE.md) |
@@ -60,4 +60,4 @@ The design documents are written in Japanese. This guide lists them and shows th
 
 ## One-line status
 
-The **BLE foundation and composite HID Device / Host are released and covered by peer/unit tests**. Original-ESP32 Classic is part of the next release, with each feature's state written down in the [feature inventory](CLASSIC_FEATURE_INVENTORY.ja.md) (Japanese). Running BLE and Classic together is hardware-verified but stays experimental. What remains is the final regression and interoperability with external devices.
+The **BLE foundation and composite HID Device / Host are released and covered by peer/unit tests**. Original-ESP32 Classic shipped in 1.3.0, with each feature's state written down in the [feature inventory](CLASSIC_FEATURE_INVENTORY.ja.md) (Japanese). Running BLE and Classic together is hardware-verified but stays experimental. The automated regressions all pass; what remains is interoperability with external devices.

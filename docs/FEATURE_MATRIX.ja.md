@@ -100,7 +100,7 @@ EspUsbHost / EspUsbDeviceで扱っている機能のBLE版、およびBLEで一�
 | Beacon（non-connectable broadcaster） | ✅ | `setConnectable(false)`＋`setScanResponseEnabled(false)`＋`setInterval()`。payloadは`setManufacturerData`等で構築。実機Peer検証済み |
 | iBeacon（Apple beacon layout） | ✅ | backend非依存codec `EspBleIBeacon.h`（`espBleEncodeIBeacon`/`espBleDecodeIBeacon`）。company ID 0x004C＋UUID＋major/minor＋measured power。unit test＋`ibeacon` Peerでbroadcast/decodeを検証済み |
 | Advertising Service Data（AD 0x16） | ✅ | `EspBleAdvertising::addServiceData(uuid, data, length)`で最大4ブロック送信、`EspBleScanResult::serviceData[]`/`serviceDataCount`/`serviceDataFor(uuid, data)`で受信。複数ブロックとUUID検索を`service_data` Peerで検証済み |
-| Filter Accept List（Peripheral側の接続制限） | ✅ | `EspBle::addToAcceptList()` ＋ `EspBleAdvertising::setFilterPolicy()`（Any / ScanRequest / Connection / Both）。コントローラが弾くのでアプリまで届かない |
+| Filter Accept List（Peripheral側の接続制限） | ✅ | `EspBle::addToAcceptList()` ＋ `EspBleAdvertising::setFilterPolicy()`（Any / ScanRequest / Connection / Both）。コントローラが弾くのでアプリまで届かない。同梱wrapperのwhite-list APIはlinkできないため`ble_gap_wl_set()`を直接使う。`accept_list` Peerで検証済み |
 | Directed Advertising（送信） | ✅ | `EspBleAdvertising::setDirectedTarget(address, addressType, highDuty)` / `clearDirectedTarget()`。`ble_gap_adv_start()`を直接呼ぶ。仕様上ADデータを載せられないためpayloadは送出されず、指定した相手だけが接続できる。highDutyは3.75 ms間隔・最大1.28秒。相手がRPAを使う場合はボンド経由で解決するため先にボンディングが必要。`directed_advertising` Peerで検証済み |
 | Directed Advertising（受信） | ⚠️ | 自分宛のADV_DIRECT_INDはスキャン結果として届き、address / addressType / rssi / connectable=true / scannable=false を持つ（仕様上ADデータを載せないため他は空）。そのまま接続可。ただし**advertisement typeを公開していないため判別不能**で、「connectable かつ non-scannable かつ payload空」からの推測になる |
 | スキャン側のFilter Accept List | ✅ | `EspBleScanConfig::acceptListOnly`。`ble_gap_disc()` の filter policy に渡すため、許可リスト外のアドバタイズはコントローラが捨てアプリまで届かない。`accept_list` Peerで、リストが空なら1件も報告されず、アドレス追加後は報告されることを検証済み |
@@ -120,17 +120,17 @@ EspUsbHost / EspUsbDeviceで扱っている機能のBLE版、およびBLEで一�
 ## Bluetooth Classic（BR/EDR）— 無印ESP32限定
 
 ESP32-S3/C3/C6/H2等はBluetooth Classicを搭載しないため利用できません。無印ESP32では`EspBleClassic`の利用時に
-独自buildしたClassic-only Bluedroid hostを自動選択します。このprecompiled hostはArduino-ESP32 3.3.11のみ対応し、
-ESP-IDF 5.5.5 / xtensa-esp32 GCC 14.2.0のABIに固定しています。Classicは次回releaseの対象で、サポートや互換性の保証は掲げません。各⚠️行に書いてあるのが実機で確認した範囲であり、外部機器との相互運用は未検証です。dual-hostは技術検証段階です。
+独自buildしたClassic-only Bluedroid hostを自動選択します。このprecompiled hostはESP-IDF 5.5.5 / xtensa-esp32 GCC 14.2.0のABIに固定しており、
+対応Coreは実測でArduino-ESP32 3.2.0〜3.3.11です（HFP audio（SCO）のみ3.3.8以上）。Classicは1.3.0から同梱しており、サポートや互換性の保証は掲げません。各⚠️行に書いてあるのが実機で確認した範囲であり、外部機器との相互運用は未検証です。dual-hostは実験扱いのままです。
 
 | 機能 | 状況 | 備考 |
 |---|---|---|
-| Bluetooth Classic（BR/EDR）全般 | ⚠️ | Core 3.3.11の無印ESP32で`EspBleClassic`利用時に自動選択。その他Core・SoCは非対応 |
+| Bluetooth Classic（BR/EDR）全般 | ⚠️ | 無印ESP32で`EspBleClassic`利用時に自動選択（対応Coreは実測で3.2.0〜3.3.11）。他SoCはBR/EDR無線を持たない |
 | A2DP（オーディオストリーミング） | ⚠️ | Sink/SourceのSBC negotiationとencode済みpayload transport。codec/PCM/device I/Oは別library |
 | HFP（ハンズフリー） | ⚠️ | Client/Audio GatewayのSLC、発信・着信・応答・終了、CVSD・mSBC raw SCO API、AG codec選択、role排他に加え、Client側のoperator名・subscriber番号・memory dial・NREC・Apple電池残量通知を実装し実機確認済み。通話待ち・三者通話（CHLD / BTRH）は未実装。外部機器相互運用は未確認 |
 | AVRCP（メディア操作） | ⚠️ | CT/TG passthrough、metadata/play-status要求、absolute volume。metadata応答の外部Target相互運用は未完了 |
 | SPP（Serial Port Profile） | ⚠️ | Classic-onlyでServer/Client transportを実機確認。`EspBleClassicSppStream`でsessionをArduino `Stream`として扱える（write 1回が1 packet、送信queueは有限）。BLEではNUS等で代替 |
-| Classic HID（BT HID） | ⚠️ | generic Device/HostとBLE同形のprofile API（keyboard / mouse / consumer / system / gamepad）、host側のReport Descriptor解析、制御チャネル（Get_Report / Set_Report / protocol mode / idle rate / virtual cable unplug）を実機確認。合成できるprofile数はSDP recordの214 byte（descriptor + 文字列）が上限で、超過は`begin()`が拒否する。host側の復号はkeyboardとmouseのみ |
+| Classic HID（BT HID） | ⚠️ | generic Device/HostとBLE同形のprofile API（keyboard / mouse / consumer / system / gamepad）、host側のReport Descriptor解析、制御チャネル（Get_Report / Set_Report / protocol mode / idle rate / virtual cable unplug）を実機確認。合成できるprofile数はSDP recordの214 byte（descriptor + 文字列）が上限で、超過は`begin()`が拒否する。host側の復号はkeyboardとmouseのみ。BLEではHOGPを使う |
 | Classic device discovery / pairing / bond | ⚠️ | inquiry（name・Class of Device・RSSI）、SDP照会、IO capability選択、numeric comparison / passkeyのapplication応答、bond一覧・削除を実機確認。legacy PINは拒否 |
 | Classicの無線・link設定 | ⚠️ | 送信電力（範囲・単一値）、page timeout、暗号鍵の最小長を実機確認。RSSI（接続後）・QoS・AFH・EIR設定は未公開 |
 | Classic / BLE同時利用（Dual-host） | ⚠️ | 実験扱い（build flagは無く、`begin()`したhostで決まる）。HID/security/lifecycle、HFP mSBC SCO双方向通信、A2DP encode済みmedia転送、AVRCP操作と、各audio link中・切断後のGATT readを実機確認済み |

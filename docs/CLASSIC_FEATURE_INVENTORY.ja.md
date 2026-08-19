@@ -133,7 +133,7 @@
 | BLEとClassicの同時利用 | 公開（実験） | begin()したhostで決まる。build flagはない |
 | HCI routing、command scheduler、event mask union、controller lifecycle | 公開（内部） | |
 | controller-to-host ACL flow control | 公開（内部） | brokerが所有し、受信ACLごとにcreditを返す |
-| 公開API・対応profile・制限の確定 | 確定（次回release） | サポートや互換性は保証せず、機能ごとの「実機検証済み / 未検証 / 未実装」をこの棚卸しで示す |
+| 公開API・対応profile・制限の確定 | 確定（1.3.0で公開） | サポートや互換性は保証せず、機能ごとの「実機検証済み / 未検証 / 未実装」をこの棚卸しで示す |
 
 ## 優先度の考え方
 

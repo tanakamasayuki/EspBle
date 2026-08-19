@@ -43,7 +43,7 @@ arduino-cli compile --profile esp32s3 examples/<path>
 ### Bluetooth Classic（無印ESP32のみ）
 
 `EspBleClassic`を使うと独自buildしたClassic hostが自動選択されます。build flagはありません。
-precompiled hostの対応環境はArduino-ESP32 3.3.11のみです。
+precompiled hostの対応Coreは実測でArduino-ESP32 3.2.0〜3.3.11です（HFP audioのみ3.3.8以上）。
 `EspBle`と`EspBleClassic`の両方を開始すればdual-host、片方だけなら単一hostになります。
 
 **2つの無線は届く相手が違い、それが選択の基準になります。**BLE HID（HOGP）は2015年前後以降の

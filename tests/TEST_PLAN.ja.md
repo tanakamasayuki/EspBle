@@ -482,15 +482,6 @@ EspBle同士のPeerテストは、両側が同じ実装なので**同じ誤解�
 - core同梱sdkconfigは`CONFIG_BT_SPP_ENABLED` / `CONFIG_BT_A2DP_ENABLE` / `CONFIG_BT_HFP_ENABLE`
   （Client/AGとも）が有効、`CONFIG_BT_HID_ENABLED`は無効、HFPのaudio pathはPCM。
 
-着手前に確認済みの前提（2026-08-16、Core 3.3.11 / 無印ESP32）:
-
-- 相手側sketchは同梱`BLE`ラッパだけでbuildできる。GATT Server（`BLEDevice` / `BLEServer` /
-  `BLE2902`）で83%、`BLEHIDDevice` + `BLESecurity`を足しても83%と、既定partitionに収まる。
-- `BLESecurity`のmethodは3.3.11ではstatic（`BLESecurity::setAuthenticationMode()` /
-  `setEncryptionLevel()`）。instanceを作る古い書き方はcompileできない。
-- core同梱sdkconfigは`CONFIG_BT_SPP_ENABLED` / `CONFIG_BT_A2DP_ENABLE` / `CONFIG_BT_HFP_ENABLE`
-  （Client/AGとも）が有効、`CONFIG_BT_HID_ENABLED`は無効、HFPのaudio pathはPCM。
-
 suite名は`core_host_*`（Classic SPPだけは先行して作った`classic_core_host_spp`）に揃え、相手側が
 同梱実装であることが名前から分かるようにします。2026-08-16に上表の6 suiteを追加し、すべて実機で
 通しました。相手側sketchを書くときに引っかかった点は次のとおりです。

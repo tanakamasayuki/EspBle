@@ -24,7 +24,6 @@ Classic機器——電話機、tablet、PCです。この側はTargetで、電�
 - `bluetooth.avrcp().begin()` — `a2dpSink().begin()`より**前に**呼ぶ
 - `onPassthrough()` — 再生・停止・次曲などをkeyの押下／解放として受け取る
 - `onVolumeChanged()` — `remoteCommand`で指示と報告を区別する
-- `bluetooth.avrcp().setAbsoluteVolume(value)` — この機器の音量を報告する
 
 ## 補足
 
@@ -33,7 +32,9 @@ Classic機器——電話機、tablet、PCです。この側はTargetで、電�
 
 **このbuildでTargetが宣言できるnotificationは音量変化だけです。**同梱Classic hostが他を
 許さず、`supportedNotifications()`が許可集合を返し、許可外の宣言は理由付きで拒否されます。
-Targetとしてmetadataやplay statusを送るAPIはbackendに存在しません。
+Targetとしてmetadataやplay statusを送るAPIはbackendに存在しません。この機器自身の音量を
+sourceへ報告するには`bluetooth.avrcp().setAbsoluteVolume(value)`を呼びます——このsketchは
+音量指示を受けるだけで、自分からの報告は行いません。
 
 keyを受けるのではなく送る側になるなら、この機器はControllerです——
 [AvrcpController](../AvrcpController/)を参照してください。

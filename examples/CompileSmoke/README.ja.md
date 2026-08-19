@@ -20,5 +20,7 @@
 ## 期待されるSerial出力
 
 ```
-EspBle 0.1.0
+EspBle <version>
 ```
+
+`<version>`は`espble_version.h`で定義されるライブラリのバージョンです。
