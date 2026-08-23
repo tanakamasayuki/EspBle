@@ -113,6 +113,16 @@ Application
 つまりBluedroidに機能不足があるからDual Hostにしたのではありません。選択理由は**BLE側の設計とAPIを
 どう保つか**です。
 
+ただし、ここでいう「標準Bluedroidの能力」と「Arduino-ESP32 Coreへ実際に収録されたBluedroid」は
+分けて考える必要があります。ESP-IDFのBluedroid sourceはbuild設定によってBLEとClassic HIDを含められますが、
+**Arduino-ESP32 Coreのprebuilt BluedroidではClassic HID Device / Hostが無効化された状態でbuildされています。**
+Core同梱`libbt.a`にはそのAPIの実体がないため、headerやsketchのbuild flagを追加しても後から有効には
+できません。既に生成済みのarchiveへ、compileされていないprofileを復活させることはできないためです。
+
+EspBleがClassic keyboard、mouse、gamepad、任意Report DescriptorのDevice、HID Hostまで提供するには、
+Classic HIDを有効にしたBluedroidをESP-IDFから独自にbuildする必要がありました。これはNimBLEを選んだこととは
+別の、**Arduino Coreのprebuilt構成に存在しないClassic profileを用意するための要件**です。
+
 標準Bluedroidは両transportを1つで扱える一方、BLEとClassicのAPI、状態、callback、build設定が同じ
 大きなHostへ集まります。対応範囲が広い分、BLEだけを使いたいapplicationから見るとAPI surfaceと
 設定の組み合わせが多く、構成を理解する負担も増えます。
@@ -162,6 +172,10 @@ Classic archiveはControllerを含まない**Host-only / Classic-only**構成で
 `espble_bd_`へ名前空間化しているため、Arduino Core側のsymbolと衝突しません。Bluedroidは
 `esp_bluedroid_attach_hci_driver()`に相当する境界から、物理VHCIではなくbrokerへ接続されます。
 NimBLEのESP32 transportも同じようにbrokerをlogical Hostとして利用します。
+
+この独自archiveでは、Core同梱Bluedroidで無効なClassic HID Device / Hostを有効にしています。
+必要なKconfigを固定してbuildし、HCI attach、SPP、HID Device、HID Hostなど必須APIのlink checkを
+生成工程で行うため、「headerには宣言があるがarchiveに実体がない」状態をrelease前に検出できます。
 
 これにより、2つのHostは互いの内部実装を知らず、brokerだけが共有Controllerを知る構成になります。
 

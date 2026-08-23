@@ -106,6 +106,18 @@ Application
 Dual host was therefore not chosen because Bluedroid lacks a feature. The
 reason is the desired **BLE architecture and API boundary**.
 
+There is an important distinction between what Bluedroid source can support and
+the Bluedroid configuration actually shipped by Arduino-ESP32 Core. ESP-IDF can
+build Bluedroid with BLE and Classic HID, but **the prebuilt Bluedroid in
+Arduino-ESP32 Core is built with Classic HID Device and Host disabled.** Its
+`libbt.a` contains no implementation of those APIs. A sketch flag or header
+cannot enable a profile that was not compiled into an already-built archive.
+
+To provide Classic keyboards, mice, gamepads, arbitrary Report Descriptor
+devices and an HID Host, EspBle therefore had to build Bluedroid independently
+with Classic HID enabled. This is separate from the decision to keep NimBLE: it
+is a requirement created by Classic profiles missing from Core's prebuilt Host.
+
 A dual-mode Bluedroid Host is broad: BLE and Classic APIs, state, callbacks and
 build options all meet in one large stack. That breadth is valuable when one
 Host should expose everything, but it also gives a BLE-only application more
@@ -160,6 +172,11 @@ Its defined symbols are moved into the `espble_bd_` namespace, preventing
 collisions with Arduino Core symbols. Bluedroid attaches its injected HCI
 driver to the broker instead of physical VHCI. The bundled NimBLE transport
 also uses the broker as its logical transport.
+
+This custom archive enables Classic HID Device and Host, which are disabled in
+Core's Bluedroid. Its pinned build and required-API link checks cover HCI attach,
+SPP, HID Device, HID Host and the other required entry points, catching a
+"declared in headers but absent from the archive" configuration before release.
 
 ### 5.1 What is source, and what is a prebuilt `.a`
 
