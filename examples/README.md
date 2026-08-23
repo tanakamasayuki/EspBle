@@ -16,7 +16,6 @@ How BLE works — the difference from Bluetooth Classic, GAP (finding and connec
 | Acting as a keyboard or mouse, or receiving their input | 6 (HID) | [Hid/](Hid/) |
 | BLE MIDI instruments | 7 (BLE MIDI) | [Midi/](Midi/) |
 | Selecting P4/C6 ESP-Hosted SDIO pins | ESP-Hosted setup | [Hosted/CustomPins](Hosted/CustomPins/) |
-| Classic inquiry, SPP, HID and audio | [Classic communication guide](../docs/GUIDE_CLASSIC_BASICS.md) | [Classic/](Classic/) |
 
 Each example's README is written to stand on its own, so starting from an individual example without reading the guide works fine.
 
@@ -40,47 +39,6 @@ Examples are grouped by area. Each standard-service directory holds a matching
 | [CompileSmoke](CompileSmoke/) | — | Minimal build check; prints the library version |
 | [Hosted/CustomPins](Hosted/CustomPins/) | P4 Host | Override ESP-Hosted SDIO pins before `ble.begin()` when they differ from the board variant |
 | [Hosted/WifiCoexistence](Hosted/WifiCoexistence/) | P4 Host | Wi-Fi and BLE over one shared ESP-Hosted transport, and the order they stop in |
-
-### Bluetooth Classic (original ESP32 only)
-
-Using `EspBleClassic` selects the separately built Classic host automatically.
-The precompiled host's measured core range is Arduino-ESP32 3.2.0 through
-3.3.11 (HFP audio needs 3.3.8 or newer).
-There is no build flag: starting both `EspBle` and `EspBleClassic` is what makes
-a sketch dual-host, and starting one is what makes it single-host.
-
-**The two radios reach different peers, which is what decides between them.**
-BLE HID (HOGP) is accepted by phones, tablets and PCs from roughly 2015 onwards.
-Classic reaches what BLE cannot: older game consoles and PCs, car audio units,
-headsets — and it is the only way to offer a serial port (SPP) or to carry audio
-(A2DP, HFP). The HID examples come in pairs, one per radio, with the same calls
-on both sides; pick the pair that matches the peer you have. Which to choose, and
-what differs between the two where both exist, is in
-[BLE and Classic](../docs/CLASSIC_VS_BLE.md).
-
-| Example | Role | Description |
-|---|---|---|
-| [Classic/Inquiry](Classic/Inquiry/) | GAP | Device discovery: where an address comes from |
-| [Classic/RadioSettings](Classic/RadioSettings/) | GAP | Transmit power, page timeout and minimum encryption key size |
-| [Classic/SppServer](Classic/SppServer/) | SPP Server | Binary-safe SPP echo server |
-| [Classic/SppClient](Classic/SppClient/) | SPP Client | Dial an address, resolve or name the RFCOMM channel |
-| [Classic/SppStream](Classic/SppStream/) | SPP Server | SPP as an Arduino `Stream`, for code written against `Serial` |
-| [Classic/SppPairing](Classic/SppPairing/) | SPP Server / GAP | Application-controlled pairing and bond management |
-| [Classic/HidKeyboard](Classic/HidKeyboard/) | HID Device | Keyboard and mouse through the same profile API the BLE examples use |
-| [Classic/HidMouse](Classic/HidMouse/) | HID Device | Motion, clicks, wheel and drag |
-| [Classic/HidGamepad](Classic/HidGamepad/) | HID Device | Axes, hat and buttons — the case BLE cannot replace |
-| [Classic/HidConsumerControl](Classic/HidConsumerControl/) | HID Device | Media keys and system requests |
-| [Classic/HidKeyboardNkro](Classic/HidKeyboardNkro/) | HID Device | N-key rollover, with no six-key limit |
-| [Classic/HidComposite](Classic/HidComposite/) | HID Device | Keyboard, mouse and media keys in one device, and the SDP record limit on how many fit |
-| [Classic/HidKeyboardHost](Classic/HidKeyboardHost/) | HID Host | Decoded key and mouse events from the peer's Report Descriptor |
-| [Classic/HidVendorDevice](Classic/HidVendorDevice/) | HID Device | Classic HID Device with an arbitrary Report Descriptor |
-| [Classic/HidVendorHost](Classic/HidVendorHost/) | HID Host | Connect by address and receive raw Input Reports |
-| [Classic/A2dpSinkRaw](Classic/A2dpSinkRaw/) | A2DP Sink | Receive codec configuration and encoded SBC media callbacks |
-| [Classic/A2dpSource](Classic/A2dpSource/) | A2DP Source | Send encoded SBC frames with backpressure |
-| [Classic/A2dpSinkAvrcp](Classic/A2dpSinkAvrcp/) | A2DP Sink / AVRCP TG | A2DP connection, playback control, and absolute volume |
-| [Classic/AvrcpController](Classic/AvrcpController/) | AVRCP CT | Press play on another device, ask for status and metadata |
-| [Classic/HfpClientRaw](Classic/HfpClientRaw/) | HFP Client | Single-call control and raw CVSD/mSBC SCO transport |
-| [Classic/HfpAudioGatewayRaw](Classic/HfpAudioGatewayRaw/) | HFP Audio Gateway | Small telephony model and raw CVSD/mSBC SCO transport |
 
 ### GAP — advertise, scan, connect
 
@@ -245,3 +203,48 @@ what differs between the two where both exist, is in
 - Hid/CustomDevice ↔ Hid/CustomClient
 - Midi/MidiDevice ↔ Midi/MidiHost
 - Info/ScanDump and Info/ConnectionInspector can observe anything — the other examples, smartphones, or commercial BLE devices
+
+## The original ESP32 also supports Bluetooth Classic
+
+All examples above use BLE. On the original ESP32, Bluetooth Classic is
+available as an additional option. Its inquiry, SPP, HID and audio concepts are
+covered in the [Classic communication guide](../docs/GUIDE_CLASSIC_BASICS.md).
+
+Using `EspBleClassic` selects the separately built Classic host automatically.
+The precompiled host's measured core range is Arduino-ESP32 3.2.0 through
+3.3.11 (HFP audio needs 3.3.8 or newer).
+There is no build flag: starting both `EspBle` and `EspBleClassic` is what makes
+a sketch dual-host, and starting one is what makes it single-host.
+
+**The two radios reach different peers, which is what decides between them.**
+BLE HID (HOGP) is accepted by phones, tablets and PCs from roughly 2015 onwards.
+Classic reaches what BLE cannot: older game consoles and PCs, car audio units,
+headsets — and it is the only way to offer a serial port (SPP) or to carry audio
+(A2DP, HFP). The HID examples come in pairs, one per radio, with the same calls
+on both sides; pick the pair that matches the peer you have. Which to choose, and
+what differs between the two where both exist, is in
+[BLE and Classic](../docs/CLASSIC_VS_BLE.md).
+
+| Example | Role | Description |
+|---|---|---|
+| [Classic/Inquiry](Classic/Inquiry/) | GAP | Device discovery: where an address comes from |
+| [Classic/RadioSettings](Classic/RadioSettings/) | GAP | Transmit power, page timeout and minimum encryption key size |
+| [Classic/SppServer](Classic/SppServer/) | SPP Server | Binary-safe SPP echo server |
+| [Classic/SppClient](Classic/SppClient/) | SPP Client | Dial an address, resolve or name the RFCOMM channel |
+| [Classic/SppStream](Classic/SppStream/) | SPP Server | SPP as an Arduino `Stream`, for code written against `Serial` |
+| [Classic/SppPairing](Classic/SppPairing/) | SPP Server / GAP | Application-controlled pairing and bond management |
+| [Classic/HidKeyboard](Classic/HidKeyboard/) | HID Device | Keyboard and mouse through the same profile API the BLE examples use |
+| [Classic/HidMouse](Classic/HidMouse/) | HID Device | Motion, clicks, wheel and drag |
+| [Classic/HidGamepad](Classic/HidGamepad/) | HID Device | Axes, hat and buttons — the case BLE cannot replace |
+| [Classic/HidConsumerControl](Classic/HidConsumerControl/) | HID Device | Media keys and system requests |
+| [Classic/HidKeyboardNkro](Classic/HidKeyboardNkro/) | HID Device | N-key rollover, with no six-key limit |
+| [Classic/HidComposite](Classic/HidComposite/) | HID Device | Keyboard, mouse and media keys in one device, and the SDP record limit on how many fit |
+| [Classic/HidKeyboardHost](Classic/HidKeyboardHost/) | HID Host | Decoded key and mouse events from the peer's Report Descriptor |
+| [Classic/HidVendorDevice](Classic/HidVendorDevice/) | HID Device | Classic HID Device with an arbitrary Report Descriptor |
+| [Classic/HidVendorHost](Classic/HidVendorHost/) | HID Host | Connect by address and receive raw Input Reports |
+| [Classic/A2dpSinkRaw](Classic/A2dpSinkRaw/) | A2DP Sink | Receive codec configuration and encoded SBC media callbacks |
+| [Classic/A2dpSource](Classic/A2dpSource/) | A2DP Source | Send encoded SBC frames with backpressure |
+| [Classic/A2dpSinkAvrcp](Classic/A2dpSinkAvrcp/) | A2DP Sink / AVRCP TG | A2DP connection, playback control, and absolute volume |
+| [Classic/AvrcpController](Classic/AvrcpController/) | AVRCP CT | Press play on another device, ask for status and metadata |
+| [Classic/HfpClientRaw](Classic/HfpClientRaw/) | HFP Client | Single-call control and raw CVSD/mSBC SCO transport |
+| [Classic/HfpAudioGatewayRaw](Classic/HfpAudioGatewayRaw/) | HFP Audio Gateway | Small telephony model and raw CVSD/mSBC SCO transport |
