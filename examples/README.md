@@ -16,6 +16,7 @@ profile specifications and configuration-specific limitations in depth.
 | [A beginner's guide to BLE](../docs/GUIDE_BLE_BASICS.md) | **Start here.** The BLE overview, GAP, security, GATT, UUIDs, HID and BLE MIDI |
 | [Choosing between BLE and Bluetooth Classic](../docs/CLASSIC_VS_BLE.md) | When deciding which radio a new device should use, or comparing features such as HID that exist on both |
 | [A beginner's guide to Bluetooth Classic](../docs/GUIDE_CLASSIC_BASICS.md) | When using inquiry, radio settings, SPP, security, HID, A2DP or HFP on the original ESP32 |
+| [BLE / Bluetooth Classic dual-host technical guide](../docs/GUIDE_DUAL_HOST.md) | For Controller and Host roles, two-Host HCI routing, flow control, lifecycle, and the source/`.a` distribution |
 | [Feature matrix](../docs/FEATURE_MATRIX.md) | When checking which features are implemented and verified, possible in an example, partial or out of scope |
 | [Writing a HID Report Descriptor](../docs/GUIDE_HID_DESCRIPTORS.md) | When designing and verifying a custom or composite HID device |
 | [HID Device specification](../docs/HID_DEVICE_SPEC.ja.md) / [HID Host specification](../docs/HID_HOST_SPEC.ja.md) (Japanese) | When you need the exact profile composition, Report IDs, send/receive APIs, discovery and event delivery |

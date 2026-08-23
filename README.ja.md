@@ -227,6 +227,7 @@ void loop() {
 - [BLE通信の入門ガイド](docs/GUIDE_BLE_BASICS.ja.md)
 - [Classic通信の入門ガイド](docs/GUIDE_CLASSIC_BASICS.ja.md)
 - [BLEとClassicの選び方](docs/CLASSIC_VS_BLE.ja.md)
+- [BLE / Bluetooth Classic Dual Host技術ガイド](docs/GUIDE_DUAL_HOST.ja.md)
 - [EspBleを深く使う（上級）](docs/GUIDE_ADVANCED.ja.md)
 - [他のライブラリからの移行](docs/GUIDE_MIGRATION.ja.md)
 - [HID Report Descriptorを書く](docs/GUIDE_HID_DESCRIPTORS.ja.md)

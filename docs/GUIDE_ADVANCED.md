@@ -238,6 +238,10 @@ worth stating the pieces separately.
 
 ## 7. Running BLE and Classic together
 
+For a step-by-step explanation from Controller and Host roles through startup,
+routing, flow control and shutdown, read the [dual-host technical guide](GUIDE_DUAL_HOST.md)
+first. This section is the operational summary and diagnostics reference.
+
 On the original ESP32 both hosts share one controller, and an HCI broker sits
 between them. There is no build flag: one registered host is a pass-through, and
 starting both `EspBle` and `EspBleClassic` makes the broker route. This mode is

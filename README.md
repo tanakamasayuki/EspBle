@@ -263,6 +263,7 @@ The user-facing documents below are available in English; the remaining design d
 - [A beginner's guide to BLE](docs/GUIDE_BLE_BASICS.md)
 - [A beginner's guide to Bluetooth Classic](docs/GUIDE_CLASSIC_BASICS.md)
 - [BLE or Bluetooth Classic](docs/CLASSIC_VS_BLE.md)
+- [BLE / Bluetooth Classic dual-host technical guide](docs/GUIDE_DUAL_HOST.md)
 - [EspBle in depth (advanced)](docs/GUIDE_ADVANCED.md)
 - [Coming from another library](docs/GUIDE_MIGRATION.md)
 - [Writing a HID Report Descriptor](docs/GUIDE_HID_DESCRIPTORS.md)

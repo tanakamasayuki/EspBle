@@ -330,5 +330,6 @@ dual-hostの検証はEspBle同士とcore内蔵host相手までで、**外部機�
 
 ## 次に読むもの
 
-SDP recordの予算、SPP queueの構成、dual-hostの内部、既知の不具合の見取り図は
-[EspBleを深く使う](GUIDE_ADVANCED.ja.md)にあります。
+ControllerとHostの役割、sourceと`.a`の構成、HCI routing、flow control、起動停止を順に追うには
+[Dual Host技術ガイド](GUIDE_DUAL_HOST.ja.md)を参照してください。SDP recordの予算、SPP queueの構成、
+既知の不具合の見取り図は[EspBleを深く使う](GUIDE_ADVANCED.ja.md)にあります。

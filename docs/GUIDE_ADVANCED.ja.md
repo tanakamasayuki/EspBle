@@ -204,6 +204,9 @@ BLEのthroughputのもう半分はMTUです。`preferredMtu`（既定247）は�
 
 ## 7. BLEとClassicを同時に使う
 
+ControllerとHostの役割から起動・routing・flow control・停止までを順に読む場合は、先に
+[Dual Host技術ガイド](GUIDE_DUAL_HOST.ja.md)を参照してください。この章は運用上の要点と診断値をまとめます。
+
 無印ESP32では両hostが1つのcontrollerを共有し、その間にHCI brokerが入ります。build flagは
 無く、登録hostが1つならpass-through、`EspBle`と`EspBleClassic`の両方を開始するとbrokerが
 routingします。このmodeは**実験扱い**で、退避手段は一方を`end()`することです。使うのなら、

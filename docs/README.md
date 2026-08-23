@@ -28,6 +28,7 @@ The design documents are written in Japanese. This guide lists them and shows th
 | HID spec (Device / Host) | [HID_DEVICE_SPEC.ja.md](HID_DEVICE_SPEC.ja.md) / [HID_HOST_SPEC.ja.md](HID_HOST_SPEC.ja.md) |
 | BLE communication beginner guide: GAP / security / GATT / UUID / HID / BLE MIDI | [GUIDE_BLE_BASICS.md](GUIDE_BLE_BASICS.md) |
 | Bluetooth Classic beginner guide: inquiry / radio settings / SPP / security / HID / A2DP / HFP (original ESP32 only) | [GUIDE_CLASSIC_BASICS.md](GUIDE_CLASSIC_BASICS.md) |
+| Dual-host internals: Controller/Host roles, HCI broker, routing, flow control, lifecycle and source/`.a` distribution | [GUIDE_DUAL_HOST.md](GUIDE_DUAL_HOST.md) |
 | Migrating from another library (`BLEDevice`, NimBLE-Arduino, `BluetoothSerial`) | [GUIDE_MIGRATION.md](GUIDE_MIGRATION.md) |
 | EspBle in depth: execution model, capacities, backpressure, reconnection, dual-host internals, footprint, debugging | [GUIDE_ADVANCED.md](GUIDE_ADVANCED.md) |
 | Choosing between BLE and Classic, and what differs where both exist | [CLASSIC_VS_BLE.md](CLASSIC_VS_BLE.md) |

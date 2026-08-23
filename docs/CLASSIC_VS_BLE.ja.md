@@ -64,7 +64,7 @@ BLE側で同じことをするなら、HID ServiceとNUS相当の独自service�
 |---|---|---|
 | Classicの複数profile同時（HID + SPPなど） | 検証済み | HFPのClient / Audio Gatewayは互いに排他。A2DPは1 role 1 session |
 | BLEの複数service同時（HID + 独自service） | 対応 | 無印ESP32同梱hostの同時接続上限は3 |
-| BLEとClassicの同時（dual-host） | 実験 | 両方`begin()`するとbrokerがHCIをroutingする。不安定なら片方を`end()`する |
+| BLEとClassicの同時（dual-host） | 実験 | 両方`begin()`するとbrokerがHCIをroutingする。内部は[Dual Host技術ガイド](GUIDE_DUAL_HOST.ja.md)、不安定なら片方を`end()`する |
 
 ## 4. 両方にある機能の差
 

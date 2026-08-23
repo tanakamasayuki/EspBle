@@ -71,7 +71,7 @@ EspBle has three concurrency arrangements:
 |---|---|---|
 | Several Classic profiles at once (HID + SPP, …) | verified | HFP Client and Audio Gateway exclude each other; A2DP is one role, one session |
 | Several BLE services at once (HID + your own) | supported | The bundled host on the original ESP32 allows three connections |
-| BLE and Classic at once (dual-host) | experimental | Starting both makes the broker route HCI; `end()` one of them if it misbehaves |
+| BLE and Classic at once (dual-host) | experimental | Starting both makes the broker route HCI; see the [dual-host technical guide](GUIDE_DUAL_HOST.md), and `end()` one if it misbehaves |
 
 ## 4. Where the shared features differ
 

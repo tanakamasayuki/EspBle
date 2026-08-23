@@ -360,5 +360,7 @@ been verified are in the [handover notes](HANDOFF_ESP32_CLASSIC.ja.md) and
 
 ## Where to go next
 
-For the SDP record budget, the SPP queue geometry, dual-host internals and the
-known failure signatures, see [EspBle in depth](GUIDE_ADVANCED.md).
+For a step-by-step account of Controller/Host roles, the source/`.a` layout,
+HCI routing, flow control and lifecycle, see the
+[dual-host technical guide](GUIDE_DUAL_HOST.md). For the SDP record budget, SPP
+queue geometry and known failure signatures, see [EspBle in depth](GUIDE_ADVANCED.md).

@@ -15,6 +15,7 @@ exampleを動かす前に、まず[BLE通信の入門ガイド](../docs/GUIDE_BL
 | [BLE通信の入門ガイド](../docs/GUIDE_BLE_BASICS.ja.md) | **最初に読むガイド。** BLEの全体像からGAP・セキュリティ・GATT・UUID・HID・BLE MIDIまで |
 | [BLEとBluetooth Classicのどちらを使うか](../docs/CLASSIC_VS_BLE.ja.md) | 新しく作る機器でどちらを選ぶか、HIDなど両方にある機能がどう違うかを判断するとき |
 | [Bluetooth Classic通信の入門ガイド](../docs/GUIDE_CLASSIC_BASICS.ja.md) | 無印ESP32でinquiry・無線設定・SPP・セキュリティ・HID・A2DP・HFPを使うとき |
+| [BLE / Bluetooth Classic Dual Host技術ガイド](../docs/GUIDE_DUAL_HOST.ja.md) | ControllerとHostの役割、2 HostのHCI routing・flow control・lifecycle、sourceと`.a`の構成を理解するとき |
 | [機能対応マトリクス](../docs/FEATURE_MATRIX.ja.md) | 実装・検証済み、exampleで実現可能、部分対応、対象外の機能を一覧で確認するとき |
 | [HID Report Descriptorを書く](../docs/GUIDE_HID_DESCRIPTORS.ja.md) | 独自HIDや複合HIDを作り、Report Descriptorを設計・検証するとき |
 | [HID Device仕様](../docs/HID_DEVICE_SPEC.ja.md) / [HID Host仕様](../docs/HID_HOST_SPEC.ja.md) | HIDのprofile構成、Report ID、送受信API、Discoveryとevent配送を正確に確認するとき |
