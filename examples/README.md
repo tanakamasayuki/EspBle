@@ -2,9 +2,31 @@
 
 > 日本語版: [README.ja.md](README.ja.md)
 
-## The concepts are covered in the guide
+## Read the guides first
 
-How BLE works — the difference from Bluetooth Classic, GAP (finding and connecting), security (pairing and bonding), GATT (exchanging data), UUIDs, HID and BLE MIDI — is explained in the [BLE communication beginner guide](../docs/GUIDE_BLE_BASICS.md). Every term is defined there.
+Before running an example, start with the [beginner's guide to BLE](../docs/GUIDE_BLE_BASICS.md). It gives a substantial explanation of the mechanisms and terminology behind the code: GAP (finding and connecting), security (pairing and bonding), GATT (exchanging data), UUIDs, HID and BLE MIDI. Reading the relevant guide section before its example makes it much easier to understand why each API call is there and what happens at runtime.
+
+### Guides and user-facing references
+
+The `docs/` directory also covers technology selection, supported features,
+profile specifications and configuration-specific limitations in depth.
+
+| Document | When to read it |
+|---|---|
+| [A beginner's guide to BLE](../docs/GUIDE_BLE_BASICS.md) | **Start here.** The BLE overview, GAP, security, GATT, UUIDs, HID and BLE MIDI |
+| [Choosing between BLE and Bluetooth Classic](../docs/CLASSIC_VS_BLE.md) | When deciding which radio a new device should use, or comparing features such as HID that exist on both |
+| [A beginner's guide to Bluetooth Classic](../docs/GUIDE_CLASSIC_BASICS.md) | When using inquiry, radio settings, SPP, security, HID, A2DP or HFP on the original ESP32 |
+| [Feature matrix](../docs/FEATURE_MATRIX.md) | When checking which features are implemented and verified, possible in an example, partial or out of scope |
+| [Writing a HID Report Descriptor](../docs/GUIDE_HID_DESCRIPTORS.md) | When designing and verifying a custom or composite HID device |
+| [HID Device specification](../docs/HID_DEVICE_SPEC.ja.md) / [HID Host specification](../docs/HID_HOST_SPEC.ja.md) (Japanese) | When you need the exact profile composition, Report IDs, send/receive APIs, discovery and event delivery |
+| [Coming to EspBle from another library](../docs/GUIDE_MIGRATION.md) | When porting code from the `BLEDevice` classes, NimBLE-Arduino or `BluetoothSerial` |
+| [EspBle in depth](../docs/GUIDE_ADVANCED.md) | After the basic examples, for callback contexts, capacities, backpressure, reconnection and debugging |
+| [ESP32-P4 / ESP-Hosted setup](../docs/ESP_HOSTED_SETUP.ja.md) (Japanese) | When preparing, wiring or updating firmware for a P4 + C6 setup |
+| [Known ESP32-P4 / ESP-Hosted limitations](../docs/ESP_HOSTED_LIMITATIONS.ja.md) (Japanese) | When checking the hardware-verified scope and limitations around security, MTU and other behavior on P4 + C6 |
+| [Terminology and naming](../docs/TERMINOLOGY.ja.md) (Japanese) | When distinguishing Central / Peripheral, GATT Client / Server and HID Host / Device roles |
+| [Full documentation index](../docs/README.md) | When looking across all specifications, feature tables and design documents |
+
+### BLE guide chapters and matching examples
 
 | What you want to know | Guide chapter | Matching examples |
 |---|---|---|
@@ -17,7 +39,7 @@ How BLE works — the difference from Bluetooth Classic, GAP (finding and connec
 | BLE MIDI instruments | 7 (BLE MIDI) | [Midi/](Midi/) |
 | Selecting P4/C6 ESP-Hosted SDIO pins | ESP-Hosted setup | [Hosted/CustomPins](Hosted/CustomPins/) |
 
-Each example's README is written to stand on its own, so starting from an individual example without reading the guide works fine.
+The recommended order is the relevant BLE guide chapter, then the matching example's README, then its `.ino` source. Each example README also gives the required boards, the procedure and the expected output.
 
 ## Building
 

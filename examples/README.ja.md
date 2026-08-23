@@ -2,9 +2,30 @@
 
 > English: [README.md](README.md)
 
-## 概念はガイドにまとまっています
+## まずガイドを読んでください
 
-BLEの仕組み——Bluetooth Classicとの違い、GAP（探してつながる）、セキュリティ（ペアリングとボンディング）、GATT（データのやり取り）、UUID、HID、BLE MIDI——は[BLE通信の入門ガイド](../docs/GUIDE_BLE_BASICS.ja.md)で説明しています。用語はすべてその中で定義しています。
+exampleを動かす前に、まず[BLE通信の入門ガイド](../docs/GUIDE_BLE_BASICS.ja.md)を読んでみてください。GAP（探してつながる）、セキュリティ（ペアリングとボンディング）、GATT（データのやり取り）、UUID、HID、BLE MIDIまで、コードの背景にある仕組みと用語を本格的に説明しています。ガイドで概念をつかんでから対応するexampleのREADMEとコードを見ると、APIを呼ぶ理由や実行時に起きていることまで理解しやすくなります。
+
+### ガイド・利用者向け資料一覧
+
+`docs/`には入門ガイド以外にも、方式の選び方、対応機能、個別profileの仕様、対象構成ごとの制限を詳しくまとめています。
+
+| 文書 | まず読む場面 |
+|---|---|
+| [BLE通信の入門ガイド](../docs/GUIDE_BLE_BASICS.ja.md) | **最初に読むガイド。** BLEの全体像からGAP・セキュリティ・GATT・UUID・HID・BLE MIDIまで |
+| [BLEとBluetooth Classicのどちらを使うか](../docs/CLASSIC_VS_BLE.ja.md) | 新しく作る機器でどちらを選ぶか、HIDなど両方にある機能がどう違うかを判断するとき |
+| [Bluetooth Classic通信の入門ガイド](../docs/GUIDE_CLASSIC_BASICS.ja.md) | 無印ESP32でinquiry・無線設定・SPP・セキュリティ・HID・A2DP・HFPを使うとき |
+| [機能対応マトリクス](../docs/FEATURE_MATRIX.ja.md) | 実装・検証済み、exampleで実現可能、部分対応、対象外の機能を一覧で確認するとき |
+| [HID Report Descriptorを書く](../docs/GUIDE_HID_DESCRIPTORS.ja.md) | 独自HIDや複合HIDを作り、Report Descriptorを設計・検証するとき |
+| [HID Device仕様](../docs/HID_DEVICE_SPEC.ja.md) / [HID Host仕様](../docs/HID_HOST_SPEC.ja.md) | HIDのprofile構成、Report ID、送受信API、Discoveryとevent配送を正確に確認するとき |
+| [他のライブラリからEspBleへ](../docs/GUIDE_MIGRATION.ja.md) | `BLEDevice`系・NimBLE-Arduino・`BluetoothSerial`のコードを移行するとき |
+| [EspBleを深く使う](../docs/GUIDE_ADVANCED.ja.md) | 基本exampleの次に、callbackの実行context・上限・backpressure・再接続・debugを理解するとき |
+| [ESP32-P4 / ESP-Hostedセットアップ](../docs/ESP_HOSTED_SETUP.ja.md) | P4＋C6構成の準備、配線、firmware更新を行うとき |
+| [ESP32-P4 / ESP-Hostedの既知制限](../docs/ESP_HOSTED_LIMITATIONS.ja.md) | P4＋C6構成で実機確認済みの範囲やSecurity・MTUなどの制限を確認するとき |
+| [用語と命名規則](../docs/TERMINOLOGY.ja.md) | Central / Peripheral、GATT Client / Server、HID Host / Deviceの役割を整理するとき |
+| [ドキュメント全体の案内](../docs/README.ja.md) | 仕様書・機能表・設計資料を含むすべての文書から目的別に探すとき |
+
+### BLE入門ガイドとexampleの対応
 
 | 知りたいこと | ガイドの章 | 対応するexample |
 |---|---|---|
@@ -17,7 +38,7 @@ BLEの仕組み——Bluetooth Classicとの違い、GAP（探してつながる
 | BLE MIDI楽器 | 7章 BLE MIDI編 | [Midi/](Midi/) |
 | P4/C6 ESP-HostedのSDIO pinを指定する | ESP-Hostedセットアップ | [Hosted/CustomPins](Hosted/CustomPins/) |
 
-各exampleのREADMEはそれ単体で読めるように書いてあるので、ガイドを読まずに個別のexampleから入っても構いません。
+おすすめの順序は、BLE入門ガイドの該当章 → 対応するexampleのREADME → `.ino`のコードです。各exampleのREADMEには必要なボード、実行方法、期待される出力もまとめています。
 
 ## ビルド方法
 
