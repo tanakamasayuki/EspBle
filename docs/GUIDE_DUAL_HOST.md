@@ -83,7 +83,70 @@ Bluedroid as separate owners. Connecting both directly creates conflicts:
 The solution must therefore own shared Controller state. A packet-type
 demultiplexer alone is insufficient.
 
-## 4. How EspBle supplies two Hosts
+## 4. Why not use standard Bluedroid alone?
+
+First, **standard Bluedroid can use BLE and Bluetooth Classic concurrently.**
+The normal ESP-IDF configuration is one dual-mode Host containing both BLE and
+Classic protocols, profiles and APIs. Because there is only one Host, that
+arrangement does not need the HCI broker described in this guide.
+
+```text
+Standard Bluedroid-only arrangement
+
+Application
+   │
+   └─ dual-mode Bluedroid Host
+        ├─ BLE API / GAP / GATT / SMP
+        └─ Classic API / GAP / SPP / HID / Audio
+                     │ HCI
+                     ▼
+               BTDM Controller
+```
+
+Dual host was therefore not chosen because Bluedroid lacks a feature. The
+reason is the desired **BLE architecture and API boundary**.
+
+A dual-mode Bluedroid Host is broad: BLE and Classic APIs, state, callbacks and
+build options all meet in one large stack. That breadth is valuable when one
+Host should expose everything, but it also gives a BLE-only application more
+API surface and more combinations of configuration and state to understand.
+
+NimBLE is BLE-only. It contains no Classic APIs or state, keeping its Host
+responsibility focused on BLE GAP, GATT and SMP. EspBle was built around NimBLE
+from the beginning and exposes a small, consistent public API over that model.
+Switching the BLE backend to Bluedroid merely to add Classic would also mean
+moving the existing BLE implementation, behavior and resource model to another
+stack.
+
+EspBle instead divides responsibility this way:
+
+1. **Keep NimBLE for BLE.** Preserve the focused BLE Host and existing EspBle API.
+2. **Build Bluedroid as Classic-only and Host-only.** Exclude its BLE and
+   Controller portions; retain the Classic profiles such as SPP, HID, A2DP,
+   AVRCP and HFP.
+3. **Connect both Hosts through an HCI broker.** Keep their internals separate
+   and isolate only the shared-Controller arbitration in one layer.
+
+```text
+EspBle dual-host arrangement
+
+Application
+   ├─ EspBle API ───────── NimBLE Host (BLE-only)
+   └─ EspBleClassic API ── Bluedroid Host (Classic-only)
+                                   │
+                          EspBle HCI Broker
+                                   │ HCI
+                                   ▼
+                             BTDM Controller
+```
+
+This design does not enable something impossible with Bluedroid. It keeps
+**BLE simple in a BLE-only NimBLE Host, while using Classic-only Bluedroid for
+native Classic profiles**. The trade-off is that command, event, buffer and
+lifecycle sharing—which one dual-mode Bluedroid Host could solve internally—
+must now be implemented correctly by the EspBle broker.
+
+## 5. How EspBle supplies two Hosts
 
 On the original ESP32, EspBle brings its own BLE and Classic Hosts:
 
@@ -98,7 +161,7 @@ collisions with Arduino Core symbols. Bluedroid attaches its injected HCI
 driver to the broker instead of physical VHCI. The bundled NimBLE transport
 also uses the broker as its logical transport.
 
-### 4.1 What is source, and what is a prebuilt `.a`
+### 5.1 What is source, and what is a prebuilt `.a`
 
 - The **EspBle library itself**—public APIs, profiles, broker, router,
   scheduler, policy and ACL-credit logic—is source compiled with the sketch.
@@ -125,7 +188,7 @@ compiled with the sketch                     built in a pinned environment
                     Core's prebuilt BTDM Controller
 ```
 
-### 4.2 Why the two Hosts use different forms
+### 5.2 Why the two Hosts use different forms
 
 Source distribution suits NimBLE because target conditions and local transport
 patches are straightforward to track and regenerate. Bluedroid depends heavily
@@ -143,7 +206,7 @@ required-symbol link checks, and clean reproducible SHA-256-identical builds
 are release gates. See [rebuilding the Classic host archive](CLASSIC_HOST_BUILD.ja.md)
 (Japanese).
 
-## 5. From `begin()` to routed mode
+## 6. From `begin()` to routed mode
 
 Startup works in either BLE→Classic or Classic→BLE order.
 
@@ -198,7 +261,7 @@ Linking Classic preserves BTDM memory even before Classic is begun, so it costs
 more heap than a BLE-only sketch. There is no special dual-host `begin()` and
 no build flag.
 
-## 6. Host to Controller: serialize commands safely
+## 7. Host to Controller: serialize commands safely
 
 ### Step 1: authorize the command
 
@@ -248,7 +311,7 @@ Command Complete or Command Status is matched against the in-flight opcode and
 delivered only to the requesting Host. A mismatch increments
 `command_response_mismatch`.
 
-## 7. Protect data with connection-handle ownership
+## 8. Protect data with connection-handle ownership
 
 An HCI ACL header contains a 12-bit connection handle. The broker records its
 owner on successful connection events:
@@ -264,7 +327,7 @@ goes to only that Host. Disconnection Complete is routed before the handle is
 removed. SCO is Classic-only and ISO is NimBLE-only. The current routing table
 holds up to 16 connections (`ESPBLE_HCI_ROUTER_MAX_CONNECTIONS`).
 
-## 8. Controller to Host: classify events
+## 9. Controller to Host: classify events
 
 | Event class | Destination |
 |---|---|
@@ -281,7 +344,7 @@ a separate event containing only the records owned by each recipient. Shared
 disconnect and encryption events are why "LE events to NimBLE, everything else
 to Classic" is not sufficient.
 
-## 9. ACL flow control in both directions
+## 10. ACL flow control in both directions
 
 ### Host → Controller
 
@@ -304,7 +367,7 @@ Credits normally batch at a threshold of four, but any remainder is flushed
 when the queue drains. Pending credit for a disconnected handle is discarded
 because the Controller frees those buffers itself.
 
-## 10. Startup, shutdown and reattachment
+## 11. Startup, shutdown and reattachment
 
 The Controller outlives either individual Host:
 
@@ -321,7 +384,7 @@ changes from one Host to two. Bluedroid can later reattach while a BLE link is
 alive because its bootstrap Reset and flow-control commands receive virtual
 completion instead of resetting the physical Controller.
 
-## 11. Shared state versus independent state
+## 12. Shared state versus independent state
 
 | Shared | Independent per Host |
 |---|---|
@@ -334,7 +397,7 @@ completion instead of resetting the physical Controller.
 BLE and Classic bonds are separate key stores; deleting one does not delete the
 other. Concurrent support does not mean unlimited parallel throughput.
 
-## 12. Reading diagnostics
+## 13. Reading diagnostics
 
 `espble_hci_broker_get_diagnostics()` in `EspBleHciBroker.h` returns a snapshot
 for the current Controller session. This is an internal experimental boundary.
@@ -373,7 +436,7 @@ that fails only in dual-host mode, look for `unclassified` or `wrong host` HCI
 opcodes. If ending one Host kills the other link, inspect final-Host detection
 and Controller ownership.
 
-## 13. Current limitations
+## 14. Current limitations
 
 - Original ESP32 only; other supported SoCs have no Bluetooth Classic radio.
 - Dual host remains experimental, with less external-device interoperability
@@ -388,7 +451,7 @@ and Controller ownership.
 The first isolation step is to `end()` one Host. If the problem disappears in
 single-host mode, prioritize broker policy, shared resources and lifecycle.
 
-## 14. Verification coverage
+## 15. Verification coverage
 
 Hardware peer tests cover Classic HID plus repeated GATT, BLE pairing/bonding
 and RPA reconnection, simultaneous commands, FIFO overflow recovery, consecutive
@@ -401,7 +464,7 @@ The representative suites are `tests/peer/dual_host_smoke/`, `dual_host_rpa/`,
 counters are in the [technical validation record](TECHNICAL_VALIDATION_ESP32_CLASSIC.ja.md)
 (Japanese).
 
-## 15. Reading the implementation
+## 16. Reading the implementation
 
 | Order | File | Responsibility |
 |---:|---|---|
@@ -418,16 +481,18 @@ Router, scheduler, policy and credit arithmetic are platform-independent C, so
 they can be unit tested without a Controller. The broker alone knows ESP-IDF,
 VHCI and FreeRTOS; Arduino link state and `begin()` stay in the integration layer.
 
-## 16. The complete mental model
+## 17. The complete mental model
 
-1. The ESP32 has one physical Controller and radio.
-2. NimBLE and Bluedroid are two independent Hosts.
-3. They share command credit, handles, buffers, Controller settings and lifecycle.
-4. The broker is the only physical VHCI owner and centralizes shared state.
-5. It authorizes and serializes commands, then returns each response to its owner.
-6. It routes data and shared events using connection-handle ownership.
-7. It owns receive flow control and Controller lifecycle instead of either Host.
-8. The application uses both normal APIs and calls both `update()` methods.
+1. Standard Bluedroid alone can run BLE and Classic concurrently.
+2. EspBle keeps BLE-only NimBLE to preserve a small, clear BLE API and model.
+3. Classic is delegated to a Classic-only, Host-only Bluedroid build.
+4. The ESP32 has one physical Controller and radio.
+5. The two Hosts share command credit, handles, buffers, settings and lifecycle.
+6. The broker is the only physical VHCI owner and centralizes shared state.
+7. It authorizes and serializes commands, then returns each response to its owner.
+8. It routes data and shared events using connection-handle ownership.
+9. It owns receive flow control and Controller lifecycle instead of either Host.
+10. The application uses both normal APIs and calls both `update()` methods.
 
 For product-level selection, see [Choosing between BLE and Bluetooth Classic](CLASSIC_VS_BLE.md).
 For profile concepts, see the [BLE](GUIDE_BLE_BASICS.md) and

@@ -91,7 +91,64 @@ NimBLEとBluedroidをそのまま同じVHCIへつなぐと、少なくとも次�
 つまり必要なのはpacket typeだけを見るdemultiplexerではなく、**共有Controllerの所有者として状態を
 管理するbroker**です。
 
-## 4. EspBleが2つのHostを用意する方法
+## 4. 標準Bluedroidだけではだめなのか
+
+先に結論を書くと、**標準BluedroidだけでもBLEとBluetooth Classicを同時に使えます。**
+ESP-IDFの通常のBluedroidはdual-mode Hostで、1つのHostの中にBLEとClassicのprotocol・profile・APIを
+持ちます。この構成ならHostは1つなので、このガイドで説明するHCI brokerは必要ありません。
+
+```text
+標準的なBluedroid単独構成
+
+Application
+   │
+   └─ dual-mode Bluedroid Host
+        ├─ BLE API / GAP / GATT / SMP
+        └─ Classic API / GAP / SPP / HID / Audio
+                     │ HCI
+                     ▼
+               BTDM Controller
+```
+
+つまりBluedroidに機能不足があるからDual Hostにしたのではありません。選択理由は**BLE側の設計とAPIを
+どう保つか**です。
+
+標準Bluedroidは両transportを1つで扱える一方、BLEとClassicのAPI、状態、callback、build設定が同じ
+大きなHostへ集まります。対応範囲が広い分、BLEだけを使いたいapplicationから見るとAPI surfaceと
+設定の組み合わせが多く、構成を理解する負担も増えます。
+
+NimBLEはBLE専用です。ClassicのAPIや状態を持たず、BLEのGAP、GATT、SMPへ範囲を絞ったHostなので、
+BLE applicationの構成とAPI境界を小さく保ちやすくなります。EspBleは最初からNimBLEをBLE backendとし、
+その上へ単純で一貫した公開APIを構築しています。Classicを追加するためにBLE backendまでBluedroidへ
+置き換えると、既存のBLE実装、挙動、resource modelを別stackへ移すことになります。
+
+そこでEspBleは役割を次のように分けました。
+
+1. **BLEはNimBLEのままにする。** BLE専用Hostの小さい責務と既存EspBle APIを維持する。
+2. **BluedroidをClassic-only / Host-onlyでbuildする。** BLE部分とControllerを含めず、SPP、HID、
+   A2DP、AVRCP、HFPなどClassicが得意な機能だけを担当させる。
+3. **2 HostをHCI brokerで1つのBTDM Controllerへ接続する。** Host内部を混ぜず、共有Controllerに
+   必要な仲裁だけを独立した層へ置く。
+
+```text
+EspBleのDual Host構成
+
+Application
+   ├─ EspBle API ───────── NimBLE Host（BLE-only）
+   └─ EspBleClassic API ── Bluedroid Host（Classic-only）
+                                   │
+                          EspBle HCI Broker
+                                   │ HCI
+                                   ▼
+                             BTDM Controller
+```
+
+この構成は「Bluedroidではできないことを可能にする」ためではなく、**BLEはBLE専用のNimBLEでシンプルに、
+ClassicはClassic-only Bluedroidで本来のprofileを使う**ための設計です。その代わり、単一Bluedroidなら
+Host内部で解決できるcommand、event、buffer、lifecycleの共有を、EspBle自身がbrokerで正しく実装する
+必要があります。それがDual Hostを採用する主なtrade-offです。
+
+## 5. EspBleが2つのHostを用意する方法
 
 無印ESP32のArduino Coreは通常Bluedroidを同梱しますが、EspBleのBLE側はNimBLEを使います。
 さらにClassic用にも独立したHostが必要です。EspBleは次の2つを持ち込みます。
@@ -108,7 +165,7 @@ NimBLEのESP32 transportも同じようにbrokerをlogical Hostとして利用�
 
 これにより、2つのHostは互いの内部実装を知らず、brokerだけが共有Controllerを知る構成になります。
 
-### 4.1 どこまでがsourceで、どこだけが`.a`か
+### 5.1 どこまでがsourceで、どこだけが`.a`か
 
 配布物は意図的に混在しています。
 
@@ -136,7 +193,7 @@ sketchと一緒にcompile                       事前に固定環境でbuild
                      Core同梱prebuilt BTDM Controller
 ```
 
-### 4.2 なぜ両方を同じ形式にしないのか
+### 5.2 なぜ両方を同じ形式にしないのか
 
 NimBLEはlocal patchとtarget別条件を追いやすく、必要な修正を再生成scriptへ記録できるためsource配布が
 適しています。一方BluedroidはESP-IDFのKconfig、生成header、複数componentへの依存が強く、そのまま
@@ -152,7 +209,7 @@ FreeRTOS、NVS、timer、loggingなど安定した外部依存は変換せず、
 必須symbolのlink check、clean環境からの再生成とSHA-256一致をrelease gateにしています。再生成方法は
 [Classic-only Bluedroid host archiveの再生成](CLASSIC_HOST_BUILD.ja.md)を参照してください。
 
-## 5. `begin()`からDual Hostになるまで
+## 6. `begin()`からDual Hostになるまで
 
 起動順はBLE→ClassicでもClassic→BLEでも構いません。内部では次の順序で進みます。
 
@@ -224,7 +281,7 @@ void loop() {
 
 順序を逆にしても構いません。build flagやDual Host専用の`begin()`はありません。
 
-## 6. HostからControllerへ: commandを安全に直列化する
+## 7. HostからControllerへ: commandを安全に直列化する
 
 ### Step 1: commandの権限を確認する
 
@@ -269,7 +326,7 @@ Controllerから`Command Complete`または`Command Status`が戻ると、opcode
 照合し、要求したHostだけへ配送します。opcodeが一致しなければ
 `command_response_mismatch`へ記録します。
 
-## 7. Data packetはconnection handleで守る
+## 8. Data packetはconnection handleで守る
 
 HCI ACL headerには12-bitのconnection handleがあります。Controllerが接続成功を通知した時点で、brokerは
 handleと所有Hostを表へ登録します。
@@ -286,7 +343,7 @@ handle表から1つのHostだけへ配送します。Disconnection Completeを�
 SCO packetはClassicへ、ISO packetはNimBLEへ限定します。現在のhandle表の上限は16接続です
 （`ESPBLE_HCI_ROUTER_MAX_CONNECTIONS`）。
 
-## 8. ControllerからHostへ: eventを分類する
+## 9. ControllerからHostへ: eventを分類する
 
 eventは次の規則でroutingされます。
 
@@ -305,7 +362,7 @@ brokerはそのpacketをそのままbroadcastせず、各Hostが所有するreco
 「LEらしいeventはNimBLE、それ以外はClassic」という規則だけでは、切断や暗号化など共通eventを
 正しく扱えません。connection handle表が必要になる理由はここにあります。
 
-## 9. 2方向のACL flow control
+## 10. 2方向のACL flow control
 
 flow controlは向きを分けて考える必要があります。
 
@@ -331,7 +388,7 @@ bufferを解放するため、そのhandleの未返却creditを破棄します�
 
 これがないと、しばらくは動いても共有bufferが尽きた時点でBLEとClassicの両方が止まります。
 
-## 10. 起動・停止・再attach
+## 11. 起動・停止・再attach
 
 Controllerは両Hostより寿命が長い共有資源です。brokerが次の規則を守ります。
 
@@ -350,7 +407,7 @@ Classicを一度停止し、BLE接続を維持したまま再開することも�
 要求するResetとflow-control commandを仮想完了することで、生きているBLE linkを壊さずHostだけを
 再attachします。
 
-## 11. 共有されるもの、分かれているもの
+## 12. 共有されるもの、分かれているもの
 
 | 共有されるもの | Hostごとに独立するもの |
 |---|---|
@@ -363,7 +420,7 @@ Classicを一度停止し、BLE接続を維持したまま再開することも�
 BLEとClassicのbondは別の鍵・別の記録です。片方のbondを削除しても、もう片方は削除されません。
 同時利用できることは、radio timeやheapが2倍になることでも、無制限に並行できることでもありません。
 
-## 12. 診断の読み方
+## 13. 診断の読み方
 
 `EspBleHciBroker.h`の`espble_hci_broker_get_diagnostics()`で、現在のController sessionに対するsnapshotを
 取得できます。このheaderは内部検証用で、Dual Host自体と同じく実験的な境界です。
@@ -404,7 +461,7 @@ Serial.printf("qmax=%u qfull=%lu mismatch=%lu unknown=%lu credits=%lu/%lu\n",
 4. **一方の`end()`でもう一方が切れる:** 最後のHost判定とController ownershipのlogを確認する。
 5. **長時間後に止まる:** credit返却数、application側queueのdrop、free heapを時間軸で記録する。
 
-## 13. 現在の制限
+## 14. 現在の制限
 
 - 無印ESP32専用です。他のESP32 SoCはBluetooth Classicを持ちません。
 - Dual Hostは実験扱いです。外部機器との相互運用はEspBle同士・Core host相手ほど広く検証されていません。
@@ -417,7 +474,7 @@ Serial.printf("qmax=%u qfull=%lu mismatch=%lu unknown=%lu credits=%lu/%lu\n",
 不具合を切り分ける最初の操作は、一方を`end()`して単一Hostに戻すことです。単一Hostで再現しなければ、
 broker policy、共有resource、起動停止境界を優先して調べます。
 
-## 14. どこまで検証しているか
+## 15. どこまで検証しているか
 
 実機Peer testでは、次をBLE linkを維持した状態で確認しています。
 
@@ -434,7 +491,7 @@ broker policy、共有resource、起動停止境界を優先して調べます�
 `dual_host_a2dp/`です。長時間検証と判定値は
 [技術検証記録](TECHNICAL_VALIDATION_ESP32_CLASSIC.ja.md)にあります。
 
-## 15. 実装を読む順序
+## 16. 実装を読む順序
 
 | 順序 | ファイル | 見るもの |
 |---:|---|---|
@@ -451,18 +508,20 @@ Router、scheduler、policy、ACL credit計算はESP-IDFに依存しない純粋
 なくてもunit testでき、brokerだけがVHCI、FreeRTOS、ESP-IDFを知ります。Arduino固有のlink状態や
 `begin()`は統合層に閉じ込めています。
 
-## 16. 最後にもう一度、全体の流れ
+## 17. 最後にもう一度、全体の流れ
 
 Dual Hostを次の順で考えると整理できます。
 
-1. ESP32にはradioを動かす**Controllerが1つ**ある。
-2. BLEのNimBLEとClassicのBluedroidは、別々の**Host**である。
-3. 2 HostはControllerのcommand、handle、buffer、設定、寿命を共有する。
-4. brokerが唯一の物理VHCI所有者になり、共有状態を一元管理する。
-5. commandは分類・直列化し、応答を要求元へ戻す。
-6. dataと共通eventはconnection handleで所有Hostへ戻す。
-7. flow controlとController lifecycleは、どちらのHostにも任せずbrokerが所有する。
-8. applicationは両objectを通常どおり使い、両方の`update()`を呼ぶ。
+1. 標準Bluedroid単独でもBLEとClassicの同時利用はできる。
+2. EspBleはBLE APIを小さく明確に保つため、BLE専用NimBLEを維持する設計を選んだ。
+3. ClassicはClassic-only / Host-onlyにbuildしたBluedroidへ任せる。
+4. ESP32にはradioを動かす**Controllerが1つ**ある。
+5. 2 HostはControllerのcommand、handle、buffer、設定、寿命を共有する。
+6. brokerが唯一の物理VHCI所有者になり、共有状態を一元管理する。
+7. commandは分類・直列化し、応答を要求元へ戻す。
+8. dataと共通eventはconnection handleで所有Hostへ戻す。
+9. flow controlとController lifecycleは、どちらのHostにも任せずbrokerが所有する。
+10. applicationは両objectを通常どおり使い、両方の`update()`を呼ぶ。
 
 関連する利用上の判断は[BLEとBluetooth Classicのどちらを使うか](CLASSIC_VS_BLE.ja.md)、
 各profileの概念は[BLE通信の入門ガイド](GUIDE_BLE_BASICS.ja.md)と
