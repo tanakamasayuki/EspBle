@@ -145,8 +145,11 @@ the callback — copy what you keep), and your decoder produces PCM. AVRCP contr
 (play/pause keys, absolute volume) and A2DP delay reporting are available through
 `avrcp()` and `setDelay()`.
 
-If you want PCM without writing a decoder, use an audio library for that part and
-EspBle for the transport, rather than expecting EspBle to grow one.
+If you want PCM without writing a decoder, use the released
+[PCMFlowBluetooth](https://github.com/tanakamasayuki/PCMFlowBluetooth) library:
+EspBle remains the transport and PCMFlowBluetooth supplies the SBC codec and PCM
+boundary. Its repository includes receive/playback, transmission, PCM diagnostic,
+and PCMFlow integration examples.
 
 ## 6. Things with no equivalent
 

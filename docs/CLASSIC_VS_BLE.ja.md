@@ -41,7 +41,8 @@ FLASHとheapも余分に使います。
   相手がPCやAndroidで「COMポートとして見えること」を期待するならSPPです。
   なお**iOSはアプリからSPPを使えません**（MFi機器を除く）。iOS相手ならBLEにします。
 - **音声**: A2DP Sink / Source、AVRCP、HFP Client / Audio Gateway。
-  EspBleが扱うのはencode済みpayloadとraw SCOで、codecとPCMのI/Oは別libraryの担当です。
+  EspBleが扱うのはencode済みpayloadとraw SCOです。A2DPのSBC codecとPCMのI/Oには、正式リリース済みの
+  [PCMFlowBluetooth](https://github.com/tanakamasayuki/PCMFlowBluetooth)を組み合わせます。
 - **旧世代HID**: gamepad、keyboard、mouse。相手がBLE HIDを受けないときの唯一の道です。
   gamepadは特にこの理由で必要になります。
 

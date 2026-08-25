@@ -130,8 +130,10 @@ SPPが同じ範囲を担い、出発点は[`Classic/SppStream`](../examples/Clas
 作ります。AVRCPの操作（再生・一時停止キー、absolute volume）とA2DPのdelay reportingは
 `avrcp()`と`setDelay()`で使えます。
 
-decoderを書かずにPCMが欲しいなら、その部分はaudio libraryに任せ、EspBleはtransportとして
-使ってください。EspBleがdecoderを持つようになるのを待つのではなく。
+decoderを書かずにPCMが欲しいなら、正式リリース済みの
+[PCMFlowBluetooth](https://github.com/tanakamasayuki/PCMFlowBluetooth)を使います。
+EspBleをtransport、PCMFlowBluetoothをSBC codec／PCM境界として組み合わせる構成で、受信再生、
+送信、PCM診断、PCMFlow接続のexampleも同repositoryにあります。
 
 ## 6. 対応するものが無いもの
 

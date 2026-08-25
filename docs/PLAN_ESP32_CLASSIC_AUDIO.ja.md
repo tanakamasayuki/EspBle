@@ -122,11 +122,11 @@ A2DPが選択するAVRCPは有効にするが、最初のarchiveでは不要なc
 6. **完了:** HFP Audio Gatewayを同じtransport APIへ追加し、Client/AGのprocess-wide runtime排他、
    自動SLC応答、発信、call state、mSBC双方向payloadをESP32同士で検証した。AG設定でmSBC/CVSDを選択可能にし、
    CVSD双方向payload、SCO切断・再接続も確認した。
-7. **A2DP実装済み・修正依頼中:** `PCMFlowBluetooth`にexternal SBC decoderとA2DP Sink adapterが実装された。
-   実機probeでdecoder reset時のfilter履歴残留を検出したため、[修正依頼書](REQUEST_PCMFLOWBLUETOOTH_A2DP_VALIDATION.ja.md)に引き継いだ。
+7. **完了:** `PCMFlowBluetooth`にexternal SBC encoder／decoderとA2DP Sink adapterが実装された。
+   decoder reset時のfilter履歴残留は修正され、[完了報告](https://github.com/tanakamasayuki/PCMFlowBluetooth/blob/main/docs/A2DP_VALIDATION_REPORT.ja.md)のhost回帰と無印ESP32 2台E2Eを通過した。
    mSBC/CVSDとHFP adapterは後続phaseとする。
-8. **EspBle側完了・PCMFlowBluetooth側E2E依頼中:** EspBle側にA2DP Sink raw media exampleがある。
-   PCMFlowBluetooth側のintegration fixtureとI2S/board speaker実例は各担当libraryで追加する。
+8. **完了:** EspBle側にA2DP Sink raw media exampleがあり、PCMFlowBluetooth側にintegration fixtureと
+   M5Stack Core2のspeaker／microphone exampleがある。実device exampleはPCMFlowBluetooth側に集約する。
 9. **dual-host基本完了:** BLE GATT接続中のHFP SLC・発信・mSBC SCO双方向payloadに加え、A2DP SBC
    encode済みmedia転送とAVRCP Play / absolute volumeを確認した。SCO/stream中と切断後もGATT readは継続し、
    broker異常診断は0だった。音声固有の性能最適化と外部機器相互運用は後続課題とする。
@@ -191,6 +191,10 @@ payload境界も公開Client/AG実機probe後に追記済みで、mSBC/CVSD adap
 2026-08-11にローカルEspBleの独自Classic hostを使う技術probeを行い、既知SBCのA2DP送信からPCM復号までを確認した。
 その過程でOI SBC合成filter履歴のreset漏れを検出した。PCMFlowBluetooth側の変更は担当側で行うため、再現条件、
 修正候補、host回帰、実機E2E要件を[専用依頼書](REQUEST_PCMFLOWBLUETOOTH_A2DP_VALIDATION.ja.md)へ分離した。
+
+この依頼はPCMFlowBluetooth 1.0.0で完了した。reset修正、host test、suspend/resume・再接続を含む
+無印ESP32 2台E2Eの結果は[完了報告](https://github.com/tanakamasayuki/PCMFlowBluetooth/blob/main/docs/A2DP_VALIDATION_REPORT.ja.md)に記録され、
+1.0.1ではcodec negotiation後にPCMFlow pipelineを開始するよう受信exampleも修正された。
 
 要件書には、EspBle / PCMFlowBluetooth / PCMFlow / device libraryの責務、公開classと依存方向、
 SBC・mSBC・CVSD backendの選定とlicense、buffering/backpressure、heap/stack上限、thread/callback規約、

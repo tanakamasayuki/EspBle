@@ -79,8 +79,9 @@ dual-hostでもBLE GATT接続中のmSBC SCO双方向転送、A2DP encode済みme
 6. **完了:** HFP Clientのcontrol / Voice over HCI transportを実装し、mSBC/CVSDで実機確認した。
 7. **基本完了:** HFP AGを公開API化し、Client/AGのruntime排他、発信、着信、応答、終了、call active、
    mSBC/CVSD往復、CVSD SCO再接続、SLC再接続後の再発信を実機確認した。外部HFP機器との相互運用は残す。
-8. codec/PCM/device処理はEspBleへ入れず、`../PCMFlowBluetooth/SPEC.ja.md`を契約として
-   独立libraryを並行実装する。PCMFlow coreの既存`PCMSource`/`PCMSink`を再利用する。
+8. **A2DP完了:** codec/PCM/device処理はEspBleへ入れず、正式リリース済みの
+   [PCMFlowBluetooth](https://github.com/tanakamasayuki/PCMFlowBluetooth)がSBC encode/decode、
+   `PCMSource`境界、M5Stack speaker／microphone exampleを提供する。HFP adapterは後続phase。
 
 HFPの公開境界は[Classic Audio拡張計画](PLAN_ESP32_CLASSIC_AUDIO.ja.md#hfp実装前調査)まで調査済み。
 受信bufferはcallback復帰後にEspBleが解放、送信bufferはAPI成功時にBluedroidが消費する。HFP送信には

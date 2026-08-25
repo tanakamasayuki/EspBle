@@ -4,8 +4,10 @@
 
 A2DP Source: this device sends audio to a speaker or headset. EspBle carries
 already-encoded SBC frames — it does not encode — so the frames here come from a
-fixed table and a real sketch takes them from an encoder such as
-PCMFlowBluetooth. The receiving side is [A2dpSinkRaw](../A2dpSinkRaw/).
+fixed table. A real sketch uses `SbcEncoder` from the released
+[PCMFlowBluetooth](https://github.com/tanakamasayuki/PCMFlowBluetooth) library;
+its `A2dpSourceM5Microphone` example is a complete M5Stack Core2 microphone
+transmitter. The receiving side is [A2dpSinkRaw](../A2dpSinkRaw/).
 **Classic works on the original ESP32 only.**
 
 ## Hardware
@@ -44,3 +46,4 @@ Put the speaker's address in `speakerAddress`; [Inquiry](../Inquiry/) finds one.
 ## Related guides
 
 - [Classic guide §7 A2DP and AVRCP](../../../docs/GUIDE_CLASSIC_BASICS.md#7-a2dp-and-avrcp) — encoded media, codec configuration and control
+- [PCMFlowBluetooth A2DP Source example](https://github.com/tanakamasayuki/PCMFlowBluetooth/tree/main/examples/A2dpSourceM5Microphone) — microphone capture, SBC encoding and backpressure-safe transmission

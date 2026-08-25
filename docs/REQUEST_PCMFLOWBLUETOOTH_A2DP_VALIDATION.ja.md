@@ -2,6 +2,11 @@
 
 更新日: 2026-08-11
 
+> **完了:** PCMFlowBluetooth 1.0.0でdecoder reset修正、host回帰、無印ESP32 2台E2E、
+> SBC encoderとM5Stack Core2 exampleが追加され、1.0.1でPCMFlow接続exampleも修正された。
+> 結果は[PCMFlowBluetoothの完了報告](https://github.com/tanakamasayuki/PCMFlowBluetooth/blob/main/docs/A2DP_VALIDATION_REPORT.ja.md)を参照。
+> 以下は依頼時点の再現条件と受け入れ基準を残した履歴文書である。
+
 この文書は `../PCMFlowBluetooth` の担当作業への依頼書である。EspBle側では実機を使った再現と
 境界確認だけを行い、PCMFlowBluetoothのsource、test、仕様書は変更しない。
 

@@ -16,8 +16,8 @@
   責務とし、PCM処理とdevice I/OはPCMFlow等の独立libraryへ委ねる方針を確定した。
 - A2DP Sink / Sourceのraw transport APIとESP32同士の実機media転送、AVRCP CT/TGのpassthroughと
   absolute volumeに加え、HFP Client/Audio GatewayのSLC、単一call control、mSBC raw SCO transport、
-  process-wide role排他まで完了した。PCMFlowBluetoothのA2DP Sink adapterとSBC decoderは実装済みだが、
-  実機probeで判明したdecoder reset問題と正式E2E追加を担当側へ依頼中である。
+  process-wide role排他まで完了した。PCMFlowBluetoothは1.0.1まで正式リリース済みで、A2DP Sink adapter、
+  SBC encode/decode、decoder reset修正、無印ESP32 2台E2E、M5Stack speaker／microphone exampleを提供する。
 - 配布形式は次回Classic拡張ではNimBLE source / Classic `.a`のmixed distributionを意図的に維持する。
 - dual-hostはcommand/ACL routing、bond/RPA、任意停止順、再attach、FIFO満杯、再登録とheap安定性に加え、BLE GATT接続中のHFP mSBC SCO双方向通信とA2DP/AVRCPまで検証済み。
 - 数時間級dual-host soak、観測HCI commandのpolicy分類、不正HID report拒否、peer突然消失後の復旧、接続・pairing失敗後の復旧、lifecycle競合監査は完了。公開範囲は「次回releaseへ含める（保証は掲げず検証状態を書く）」として確定した。
@@ -206,8 +206,9 @@ workflowの仕事であり、手元で前倒ししても結果が変わらない
 ## 推奨実行順
 
 1. AVRCP metadata/play-statusの外部Target相互運用と、HFPの外部機器相互運用を行う（機材待ち）。
-2. [PCMFlowBluetooth修正依頼](REQUEST_PCMFLOWBLUETOOTH_A2DP_VALIDATION.ja.md)のreset修正と正式E2E結果を受け取り、
-   PCMFlowDevice等を接続した実出力と長時間負荷へ進む。
+2. 完了済みの[PCMFlowBluetooth修正依頼](REQUEST_PCMFLOWBLUETOOTH_A2DP_VALIDATION.ja.md)と
+   [正式E2E結果](https://github.com/tanakamasayuki/PCMFlowBluetooth/blob/main/docs/A2DP_VALIDATION_REPORT.ja.md)を基準に、
+   必要に応じて市販機器での実出力と長時間負荷を追加確認する。
 3. コードfreeze後にGate Cのclean全回帰を複数回行う。
 4. Gate Eの文書整合とartifact監査を締める。
 5. Gate Dを並行実施する。

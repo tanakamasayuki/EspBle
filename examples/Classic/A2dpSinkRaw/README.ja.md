@@ -3,8 +3,9 @@
 > English: [README.md](README.md)
 
 A2DPの受信側です。電話機やPCからこの基板へ音楽が流れてきます。**EspBleが運ぶのは
-encode済みのpayload**で、SBCのdecodeとspeaker出力はPCMFlowBluetooth等の別libraryの
-担当です。**Classicは無印ESP32のみ**で動き、届く相手はClassicのsource——電話機、
+encode済みのpayload**です。SBCのdecodeとspeaker出力まで動かす場合は、正式リリース済みの
+[PCMFlowBluetooth](https://github.com/tanakamasayuki/PCMFlowBluetooth)にある
+`A2dpSinkM5Speaker`または`A2dpSinkToPcm`から始めてください。**Classicは無印ESP32のみ**で動き、届く相手はClassicのsource——電話機、
 tablet、PCです。BLEにはこのlibraryが扱う標準audio pathが無いため、BLE版はありません。
 
 ## 必要なもの
@@ -39,3 +40,4 @@ tablet、PCです。BLEにはこのlibraryが扱う標準audio pathが無いた�
 ## 関連するガイド
 
 - [Classic入門ガイド §7 A2DPとAVRCP](../../../docs/GUIDE_CLASSIC_BASICS.ja.md#7-a2dpとavrcp) — encode済みmedia、codec設定、操作
+- [PCMFlowBluetoothのA2DP Sink example](https://github.com/tanakamasayuki/PCMFlowBluetooth/tree/main/examples) — SBC decode、PCMFlow、speaker出力

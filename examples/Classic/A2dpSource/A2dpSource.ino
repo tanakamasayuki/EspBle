@@ -4,7 +4,7 @@
 //     PCMFlowBluetooth. The receiving side is examples/Classic/A2dpSinkRaw.
 // ja: A2DP Source。この機器がspeakerやheadsetへ音声を送る側になる。EspBleは
 //     encode済みのSBC frameを運ぶだけでencodeはしないため、ここでは固定表の
-//     frameを送る。実際のsketchではPCMFlowBluetooth等のencoderから受け取る。
+//     frameを送る。実際のsketchではPCMFlowBluetoothのSbcEncoderから受け取る。
 //     受け取る側はexamples/Classic/A2dpSinkRaw。
 #include <EspBleClassic.h>
 

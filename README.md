@@ -133,6 +133,12 @@ forms.
   device strings, sharing one SDP record — is checked before registration instead of
   failing silently
 
+For actual PCM input and output over A2DP, combine EspBle with the released
+[PCMFlowBluetooth](https://github.com/tanakamasayuki/PCMFlowBluetooth) library.
+EspBle's examples demonstrate the encoded-payload transport boundary; PCMFlowBluetooth
+provides SBC encoding/decoding, PCMFlow integration, and complete M5Stack Core2
+speaker and microphone examples.
+
 Which radio suits which peer is covered in
 [BLE or Bluetooth Classic](docs/CLASSIC_VS_BLE.md), and each feature's state —
 hardware-verified, unverified or unimplemented — is written down in the Japanese

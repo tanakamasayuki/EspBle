@@ -4,7 +4,9 @@
 
 A2DP Sourceです。この機器がspeakerやheadsetへ音声を送ります。EspBleはencode済みの
 SBC frameを運ぶだけでencodeはしないため、ここでは固定表のframeを送ります。実際の
-sketchではPCMFlowBluetooth等のencoderから受け取ります。受け取る側は
+sketchでは、正式リリース済みの
+[PCMFlowBluetooth](https://github.com/tanakamasayuki/PCMFlowBluetooth)の`SbcEncoder`を使用します。
+M5Stack Core2のmicrophoneから送信する完全な例は同libraryの`A2dpSourceM5Microphone`にあります。受け取る側は
 [A2dpSinkRaw](../A2dpSinkRaw/)です。**Classicは無印ESP32のみ**で動きます。
 
 ## 必要なもの
@@ -41,3 +43,4 @@ sketchではPCMFlowBluetooth等のencoderから受け取ります。受け取る
 ## 関連するガイド
 
 - [Classic入門ガイド §7 A2DPとAVRCP](../../../docs/GUIDE_CLASSIC_BASICS.ja.md#7-a2dpとavrcp) — encode済みmedia、codec設定、操作
+- [PCMFlowBluetoothのA2DP Source example](https://github.com/tanakamasayuki/PCMFlowBluetooth/tree/main/examples/A2dpSourceM5Microphone) — microphone、SBC encode、backpressure-safe送信

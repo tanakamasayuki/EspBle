@@ -242,6 +242,10 @@ precompiled hostの対応Coreは実測でArduino-ESP32 3.2.0〜3.3.11です（HF
 両方で同じです。手元の相手に合う方を選んでください。どちらを使うか、両方にある機能の差は
 [BLEとClassic](../docs/CLASSIC_VS_BLE.ja.md)にあります。
 
+以下のA2DP exampleはEspBleが担当するencode済みpayload transportを確認するため、意図的にrawのままです。
+SBC encode/decode、PCMFlow接続、M5Stack Core2のspeaker／microphoneまで動かすexampleは、重複させず
+[PCMFlowBluetoothのexamples](https://github.com/tanakamasayuki/PCMFlowBluetooth/tree/main/examples)に集約しています。
+
 | Example | Role | 説明 |
 |---|---|---|
 | [Classic/Inquiry](Classic/Inquiry/) | GAP | device discovery。addressの入手経路 |

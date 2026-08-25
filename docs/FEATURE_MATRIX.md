@@ -126,7 +126,7 @@ ESP-IDF 5.5.5 / xtensa-esp32 GCC 14.2.0; the measured core range is Arduino-ESP3
 | Feature | Status | Notes |
 |---|---|---|
 | Bluetooth Classic (BR/EDR) in general | ⚠️ | Selected automatically when `EspBleClassic` is used on the original ESP32 (measured core range 3.2.0–3.3.11); other SoCs have no BR/EDR radio |
-| A2DP (audio streaming) | ⚠️ | Sink/Source SBC negotiation and encoded-payload transport; codec/PCM/device I/O stays in another library |
+| A2DP (audio streaming) | ⚠️ | Sink/Source SBC negotiation and encoded-payload transport; the released [PCMFlowBluetooth](https://github.com/tanakamasayuki/PCMFlowBluetooth) library provides SBC encoding/decoding, PCM, and speaker/microphone examples |
 | HFP (hands-free) | ⚠️ | Client/Audio Gateway SLC, outgoing/incoming/answer/end, selectable CVSD/mSBC raw SCO with AG codec selection, role exclusion, and the Client's operator name, subscriber number, memory dial, NREC and Apple battery reporting are implemented and hardware-verified; call waiting and three-way calling (CHLD, BTRH) are not implemented, and external-device interoperability remains |
 | AVRCP (media control) | ⚠️ | CT/TG passthrough, metadata/play-status requests, and absolute volume; external-target metadata interoperability remains |
 | SPP (Serial Port Profile) | ⚠️ | Classic-only Server/Client transport verified on hardware. `EspBleClassicSppStream` presents a session as an Arduino `Stream` (a write becomes one packet, and the outgoing queue is finite). Use NUS or similar on BLE |

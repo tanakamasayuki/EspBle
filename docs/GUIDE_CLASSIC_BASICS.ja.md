@@ -257,6 +257,11 @@ A2DPは音楽向けのaudio profileです。受信側がSink、送信側がSourc
 **EspBleが扱うのはencode済みのpayloadで、codecとPCMのI/Oは別libraryの担当です。**
 SBCへのencode/decodeはEspBleに入れません。
 
+PCMまで扱う場合は、正式リリース済みの
+[PCMFlowBluetooth](https://github.com/tanakamasayuki/PCMFlowBluetooth)を使用します。
+PC／phoneの音をM5Stack Core2のspeakerから再生する例、M5のmicrophoneをA2DP Sink対応PCへ送る例、
+音を出さずにPCMを確認する例、PCMFlowへ接続する例が揃っています。
+
 `send()`は`Accepted`、`WouldBlock`、失敗を返します。`WouldBlock`は正常なbackpressureで
 errorではありません。frameは捨てずに保持して再送します——捨てるとstreamに欠落が出ます。
 
@@ -276,6 +281,8 @@ metadata / play statusの応答送信は公開backend APIに手段が無く未�
 [A2dpSource](../examples/Classic/A2dpSource/)、
 [A2dpSinkAvrcp](../examples/Classic/A2dpSinkAvrcp/)、
 [AvrcpController](../examples/Classic/AvrcpController/)
+
+実音声のexample: [PCMFlowBluetooth examples](https://github.com/tanakamasayuki/PCMFlowBluetooth/tree/main/examples)
 
 ## 8. HFP
 

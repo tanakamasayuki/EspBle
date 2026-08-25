@@ -42,7 +42,7 @@ EspBleの開発ドキュメント一覧と、初見の人が状況を把握す�
 | 持ち込みhost × Arduino Coreバージョンのテスト計画 | [PLAN_CORE_VERSION_MATRIX.ja.md](PLAN_CORE_VERSION_MATRIX.ja.md) |
 | Classic host配布形式の再評価（archive / source / 折衷の比較） | [PLAN_CLASSIC_HOST_DISTRIBUTION.ja.md](PLAN_CLASSIC_HOST_DISTRIBUTION.ja.md) |
 | ESP32-P4 / ESP-Hosted対応の計画 | [PLAN_ESP_HOSTED.ja.md](PLAN_ESP_HOSTED.ja.md) |
-| PCMFlowBluetoothへのA2DP検証・修正依頼 | [REQUEST_PCMFLOWBLUETOOTH_A2DP_VALIDATION.ja.md](REQUEST_PCMFLOWBLUETOOTH_A2DP_VALIDATION.ja.md) |
+| PCMFlowBluetoothへのA2DP検証・修正依頼（完了済みの履歴） | [REQUEST_PCMFLOWBLUETOOTH_A2DP_VALIDATION.ja.md](REQUEST_PCMFLOWBLUETOOTH_A2DP_VALIDATION.ja.md) / [完了報告](https://github.com/tanakamasayuki/PCMFlowBluetooth/blob/main/docs/A2DP_VALIDATION_REPORT.ja.md) |
 | 1.0.0リリース時の作業計画（履歴） | [PLAN_RELEASE_1_0_0.ja.md](PLAN_RELEASE_1_0_0.ja.md) |
 | 無印ESP32でNimBLEとClassicを共存させる調査・技術検証 | [TECHNICAL_VALIDATION_ESP32_CLASSIC.ja.md](TECHNICAL_VALIDATION_ESP32_CLASSIC.ja.md) |
 | 無印ESP32 Classic作業の引き継ぎ・未完了事項 | [HANDOFF_ESP32_CLASSIC.ja.md](HANDOFF_ESP32_CLASSIC.ja.md) |

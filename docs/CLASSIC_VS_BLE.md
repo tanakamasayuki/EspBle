@@ -45,7 +45,8 @@ the same boundary.
   a PC or Android device and expects to see a COM port, that is SPP. Note that
   **iOS apps cannot use SPP** (MFi accessories aside), so for iOS use BLE
 - **Audio**: A2DP Sink/Source, AVRCP, HFP Client/Audio Gateway. EspBle handles
-  already-encoded payloads and raw SCO; codecs and PCM I/O belong to another
+  already-encoded payloads and raw SCO. For A2DP SBC codecs and PCM I/O, combine
+  it with the released [PCMFlowBluetooth](https://github.com/tanakamasayuki/PCMFlowBluetooth)
   library
 - **Older HID**: gamepad, keyboard, mouse. The only route when the peer does not
   accept BLE HID, and a gamepad is the usual reason

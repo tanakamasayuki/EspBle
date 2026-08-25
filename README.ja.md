@@ -109,6 +109,11 @@ build・更新条件が異なるため、両者の成果物形式は揃えませ
 - HID Report Descriptorの合成上限（1つのSDP recordを共有し、descriptorとdevice名などで214 byte）は
   登録前に検査し、黙って失敗させません
 
+A2DPで実際にPCMを入出力する場合は、正式リリース済みの
+[PCMFlowBluetooth](https://github.com/tanakamasayuki/PCMFlowBluetooth)を組み合わせます。
+EspBle側のexampleはencode済みpayloadのtransport境界を示し、SBC encode/decode、PCMFlow接続、
+M5Stack Core2のspeaker／microphoneまで含む実用exampleはPCMFlowBluetooth側にあります。
+
 どちらを選ぶかと、両方にある機能の差は[BLEとClassicの選び方](docs/CLASSIC_VS_BLE.ja.md)、
 機能ごとの「実機検証済み / 未検証 / 未実装」は[Classic機能の棚卸し](docs/CLASSIC_FEATURE_INVENTORY.ja.md)に
 書いてあります。Classicは1.3.0から同梱されています。

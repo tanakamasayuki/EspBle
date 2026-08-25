@@ -44,7 +44,7 @@ The design documents are written in Japanese. This guide lists them and shows th
 | Classic host distribution re-evaluation: archive vs source vs hybrid (Japanese) | [PLAN_CLASSIC_HOST_DISTRIBUTION.ja.md](PLAN_CLASSIC_HOST_DISTRIBUTION.ja.md) |
 | ESP32-P4 / ESP-Hosted support plan (Japanese) | [PLAN_ESP_HOSTED.ja.md](PLAN_ESP_HOSTED.ja.md) |
 | Coexistence research and hardware validation record for NimBLE plus Classic (Japanese) | [TECHNICAL_VALIDATION_ESP32_CLASSIC.ja.md](TECHNICAL_VALIDATION_ESP32_CLASSIC.ja.md) |
-| A2DP validation and fix request sent to PCMFlowBluetooth (Japanese) | [REQUEST_PCMFLOWBLUETOOTH_A2DP_VALIDATION.ja.md](REQUEST_PCMFLOWBLUETOOTH_A2DP_VALIDATION.ja.md) |
+| Completed A2DP validation/fix request sent to PCMFlowBluetooth (history, Japanese) | [REQUEST_PCMFLOWBLUETOOTH_A2DP_VALIDATION.ja.md](REQUEST_PCMFLOWBLUETOOTH_A2DP_VALIDATION.ja.md) / [completion report](https://github.com/tanakamasayuki/PCMFlowBluetooth/blob/main/docs/A2DP_VALIDATION_REPORT.md) |
 | Work plan for the 1.0.0 release (history, Japanese) | [PLAN_RELEASE_1_0_0.ja.md](PLAN_RELEASE_1_0_0.ja.md) |
 | Original-ESP32 Classic handoff and remaining work (Japanese) | [HANDOFF_ESP32_CLASSIC.ja.md](HANDOFF_ESP32_CLASSIC.ja.md) |
 | Rebuilding the Classic-only Bluedroid archive (Japanese) | [CLASSIC_HOST_BUILD.ja.md](CLASSIC_HOST_BUILD.ja.md) |

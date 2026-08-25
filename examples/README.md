@@ -248,6 +248,11 @@ on both sides; pick the pair that matches the peer you have. Which to choose, an
 what differs between the two where both exist, is in
 [BLE and Classic](../docs/CLASSIC_VS_BLE.md).
 
+The A2DP examples below intentionally stay at EspBle's encoded-payload transport
+boundary. SBC encoding/decoding, PCMFlow integration, and complete M5Stack Core2
+speaker/microphone examples are kept without duplication in
+[PCMFlowBluetooth examples](https://github.com/tanakamasayuki/PCMFlowBluetooth/tree/main/examples).
+
 | Example | Role | Description |
 |---|---|---|
 | [Classic/Inquiry](Classic/Inquiry/) | GAP | Device discovery: where an address comes from |

@@ -3,8 +3,10 @@
 > 日本語版: [README.ja.md](README.ja.md)
 
 The receiving side of A2DP: a phone or PC streams music to this board. **EspBle
-carries already-encoded payloads** — SBC decoding and speaker output belong to
-another library, such as PCMFlowBluetooth. **Classic works on the original ESP32
+carries already-encoded payloads**. For SBC decoding and speaker output, start with
+`A2dpSinkM5Speaker` or `A2dpSinkToPcm` in the released
+[PCMFlowBluetooth](https://github.com/tanakamasayuki/PCMFlowBluetooth) library.
+**Classic works on the original ESP32
 only**, and A2DP reaches Classic sources: phones, tablets and PCs. BLE has no
 standard audio path in this library, so there is no BLE equivalent.
 
@@ -41,3 +43,4 @@ measures; this library cannot work it out.
 ## Related guides
 
 - [Classic guide §7 A2DP and AVRCP](../../../docs/GUIDE_CLASSIC_BASICS.md#7-a2dp-and-avrcp) — encoded media, codec configuration and control
+- [PCMFlowBluetooth A2DP Sink examples](https://github.com/tanakamasayuki/PCMFlowBluetooth/tree/main/examples) — SBC decoding, PCMFlow and speaker output

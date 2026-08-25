@@ -126,7 +126,7 @@ ESP32-S3/C3/C6/H2等はBluetooth Classicを搭載しないため利用できま�
 | 機能 | 状況 | 備考 |
 |---|---|---|
 | Bluetooth Classic（BR/EDR）全般 | ⚠️ | 無印ESP32で`EspBleClassic`利用時に自動選択（対応Coreは実測で3.2.0〜3.3.11）。他SoCはBR/EDR無線を持たない |
-| A2DP（オーディオストリーミング） | ⚠️ | Sink/SourceのSBC negotiationとencode済みpayload transport。codec/PCM/device I/Oは別library |
+| A2DP（オーディオストリーミング） | ⚠️ | Sink/SourceのSBC negotiationとencode済みpayload transport。SBC encode/decode、PCM、speaker／microphone exampleは正式リリース済みの[PCMFlowBluetooth](https://github.com/tanakamasayuki/PCMFlowBluetooth)が担当 |
 | HFP（ハンズフリー） | ⚠️ | Client/Audio GatewayのSLC、発信・着信・応答・終了、CVSD・mSBC raw SCO API、AG codec選択、role排他に加え、Client側のoperator名・subscriber番号・memory dial・NREC・Apple電池残量通知を実装し実機確認済み。通話待ち・三者通話（CHLD / BTRH）は未実装。外部機器相互運用は未確認 |
 | AVRCP（メディア操作） | ⚠️ | CT/TG passthrough、metadata/play-status要求、absolute volume。metadata応答の外部Target相互運用は未完了 |
 | SPP（Serial Port Profile） | ⚠️ | Classic-onlyでServer/Client transportを実機確認。`EspBleClassicSppStream`でsessionをArduino `Stream`として扱える（write 1回が1 packet、送信queueは有限）。BLEではNUS等で代替 |

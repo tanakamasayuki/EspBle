@@ -275,6 +275,12 @@ A2DP carries music. The receiving side is the Sink and the sending side the
 Source. **EspBle handles already-encoded payloads; codecs and PCM I/O belong to
 another library.** SBC encoding and decoding are deliberately not part of EspBle.
 
+For PCM audio, use the released
+[PCMFlowBluetooth](https://github.com/tanakamasayuki/PCMFlowBluetooth) library. It
+includes examples that play PC/phone audio on an M5Stack Core2 speaker, send its
+microphone to an A2DP-Sink-capable PC, inspect decoded PCM without audio hardware,
+and connect the stream to PCMFlow.
+
 `send()` returns `Accepted`, `WouldBlock` or a failure. `WouldBlock` is normal
 backpressure, not an error: keep the frame and retry it rather than dropping it,
 or the stream develops gaps.
@@ -299,6 +305,8 @@ Related examples: [A2dpSinkRaw](../examples/Classic/A2dpSinkRaw/),
 [A2dpSource](../examples/Classic/A2dpSource/),
 [A2dpSinkAvrcp](../examples/Classic/A2dpSinkAvrcp/),
 [AvrcpController](../examples/Classic/AvrcpController/)
+
+Complete audio examples: [PCMFlowBluetooth examples](https://github.com/tanakamasayuki/PCMFlowBluetooth/tree/main/examples)
 
 ## 8. HFP
 
