@@ -19,7 +19,7 @@ def test_classic_spp_server_client_and_restart(dut, peers):
     peer = peers["device"]
     peer.expect_exact("CLASSIC_PEER_READY", timeout=20)
     ready = dut.expect(
-        re.compile(rb"CLASSIC_SERVER_READY address=([0-9a-f:]+) heap=(\d+)"),
+        re.compile(rb"CLASSIC_SERVER_READY address=([0-9a-f:]+) heap=(\d+)\r?\n"),
         timeout=20,
     )
     address = ready.group(1).decode()
@@ -33,9 +33,9 @@ def test_classic_spp_server_client_and_restart(dut, peers):
     dut.expect(re.compile(rb"CLASSIC_DISCONNECTED id=\d+"), timeout=10)
 
     dut.write("r")
-    ended = dut.expect(re.compile(rb"CLASSIC_ENDED heap=(\d+)"), timeout=20)
+    ended = dut.expect(re.compile(rb"CLASSIC_ENDED heap=(\d+)\r?\n"), timeout=20)
     restarted = dut.expect(
-        re.compile(rb"CLASSIC_SERVER_READY address=([0-9a-f:]+) heap=(\d+)"),
+        re.compile(rb"CLASSIC_SERVER_READY address=([0-9a-f:]+) heap=(\d+)\r?\n"),
         timeout=20,
     )
     dut.expect_exact("CLASSIC_SERVER_STARTED", timeout=10)
@@ -56,7 +56,7 @@ def test_classic_spp_server_client_and_restart(dut, peers):
     dut.write("2")
     dut.expect_exact("CLASSIC_SECOND_SERVER started=1 error=None", timeout=10)
     second = dut.expect(
-        re.compile(rb"CLASSIC_SERVER_STARTED channel=(\d+)"), timeout=20)
+        re.compile(rb"CLASSIC_SERVER_STARTED channel=(\d+)\r?\n"), timeout=20)
     second_channel = int(second.group(1))
     dut.write("?")
     listed = dut.expect(re.compile(rb"CLASSIC_SERVERS count=2 [^\r\n]*"), timeout=10)

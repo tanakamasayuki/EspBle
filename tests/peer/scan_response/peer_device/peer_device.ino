@@ -3,6 +3,8 @@
 // (name + manufacturer data), so a passive scanner sees only the former.
 #include <EspBle.h>
 
+#include "../../../sketch_support/EspBleTestLifecycleEspBle.h"
+
 static constexpr const char *SERVICE_UUID = "FEAC";
 // Generic Thermometer; the value only has to be recognisable in the test.
 static constexpr uint16_t APPEARANCE_THERMOMETER = 0x0341;
@@ -40,13 +42,15 @@ void setup()
   {
     Serial.printf("ADVERTISING_FAILED %s %s\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
   }
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == '?')
     {
       Serial.printf("ADVERTISING %u\n", ble.advertising().isAdvertising() ? 1 : 0);
@@ -54,5 +58,6 @@ void loop()
   }
 
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

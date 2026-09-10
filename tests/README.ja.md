@@ -86,3 +86,31 @@ Wi-Fi情報はcompile-time defineとして渡され、verboseなArduino CLI comp
 現行Core/ESP-Hostedの既知制限に該当するSecurityと完全な初期化・終了反復は、P4代表suiteの必須合格項目から除外しています。上流versionを更新したときに再実行し、制限が解消したか確認します。
 
 `stack_smoke`はEspBleを使わず、Arduino-ESP32同梱NimBLE backendのBLE APIだけで親側をCentral、`peer_device/`側をPeripheralとして接続します。2台のポート、書き込み、無線接続、双方のSerial、テストfixture自体が動くことを、libraryと切り離して確認するための土台です。他のsuiteが落ちたときに、原因がfixture側かどうかを切り分けられます。
+
+## test間のboard状態
+
+sketchはmoduleごとに1回だけflashされ、全moduleが1テストなので、testからtestへ持ち越される
+ものはありません。moduleの先頭のuploadがboardをresetするからです。fixtureが引き受けるのは、
+終わったtestが電波を出したままにするほうです。runが終わっても、途中で落ちても、次のupload
+まで両boardはadvertiseし続け、治具を次に使う人のscanに映ります。
+
+そのため[`peer/conftest.py`](peer/conftest.py)のautouse fixtureが、primary DUTと接続中の
+全peerへ予約commandを1つ送ります。fixtureのteardownはCtrl-Cを含めどんな終わり方でも実行
+されるので、片付けの置き場所はここになります。
+
+| command | byte | 目標状態に到達したときの応答 |
+|---|---|---|
+| STOP | `0x04`（EOT） | `STOPPED`: 接続・advertise・scanのいずれもない |
+
+応答は「byteを受け取った」ではなく「状態に到達した」の合図です。fixtureはboardごとに2秒まで
+待ち、返らなければその旨を出すだけでtest結果は変えません。応答できないboardは、固まったか
+落ちたsketchそのものだからです。やり取りは`dut.log`に`[espble] STOP -> primary`として残ります。
+`peer/`の全sketchは
+[`sketch_support/EspBleTestLifecycle.h`](sketch_support/EspBleTestLifecycle.h)で応答します。
+include、`setup()`末尾の`beginEspBle()` / `beginClassic()`、`Serial.read()`を包む`filter()`
+（行読み取りのsketchは`handleLine()`）、`loop()`でlibraryのupdateの直後に呼ぶ`update()`の
+4点です。新しいsketchの契約はheader冒頭のcommentが正本です。
+
+これはtest開始時の処理を置き換えません。testは必要なapplication状態を自分のcommandで整えます
+（`lifecycle_stress/_reset()`参照）。前のtestのteardownが成功した前提に立てないこと、`-k`で
+1本だけ回しても動く必要があることが理由です。

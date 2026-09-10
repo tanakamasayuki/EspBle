@@ -13,7 +13,7 @@ def test_pairing_and_bonding_interoperate_with_the_core_bluedroid_stack(
     """
     peer = peers["device"]
 
-    ready = probe(peer, "?\n", re.compile(rb"SECPEER_READY address=([0-9a-f:]+)"))
+    ready = probe(peer, "?\n", re.compile(rb"SECPEER_READY address=([0-9a-f:]+)\r?\n"))
     peer_address = ready.group(1).decode()
     probe(dut, "?\n", re.compile(rb"SECGATT_READY"))
 
@@ -27,7 +27,7 @@ def test_pairing_and_bonding_interoperate_with_the_core_bluedroid_stack(
     dut.write("s\n")
     dut.expect_exact("SECGATT_SCAN started=1", timeout=10)
     connect = dut.expect(
-        re.compile(rb"SECGATT_CONNECT requested=1 peer=([0-9a-f:]+)"), timeout=30
+        re.compile(rb"SECGATT_CONNECT requested=1 peer=([0-9a-f:]+)\r?\n"), timeout=30
     )
     assert connect.group(1).decode() == peer_address
     dut.expect(re.compile(rb"SECGATT_CONNECTED id=\d+"), timeout=30)
@@ -40,7 +40,7 @@ def test_pairing_and_bonding_interoperate_with_the_core_bluedroid_stack(
         re.compile(rb"SECGATT_SECURITY success=1 encrypted=1 bonded=1"), timeout=40
     )
     auth = peer.expect(
-        re.compile(rb"SECPEER_AUTH success=1 auth_mode=([0-9a-f]{2}) bonds=(\d+)"),
+        re.compile(rb"SECPEER_AUTH success=1 auth_mode=([0-9a-f]{2}) bonds=(\d+)\r?\n"),
         timeout=40,
     )
     auth_mode = int(auth.group(1), 16)
@@ -76,13 +76,13 @@ def test_pairing_and_bonding_interoperate_with_the_core_bluedroid_stack(
     state = probe(
         dut,
         "?\n",
-        re.compile(rb"SECGATT_STATE connected=1 encrypted=1 bonded=1 bonds=(\d+)"),
+        re.compile(rb"SECGATT_STATE connected=1 encrypted=1 bonded=1 bonds=(\d+)\r?\n"),
     )
     assert int(state.group(1)) >= 1, "DUT kept no bond for the peer"
 
     peer_state = probe(
         peer,
         "?\n",
-        re.compile(rb"SECPEER_STATE connected=1 authenticated=\d+ bonded=\d+ bonds=(\d+)"),
+        re.compile(rb"SECPEER_STATE connected=1 authenticated=\d+ bonded=\d+ bonds=(\d+)\r?\n"),
     )
     assert int(peer_state.group(1)) >= 1, "peer kept no bond for the DUT"

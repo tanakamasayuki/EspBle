@@ -3,6 +3,8 @@
 // setScanResponseEnabled(false) and a 100..150 ms advertising interval. No GATT
 // connection is possible; the payload is broadcast only.
 #include <EspBle.h>
+
+#include "../../../sketch_support/EspBleTestLifecycleEspBle.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
@@ -41,18 +43,21 @@ void setup()
     Serial.printf("ADVERTISING_FAILED %s %s\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
     return;
   }
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == '?')
     {
       Serial.printf("ADVERTISING %u\n", ble.advertising().isAdvertising() ? 1 : 0);
     }
   }
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

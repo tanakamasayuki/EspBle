@@ -6,7 +6,7 @@ dependencies = [
     "pytest>=8",
     "pytest-embedded>=2.0",
     "pytest-embedded-serial>=2.0",
-    "pytest-embedded-arduino-cli>=1.1",
+    "pytest-embedded-arduino-cli>=1.6.0",
     "pytest-html>=4.1.1",
 ]
 
@@ -15,3 +15,7 @@ filterwarnings = [
     "ignore:record_xml_attribute is an experimental feature:pytest.PytestExperimentalApiWarning",
 ]
 addopts = "--save-state"
+# The default run is the two layers that need no judgement call: host-side unit
+# tests and the peer suites. manual/ needs hardware that is not always attached
+# or a person to watch, so it is named explicitly when it is wanted.
+testpaths = ["unit", "peer"]

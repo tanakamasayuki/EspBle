@@ -1,5 +1,8 @@
 #include <EspBle.h>
 #include <EspBleClassic.h>
+
+#include "../../sketch_support/EspBleTestLifecycleClassic.h"
+#include "../../sketch_support/EspBleTestLifecycleEspBle.h"
 #include <EspBleHciBroker.h>
 #include <esp_mac.h>
 #if defined(CONFIG_IDF_TARGET_ESP32)
@@ -318,6 +321,32 @@ bool runDestructorCycle(bool classicFirst)
   return started && survivor;
 }
 
+// Both hosts answer the lifecycle commands together: a transition is complete
+// only once the Classic side and the BLE side both report it. Tests end the
+// stacks and restart them, so RECOVER also brings back whichever host a test
+// left down, the way setup() started it. File-scope so the capture-less
+// lambdas can reach the hooks.
+EspBleTestLifecycle::Hooks classicLifecycle;
+EspBleTestLifecycle::Hooks bleLifecycle;
+
+void beginDualLifecycle()
+{
+  EspBleTestLifecycle::attachClassic(classic);
+  EspBleTestLifecycle::attachEspBle(ble);
+  classicLifecycle = EspBleTestLifecycle::classicHooks();
+  bleLifecycle = EspBleTestLifecycle::espBleHooks();
+  EspBleTestLifecycle::Hooks hooks;
+  // The sketch's own 'e' command ends BLE first; STOP takes the same path.
+  hooks.stop = []() {
+    bleLifecycle.stop();
+    classicLifecycle.stop();
+  };
+  hooks.stopped = []() {
+    return bleLifecycle.stopped() && classicLifecycle.stopped();
+  };
+  EspBleTestLifecycle::begin(hooks);
+}
+
 void setup()
 {
   Serial.begin(115200);
@@ -379,12 +408,15 @@ void setup()
     "DUAL_READY classic=%02x:%02x:%02x:%02x:%02x:%02x ble=%s type=%u\n",
     address[0], address[1], address[2], address[3], address[4], address[5],
     ble.localAddress().c_str(), static_cast<unsigned>(ble.localAddressType()));
+
+  beginDualLifecycle();
 }
 
 void loop()
 {
   classic.update();
   ble.update();
+  EspBleTestLifecycle::update();
   if (classic.hidDevice().connected() && !inputSent)
   {
     const uint8_t report[] = {0x00, 0x7f, 0x80, inputSequence++};
@@ -393,7 +425,7 @@ void loop()
   }
   if (Serial.available())
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == 'i') inputSent = false;
     else if (command == 'a')
       Serial.printf("DUAL_BLE_ADVERTISING %u\n",

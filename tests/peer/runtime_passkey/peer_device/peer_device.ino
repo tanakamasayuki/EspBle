@@ -3,6 +3,8 @@
 // the backend generates a random passkey per pairing and surfaces it through
 // onPasskeyDisplayed, which a real device would show on screen.
 #include <EspBle.h>
+
+#include "../../../sketch_support/EspBleTestLifecycleEspBle.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
@@ -66,13 +68,15 @@ void setup()
   advertising.setName("EspBle RtPasskey Peer");
   advertising.addServiceUuid(MARKER_SERVICE_UUID);
   advertising.start();
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == 'x')
     {
       const bool cleared = ble.deleteAllBonds();
@@ -85,5 +89,6 @@ void loop()
     }
   }
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

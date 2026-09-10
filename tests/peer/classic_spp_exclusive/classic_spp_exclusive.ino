@@ -1,6 +1,8 @@
 #include <EspBleClassic.h>
 #include <esp_mac.h>
 
+#include "../../sketch_support/EspBleTestLifecycleClassic.h"
+
 EspBleClassic bluetooth;
 EspBleClassicSppSessionId sessionId = 0;
 
@@ -72,14 +74,18 @@ void setup()
     Serial.printf("CLASSIC_DISCONNECTED id=%u\n", static_cast<unsigned>(session.id));
   });
   startStack();
+
+  // Boot state: one SPP server, no session.
+  EspBleTestLifecycle::beginClassic(bluetooth);
 }
 
 void loop()
 {
   bluetooth.update();
+  EspBleTestLifecycle::update();
   if (Serial.available())
   {
-    const char command = static_cast<char>(Serial.read());
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == 'r')
     {
       bluetooth.end();

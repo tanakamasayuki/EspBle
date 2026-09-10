@@ -2,6 +2,8 @@
 // address type / value it advertises with.
 #include <EspBle.h>
 
+#include "../../sketch_support/EspBleTestLifecycleEspBle.h"
+
 static constexpr const char *MARKER_SERVICE_UUID = "70726976-6163-7900-9003-72616e646d01";
 
 EspBle ble;
@@ -27,13 +29,15 @@ void setup()
     Serial.printf("PEER_SEEN addr=%s type=%u\n",
       scanResult.address.c_str(), static_cast<unsigned>(scanResult.addressType));
   });
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == 's')
     {
       reported = false;
@@ -44,5 +48,6 @@ void loop()
   }
 
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

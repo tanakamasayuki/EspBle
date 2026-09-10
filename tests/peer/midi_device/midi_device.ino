@@ -10,6 +10,8 @@
 #include <BLERemoteCharacteristic.h>
 #include <BLERemoteService.h>
 
+#include "../../sketch_support/EspBleTestLifecycle.h"
+
 #if !defined(CONFIG_NIMBLE_ENABLED)
 #error "EspBle peer tests require the Arduino-ESP32 NimBLE backend"
 #endif
@@ -20,6 +22,7 @@ static BLEUUID MIDI_IO_UUID("7772E5DB-3868-4112-A1A9-F2669D106BF3");
 BLEAdvertisedDevice *target = nullptr;
 BLEClient *client = nullptr;
 BLERemoteCharacteristic *ioCharacteristic = nullptr;
+bool stackStopped = false;
 
 volatile uint32_t notifyCount = 0;
 uint8_t lastNotify[16] = {0};
@@ -150,13 +153,27 @@ void setup()
   Serial.begin(115200);
   delay(500);
   BLEDevice::init("EspBle MIDI Peer Host");
+
+  // RECOVER mirrors the 'd' command and forgets the I/O handle, which belongs
+  // to the connection that just ended. The capture counters keep their own
+  // reset command ('c'), so the tests stay in charge of them. deinit() takes
+  // the radio down synchronously, so STOP is complete at once.
+  EspBleTestLifecycle::Hooks hooks;
+  hooks.stop = []() {
+    stackStopped = true;
+    BLEDevice::deinit(false);
+  };
+  EspBleTestLifecycle::begin(hooks);
 }
 
 void loop()
 {
+  EspBleTestLifecycle::update();
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
+    // STOP has taken the stack down; the commands have nothing left to act on.
+    if (stackStopped) return;
     if (command == 's')
     {
       Serial.println("MIDI_SCAN_STARTED");

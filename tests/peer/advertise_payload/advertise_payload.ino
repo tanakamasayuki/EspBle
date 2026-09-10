@@ -5,8 +5,11 @@
 #include <BLEScan.h>
 #include <BLEAdvertisedDevice.h>
 
+#include "../../sketch_support/EspBleTestLifecycle.h"
+
 BLEScan *scan = nullptr;
 String targetName = "BlePayload";
+bool stackStopped = false;
 
 class Callbacks : public BLEAdvertisedDeviceCallbacks
 {
@@ -40,14 +43,24 @@ void setup()
   delay(500);
   BLEDevice::init("EspBle Payload Scanner");
   scan = BLEDevice::getScan();
+
+  // deinit() takes the radio down synchronously, so STOP is complete at once.
+  EspBleTestLifecycle::Hooks hooks;
+  hooks.stop = []() {
+    stackStopped = true;
+    BLEDevice::deinit(false);
+  };
+  EspBleTestLifecycle::begin(hooks);
 }
 
 void loop()
 {
+  EspBleTestLifecycle::update();
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
-    if (command == 's')
+    const char command = EspBleTestLifecycle::filter(Serial.read());
+    // STOP has taken the stack down; the scan object went with it.
+    if (command == 's' && !stackStopped)
     {
       // Passive scan so SCANNER_PAYLOAD reports the advertising PDU itself,
       // not a merged scan response.

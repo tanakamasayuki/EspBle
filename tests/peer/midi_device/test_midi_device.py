@@ -2,13 +2,13 @@ import re
 import time
 
 NOTIFY_PATTERN = re.compile(
-    rb"NOTIFY count=(\d+) length=(\d+) b0=(\d+) b1=(\d+) b2=(\d+) b3=(\d+) b4=(\d+)"
+    rb"NOTIFY count=(\d+) length=(\d+) b0=(\d+) b1=(\d+) b2=(\d+) b3=(\d+) b4=(\d+)\r?\n"
 )
 DEVICE_IN_PATTERN = re.compile(
-    rb"DEVICE_IN count=(\d+) status=(\d+) data1=(\d+) data2=(\d+) context=(\w+)"
+    rb"DEVICE_IN count=(\d+) status=(\d+) data1=(\d+) data2=(\d+) context=(\w+)\r?\n"
 )
 SYSEX_PATTERN = re.compile(
-    rb"SYSEX complete=(\d+) length=(\d+) first=(\d+) last=(\d+) sum=(\d+)"
+    rb"SYSEX complete=(\d+) length=(\d+) first=(\d+) last=(\d+) sum=(\d+)\r?\n"
 )
 
 

@@ -2,6 +2,8 @@
 // and the protocol mode. A real Host asks for these after connecting, and a
 // device that never answers looks broken to it.
 #include <EspBleClassic.h>
+
+#include "../../sketch_support/EspBleTestLifecycleClassic.h"
 #include <esp_mac.h>
 
 // Report 1 is an Input report the Host can ask for, report 2 an Output report,
@@ -110,15 +112,18 @@ void setup()
   Serial.printf(
     "CONTROL_DEVICE_READY address=%02x:%02x:%02x:%02x:%02x:%02x\n",
     address[0], address[1], address[2], address[3], address[4], address[5]);
+
+  EspBleTestLifecycle::beginClassic(bluetooth);
 }
 
 void loop()
 {
   bluetooth.update();
+  EspBleTestLifecycle::update();
 
   if (Serial.available())
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == 'r')
     {
       refuseRequests = true;

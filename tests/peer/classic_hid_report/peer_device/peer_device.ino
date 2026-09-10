@@ -1,5 +1,7 @@
 #include <EspBleClassic.h>
 
+#include "../../../sketch_support/EspBleTestLifecycleClassic.h"
+
 EspBleClassic bluetooth;
 EspBleClassicSppSessionId sppSession = 0;
 
@@ -52,15 +54,19 @@ void setup()
     return;
   }
   Serial.println("CLASSIC_HIDH_READY");
+
+  EspBleTestLifecycle::beginClassic(bluetooth);
 }
 
 void loop()
 {
   bluetooth.update();
+  EspBleTestLifecycle::update();
   if (Serial.available())
   {
     String command = Serial.readStringUntil('\n');
     command.trim();
+    if (EspBleTestLifecycle::handleLine(command)) return;
     if (command.startsWith("c"))
     {
       Serial.printf(

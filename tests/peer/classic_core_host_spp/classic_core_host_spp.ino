@@ -3,6 +3,8 @@
 // pass here is interoperability between two different stacks rather than two
 // copies of the same one.
 #include <EspBleClassic.h>
+
+#include "../../sketch_support/EspBleTestLifecycleClassic.h"
 #include <esp_mac.h>
 
 EspBleClassic bluetooth;
@@ -75,15 +77,18 @@ void setup()
 
   if (!startStack()) return;
   printAddress();
+
+  EspBleTestLifecycle::beginClassic(bluetooth);
 }
 
 void loop()
 {
   bluetooth.update();
+  EspBleTestLifecycle::update();
 
   if (Serial.available())
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == 'e')
     {
       // Echo a fixed payload that contains a zero byte, so the transfer is

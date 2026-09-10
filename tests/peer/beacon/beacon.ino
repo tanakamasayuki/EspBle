@@ -3,6 +3,8 @@
 // setConnectable(false) + setScanResponseEnabled(false) produces a non-connectable
 // non-scannable advertisement carrying the expected payload.
 #include <EspBle.h>
+
+#include "../../sketch_support/EspBleTestLifecycleEspBle.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
@@ -44,13 +46,15 @@ void setup()
       hex.c_str(),
       contextName());
   });
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == 's')
     {
       reported = false;
@@ -64,5 +68,6 @@ void loop()
     }
   }
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

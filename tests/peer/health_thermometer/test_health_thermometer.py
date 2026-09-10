@@ -1,7 +1,7 @@
 import re
 
 MEASUREMENT_PATTERN = re.compile(
-    rb"THERM_MEASUREMENT valid=(\d+) indication=(\d+) flags=([0-9a-f]{2}) temp_x100=(-?\d+) context=(\w+)"
+    rb"THERM_MEASUREMENT valid=(\d+) indication=(\d+) flags=([0-9a-f]{2}) temp_x100=(-?\d+) context=(\w+)\r?\n"
 )
 
 
@@ -20,7 +20,7 @@ def test_health_thermometer_service(dut, peers):
     dut.expect_exact("TYPE_READ_REQUESTED", timeout=20)
 
     # Temperature Type = 0x02 (Body).
-    match = dut.expect(re.compile(rb"TYPE_READ valid=(\d+) value=(\d+) context=(\w+)"), timeout=20)
+    match = dut.expect(re.compile(rb"TYPE_READ valid=(\d+) value=(\d+) context=(\w+)\r?\n"), timeout=20)
     assert match.group(1) == b"1", "Temperature Type read failed"
     assert match.group(2) == b"2", "expected Temperature Type Body (2)"
     assert match.group(3) == b"loop"
@@ -47,4 +47,4 @@ def test_health_thermometer_service(dut, peers):
 
     dut.write("d")
     dut.expect_exact("DISCONNECT_REQUESTED", timeout=10)
-    dut.expect(re.compile(rb"DISCONNECTED id=(\d+)"), timeout=20)
+    dut.expect(re.compile(rb"DISCONNECTED id=(\d+)\r?\n"), timeout=20)

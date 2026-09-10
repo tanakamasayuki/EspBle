@@ -1,9 +1,13 @@
 #include <EspBleClassic.h>
+
+#include "../../sketch_support/EspBleTestLifecycleClassic.h"
 #include <esp_mac.h>
 #include <esp_heap_caps.h>
 #if defined(ESPBLE_TEST_DUAL_A2DP)
 #include <EspBle.h>
 #include <EspBleHciBroker.h>
+
+#include "../../sketch_support/EspBleTestLifecycleEspBle.h"
 #endif
 
 EspBleClassic bluetooth;
@@ -65,6 +69,52 @@ String classicAddress()
     address[0], address[1], address[2], address[3], address[4], address[5]);
   return String(value);
 }
+
+// Registered by setup() and again by RECOVER: the Sink unregisters it on every
+// disconnect (see onDisconnected) to show that a callback can be taken away.
+void onSinkMedia(const EspBleClassicEncodedAudioView &view)
+{
+  ++mediaPackets;
+  mediaBytes += view.length;
+  if (mediaPackets <= 3)
+  {
+    uint32_t checksum = 0;
+    for (size_t i = 0; i < view.length; ++i) checksum += view.data[i];
+    Serial.printf(
+      "A2DP_SINK_MEDIA id=%u codec=%u timestamp=%lu frames=%u len=%u "
+      "checksum=%lu first=%02x\n",
+      view.connectionId, static_cast<unsigned>(view.codec),
+      static_cast<unsigned long>(view.timestamp), view.frameCount,
+      static_cast<unsigned>(view.length),
+      static_cast<unsigned long>(checksum),
+      view.length == 0 ? 0 : view.data[0]);
+  }
+}
+
+#if defined(ESPBLE_TEST_DUAL_A2DP)
+// Both hosts answer the lifecycle commands together: a transition is complete
+// only once the Classic side and the BLE side both report it. File-scope so
+// the capture-less lambdas can reach the hooks.
+EspBleTestLifecycle::Hooks classicLifecycle;
+EspBleTestLifecycle::Hooks bleLifecycle;
+
+void beginDualLifecycle()
+{
+  EspBleTestLifecycle::attachClassic(bluetooth);
+  EspBleTestLifecycle::attachEspBle(dualBle);
+  classicLifecycle = EspBleTestLifecycle::classicHooks();
+  bleLifecycle = EspBleTestLifecycle::espBleHooks();
+  EspBleTestLifecycle::Hooks hooks;
+  hooks.stop = []() {
+    classicLifecycle.stop();
+    bleLifecycle.stop();
+  };
+  hooks.stopped = []() {
+    return classicLifecycle.stopped() && bleLifecycle.stopped();
+  };
+  EspBleTestLifecycle::begin(hooks);
+}
+#endif
 
 void setup()
 {
@@ -153,23 +203,7 @@ void setup()
     Serial.printf("A2DP_SINK_STREAM id=%u state=%u\n",
       event.connectionId, static_cast<unsigned>(event.state));
   });
-  bluetooth.a2dpSink().onMedia([](const EspBleClassicEncodedAudioView &view) {
-    ++mediaPackets;
-    mediaBytes += view.length;
-    if (mediaPackets <= 3)
-    {
-      uint32_t checksum = 0;
-      for (size_t i = 0; i < view.length; ++i) checksum += view.data[i];
-      Serial.printf(
-        "A2DP_SINK_MEDIA id=%u codec=%u timestamp=%lu frames=%u len=%u "
-        "checksum=%lu first=%02x\n",
-        view.connectionId, static_cast<unsigned>(view.codec),
-        static_cast<unsigned long>(view.timestamp), view.frameCount,
-        static_cast<unsigned>(view.length),
-        static_cast<unsigned long>(checksum),
-        view.length == 0 ? 0 : view.data[0]);
-    }
-  });
+  bluetooth.a2dpSink().onMedia(onSinkMedia);
 
   sinkStarted = bluetooth.a2dpSink().begin();
   baselineHeap = ESP.getFreeHeap();
@@ -186,6 +220,10 @@ void setup()
   }
   dualServerReady = true;
   Serial.println("DUAL_A2DP_BLE_SERVER_READY");
+
+  beginDualLifecycle();
+#else
+  EspBleTestLifecycle::beginClassic(bluetooth);
 #endif
 }
 
@@ -206,6 +244,7 @@ void loop()
 #if defined(ESPBLE_TEST_DUAL_A2DP)
   dualBle.update();
 #endif
+  EspBleTestLifecycle::update();
   if (teardownRequested)
   {
     teardownRequested = false;
@@ -225,6 +264,7 @@ void loop()
   if (Serial.available())
   {
     const String command = Serial.readStringUntil('\n');
+    if (EspBleTestLifecycle::handleLine(command)) return;
     if (command == "?")
     {
       reportReady();

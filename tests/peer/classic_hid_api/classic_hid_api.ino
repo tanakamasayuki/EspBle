@@ -1,5 +1,7 @@
 // Classic HID Device driven through the same profile API the BLE side uses.
 #include <EspBleClassic.h>
+
+#include "../../sketch_support/EspBleTestLifecycleClassic.h"
 #include <esp_mac.h>
 
 EspBleClassic bluetooth;
@@ -42,15 +44,18 @@ void setup()
     address[0], address[1], address[2], address[3], address[4], address[5],
     bluetooth.hidKeyboard().configured() ? 1 : 0,
     bluetooth.hidMouse().configured() ? 1 : 0);
+
+  EspBleTestLifecycle::beginClassic(bluetooth);
 }
 
 void loop()
 {
   bluetooth.update();
+  EspBleTestLifecycle::update();
 
   if (Serial.available())
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == 'k')
       Serial.printf("DEVICE_KEY sent=%u\n",
         bluetooth.hidKeyboard().pressUsage(0x04) ? 1 : 0);

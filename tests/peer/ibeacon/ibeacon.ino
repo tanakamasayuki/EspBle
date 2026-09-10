@@ -1,5 +1,7 @@
 // Central for the ibeacon peer test: scan and decode an iBeacon advertisement.
 #include <EspBle.h>
+
+#include "../../sketch_support/EspBleTestLifecycleEspBle.h"
 #include <EspBleIBeacon.h>
 
 EspBle ble;
@@ -42,13 +44,15 @@ void setup()
       scanResult.connectable ? 1 : 0,
       scanResult.scannable ? 1 : 0);
   });
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == 's')
     {
       reported = false;
@@ -59,5 +63,6 @@ void loop()
   }
 
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

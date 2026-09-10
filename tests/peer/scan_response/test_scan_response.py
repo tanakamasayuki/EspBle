@@ -1,7 +1,7 @@
 import re
 
 RESULT = re.compile(
-    rb'RESULT mode=(\w+) name="([^"]*)" manufacturer=(\S+) appearance=(0x[0-9a-f]{4}) txpower=(\S+)'
+    rb'RESULT mode=(\w+) name="([^"]*)" manufacturer=(\S+) appearance=(0x[0-9a-f]{4}) txpower=(\S+)\r?\n'
 )
 
 

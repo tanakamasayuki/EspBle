@@ -1,4 +1,6 @@
 #include <EspBle.h>
+
+#include "../../../sketch_support/EspBleTestLifecycleEspBle.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
@@ -52,15 +54,18 @@ void setup()
   {
     Serial.printf("ADVERTISING_FAILED %s %s\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
   }
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
-  if (Serial.available() > 0 && Serial.read() == '?')
+  if (Serial.available() > 0 && EspBleTestLifecycle::filter(Serial.read()) == '?')
   {
     Serial.printf("ADVERTISING %u\n", ble.advertising().isAdvertising() ? 1 : 0);
   }
 
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

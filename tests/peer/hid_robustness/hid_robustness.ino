@@ -1,5 +1,7 @@
 #include <EspBle.h>
 
+#include "../../sketch_support/EspBleTestLifecycleEspBle.h"
+
 EspBle ble;
 EspBleConnectionId connectionId = 0;
 EspBleConnectionId lastConnectionId = 0;
@@ -63,13 +65,15 @@ void setup()
       Serial.printf("HOST_CONNECT_STARTED success=%u\n", ble.connect(result) ? 1 : 0);
     }
   });
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == 'c')
     {
       connectedCount = 0;
@@ -148,4 +152,5 @@ void loop()
     ble.update();
   }
   delay(1);
+  EspBleTestLifecycle::update();
 }

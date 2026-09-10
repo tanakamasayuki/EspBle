@@ -3,6 +3,8 @@
 // against its accept list, and succeed once the policy is open again.
 #include <EspBle.h>
 
+#include "../../sketch_support/EspBleTestLifecycleEspBle.h"
+
 static constexpr const char *SERVICE_UUID = "FEAD";
 // Shorter than the library default so a blocked attempt reports back quickly.
 static constexpr uint32_t CONNECT_TIMEOUT_MS = 4000;
@@ -63,13 +65,15 @@ void setup()
   ble.onDisconnected([](const EspBleConnection &connection) {
     Serial.printf("CENTRAL_DISCONNECTED id=%u\n", connection.id);
   });
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == 's' || command == 'f')
     {
       // 's' observes every advertiser; 'f' only those on the accept list.
@@ -141,5 +145,6 @@ void loop()
   }
 
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

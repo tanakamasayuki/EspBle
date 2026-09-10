@@ -3,6 +3,8 @@
 // fields (name, manufacturer data) must only appear in the active scan.
 #include <EspBle.h>
 
+#include "../../sketch_support/EspBleTestLifecycleEspBle.h"
+
 static constexpr const char *SERVICE_UUID = "FEAC";
 
 EspBle ble;
@@ -55,13 +57,15 @@ void setup()
     ble.scanner().stop();
     reportResult(scanResult);
   });
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == 'p')
     {
       startScan(false, "passive");
@@ -73,5 +77,6 @@ void loop()
   }
 
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

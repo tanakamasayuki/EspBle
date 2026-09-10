@@ -5,6 +5,8 @@
 // "local host terminated" reason that differs from the reason the remote DUT
 // sees, proving the reason code is captured on both the server and client paths.
 #include <EspBle.h>
+
+#include "../../../sketch_support/EspBleTestLifecycleEspBle.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
@@ -60,13 +62,15 @@ void setup()
   ble.advertising().setName("EspBle Disc Peer");
   ble.advertising().addServiceUuid(SERVICE_UUID);
   ble.advertising().start();
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == '?')
     {
       Serial.printf("ADVERTISING %u\n", ble.advertising().isAdvertising() ? 1 : 0);
@@ -77,5 +81,6 @@ void loop()
     }
   }
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

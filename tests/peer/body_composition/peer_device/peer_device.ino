@@ -3,6 +3,8 @@
 // carrying uint16 flags, the mandatory Body Fat Percentage (0.1 %/LSB), and
 // optional fields; Body Composition Feature (0x2A9B) is a readable uint32.
 #include <EspBle.h>
+
+#include "../../../sketch_support/EspBleTestLifecycleEspBle.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
@@ -60,13 +62,15 @@ void setup()
   ble.advertising().setName("EspBle BodyComp Peer");
   ble.advertising().addServiceUuid(BODY_COMPOSITION_SERVICE_UUID);
   ble.advertising().start();
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == '?')
     {
       Serial.printf("ADVERTISING %u\n", ble.advertising().isAdvertising() ? 1 : 0);
@@ -92,5 +96,6 @@ void loop()
     }
   }
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

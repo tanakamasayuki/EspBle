@@ -8,6 +8,8 @@
 // so the AG side routes voice to a codec chip rather than over HCI. EspBle's
 // raw SCO transport is covered against an EspBle AG in `classic_hfp_client`.
 #include <EspBleClassic.h>
+
+#include "../../sketch_support/EspBleTestLifecycleClassic.h"
 #include <esp_mac.h>
 
 EspBleClassic bluetooth;
@@ -81,16 +83,20 @@ void setup()
 
   clientStarted = bluetooth.hfpClient().begin();
   reportReady();
+
+  EspBleTestLifecycle::beginClassic(bluetooth);
 }
 
 void loop()
 {
   bluetooth.update();
+  EspBleTestLifecycle::update();
 
   if (Serial.available())
   {
     String command = Serial.readStringUntil('\n');
     command.trim();
+    if (EspBleTestLifecycle::handleLine(command)) return;
     if (command == "?")
     {
       reportReady();

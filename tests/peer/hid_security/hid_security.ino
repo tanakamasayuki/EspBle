@@ -1,5 +1,7 @@
 #include <EspBle.h>
 
+#include "../../sketch_support/EspBleTestLifecycleEspBle.h"
+
 // Central WITHOUT security: it must not be able to read HID data from a
 // security-enabled HID Keyboard Device over an unencrypted link.
 EspBle ble;
@@ -52,13 +54,15 @@ void setup()
       Serial.printf("HOST_CONNECT_STARTED success=%u\n", ble.connect(result) ? 1 : 0);
     }
   });
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == 's')
     {
       Serial.printf("HOST_SCAN_STARTED success=%u\n", ble.scanner().start() ? 1 : 0);
@@ -95,5 +99,6 @@ void loop()
   }
 
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

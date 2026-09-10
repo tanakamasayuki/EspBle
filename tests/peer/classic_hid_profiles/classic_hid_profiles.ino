@@ -1,4 +1,6 @@
 #include <EspBleClassic.h>
+
+#include "../../sketch_support/EspBleTestLifecycleClassic.h"
 #include <esp_hidd_api.h>
 #include <esp_hidh_api.h>
 
@@ -65,11 +67,15 @@ void setup()
   const esp_err_t hostInitStatus = espble_bd_esp_bt_hid_host_init();
   Serial.printf(
     "CLASSIC_HIDH_START %d %d\n", hostCallbackStatus, hostInitStatus);
+
+  EspBleTestLifecycle::beginClassic(bluetooth);
 }
 
 void loop()
 {
+  if (Serial.available() > 0) EspBleTestLifecycle::handle(static_cast<char>(Serial.read()));
   bluetooth.update();
+  EspBleTestLifecycle::update();
   if (deviceInitialized && hostInitialized && !deinitStarted)
   {
     deinitStarted = true;

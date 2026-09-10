@@ -4,6 +4,8 @@
 // returns its own handle, which is what tells them apart.
 #include <EspBle.h>
 
+#include "../../../sketch_support/EspBleTestLifecycleEspBle.h"
+
 static constexpr const char *SERVICE_UUID = "5266f727-49d7-4eaf-a6f1-647570736572";
 static constexpr const char *VALUE_UUID = "5266f728-49d7-4eaf-a6f1-647570636861";
 
@@ -56,13 +58,15 @@ void setup()
   {
     Serial.printf("ADVERTISING_FAILED %s\n", ble.lastErrorDetail().c_str());
   }
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == '?')
     {
       Serial.printf("ADVERTISING %u\n", ble.advertising().isAdvertising() ? 1 : 0);
@@ -95,5 +99,6 @@ void loop()
     }
   }
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

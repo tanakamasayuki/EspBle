@@ -6,6 +6,8 @@
 // The raw sendReport() paths are covered by hid_keyboard_device /
 // hid_keyboard_host; this sketch deliberately never calls them.
 #include <EspBle.h>
+
+#include "../../../sketch_support/EspBleTestLifecycleEspBle.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
@@ -64,13 +66,15 @@ void setup()
   });
   ble.advertising().setName("EspBle HID Convenience");
   ble.advertising().start();
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     auto &keyboard = ble.hidKeyboard();
     auto &mouse = ble.hidMouse();
     if (command == 'x')
@@ -215,5 +219,6 @@ void loop()
   }
 
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

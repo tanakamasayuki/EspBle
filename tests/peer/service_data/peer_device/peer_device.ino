@@ -2,6 +2,8 @@
 // Data blocks (AD type 0x16) under different 16-bit UUIDs.
 #include <EspBle.h>
 
+#include "../../../sketch_support/EspBleTestLifecycleEspBle.h"
+
 static constexpr const char *SERVICE_DATA_UUID = "FEAB";
 static constexpr const char *SECOND_SERVICE_DATA_UUID = "181A";
 
@@ -42,13 +44,15 @@ void setup()
   {
     Serial.printf("ADVERTISING_FAILED %s %s\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
   }
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == '?')
     {
       Serial.printf("ADVERTISING %u\n", ble.advertising().isAdvertising() ? 1 : 0);
@@ -56,5 +60,6 @@ void loop()
   }
 
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

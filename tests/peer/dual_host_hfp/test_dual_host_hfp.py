@@ -7,11 +7,11 @@ def test_hfp_sco_while_ble_gatt_remains_live(dut, peers, probe):
     # flashed second attaches. "?" repeats those lines on request.
     probe(dut, "?\n", re.compile(rb"DUAL_HFP_BLE_SERVER_READY"))
     client = dut.expect(
-        re.compile(rb"HFP_CLIENT_READY address=([0-9a-f:]+)"), timeout=10
+        re.compile(rb"HFP_CLIENT_READY address=([0-9a-f:]+)\r?\n"), timeout=10
     )
     probe(peer, "?\n", re.compile(rb"DUAL_HFP_BLE_CLIENT_READY"))
     ag = peer.expect(
-        re.compile(rb"HFP_AG_READY address=([0-9a-f:]+)"), timeout=10
+        re.compile(rb"HFP_AG_READY address=([0-9a-f:]+)\r?\n"), timeout=10
     )
     assert client.group(1) != ag.group(1)
 
@@ -45,7 +45,7 @@ def test_hfp_sco_while_ble_gatt_remains_live(dut, peers, probe):
     diagnostics = dut.expect(
         re.compile(
             rb"DUAL_HFP_DIAGNOSTICS acl_tx=(\d+),(\d+) acl_rx=(\d+),(\d+) "
-            rb"unknown=(\d+) mismatch=(\d+) qfull=(\d+)"
+            rb"unknown=(\d+) mismatch=(\d+) qfull=(\d+)\r?\n"
         ),
         timeout=10,
     )

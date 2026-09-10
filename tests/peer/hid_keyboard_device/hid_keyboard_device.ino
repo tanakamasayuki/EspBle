@@ -8,6 +8,8 @@
 #include <BLERemoteService.h>
 #include <host/ble_store.h>
 
+#include "../../sketch_support/EspBleTestLifecycle.h"
+
 static BLEUUID HID_SERVICE_UUID((uint16_t)0x1812);
 static BLEUUID REPORT_UUID((uint16_t)0x2a4d);
 static BLEUUID REPORT_MAP_UUID((uint16_t)0x2a4b);
@@ -21,6 +23,7 @@ BLERemoteCharacteristic *inputReport = nullptr;
 BLERemoteCharacteristic *outputReport = nullptr;
 BLERemoteCharacteristic *mouseInputReport = nullptr;
 volatile bool securityComplete = false;
+bool stackStopped = false;
 
 class ScanCallbacks : public BLEAdvertisedDeviceCallbacks
 {
@@ -208,13 +211,26 @@ void setup()
   security.setAuthenticationMode(true, false, true);
   security.setForceAuthentication(true);
   BLEDevice::setSecurityCallbacks(new SecurityCallbacks());
+
+  // RECOVER mirrors the 'd' command and forgets the discovered handles, which
+  // belong to the connection that just ended; the next 's' finds them again.
+  // deinit() takes the radio down synchronously, so STOP is complete at once.
+  EspBleTestLifecycle::Hooks hooks;
+  hooks.stop = []() {
+    stackStopped = true;
+    BLEDevice::deinit(false);
+  };
+  EspBleTestLifecycle::begin(hooks);
 }
 
 void loop()
 {
+  EspBleTestLifecycle::update();
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
+    // STOP has taken the stack down; the commands have nothing left to act on.
+    if (stackStopped) return;
     if (command == 'x')
     {
       clearBonds();

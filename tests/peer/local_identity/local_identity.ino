@@ -3,6 +3,8 @@
 // code the peripheral used when it disconnected.
 #include <EspBle.h>
 
+#include "../../sketch_support/EspBleTestLifecycleEspBle.h"
+
 static constexpr const char *SERVICE_UUID = "FEAE";
 
 EspBle ble;
@@ -44,13 +46,15 @@ void setup()
     Serial.printf("CENTRAL_DISCONNECTED id=%u reason=0x%02x\n",
       connection.id, connection.disconnectReason);
   });
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == 's' || command == 'c')
     {
       reported = false;
@@ -62,5 +66,6 @@ void loop()
   }
 
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

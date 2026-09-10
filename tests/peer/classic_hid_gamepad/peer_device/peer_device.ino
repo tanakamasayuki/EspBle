@@ -2,6 +2,8 @@
 // it arrives raw — which is exactly what makes the byte layout checkable.
 #include <EspBleClassic.h>
 
+#include "../../../sketch_support/EspBleTestLifecycleClassic.h"
+
 EspBleClassic bluetooth;
 
 void setup()
@@ -31,15 +33,19 @@ void setup()
     return;
   }
   Serial.println("GAMEPAD_HOST_READY");
+
+  EspBleTestLifecycle::beginClassic(bluetooth);
 }
 
 void loop()
 {
   bluetooth.update();
+  EspBleTestLifecycle::update();
 
   if (Serial.available())
   {
     const String line = Serial.readStringUntil('\n');
+    if (EspBleTestLifecycle::handleLine(line)) return;
     if (line.length() == 0) return;
     if (line[0] == 'c')
       Serial.printf("GAMEPAD_HOST_CONNECT requested=%u\n",

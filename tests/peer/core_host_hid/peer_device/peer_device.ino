@@ -9,6 +9,8 @@
 #include <BLEUtils.h>
 #include <esp_gap_ble_api.h>
 
+#include "../../../sketch_support/EspBleTestLifecycle.h"
+
 // A plain 8-byte boot-style keyboard report with no report ID, which is what a
 // simple HOGP device publishes: modifiers, one reserved byte, six key usages.
 static const uint8_t ReportMap[] = {
@@ -54,6 +56,7 @@ bool linkUp = false;
 uint16_t connectionId = 0;
 unsigned ledWrites = 0;
 uint8_t lastLeds = 0;
+bool stackStopped = false;
 
 void reportReady()
 {
@@ -153,14 +156,27 @@ void setup()
   BLEDevice::startAdvertising();
 
   reportReady();
+
+  // onDisconnect advertises again on its own, so RECOVER only drops the link.
+  // deinit() takes the radio down synchronously, so STOP is complete at once.
+  EspBleTestLifecycle::Hooks hooks;
+  hooks.stop = []() {
+    stackStopped = true;
+    BLEDevice::deinit(false);
+  };
+  EspBleTestLifecycle::begin(hooks);
 }
 
 void loop()
 {
+  EspBleTestLifecycle::update();
   if (Serial.available())
   {
     String command = Serial.readStringUntil('\n');
     command.trim();
+    if (EspBleTestLifecycle::handleLine(command)) return;
+    // STOP has taken the stack down; the commands have nothing left to act on.
+    if (stackStopped) return;
     if (command == "?")
     {
       reportReady();

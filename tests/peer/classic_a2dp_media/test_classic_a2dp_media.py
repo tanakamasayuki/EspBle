@@ -120,7 +120,7 @@ def test_a2dp_sink_receives_external_codec_media(dut, peers, probe):
     )
     assert int(media.group(1)) >= 1000
     disconnected = dut.expect(
-        re.compile(rb"A2DP_SINK_DISCONNECTED id=\d+ packets=(\d+) bytes=(\d+)"),
+        re.compile(rb"A2DP_SINK_DISCONNECTED id=\d+ packets=(\d+) bytes=(\d+)\r?\n"),
         timeout=transfer_timeout,
     )
     assert int(disconnected.group(1)) == packet_target
@@ -129,7 +129,7 @@ def test_a2dp_sink_receives_external_codec_media(dut, peers, probe):
     sink_heap = dut.expect(
         re.compile(
             rb"A2DP_SINK_HEAP baseline=(\d+) current=(\d+) "
-            rb"minimum=(\d+) largest=(\d+)"
+            rb"minimum=(\d+) largest=(\d+)\r?\n"
         ),
         timeout=10,
     )
@@ -137,7 +137,7 @@ def test_a2dp_sink_receives_external_codec_media(dut, peers, probe):
     dut.expect_exact("A2DP_SINK_ENDED initialized=0", timeout=10)
     source_disconnected = peer.expect(
         re.compile(
-            rb"A2DP_SOURCE_DISCONNECTED sent=(\d+) would_block=(\d+)"
+            rb"A2DP_SOURCE_DISCONNECTED sent=(\d+) would_block=(\d+)\r?\n"
         ),
         timeout=transfer_timeout,
     )
@@ -146,7 +146,7 @@ def test_a2dp_sink_receives_external_codec_media(dut, peers, probe):
     source_heap = peer.expect(
         re.compile(
             rb"A2DP_SOURCE_HEAP baseline=(\d+) current=(\d+) "
-            rb"minimum=(\d+) largest=(\d+)"
+            rb"minimum=(\d+) largest=(\d+)\r?\n"
         ),
         timeout=10,
     )

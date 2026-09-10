@@ -1,7 +1,7 @@
 import time
 
 
-def test_accept_list_blocks_and_admits_connections(dut, peers):
+def _accept_list_blocks_and_admits_connections(dut, peers):
     peripheral = peers["device"]
 
     # Probe with a command rather than waiting for a boot banner: the sketch may
@@ -34,7 +34,7 @@ def test_accept_list_blocks_and_admits_connections(dut, peers):
     dut.expect("CENTRAL_DISCONNECTED id=", timeout=15)
 
 
-def test_scanner_accept_list_filters_advertisers(dut, peers):
+def _scanner_accept_list_filters_advertisers(dut, peers):
     """The scanner's own accept list: the controller drops reports from
     advertisers that are not on it, so onResult never sees them."""
     peripheral = peers["device"]
@@ -73,7 +73,7 @@ def test_scanner_accept_list_filters_advertisers(dut, peers):
     dut.expect_exact("CENTRAL_ACCEPT_LIST added=0 count=0", timeout=10)
 
 
-def test_accept_list_entries_can_be_read_back_and_removed(dut, peers):
+def _accept_list_entries_can_be_read_back_and_removed(dut, peers):
     """Coverage for the other direction: acceptListEntry() reports what was
     added, and removeFromAcceptList() takes it out so filtering stops matching."""
     peripheral = peers["device"]
@@ -112,3 +112,17 @@ def test_accept_list_entries_can_be_read_back_and_removed(dut, peers):
     time.sleep(3)
     dut.write("n")
     dut.expect_exact("OBSERVED target=0", timeout=10)
+
+
+def test_accept_list(dut, peers, run_checks):
+    """The cases of this suite, in one test.
+
+    Each case rebuilds the state it needs, so the order is not load-bearing;
+    they share a module only to share one upload. They are called from a list
+    so that `ESPBLE_REVERSE_CHECKS=1` can prove that.
+    """
+    run_checks([
+        _accept_list_blocks_and_admits_connections,
+        _scanner_accept_list_filters_advertisers,
+        _accept_list_entries_can_be_read_back_and_removed,
+    ], dut, peers)

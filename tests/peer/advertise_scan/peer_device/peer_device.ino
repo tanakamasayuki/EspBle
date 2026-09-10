@@ -1,5 +1,7 @@
 #include <EspBle.h>
 
+#include "../../../sketch_support/EspBleTestLifecycleEspBle.h"
+
 static constexpr const char *TEST_SERVICE_UUID = "8d47a630-8d3a-4d65-a76f-6f7370626c65";
 
 EspBle ble;
@@ -27,15 +29,18 @@ void setup()
   {
     Serial.printf("ADVERTISING_FAILED %s %s\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
   }
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
-  if (Serial.available() > 0 && Serial.read() == '?')
+  if (Serial.available() > 0 && EspBleTestLifecycle::filter(Serial.read()) == '?')
   {
     Serial.printf("ADVERTISING %u\n", ble.advertising().isAdvertising() ? 1 : 0);
   }
 
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

@@ -1,6 +1,8 @@
 #include <Arduino.h>
 #include <BLEDevice.h>
 
+#include "../../sketch_support/EspBleTestLifecycle.h"
+
 #if !defined(CONFIG_NIMBLE_ENABLED)
 #error "EspBle peer tests require the Arduino-ESP32 NimBLE backend"
 #endif
@@ -10,6 +12,8 @@ static BLEUUID characteristicUuid("8d47a621-8d3a-4d65-a76f-6f7370626c65");
 static BLEAdvertisedDevice *peer = nullptr;
 static bool connectPending = false;
 static bool complete = false;
+static BLEClient *client = nullptr;
+static bool stackStopped = false;
 
 class ScanCallbacks : public BLEAdvertisedDeviceCallbacks
 {
@@ -29,7 +33,7 @@ class ScanCallbacks : public BLEAdvertisedDeviceCallbacks
 
 static bool connectAndExerciseGatt()
 {
-  BLEClient *client = BLEDevice::createClient();
+  client = BLEDevice::createClient();
   if (client == nullptr || !client->connect(peer))
   {
     return false;
@@ -72,11 +76,30 @@ void setup()
   scan->setAdvertisedDeviceCallbacks(new ScanCallbacks());
   scan->setActiveScan(true);
   Serial.println("CENTRAL_READY");
+
+  // RECOVER leaves the sketch idle rather than scanning again: the boot scan
+  // reconnects to the peer the moment it sees it, the opposite of the state
+  // the command asks for. deinit() takes the radio down synchronously, so STOP
+  // is complete at once.
+  EspBleTestLifecycle::Hooks hooks;
+  hooks.stop = []() {
+    stackStopped = true;
+    BLEDevice::deinit(false);
+  };
+  EspBleTestLifecycle::begin(hooks);
   scan->start(5, false);
 }
 
 void loop()
 {
+  if (Serial.available() > 0) EspBleTestLifecycle::handle(static_cast<char>(Serial.read()));
+  EspBleTestLifecycle::update();
+  // STOP has taken the stack down; nothing below may call into it any more.
+  if (stackStopped)
+  {
+    delay(10);
+    return;
+  }
   if (connectPending && !complete)
   {
     connectPending = false;

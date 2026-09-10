@@ -4,6 +4,8 @@
 // to Age or First Name bumps the Database Change Increment and notifies it, so
 // the test can observe the client-write -> onWritten -> notify path.
 #include <EspBle.h>
+
+#include "../../../sketch_support/EspBleTestLifecycleEspBle.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
@@ -97,18 +99,21 @@ void setup()
   ble.advertising().setName("EspBle UserData Peer");
   ble.advertising().addServiceUuid(USER_DATA_SERVICE_UUID);
   ble.advertising().start();
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == '?')
     {
       Serial.printf("ADVERTISING %u\n", ble.advertising().isAdvertising() ? 1 : 0);
     }
   }
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

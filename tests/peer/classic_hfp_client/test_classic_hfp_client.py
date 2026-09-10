@@ -9,13 +9,13 @@ def test_hfp_client_control_and_external_codec_audio(dut, peers, probe):
         dut, "?\n", re.compile(rb"HFP_CLIENT_EXCLUSION ag=0 error=InvalidState")
     )
     client = dut.expect(
-        re.compile(rb"HFP_CLIENT_READY address=([0-9a-f:]+)"), timeout=10
+        re.compile(rb"HFP_CLIENT_READY address=([0-9a-f:]+)\r?\n"), timeout=10
     )
     probe(
         peer, "?\n", re.compile(rb"HFP_AG_EXCLUSION client=0 error=InvalidState")
     )
     ag = peer.expect(
-        re.compile(rb"HFP_AG_READY address=([0-9a-f:]+)"), timeout=10
+        re.compile(rb"HFP_AG_READY address=([0-9a-f:]+)\r?\n"), timeout=10
     )
     assert client.group(1) != ag.group(1)
 
@@ -98,7 +98,7 @@ def test_hfp_client_control_and_external_codec_audio(dut, peers, probe):
     # The AG probe transitions the call directly to active, which causes the
     # HFP stack to establish SCO without a second explicit connect request.
     client_audio = dut.expect(
-        re.compile(rb"HFP_CLIENT_AUDIO state=2 codec=([23]) handle=(\d+) frame=(\d+)"),
+        re.compile(rb"HFP_CLIENT_AUDIO state=2 codec=([23]) handle=(\d+) frame=(\d+)\r?\n"),
         timeout=30,
     )
     peer.expect(
@@ -111,7 +111,7 @@ def test_hfp_client_control_and_external_codec_audio(dut, peers, probe):
     dut.expect_exact("HFP_CLIENT_SEND result=0", timeout=10)
     peer.expect(re.compile(rb"HFP_AG_MEDIA handle=\d+ len=58 bad=0 checksum=1653"), timeout=20)
     echoed = dut.expect(
-        re.compile(rb"HFP_CLIENT_MEDIA codec=2 handle=\d+ len=60 bad=0 checksum=(\d+)"),
+        re.compile(rb"HFP_CLIENT_MEDIA codec=2 handle=\d+ len=60 bad=0 checksum=(\d+)\r?\n"),
         timeout=20,
     )
     assert int(echoed.group(1)) > 0

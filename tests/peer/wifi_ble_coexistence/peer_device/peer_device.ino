@@ -1,5 +1,7 @@
 #include <EspBle.h>
 
+#include "../../../sketch_support/EspBleTestLifecycleEspBle.h"
+
 static constexpr const char *TEST_SERVICE_UUID = "98d46f50-c2a7-4a71-9003-636f65786973";
 static constexpr const char *TEST_CHARACTERISTIC_UUID = "98d46f51-c2a7-4a71-9003-636f65786973";
 
@@ -47,13 +49,15 @@ void setup()
   ble.advertising().setName("EspBle Coexistence Peer");
   ble.advertising().addServiceUuid(TEST_SERVICE_UUID);
   Serial.println(ble.advertising().start() ? "ADVERTISING 1" : "ADVERTISING 0");
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == '?')
     {
       Serial.printf("ADVERTISING %u\n", ble.advertising().isAdvertising() ? 1 : 0);
@@ -66,5 +70,6 @@ void loop()
     }
   }
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

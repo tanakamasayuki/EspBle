@@ -7,6 +7,8 @@
 #include <BLEServer.h>
 #include <BLEUtils.h>
 
+#include "../../../sketch_support/EspBleTestLifecycle.h"
+
 #if !defined(CONFIG_NIMBLE_ENABLED)
 #error "EspBle peer tests require the Arduino-ESP32 NimBLE backend"
 #endif
@@ -14,8 +16,10 @@
 static constexpr const char *MIDI_SERVICE_UUID = "03B80E5A-EDE8-4B33-A751-6CE34EC4C700";
 static constexpr const char *MIDI_IO_UUID = "7772E5DB-3868-4112-A1A9-F2669D106BF3";
 
+BLEServer *server = nullptr;
 BLECharacteristic *midiCharacteristic = nullptr;
 bool advertising = false;
+bool stackStopped = false;
 
 uint8_t hostIn[16] = {0};
 size_t hostInLength = 0;
@@ -115,7 +119,7 @@ void setup()
     return;
   }
 
-  BLEServer *server = BLEDevice::createServer();
+  server = BLEDevice::createServer();
   server->setCallbacks(new ServerCallbacks());
   BLEService *service = server->createService(MIDI_SERVICE_UUID);
   midiCharacteristic = service->createCharacteristic(
@@ -132,13 +136,28 @@ void setup()
   BLEDevice::startAdvertising();
   advertising = true;
   Serial.println("PERIPHERAL_READY");
+
+  // The sketch tracks no connection id; the wrapper's own peer map has them.
+  // onDisconnect advertises again, and the predicate covers the case where it
+  // did not. deinit() takes the radio down synchronously, so STOP is complete
+  // at once.
+  EspBleTestLifecycle::Hooks hooks;
+  hooks.stop = []() {
+    stackStopped = true;
+    advertising = false;
+    BLEDevice::deinit(false);
+  };
+  EspBleTestLifecycle::begin(hooks);
 }
 
 void loop()
 {
+  EspBleTestLifecycle::update();
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
+    // STOP has taken the stack down; the commands have nothing left to act on.
+    if (stackStopped) return;
     if (command == '?')
     {
       Serial.printf("ADVERTISING %u\n", advertising ? 1 : 0);

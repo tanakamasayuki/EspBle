@@ -2,6 +2,8 @@
 // BLE MIDI service, sends Note On/Off on command, and reports MIDI received from
 // the host so the DUT (a bundled-NimBLE central) can verify both directions.
 #include <EspBle.h>
+
+#include "../../../sketch_support/EspBleTestLifecycleEspBle.h"
 #include <EspBleMidiProfile.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -49,13 +51,15 @@ void setup()
   }
   ble.advertising().setName("EspBle MIDI Peer");
   ble.advertising().start();
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == '?')
     {
       Serial.printf("ADVERTISING %u\n", ble.advertising().isAdvertising() ? 1 : 0);
@@ -90,5 +94,6 @@ void loop()
     }
   }
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

@@ -4,6 +4,8 @@
 // the specification requires of both is checked.
 #include <EspBle.h>
 
+#include "../../sketch_support/EspBleTestLifecycleEspBle.h"
+
 static const char *ServiceUuid = "2f7a1000-9d0b-4f6a-9b41-1c8f3a5d0001";
 static const char *DataUuid = "2f7a1001-9d0b-4f6a-9b41-1c8f3a5d0001";
 static const char *NotifyUuid = "2f7a1002-9d0b-4f6a-9b41-1c8f3a5d0001";
@@ -116,6 +118,8 @@ void setup()
   });
 
   Serial.println("COREGATT_READY");
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
@@ -124,6 +128,7 @@ void loop()
   {
     String command = Serial.readStringUntil('\n');
     command.trim();
+    if (EspBleTestLifecycle::handleLine(command)) return;
     if (command == "?")
     {
       Serial.println("COREGATT_READY");
@@ -179,5 +184,6 @@ void loop()
   }
 
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

@@ -4,6 +4,8 @@
 // enum. The DUT reads the type, subscribes to indications, and decodes the
 // FLOAT.
 #include <EspBle.h>
+
+#include "../../../sketch_support/EspBleTestLifecycleEspBle.h"
 #include <EspBleMedicalFloat.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -62,13 +64,15 @@ void setup()
   ble.advertising().setName("EspBle Thermometer Peer");
   ble.advertising().addServiceUuid(HEALTH_THERMOMETER_SERVICE_UUID);
   ble.advertising().start();
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == '?')
     {
       Serial.printf("ADVERTISING %u\n", ble.advertising().isAdvertising() ? 1 : 0);
@@ -86,5 +90,6 @@ void loop()
     }
   }
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

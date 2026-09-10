@@ -3,6 +3,8 @@
 // attribute handle.
 #include <EspBle.h>
 
+#include "../../sketch_support/EspBleTestLifecycleEspBle.h"
+
 static constexpr const char *SERVICE_UUID = "5266f727-49d7-4eaf-a6f1-647570736572";
 static constexpr const char *VALUE_UUID = "5266f728-49d7-4eaf-a6f1-647570636861";
 static constexpr size_t MaxTargets = 8;
@@ -131,16 +133,19 @@ void setup()
     Serial.printf(
       "NOTIFY handle=%u value=%s\n", notification.handle, notification.value.c_str());
   });
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
-  if (Serial.available() > 0 && Serial.read() == 'c')
+  if (Serial.available() > 0 && EspBleTestLifecycle::filter(Serial.read()) == 'c')
   {
     EspBleScanConfig scanConfig;
     scanConfig.active = true;
     Serial.println(ble.scanner().start(scanConfig) ? "SCAN_STARTED" : "SCAN_START_FAILED");
   }
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

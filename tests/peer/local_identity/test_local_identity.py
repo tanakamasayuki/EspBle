@@ -1,7 +1,7 @@
 import re
 
-OBSERVED = re.compile(rb"OBSERVED address=(\S+) type=(\d+) txpower=(\S+)")
-LOCAL = re.compile(rb"LOCAL_ADDRESS (\S+) type=(\d+)")
+OBSERVED = re.compile(rb"OBSERVED address=(\S+) type=(\d+) txpower=(\S+)\r?\n")
+LOCAL = re.compile(rb"LOCAL_ADDRESS (\S+) type=(\d+)\r?\n")
 
 
 def _observe(dut, command="s"):

@@ -1,5 +1,7 @@
 #include <EspBleClassic.h>
 
+#include "../../../sketch_support/EspBleTestLifecycleClassic.h"
+
 EspBleClassic bluetooth;
 EspBleClassicSppSessionId sessionId = 0;
 String command;
@@ -48,10 +50,13 @@ void setup()
       failure.detail.c_str());
   });
   Serial.println("CLASSIC_PEER_READY");
+
+  EspBleTestLifecycle::beginClassic(bluetooth);
 }
 
 void handleCommand(const String &value)
 {
+  if (EspBleTestLifecycle::handleLine(value)) return;
   if (value.startsWith("c"))
   {
     Serial.printf(
@@ -81,6 +86,7 @@ void handleCommand(const String &value)
 void loop()
 {
   bluetooth.update();
+  EspBleTestLifecycle::update();
   while (Serial.available())
   {
     const char value = static_cast<char>(Serial.read());

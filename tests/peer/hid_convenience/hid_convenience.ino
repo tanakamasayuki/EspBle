@@ -4,6 +4,8 @@
 // It also exercises EspBleHidHost's multi-listener API (addKeyboardListener /
 // addMouseListener / removeListener) on top of the primary onKeyboard/onMouse.
 #include <EspBle.h>
+
+#include "../../sketch_support/EspBleTestLifecycleEspBle.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
@@ -95,13 +97,15 @@ void setup()
       Serial.printf("HOST_CONNECT_STARTED success=%u\n", ble.connect(result) ? 1 : 0);
     }
   });
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == 'x')
     {
       const bool cleared = ble.deleteAllBonds();
@@ -172,5 +176,6 @@ void loop()
   }
 
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

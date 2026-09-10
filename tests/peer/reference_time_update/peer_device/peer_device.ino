@@ -4,6 +4,8 @@
 // Update State (0x2A17) is a readable 2-byte value (Current State + Result).
 // Control Point writes transition the read-only state, verified by re-reading.
 #include <EspBle.h>
+
+#include "../../../sketch_support/EspBleTestLifecycleEspBle.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
@@ -72,18 +74,21 @@ void setup()
   ble.advertising().setName("EspBle RTUS Peer");
   ble.advertising().addServiceUuid(RTUS_SERVICE_UUID);
   ble.advertising().start();
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == '?')
     {
       Serial.printf("ADVERTISING %u\n", ble.advertising().isAdvertising() ? 1 : 0);
     }
   }
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

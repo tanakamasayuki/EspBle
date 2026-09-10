@@ -1,4 +1,7 @@
-def test_hid_convenience_input_apis(dut, peers):
+import re
+
+
+def _hid_convenience_input_apis(dut, peers):
     device = peers["device"]
 
     dut.write("x")
@@ -11,8 +14,11 @@ def test_hid_convenience_input_apis(dut, peers):
     dut.write("s")
     dut.expect_exact("HOST_SCAN_STARTED success=1", timeout=10)
     dut.expect_exact("HOST_CONNECT_STARTED success=1", timeout=20)
-    dut.expect_exact("HOST_CONNECTED id=1", timeout=20)
-    device.expect_exact("DEVICE_CONNECTED id=1", timeout=20)
+    # Connection ids count from boot rather than from the test, so a test that
+    # can run after another one in this module matches the number instead of
+    # naming it.
+    dut.expect(re.compile(rb"HOST_CONNECTED id=\d+"), timeout=20)
+    device.expect(re.compile(rb"DEVICE_CONNECTED id=\d+"), timeout=20)
     dut.expect_exact("HOST_SECURITY encrypted=1 bonded=1", timeout=20)
     dut.expect_exact("HOST_DISCOVERY_STARTED success=1", timeout=10)
     dut.expect_exact(
@@ -148,7 +154,7 @@ def test_hid_convenience_input_apis(dut, peers):
     device.expect_exact("DEVICE_BONDS_CLEARED success=1 count=0", timeout=10)
 
 
-def test_hid_convenience_host_listeners(dut, peers):
+def _hid_convenience_host_listeners(dut, peers):
     device = peers["device"]
 
     dut.write("x")
@@ -217,3 +223,16 @@ def test_hid_convenience_host_listeners(dut, peers):
     device.write("x")
     dut.expect_exact("HOST_BONDS_CLEARED success=1 count=0", timeout=10)
     device.expect_exact("DEVICE_BONDS_CLEARED success=1 count=0", timeout=10)
+
+
+def test_hid_convenience(dut, peers, run_checks):
+    """The cases of this suite, in one test.
+
+    Each case rebuilds the state it needs, so the order is not load-bearing;
+    they share a module only to share one upload. They are called from a list
+    so that `ESPBLE_REVERSE_CHECKS=1` can prove that.
+    """
+    run_checks([
+        _hid_convenience_input_apis,
+        _hid_convenience_host_listeners,
+    ], dut, peers)

@@ -1,5 +1,7 @@
 #include <EspBle.h>
 
+#include "../../../sketch_support/EspBleTestLifecycleEspBle.h"
+
 static constexpr const char *TEST_SERVICE_UUID = "3d9b1c40-6f2e-4a8b-9f31-64697265637a";
 
 EspBle ble;
@@ -38,13 +40,15 @@ void setup()
   });
 
   startUndirected();
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     auto &advertising = ble.advertising();
     if (command == '?')
     {
@@ -76,5 +80,6 @@ void loop()
   }
 
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

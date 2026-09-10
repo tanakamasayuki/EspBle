@@ -3,6 +3,8 @@
 // Record Access Control Point (indicate), writes "Report Stored Records (all)"
 // to the RACP, then decodes the notified measurement and the RACP response.
 #include <EspBle.h>
+
+#include "../../sketch_support/EspBleTestLifecycleEspBle.h"
 #include <EspBleMedicalFloat.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -102,13 +104,15 @@ void setup()
     ble.scanner().stop();
     connectionRequested = ble.connect(result);
   });
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == 's' && !connectionRequested)
     {
       EspBleScanConfig scan;
@@ -141,5 +145,6 @@ void loop()
     }
   }
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

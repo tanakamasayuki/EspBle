@@ -2,6 +2,8 @@
 // shapes the BLE host delivers.
 #include <EspBleClassic.h>
 
+#include "../../../sketch_support/EspBleTestLifecycleClassic.h"
+
 EspBleClassic bluetooth;
 
 void setup()
@@ -48,15 +50,19 @@ void setup()
     return;
   }
   Serial.println("HOST_READY");
+
+  EspBleTestLifecycle::beginClassic(bluetooth);
 }
 
 void loop()
 {
   bluetooth.update();
+  EspBleTestLifecycle::update();
 
   if (Serial.available())
   {
     const String line = Serial.readStringUntil('\n');
+    if (EspBleTestLifecycle::handleLine(line)) return;
     if (line.length() == 0) return;
     const char command = line[0];
     if (command == 'c')

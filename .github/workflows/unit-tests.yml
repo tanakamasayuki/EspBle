@@ -1,0 +1,44 @@
+name: Unit Tests
+
+# The layer that needs no board: the pure C++ under src/ compiled with the
+# system g++ and run as an ordinary program. It takes seconds, so it runs on
+# every push rather than waiting for someone to remember it. Everything above
+# this layer needs the hardware fixture and cannot run here.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "tests/unit/**"
+      - "tests/pyproject.toml"
+      - "tests/uv.lock"
+      - ".github/workflows/unit-tests.yml"
+  pull_request:
+    paths:
+      - "src/**"
+      - "tests/unit/**"
+      - "tests/pyproject.toml"
+      - "tests/uv.lock"
+      - ".github/workflows/unit-tests.yml"
+  workflow_dispatch:
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: tests/uv.lock
+
+      - name: Run unit tests
+        working-directory: tests
+        # No .env here: these tests open no serial port and need no board, so
+        # the port variables a hardware run reads are not set.
+        run: uv run pytest unit/ -v

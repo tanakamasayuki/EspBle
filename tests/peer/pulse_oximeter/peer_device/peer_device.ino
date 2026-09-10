@@ -3,6 +3,8 @@
 // carrying SpO2 and pulse rate as IEEE-11073 16-bit SFLOATs; PLX Features
 // (0x2A60) is readable.
 #include <EspBle.h>
+
+#include "../../../sketch_support/EspBleTestLifecycleEspBle.h"
 #include <EspBleMedicalFloat.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -61,13 +63,15 @@ void setup()
   ble.advertising().setName("EspBle PLX Peer");
   ble.advertising().addServiceUuid(PLX_SERVICE_UUID);
   ble.advertising().start();
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == '?')
     {
       Serial.printf("ADVERTISING %u\n", ble.advertising().isAdvertising() ? 1 : 0);
@@ -86,5 +90,6 @@ void loop()
     }
   }
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

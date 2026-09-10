@@ -1,4 +1,6 @@
 #include <EspBleClassic.h>
+
+#include "../../sketch_support/EspBleTestLifecycleClassic.h"
 #include <esp_mac.h>
 
 EspBleClassic bluetooth;
@@ -57,15 +59,18 @@ void setup()
   Serial.printf(
     "INQUIRY_READY address=%02x:%02x:%02x:%02x:%02x:%02x\n",
     address[0], address[1], address[2], address[3], address[4], address[5]);
+
+  EspBleTestLifecycle::beginClassic(bluetooth);
 }
 
 void loop()
 {
   bluetooth.update();
+  EspBleTestLifecycle::update();
 
   if (Serial.available())
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == 's' || command == 'l')
     {
       resultCount = 0;
@@ -106,6 +111,7 @@ void loop()
       // case these queries exist for: knowing an address but not what the peer
       // offers or what it calls itself.
       const String line = Serial.readStringUntil('\n');
+      if (EspBleTestLifecycle::handleLine(line)) return;
       const bool services = command == 'u';
       Serial.printf("INQUIRY_QUERY kind=%c requested=%u error=%s\n",
         command,

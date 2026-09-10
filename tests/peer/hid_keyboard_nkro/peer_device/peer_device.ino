@@ -1,5 +1,7 @@
 #include <EspBle.h>
 
+#include "../../../sketch_support/EspBleTestLifecycleEspBle.h"
+
 EspBle ble;
 bool outputCallbackInstalled = false;
 
@@ -11,6 +13,17 @@ static EspBleConfig makeConfig(uint16_t preferredMtu)
   config.security.enabled = true;
   config.security.bonding = true;
   return config;
+}
+
+// Registered by setup() and again by RECOVER: the "u" command drops it to show
+// that ledState() keeps following the host without one, so the boot state has to
+// be put back before the next test runs.
+static void installOutputCallback()
+{
+  ble.hidKeyboard().onOutputReport([](const EspBleHidKeyboardOutputReport &report) {
+    Serial.printf("DEVICE_OUTPUT leds=%u\n", report.leds);
+  });
+  outputCallbackInstalled = true;
 }
 
 static void startAdvertising()
@@ -26,20 +39,19 @@ void setup()
   auto &keyboard = ble.hidKeyboard();
   keyboard.enableNkro();
   keyboard.configure();
-  keyboard.onOutputReport([](const EspBleHidKeyboardOutputReport &report) {
-    Serial.printf("DEVICE_OUTPUT leds=%u\n", report.leds);
-  });
-  outputCallbackInstalled = true;
+  installOutputCallback();
 
   if (!ble.begin(makeConfig(64))) return;
   startAdvertising();
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == 'x')
       Serial.printf("DEVICE_BONDS_CLEARED success=%u\n", ble.deleteAllBonds() ? 1 : 0);
     else if (command == 'n')
@@ -79,6 +91,14 @@ void loop()
         led.capsLock ? 1 : 0,
         led.scrollLock ? 1 : 0,
         static_cast<unsigned>(led.connectionId));
+    }
+    else if (command == 'U')
+    {
+      // Put the callback back, so the case that removed it leaves the device
+      // as it found it and the cases can run in any order.
+      installOutputCallback();
+      Serial.printf("DEVICE_OUTPUT_CALLBACK installed=%u\n",
+        outputCallbackInstalled ? 1 : 0);
     }
     else if (command == 'u')
     {
@@ -139,5 +159,6 @@ void loop()
     }
   }
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

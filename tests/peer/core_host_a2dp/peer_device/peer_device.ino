@@ -23,10 +23,13 @@
 #include <esp_bt_main.h>
 #include <esp_gap_bt_api.h>
 
+#include "../../../sketch_support/EspBleTestLifecycle.h"
+
 bool connected = false;
 bool streaming = false;
 volatile uint32_t sentSamples = 0;
 esp_bd_addr_t peerAddress = {0};
+bool stackStopped = false;
 
 String addressText(const uint8_t *address)
 {
@@ -164,6 +167,20 @@ void sendPassthrough(uint8_t keyCode)
   Serial.printf("A2DPPEER_AVRCP_SENT key=%u\n", keyCode);
 }
 
+// STOP's second half, once the link is gone: the profiles and the stack go
+// down in the reverse of the order setup() brought them up. The flag keeps
+// loop() from calling into a stack that no longer exists.
+void stopStack()
+{
+  esp_avrc_tg_deinit();
+  esp_avrc_ct_deinit();
+  esp_a2d_source_deinit();
+  esp_bluedroid_disable();
+  esp_bluedroid_deinit();
+  btStop();
+  stackStopped = true;
+}
+
 void setup()
 {
   Serial.begin(115200);
@@ -218,14 +235,31 @@ void setup()
   esp_bt_gap_set_scan_mode(ESP_BT_NON_CONNECTABLE, ESP_BT_NON_DISCOVERABLE);
 
   reportReady();
+
+  // The link has to be down before the profile is deinitialized, so STOP
+  // finishes in its predicate once the disconnect has landed.
+  EspBleTestLifecycle::Hooks hooks;
+  hooks.stop = []() {
+    if (connected) esp_a2d_source_disconnect(peerAddress);
+  };
+  hooks.stopped = []() {
+    if (connected) return false;
+    if (!stackStopped) stopStack();
+    return true;
+  };
+  EspBleTestLifecycle::begin(hooks);
 }
 
 void loop()
 {
+  EspBleTestLifecycle::update();
   if (Serial.available())
   {
     String command = Serial.readStringUntil('\n');
     command.trim();
+    if (EspBleTestLifecycle::handleLine(command)) return;
+    // STOP has taken the stack down; the commands have nothing left to act on.
+    if (stackStopped) return;
     if (command == "?")
     {
       reportReady();

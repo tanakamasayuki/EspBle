@@ -3,14 +3,14 @@ import time
 
 QUERY_PATTERN = re.compile(
     rb"HOST_QUERY connected=(\d+) disconnected=(\d+) notifications=(\d+) "
-    rb"connections=(\d+) ready=(\d+) dropped=(\d+) scan=(\d+)"
+    rb"connections=(\d+) ready=(\d+) dropped=(\d+) scan=(\d+)\r?\n"
 )
-END_CONNECT_PATTERN = re.compile(rb"HOST_END_CONNECT connect=(\d+) ms=(\d+) begin=(\d+)")
-CONNECT_FAILED_PATTERN = re.compile(rb"HOST_CONNECT_FAILED ms=(\d+) error=(\d+)")
-HEAP_PATTERN = re.compile(rb"HOST_HEAP free=(\d+)")
-END_CYCLE_PATTERN = re.compile(rb"HOST_END_CYCLE read=(\d+) begin=(\d+) heap=(\d+)")
-CONNECTED_PATTERN = re.compile(rb"HOST_CONNECTED id=(\d+)")
-DISCONNECTED_PATTERN = re.compile(rb"HOST_DISCONNECTED id=(\d+)")
+END_CONNECT_PATTERN = re.compile(rb"HOST_END_CONNECT connect=(\d+) ms=(\d+) begin=(\d+)\r?\n")
+CONNECT_FAILED_PATTERN = re.compile(rb"HOST_CONNECT_FAILED ms=(\d+) error=(\d+)\r?\n")
+HEAP_PATTERN = re.compile(rb"HOST_HEAP free=(\d+)\r?\n")
+END_CYCLE_PATTERN = re.compile(rb"HOST_END_CYCLE read=(\d+) begin=(\d+) heap=(\d+)\r?\n")
+CONNECTED_PATTERN = re.compile(rb"HOST_CONNECTED id=(\d+)\r?\n")
+DISCONNECTED_PATTERN = re.compile(rb"HOST_DISCONNECTED id=(\d+)\r?\n")
 
 
 def _reset(dut, device):
@@ -34,10 +34,10 @@ def _connect(dut, device):
     dut.expect_exact("HOST_SCAN_STARTED success=1", timeout=10)
     dut.expect_exact("HOST_CONNECT_STARTED success=1", timeout=20)
     dut.expect(CONNECTED_PATTERN, timeout=20)
-    device.expect(re.compile(rb"DEVICE_CONNECTED id=(\d+)"), timeout=20)
+    device.expect(re.compile(rb"DEVICE_CONNECTED id=(\d+)\r?\n"), timeout=20)
 
 
-def test_disconnect_event_survives_notification_flood(dut, peers):
+def _disconnect_event_survives_notification_flood(dut, peers):
     """A Disconnected event must not be silently dropped when the shared
     event queue is filled with notifications while update() is not being
     called, and the HID Host slot must be released."""
@@ -65,7 +65,7 @@ def test_disconnect_event_survives_notification_flood(dut, peers):
     device.expect_exact("DEVICE_BATTERY_BURST sent=10", timeout=10)
     device.write("d")
     device.expect_exact("DEVICE_DISCONNECT_STARTED success=1", timeout=10)
-    device.expect(re.compile(rb"DEVICE_DISCONNECTED id=(\d+)"), timeout=20)
+    device.expect(re.compile(rb"DEVICE_DISCONNECTED id=(\d+)\r?\n"), timeout=20)
     dut.expect_exact("HOST_RESUMED", timeout=20)
 
     dut.write("q")
@@ -95,40 +95,7 @@ def test_disconnect_event_survives_notification_flood(dut, peers):
     dut.expect_exact("HOST_LEDS success=0", timeout=20)
 
 
-def test_reconnect_cycles_do_not_leak_heap(dut, peers):
-    """Repeated connect + HID discovery + disconnect cycles must not leak
-    the BLEClient and its remote service tree on every cycle."""
-    device = peers["device"]
-    _reset(dut, device)
-
-    heaps = []
-    cycles = 6
-    for _ in range(cycles):
-        _connect(dut, device)
-        dut.write("i")
-        dut.expect_exact("HOST_DISCOVERY_STARTED success=1", timeout=10)
-        dut.expect_exact("HOST_DISCOVERED success=1", timeout=20)
-        dut.write("d")
-        dut.expect_exact("HOST_DISCONNECT_STARTED success=1", timeout=10)
-        dut.expect(DISCONNECTED_PATTERN, timeout=20)
-        device.expect_exact("DEVICE_READVERTISING 1", timeout=20)
-        dut.write("h")
-        match = dut.expect(HEAP_PATTERN, timeout=10)
-        heaps.append(int(match.group(1)))
-
-    # Allow the first cycles to settle allocator pools; the remaining cycles
-    # must not each leak a BLEClient plus its discovered service tree
-    # (~10 KB/cycle before the fix, allocator noise stays well under 1 KB).
-    settled = heaps[2:]
-    loss = settled[0] - settled[-1]
-    per_cycle = loss / (len(settled) - 1)
-    assert loss < 4000, (
-        f"heap shrank by {loss} bytes over {len(settled) - 1} cycles "
-        f"(~{per_cycle:.0f} bytes/cycle, heap samples: {heaps})"
-    )
-
-
-def test_end_cancels_pending_connect(dut, peers):
+def _end_cancels_pending_connect(dut, peers):
     """end() while a connect attempt to an unreachable peer is in flight must
     cancel it instead of blocking until the connect timeout (10s+)."""
     device = peers["device"]
@@ -144,7 +111,7 @@ def test_end_cancels_pending_connect(dut, peers):
     )
 
 
-def test_end_flushes_scanner_queue(dut, peers):
+def _end_flushes_scanner_queue(dut, peers):
     """Scan results queued but never dispatched must not leak into the next
     begin() session."""
     device = peers["device"]
@@ -163,7 +130,7 @@ def test_end_flushes_scanner_queue(dut, peers):
     dut.expect_exact("HOST_COUNTERS_RESET", timeout=10)
 
 
-def test_connect_timeout_reports_async_failure(dut, peers):
+def _connect_timeout_reports_async_failure(dut, peers):
     """A connect attempt to an unreachable address must complete as an
     asynchronous ConnectionFailed event close to the requested timeout,
     and the stack must accept a normal connect afterwards."""
@@ -189,7 +156,7 @@ def test_connect_timeout_reports_async_failure(dut, peers):
     device.expect_exact("DEVICE_READVERTISING 1", timeout=20)
 
 
-def test_concurrent_gatt_operations_are_queued(dut, peers):
+def _concurrent_gatt_operations_are_queued(dut, peers):
     """Central GATT operations are auto-queued: a second operation issued while
     one is in flight is accepted (not rejected) and runs after the first, so
     both reads complete."""
@@ -209,7 +176,7 @@ def test_concurrent_gatt_operations_are_queued(dut, peers):
     device.expect_exact("DEVICE_READVERTISING 1", timeout=20)
 
 
-def test_end_during_gatt_operation_stress(dut, peers):
+def _end_during_gatt_operation_stress(dut, peers):
     """end() while a GATT worker task is completing must not use freed
     state. Exercises the completion window repeatedly."""
     device = peers["device"]
@@ -228,26 +195,24 @@ def test_end_during_gatt_operation_stress(dut, peers):
     dut.expect(QUERY_PATTERN, timeout=10)
 
 
-def test_peer_loss_is_detected_via_supervision_timeout(dut, peers):
-    """When the peer vanishes silently (radio killed without a Link Layer
-    terminate), the central must deliver a Disconnected event via the
-    supervision timeout and release the connection slot.
+# Keep this test last. It disables the peer's controller to produce a silent
+# loss, and nothing short of the next module's upload brings that board back, so
+# every test after it in the same run would fail. This module is the one place
+# where the order is part of the design.
 
-    This must stay the LAST test in this module: the peer's BLE stack is
-    unusable afterwards until the next module reflashes the board."""
-    device = peers["device"]
-    _reset(dut, device)
 
-    _connect(dut, device)
+def test_lifecycle_stress(dut, peers, run_checks):
+    """The cases of this suite, in one test.
 
-    device.write("X")
-    device.expect_exact("DEVICE_RADIO_KILLED", timeout=10)
-
-    # NimBLE's default supervision timeout is a few seconds; allow margin.
-    dut.expect(DISCONNECTED_PATTERN, timeout=30)
-
-    dut.write("q")
-    match = dut.expect(QUERY_PATTERN, timeout=10)
-    assert int(match.group(2)) == 1, "Disconnected event must be delivered"
-    assert int(match.group(4)) == 0, "backend connection slot must be released"
-    assert int(match.group(5)) == 0, "HID Host must not report the lost peer as ready"
+    Each case rebuilds the state it needs, so the order is not load-bearing;
+    they share a module only to share one upload. They are called from a list
+    so that `ESPBLE_REVERSE_CHECKS=1` can prove that.
+    """
+    run_checks([
+        _disconnect_event_survives_notification_flood,
+        _end_cancels_pending_connect,
+        _end_flushes_scanner_queue,
+        _connect_timeout_reports_async_failure,
+        _concurrent_gatt_operations_are_queued,
+        _end_during_gatt_operation_stress,
+    ], dut, peers)

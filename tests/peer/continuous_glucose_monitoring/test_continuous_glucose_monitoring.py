@@ -2,7 +2,7 @@ import re
 
 MEASUREMENT_PATTERN = re.compile(
     rb"CGM_MEASUREMENT valid=(\d+) crc_ok=(\d+) size=(\d+) flags=([0-9a-f]{2}) "
-    rb"glucose=(-?\d+) time_offset=(\d+) context=(\w+)"
+    rb"glucose=(-?\d+) time_offset=(\d+) context=(\w+)\r?\n"
 )
 
 
@@ -23,7 +23,7 @@ def test_continuous_glucose_monitoring_service(dut, peers):
 
     feature = dut.expect(re.compile(
         rb"FEATURE_READ valid=(\d+) crc_ok=(\d+) feature=([0-9a-f]{6}) "
-        rb"type_location=([0-9a-f]{2}) context=(\w+)"), timeout=20)
+        rb"type_location=([0-9a-f]{2}) context=(\w+)\r?\n"), timeout=20)
     assert feature.group(1) == b"1", "CGM Feature read failed"
     assert feature.group(2) == b"1", "CGM Feature E2E-CRC did not verify"
     assert feature.group(3) == b"001000", "expected E2E-CRC-supported feature bit"
@@ -53,4 +53,4 @@ def test_continuous_glucose_monitoring_service(dut, peers):
 
     dut.write("d")
     dut.expect_exact("DISCONNECT_REQUESTED", timeout=10)
-    dut.expect(re.compile(rb"DISCONNECTED id=(\d+)"), timeout=20)
+    dut.expect(re.compile(rb"DISCONNECTED id=(\d+)\r?\n"), timeout=20)

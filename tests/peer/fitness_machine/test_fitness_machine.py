@@ -16,7 +16,7 @@ def test_fitness_machine_service(dut, peers):
     dut.expect_exact("FEATURE_READ_REQUESTED", timeout=20)
 
     match = dut.expect(
-        re.compile(rb"FEATURE_READ valid=(\d+) features=(\d+) context=(\w+)"), timeout=20
+        re.compile(rb"FEATURE_READ valid=(\d+) features=(\d+) context=(\w+)\r?\n"), timeout=20
     )
     assert match.group(1) == b"1", "Fitness Machine Feature read failed (expected 8 bytes)"
     assert int(match.group(2)) == 6, "expected Fitness Machine Features 0x00000006"
@@ -30,7 +30,7 @@ def test_fitness_machine_service(dut, peers):
     device.expect_exact("FTMS_UPDATED stored=1 notified=1", timeout=10)
     measurement = dut.expect(
         re.compile(
-            rb"FTMS_BIKE valid=(\d+) flags=([0-9a-f]{4}) speed=(\d+) cadence=(\d+) power=(-?\d+) context=(\w+)"
+            rb"FTMS_BIKE valid=(\d+) flags=([0-9a-f]{4}) speed=(\d+) cadence=(\d+) power=(-?\d+) context=(\w+)\r?\n"
         ),
         timeout=20,
     )
@@ -76,4 +76,4 @@ def test_fitness_machine_service(dut, peers):
 
     dut.write("d")
     dut.expect_exact("DISCONNECT_REQUESTED", timeout=10)
-    dut.expect(re.compile(rb"DISCONNECTED id=(\d+)"), timeout=20)
+    dut.expect(re.compile(rb"DISCONNECTED id=(\d+)\r?\n"), timeout=20)

@@ -3,14 +3,14 @@ import time
 
 QUERY_PATTERN = re.compile(
     rb"HOST_QUERY connected=(\d+) disconnected=(\d+) states=(\d+) releases=(\d+) "
-    rb"connections=(\d+) ready=(\d+) dropped=(\d+)"
+    rb"connections=(\d+) ready=(\d+) dropped=(\d+)\r?\n"
 )
 DISCOVER_DISCONNECT_PATTERN = re.compile(
-    rb"HOST_DISCOVER_DISCONNECT discover=(\d+) disconnect=(\d+) error=(\w+)"
+    rb"HOST_DISCOVER_DISCONNECT discover=(\d+) disconnect=(\d+) error=(\w+)\r?\n"
 )
-REBEGIN_PATTERN = re.compile(rb"HOST_REBEGIN success=(\d+) error=(\w+)")
-INPUT_SENT_PATTERN = re.compile(rb"DEVICE_INPUT_SENT success=(\d+) error=(\w+)")
-READY_PATTERN = re.compile(rb"DEVICE_READY ready=(\d+) error_kept=(\d+)")
+REBEGIN_PATTERN = re.compile(rb"HOST_REBEGIN success=(\d+) error=(\w+)\r?\n")
+INPUT_SENT_PATTERN = re.compile(rb"DEVICE_INPUT_SENT success=(\d+) error=(\w+)\r?\n")
+READY_PATTERN = re.compile(rb"DEVICE_READY ready=(\d+) error_kept=(\d+)\r?\n")
 
 
 def _reset(dut, device):
@@ -21,7 +21,7 @@ def _reset(dut, device):
     if match.group(5) != b"0":
         dut.write("d")
         dut.expect_exact("HOST_DISCONNECT_STARTED success=1", timeout=10)
-        dut.expect(re.compile(rb"HOST_DISCONNECTED id=(\d+)"), timeout=20)
+        dut.expect(re.compile(rb"HOST_DISCONNECTED id=(\d+)\r?\n"), timeout=20)
         dut.write("c")
         dut.expect_exact("HOST_COUNTERS_RESET", timeout=10)
     device.write("?")
@@ -32,8 +32,8 @@ def _connect(dut, device):
     dut.write("s")
     dut.expect_exact("HOST_SCAN_STARTED success=1", timeout=10)
     dut.expect_exact("HOST_CONNECT_STARTED success=1", timeout=20)
-    dut.expect(re.compile(rb"HOST_CONNECTED id=(\d+)"), timeout=20)
-    device.expect(re.compile(rb"DEVICE_CONNECTED id=(\d+)"), timeout=20)
+    dut.expect(re.compile(rb"HOST_CONNECTED id=(\d+)\r?\n"), timeout=20)
+    device.expect(re.compile(rb"DEVICE_CONNECTED id=(\d+)\r?\n"), timeout=20)
 
 
 def _discover(dut):
@@ -56,7 +56,7 @@ def _query(dut):
     }
 
 
-def test_unsubscribed_input_report_is_not_sent(dut, peers):
+def _unsubscribed_input_report_is_not_sent(dut, peers):
     """The device must not notify an input report to a Central that has not
     subscribed to it."""
     device = peers["device"]
@@ -80,7 +80,7 @@ def test_unsubscribed_input_report_is_not_sent(dut, peers):
 
     dut.write("d")
     dut.expect_exact("HOST_DISCONNECT_STARTED success=1", timeout=10)
-    dut.expect(re.compile(rb"HOST_DISCONNECTED id=(\d+)"), timeout=20)
+    dut.expect(re.compile(rb"HOST_DISCONNECTED id=(\d+)\r?\n"), timeout=20)
     device.expect_exact("DEVICE_READVERTISING 1", timeout=20)
 
 
@@ -91,7 +91,7 @@ def _device_ready(device):
     return match.group(1) == b"1"
 
 
-def test_device_ready_follows_the_subscription_gate(dut, peers):
+def _device_ready_follows_the_subscription_gate(dut, peers):
     """hidKeyboard().ready() must report exactly when a report can go out: false
     with no host, false while a connected host has not subscribed, true after
     the host's HID discovery subscribes, and false again after disconnection."""
@@ -120,12 +120,12 @@ def test_device_ready_follows_the_subscription_gate(dut, peers):
 
     dut.write("d")
     dut.expect_exact("HOST_DISCONNECT_STARTED success=1", timeout=10)
-    dut.expect(re.compile(rb"HOST_DISCONNECTED id=(\d+)"), timeout=20)
+    dut.expect(re.compile(rb"HOST_DISCONNECTED id=(\d+)\r?\n"), timeout=20)
     device.expect_exact("DEVICE_READVERTISING 1", timeout=20)
     assert not _device_ready(device), "ready() must be false again after disconnection"
 
 
-def test_rollover_report_is_ignored(dut, peers):
+def _rollover_report_is_ignored(dut, peers):
     """A phantom/rollover report (six ErrorRollOver usages) must not be
     interpreted as releasing all held keys."""
     device = peers["device"]
@@ -159,11 +159,11 @@ def test_rollover_report_is_ignored(dut, peers):
 
     dut.write("d")
     dut.expect_exact("HOST_DISCONNECT_STARTED success=1", timeout=10)
-    dut.expect(re.compile(rb"HOST_DISCONNECTED id=(\d+)"), timeout=20)
+    dut.expect(re.compile(rb"HOST_DISCONNECTED id=(\d+)\r?\n"), timeout=20)
     device.expect_exact("DEVICE_READVERTISING 1", timeout=20)
 
 
-def test_release_event_survives_full_event_queue(dut, peers):
+def _release_event_survives_full_event_queue(dut, peers):
     """The all-release event synthesized on disconnection must survive a full
     HID event queue, so held keys never stay stuck."""
     device = peers["device"]
@@ -181,7 +181,7 @@ def test_release_event_survives_full_event_queue(dut, peers):
     device.expect_exact("DEVICE_FLOOD_SENT sent=9", timeout=15)
     device.write("d")
     device.expect_exact("DEVICE_DISCONNECT_STARTED success=1", timeout=10)
-    device.expect(re.compile(rb"DEVICE_DISCONNECTED id=(\d+)"), timeout=20)
+    device.expect(re.compile(rb"DEVICE_DISCONNECTED id=(\d+)\r?\n"), timeout=20)
     dut.expect_exact("HOST_RESUMED", timeout=20)
 
     status = _query(dut)
@@ -196,7 +196,7 @@ def test_release_event_survives_full_event_queue(dut, peers):
     device.expect_exact("DEVICE_READVERTISING 1", timeout=20)
 
 
-def test_disconnect_deferred_during_discovery(dut, peers):
+def _disconnect_deferred_during_discovery(dut, peers):
     """disconnect() on a connection whose HID discovery is still running is
     accepted but deferred: the worker runs to completion (the link is not pulled
     out from under it) and the disconnect then happens automatically, without a
@@ -218,11 +218,11 @@ def test_disconnect_deferred_during_discovery(dut, peers):
     # The worker finishes normally despite the pending disconnect...
     dut.expect_exact("HOST_DISCOVERED success=1", timeout=20)
     # ...then the deferred disconnect fires on its own (no second disconnect()).
-    dut.expect(re.compile(rb"HOST_DISCONNECTED id=(\d+)"), timeout=20)
+    dut.expect(re.compile(rb"HOST_DISCONNECTED id=(\d+)\r?\n"), timeout=20)
     device.expect_exact("DEVICE_READVERTISING 1", timeout=20)
 
 
-def test_second_begin_with_different_config_fails(dut, peers):
+def _second_begin_with_different_config_fails(dut, peers):
     """A second begin() with a different configuration must fail instead of
     silently keeping the old configuration."""
     device = peers["device"]
@@ -234,3 +234,20 @@ def test_second_begin_with_different_config_fails(dut, peers):
         "begin() with a different config silently reported success "
         f"(error={match.group(2).decode()})"
     )
+
+
+def test_hid_robustness(dut, peers, run_checks):
+    """The cases of this suite, in one test.
+
+    Each case rebuilds the state it needs, so the order is not load-bearing;
+    they share a module only to share one upload. They are called from a list
+    so that `ESPBLE_REVERSE_CHECKS=1` can prove that.
+    """
+    run_checks([
+        _unsubscribed_input_report_is_not_sent,
+        _device_ready_follows_the_subscription_gate,
+        _rollover_report_is_ignored,
+        _release_event_survives_full_event_queue,
+        _disconnect_deferred_during_discovery,
+        _second_begin_with_different_config_fails,
+    ], dut, peers)

@@ -86,3 +86,36 @@ Arduino CLI command output. Use credentials dedicated to a disposable test AP.
 Security and repeated full initialization/deinitialization cases affected by the current Core/ESP-Hosted known limitations are not mandatory pass criteria for the representative P4 suite. Re-run them whenever the upstream versions change to determine whether those limitations have been resolved.
 
 `stack_smoke` uses no EspBle code: it connects the parent side as central and `peer_device/` as peripheral through the BLE API of the NimBLE backend bundled with Arduino-ESP32. It is the base that shows the two ports, flashing, the radio link, both serial monitors and the fixture itself work independently of the library, which is what tells you whether a failure elsewhere is the fixture's doing.
+
+## Board state between tests
+
+Sketches are flashed once per module and every module holds one test, so nothing
+is carried from one test to the next: the upload that starts a module resets the
+board. What the fixture still has to deal with is the board that a finished test
+leaves on the air. A run that ends — or fails halfway — would otherwise leave both
+boards advertising until their next upload, and they show up in the scans of
+whoever has the rig next.
+
+An autouse fixture in [`peer/conftest.py`](peer/conftest.py) therefore sends one
+reserved command to the primary DUT and every connected peer, from fixture
+teardown so that a failed test, and Ctrl-C, are covered too:
+
+| Command | Byte | Reply once the target state holds |
+|---|---|---|
+| STOP | `0x04` (EOT) | `STOPPED`: nothing connected, advertising or scanning |
+
+The reply means the state has been reached, not that the byte arrived. The fixture
+waits up to two seconds per board and prints a note when nothing comes back; a
+board that cannot answer never changes a test result, which is what a hung or
+crashed sketch looks like. Each exchange is visible in `dut.log` as
+`[espble] STOP -> primary`. Every sketch under `peer/` answers through
+[`sketch_support/EspBleTestLifecycle.h`](sketch_support/EspBleTestLifecycle.h):
+the include, one `beginEspBle()` / `beginClassic()` call at the end of `setup()`,
+`filter()` around `Serial.read()` (or `handleLine()` for line-based sketches) and
+`update()` after the library's update in `loop()`. The header's comment is the
+contract for a new sketch.
+
+This does not replace what a test does at its start. A test still brings the application
+state it needs into place with its own commands (see `lifecycle_stress/_reset()`), because it
+must not depend on the previous test's teardown having succeeded, and because it must work
+when run alone with `-k`.

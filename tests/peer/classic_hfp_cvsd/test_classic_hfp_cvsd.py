@@ -4,10 +4,10 @@ import re
 def test_hfp_cvsd_audio_disconnect_and_reconnect(dut, peers, probe):
     peer = peers["device"]
     client = probe(
-        dut, "?\n", re.compile(rb"HFP_CLIENT_READY address=([0-9a-f:]+)")
+        dut, "?\n", re.compile(rb"HFP_CLIENT_READY address=([0-9a-f:]+)\r?\n")
     )
     ag = probe(
-        peer, "?\n", re.compile(rb"HFP_AG_READY address=([0-9a-f:]+)")
+        peer, "?\n", re.compile(rb"HFP_AG_READY address=([0-9a-f:]+)\r?\n")
     )
     assert client.group(1) != ag.group(1)
 
@@ -31,11 +31,11 @@ def test_hfp_cvsd_audio_disconnect_and_reconnect(dut, peers, probe):
 
     def expect_cvsd_audio():
         client_audio = dut.expect(
-            re.compile(rb"HFP_CLIENT_AUDIO state=2 codec=3 handle=\d+ frame=(\d+)"),
+            re.compile(rb"HFP_CLIENT_AUDIO state=2 codec=3 handle=\d+ frame=(\d+)\r?\n"),
             timeout=30,
         )
         ag_audio = peer.expect(
-            re.compile(rb"HFP_AG_AUDIO state=2 codec=3 handle=\d+ frame=(\d+)"),
+            re.compile(rb"HFP_AG_AUDIO state=2 codec=3 handle=\d+ frame=(\d+)\r?\n"),
             timeout=30,
         )
         assert int(client_audio.group(1)) > 0

@@ -4,6 +4,8 @@
 // read-only signed-int8 Tx Power Level (0x2A07). The Alert Level write is
 // received in onWritten and stored so the client can read it back.
 #include <EspBle.h>
+
+#include "../../../sketch_support/EspBleTestLifecycleEspBle.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
@@ -67,18 +69,21 @@ void setup()
   ble.advertising().setName("EspBle Proximity Peer");
   ble.advertising().addServiceUuid(LINK_LOSS_SERVICE_UUID);
   ble.advertising().start();
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == '?')
     {
       Serial.printf("ADVERTISING %u\n", ble.advertising().isAdvertising() ? 1 : 0);
     }
   }
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

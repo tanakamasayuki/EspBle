@@ -11,7 +11,22 @@ EspBle itself (central side).
 import time
 
 
-def test_every_observer_receives_the_event_and_removal_is_selective(dut, peers):
+def _restore_listeners(dut, peers):
+    """Put both sides back to the registration setup() made.
+
+    Two of the cases below change the registry — one removes a listener, one
+    fills it to capacity — so a case that does not start from a known
+    registration would be reading whatever ran before it.
+    """
+    peripheral = peers["device"]
+    dut.write("R")
+    dut.expect_exact("LISTENERS_RESTORED", timeout=10)
+    peripheral.write("R")
+    peripheral.expect_exact("LISTENERS_RESTORED total=2", timeout=10)
+
+
+def _every_observer_receives_the_event_and_removal_is_selective(dut, peers):
+    _restore_listeners(dut, peers)
     peripheral = peers["device"]
 
     peripheral.write("?")
@@ -61,7 +76,7 @@ def test_every_observer_receives_the_event_and_removal_is_selective(dut, peers):
     dut.expect("CENTRAL_DISCONNECTED id=", timeout=15)
 
 
-def test_connection_events_reach_primary_then_listeners(dut, peers):
+def _connection_events_reach_primary_then_listeners(dut, peers):
     """Connection events use the same primary + listeners model as the GATT
     events, so an integration layer can follow connections without taking the
     application's `on*()` slot.
@@ -71,6 +86,7 @@ def test_connection_events_reach_primary_then_listeners(dut, peers):
     recorded order string), and `removeConnectionListener()` drops exactly one
     observer while the primary and the remaining listener keep firing.
     """
+    _restore_listeners(dut, peers)
     peripheral = peers["device"]
 
     peripheral.write("?")
@@ -121,7 +137,8 @@ def test_connection_events_reach_primary_then_listeners(dut, peers):
     dut.expect("CENTRAL_DISCONNECTED id=", timeout=15)
 
 
-def test_listener_list_refuses_unknown_removal_and_overflow(dut, peers):
+def _listener_list_refuses_unknown_removal_and_overflow(dut, peers):
+    _restore_listeners(dut, peers)
     peripheral = peers["device"]
 
     peripheral.write("?")
@@ -137,3 +154,17 @@ def test_listener_list_refuses_unknown_removal_and_overflow(dut, peers):
     # depend on how many the earlier test left registered.
     peripheral.write("F")
     peripheral.expect_exact("total=4", timeout=10)
+
+
+def test_multi_listener(dut, peers, run_checks):
+    """The cases of this suite, in one test.
+
+    Each case rebuilds the state it needs, so the order is not load-bearing;
+    they share a module only to share one upload. They are called from a list
+    so that `ESPBLE_REVERSE_CHECKS=1` can prove that.
+    """
+    run_checks([
+        _every_observer_receives_the_event_and_removal_is_selective,
+        _connection_events_reach_primary_then_listeners,
+        _listener_list_refuses_unknown_removal_and_overflow,
+    ], dut, peers)

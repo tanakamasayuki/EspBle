@@ -21,11 +21,14 @@
 #include <esp_gap_bt_api.h>
 #include <esp_hf_ag_api.h>
 
+#include "../../../sketch_support/EspBleTestLifecycle.h"
+
 bool slcConnected = false;
 esp_bd_addr_t clientAddress = {0};
 String lastDialedNumber;
 unsigned answeredCalls = 0;
 unsigned endedCalls = 0;
+bool stackStopped = false;
 
 String addressText(const uint8_t *address)
 {
@@ -139,6 +142,18 @@ void agCallback(esp_hf_cb_event_t event, esp_hf_cb_param_t *param)
   }
 }
 
+// STOP's second half, once the link is gone: the profile and the stack go
+// down in the reverse of the order setup() brought them up. The flag keeps
+// loop() from calling into a stack that no longer exists.
+void stopStack()
+{
+  esp_hf_ag_deinit();
+  esp_bluedroid_disable();
+  esp_bluedroid_deinit();
+  btStop();
+  stackStopped = true;
+}
+
 void setup()
 {
   Serial.begin(115200);
@@ -170,14 +185,31 @@ void setup()
   esp_bt_gap_set_scan_mode(ESP_BT_CONNECTABLE, ESP_BT_GENERAL_DISCOVERABLE);
 
   reportReady();
+
+  // The link has to be down before the profile is deinitialized, so STOP
+  // finishes in its predicate once the disconnect has landed.
+  EspBleTestLifecycle::Hooks hooks;
+  hooks.stop = []() {
+    if (slcConnected) esp_hf_ag_slc_disconnect(clientAddress);
+  };
+  hooks.stopped = []() {
+    if (slcConnected) return false;
+    if (!stackStopped) stopStack();
+    return true;
+  };
+  EspBleTestLifecycle::begin(hooks);
 }
 
 void loop()
 {
+  EspBleTestLifecycle::update();
   if (Serial.available())
   {
     String command = Serial.readStringUntil('\n');
     command.trim();
+    if (EspBleTestLifecycle::handleLine(command)) return;
+    // STOP has taken the stack down; the commands have nothing left to act on.
+    if (stackStopped) return;
     if (command == "?")
     {
       reportReady();

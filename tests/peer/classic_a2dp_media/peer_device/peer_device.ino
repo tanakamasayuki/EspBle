@@ -1,7 +1,11 @@
 #include <EspBleClassic.h>
+
+#include "../../../sketch_support/EspBleTestLifecycleClassic.h"
 #include <esp_heap_caps.h>
 #if defined(ESPBLE_TEST_DUAL_A2DP)
 #include <EspBle.h>
+
+#include "../../../sketch_support/EspBleTestLifecycleEspBle.h"
 #endif
 
 EspBleClassic bluetooth;
@@ -66,6 +70,29 @@ bool startDualBleClient()
   EspBleScanConfig scanConfig;
   scanConfig.active = true;
   return dualBle.scanner().start(scanConfig);
+}
+
+// Both hosts answer the lifecycle commands together: a transition is complete
+// only once the Classic side and the BLE side both report it. File-scope so
+// the capture-less lambdas can reach the hooks.
+EspBleTestLifecycle::Hooks classicLifecycle;
+EspBleTestLifecycle::Hooks bleLifecycle;
+
+void beginDualLifecycle()
+{
+  EspBleTestLifecycle::attachClassic(bluetooth);
+  EspBleTestLifecycle::attachEspBle(dualBle);
+  classicLifecycle = EspBleTestLifecycle::classicHooks();
+  bleLifecycle = EspBleTestLifecycle::espBleHooks();
+  EspBleTestLifecycle::Hooks hooks;
+  hooks.stop = []() {
+    classicLifecycle.stop();
+    bleLifecycle.stop();
+  };
+  hooks.stopped = []() {
+    return classicLifecycle.stopped() && bleLifecycle.stopped();
+  };
+  EspBleTestLifecycle::begin(hooks);
 }
 #endif
 
@@ -162,6 +189,10 @@ void setup()
   }
   dualClientReady = true;
   Serial.println("DUAL_A2DP_BLE_CLIENT_READY");
+
+  beginDualLifecycle();
+#else
+  EspBleTestLifecycle::beginClassic(bluetooth);
 #endif
 }
 
@@ -215,10 +246,12 @@ void loop()
 #if defined(ESPBLE_TEST_DUAL_A2DP)
   dualBle.update();
 #endif
+  EspBleTestLifecycle::update();
   if (Serial.available())
   {
     String command = Serial.readStringUntil('\n');
     command.trim();
+    if (EspBleTestLifecycle::handleLine(command)) return;
     if (command == "?")
       reportReady();
     else if (command.startsWith("c"))

@@ -3,8 +3,11 @@
 // the two boards speak SPP through two independently built stacks.
 #include <BluetoothSerial.h>
 
+#include "../../../sketch_support/EspBleTestLifecycle.h"
+
 BluetoothSerial serialBluetooth;
 bool connectedState;
+bool stackStopped = false;
 
 uint8_t parseNibble(char value)
 {
@@ -45,10 +48,26 @@ void setup()
     return;
   }
   Serial.println("COREPEER_READY");
+
+  // disconnect() returns only once the link has dropped and end() takes the
+  // whole stack down, so both transitions are complete when they return.
+  EspBleTestLifecycle::Hooks hooks;
+  hooks.stop = []() {
+    stackStopped = true;
+    serialBluetooth.end();
+  };
+  EspBleTestLifecycle::begin(hooks);
 }
 
 void loop()
 {
+  EspBleTestLifecycle::update();
+  // STOP has taken the stack down; nothing below may call into it any more.
+  if (stackStopped)
+  {
+    delay(1);
+    return;
+  }
   if (serialBluetooth.connected() != connectedState)
   {
     connectedState = !connectedState;
@@ -66,6 +85,7 @@ void loop()
   if (Serial.available())
   {
     const String line = Serial.readStringUntil('\n');
+    if (EspBleTestLifecycle::handleLine(line)) return;
     if (line.length() == 0) return;
     const char command = line[0];
     if (command == 'c')

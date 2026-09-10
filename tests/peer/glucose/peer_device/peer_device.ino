@@ -5,6 +5,8 @@
 // then indicates the RACP response. Sends are queued, so the RACP indicate is
 // sequenced from onSent to complete only after the measurement is delivered.
 #include <EspBle.h>
+
+#include "../../../sketch_support/EspBleTestLifecycleEspBle.h"
 #include <EspBleMedicalFloat.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -118,18 +120,21 @@ void setup()
   ble.advertising().setName("EspBle Glucose Peer");
   ble.advertising().addServiceUuid(GLUCOSE_SERVICE_UUID);
   ble.advertising().start();
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == '?')
     {
       Serial.printf("ADVERTISING %u\n", ble.advertising().isAdvertising() ? 1 : 0);
     }
   }
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

@@ -3,6 +3,8 @@
 // carries the commands for the Class of Device and visibility checks, because
 // both are properties of the side being looked for.
 #include <EspBleClassic.h>
+
+#include "../../../sketch_support/EspBleTestLifecycleClassic.h"
 #include <esp_mac.h>
 
 EspBleClassic bluetooth;
@@ -57,17 +59,21 @@ void setup()
     "INQUIRY_PEER_READY address=%02x:%02x:%02x:%02x:%02x:%02x visibility=%u\n",
     address[0], address[1], address[2], address[3], address[4], address[5],
     static_cast<unsigned>(bluetooth.visibility()));
+
+  EspBleTestLifecycle::beginClassic(bluetooth);
 }
 
 void loop()
 {
   bluetooth.update();
+  EspBleTestLifecycle::update();
 
   reportWhenClassOfDeviceIsLive();
 
   if (Serial.available())
   {
     const String line = Serial.readStringUntil('\n');
+    if (EspBleTestLifecycle::handleLine(line)) return;
     if (line.length() == 0) return;
     const char command = line[0];
     if (command == 'h')

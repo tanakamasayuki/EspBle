@@ -4,6 +4,8 @@
 // order-sensitive: a split buffer reassembled out of order changes it.
 #include <EspBleClassic.h>
 
+#include "../../../sketch_support/EspBleTestLifecycleClassic.h"
+
 EspBleClassic bluetooth;
 EspBleClassicSppSessionId sessionId = 0;
 uint32_t receivedBytes = 0;
@@ -51,15 +53,19 @@ void setup()
     return;
   }
   Serial.println("PEER_READY");
+
+  EspBleTestLifecycle::beginClassic(bluetooth);
 }
 
 void loop()
 {
   bluetooth.update();
+  EspBleTestLifecycle::update();
 
   if (Serial.available())
   {
     const String line = Serial.readStringUntil('\n');
+    if (EspBleTestLifecycle::handleLine(line)) return;
     if (line.length() == 0) return;
     const char command = line[0];
     if (command == 'c')

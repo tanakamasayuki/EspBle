@@ -57,9 +57,15 @@ peer/<suite>/
   test_<suite>.py    入力の生成と判定
 ```
 
+全sketchは[`conftest.py`](conftest.py)のautouse fixtureが毎test後に送る予約STOP commandにも
+[`../sketch_support/EspBleTestLifecycle.h`](../sketch_support/EspBleTestLifecycle.h)で応答します。
+応答しないsketchは毎testの後にwarningとして報告されます。新しいsketchに必要な4つの変更は
+headerのcommentに、pytestが何を送るかは[tests README](../README.ja.md#test間のboard状態)にあります。
+
 **全suiteの目的と合格条件は[テスト計画](../TEST_PLAN.ja.md)が正本です。**ここでは重複させません。
 suiteを追加するときは、両言語のテスト計画へも追記します（`tests/peer`の全suiteが両方に載っている
 状態を保ちます）。
 
-新しいsuiteを書くときの規則は、テスト計画の「起動banner待ちを避ける」と
-「末尾の可変長fieldは行末で止める」を先に読んでください。どちらも実機で実際に落ちた形です。
+新しいsuiteを書くときの規則は、テスト計画の「起動banner待ちを避ける」「末尾の可変長fieldは
+行末で止める」「boardは来たときの状態で返す」を先に読んでください。前の2つは実機で実際に
+落ちた形、3つ目は全sketchが守る契約です。

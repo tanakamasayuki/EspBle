@@ -32,7 +32,7 @@ def test_hid_host_interoperates_with_a_core_bluedroid_keyboard(dut, peers, probe
     # the Bluedroid device published.
     discovered = dut.expect(
         re.compile(
-            rb"HIDHOST_DISCOVERED success=1 report_id=(\d+) output=(\d) battery=(\d) level=(\d+)"
+            rb"HIDHOST_DISCOVERED success=1 report_id=(\d+) output=(\d) battery=(\d) level=(\d+)\r?\n"
         ),
         timeout=30,
     )

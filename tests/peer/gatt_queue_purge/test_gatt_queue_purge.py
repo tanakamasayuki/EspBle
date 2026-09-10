@@ -34,8 +34,8 @@ def test_disconnect_defers_and_purges_queued_gatt_operations(dut, peers):
     dut.write("s")
     dut.expect_exact("SCAN_STARTED", timeout=10)
     dut.expect_exact("CONNECT_REQUESTED", timeout=20)
-    dut.expect(re.compile(rb"CENTRAL_CONNECTED id=(\d+)"), timeout=20)
-    peripheral.expect(re.compile(rb"PERIPHERAL_CONNECTED id=(\d+)"), timeout=20)
+    dut.expect(re.compile(rb"CENTRAL_CONNECTED id=(\d+)\r?\n"), timeout=20)
+    peripheral.expect(re.compile(rb"PERIPHERAL_CONNECTED id=(\d+)\r?\n"), timeout=20)
     dut.expect_exact("DISCOVERED success=1 characteristics=4", timeout=20)
 
     # All four are accepted: the queue holds 8 beside the one in flight.
@@ -48,7 +48,7 @@ def test_disconnect_defers_and_purges_queued_gatt_operations(dut, peers):
     purged = []
     for _ in range(3):
         failure = dut.expect(re.compile(
-            rb"READ tag=(\d) success=0 error=(\d+) value= detail=([^\r\n]*)"), timeout=20)
+            rb"READ tag=(\d) success=0 error=(\d+) value= detail=([^\r\n]*)\r?\n"), timeout=20)
         assert failure.group(2) == b"1", "a purged operation fails with InvalidState"
         assert failure.group(3) == b"connection closed before the queued GATT operation started"
         purged.append(failure.group(1).decode())
@@ -64,8 +64,8 @@ def test_disconnect_defers_and_purges_queued_gatt_operations(dut, peers):
     assert first.group(1) == b"1", "the first queued read is the one that went on the air"
     assert first.group(2) == b"v1", "it must return the peer's value, not a failure"
 
-    dut.expect(re.compile(rb"CENTRAL_DISCONNECTED id=(\d+)"), timeout=20)
-    peripheral.expect(re.compile(rb"PERIPHERAL_DISCONNECTED id=(\d+)"), timeout=20)
+    dut.expect(re.compile(rb"CENTRAL_DISCONNECTED id=(\d+)\r?\n"), timeout=20)
+    peripheral.expect(re.compile(rb"PERIPHERAL_DISCONNECTED id=(\d+)\r?\n"), timeout=20)
 
     # If the event queue had overflowed, the checks above would have been reading an
     # incomplete picture.
@@ -78,9 +78,9 @@ def test_disconnect_defers_and_purges_queued_gatt_operations(dut, peers):
     dut.write("s")
     dut.expect_exact("SCAN_STARTED", timeout=10)
     dut.expect_exact("CONNECT_REQUESTED", timeout=20)
-    dut.expect(re.compile(rb"CENTRAL_CONNECTED id=(\d+)"), timeout=20)
+    dut.expect(re.compile(rb"CENTRAL_CONNECTED id=(\d+)\r?\n"), timeout=20)
     dut.expect_exact("DISCOVERED success=1 characteristics=4", timeout=20)
 
     dut.write("d")
     dut.expect_exact("DISCONNECT_REQUESTED", timeout=10)
-    dut.expect(re.compile(rb"CENTRAL_DISCONNECTED id=(\d+)"), timeout=20)
+    dut.expect(re.compile(rb"CENTRAL_DISCONNECTED id=(\d+)\r?\n"), timeout=20)

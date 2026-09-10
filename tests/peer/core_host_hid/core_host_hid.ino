@@ -5,6 +5,8 @@
 // parsing them.
 #include <EspBle.h>
 
+#include "../../sketch_support/EspBleTestLifecycleEspBle.h"
+
 EspBle ble;
 bool connectRequested = false;
 EspBleConnectionId connectionId = 0;
@@ -93,6 +95,8 @@ void setup()
   });
 
   Serial.println("HIDHOST_READY");
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
@@ -101,6 +105,7 @@ void loop()
   {
     String command = Serial.readStringUntil('\n');
     command.trim();
+    if (EspBleTestLifecycle::handleLine(command)) return;
     if (command == "?")
     {
       Serial.println("HIDHOST_READY");
@@ -136,5 +141,6 @@ void loop()
   }
 
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

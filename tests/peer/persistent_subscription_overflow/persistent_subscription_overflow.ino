@@ -10,6 +10,8 @@
 // finds the registry full and droppedPersistentSubscriptionCount() reports 1.
 #include <EspBle.h>
 
+#include "../../sketch_support/EspBleTestLifecycleEspBle.h"
+
 static constexpr const char *SERVICE_UUID = "2f9b0000-3a71-4d1e-9c3f-8a5d6e7f1000";
 static const char *CHARACTERISTIC_UUIDS[] = {
   "2f9b0001-3a71-4d1e-9c3f-8a5d6e7f1000",
@@ -119,13 +121,15 @@ void setup()
     connectionRequested = ble.connect(result);
     Serial.println(connectionRequested ? "CONNECT_REQUESTED" : "CONNECT_REQUEST_FAILED");
   });
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == 's' && !connectionRequested)
     {
       EspBleScanConfig scan;
@@ -160,5 +164,6 @@ void loop()
   }
   pumpBatch();
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

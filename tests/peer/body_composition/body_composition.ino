@@ -3,6 +3,8 @@
 // indications, and decodes the mandatory Body Fat Percentage (0.1 %/LSB) and the
 // optional Weight field (0.005 kg/LSB in SI) present per the measurement flags.
 #include <EspBle.h>
+
+#include "../../sketch_support/EspBleTestLifecycleEspBle.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
@@ -101,13 +103,15 @@ void setup()
     connectionRequested = ble.connect(result);
     Serial.println(connectionRequested ? "CONNECT_REQUESTED" : "CONNECT_REQUEST_FAILED");
   });
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == 's' && !connectionRequested)
     {
       EspBleScanConfig scan;
@@ -126,5 +130,6 @@ void loop()
     }
   }
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

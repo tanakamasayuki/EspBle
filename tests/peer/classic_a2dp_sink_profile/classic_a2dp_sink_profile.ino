@@ -1,5 +1,7 @@
 #include <EspBleClassic.h>
 
+#include "../../sketch_support/EspBleTestLifecycleClassic.h"
+
 EspBleClassic bluetooth;
 
 void setup()
@@ -31,10 +33,14 @@ void setup()
   bluetooth.end();
   Serial.printf("CLASSIC_A2DP_STACK_ENDED initialized=%u\n",
     bluetooth.initialized() ? 1 : 0);
+
+  EspBleTestLifecycle::beginClassic(bluetooth);
 }
 
 void loop()
 {
+  if (Serial.available() > 0) EspBleTestLifecycle::handle(static_cast<char>(Serial.read()));
   bluetooth.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

@@ -3,6 +3,8 @@
 // a gamepad still composes with another profile — the pair comes to 133
 // descriptor bytes, where adding the mouse as well would exceed the SDP record.
 #include <EspBleClassic.h>
+
+#include "../../sketch_support/EspBleTestLifecycleClassic.h"
 #include <esp_mac.h>
 
 EspBleClassic bluetooth;
@@ -40,15 +42,18 @@ void setup()
     "GAMEPAD_DEVICE_READY address=%02x:%02x:%02x:%02x:%02x:%02x gamepad=%u\n",
     address[0], address[1], address[2], address[3], address[4], address[5],
     bluetooth.hidGamepad().configured() ? 1 : 0);
+
+  EspBleTestLifecycle::beginClassic(bluetooth);
 }
 
 void loop()
 {
   bluetooth.update();
+  EspBleTestLifecycle::update();
 
   if (Serial.available())
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == 'g')
       // Signed axes and an enumerated hat, so wrong packing shows up as a
       // different value rather than as a missing report.

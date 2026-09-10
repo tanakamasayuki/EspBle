@@ -7,6 +7,8 @@
 #include <BLEServer.h>
 #include <BLEUtils.h>
 
+#include "../../../sketch_support/EspBleTestLifecycle.h"
+
 // The MIDI service and its single I/O characteristic, as defined by the
 // MIDI over Bluetooth Low Energy specification.
 static const char *MidiServiceUuid = "03b80e5a-ede8-4b33-a751-6ce34ec4c700";
@@ -19,6 +21,7 @@ uint16_t connectionId = 0;
 uint16_t subscription = 0;
 unsigned received = 0;
 String lastReceivedHex;
+bool stackStopped = false;
 
 String toHex(const uint8_t *data, size_t length)
 {
@@ -119,14 +122,27 @@ void setup()
   BLEDevice::startAdvertising();
 
   reportReady();
+
+  // onDisconnect advertises again on its own, so RECOVER only drops the link.
+  // deinit() takes the radio down synchronously, so STOP is complete at once.
+  EspBleTestLifecycle::Hooks hooks;
+  hooks.stop = []() {
+    stackStopped = true;
+    BLEDevice::deinit(false);
+  };
+  EspBleTestLifecycle::begin(hooks);
 }
 
 void loop()
 {
+  EspBleTestLifecycle::update();
   if (Serial.available())
   {
     String command = Serial.readStringUntil('\n');
     command.trim();
+    if (EspBleTestLifecycle::handleLine(command)) return;
+    // STOP has taken the stack down; the commands have nothing left to act on.
+    if (stackStopped) return;
     if (command == "?")
     {
       reportReady();

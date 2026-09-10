@@ -4,6 +4,8 @@
 // them, and the list must refuse a listener past its capacity.
 #include <EspBle.h>
 
+#include "../../../sketch_support/EspBleTestLifecycleEspBle.h"
+
 static constexpr const char *SERVICE_UUID = "FEAE";
 static constexpr const char *CHARACTERISTIC_UUID = "2ae3";
 
@@ -20,6 +22,19 @@ EspBleListenerId secondListener = EspBleInvalidListenerId;
 // How many listeners this sketch believes are registered, so the capacity check
 // reports an absolute number instead of one that depends on what ran before.
 unsigned activeListeners = 0;
+static void registerFirstListener()
+{
+  firstListener = ble.gattServer().addWrittenListener([](const EspBleGattWrite &) {
+    ++firstCount;
+  });
+}
+
+static void registerSecondListener()
+{
+  secondListener = ble.gattServer().addWrittenListener([](const EspBleGattWrite &) {
+    ++secondCount;
+  });
+}
 
 void setup()
 {
@@ -38,12 +53,8 @@ void setup()
     lastValue = write.value;
     ++primaryCount;
   });
-  firstListener = gattServer.addWrittenListener([](const EspBleGattWrite &) {
-    ++firstCount;
-  });
-  secondListener = gattServer.addWrittenListener([](const EspBleGattWrite &) {
-    ++secondCount;
-  });
+  registerFirstListener();
+  registerSecondListener();
   if (firstListener != EspBleInvalidListenerId) ++activeListeners;
   if (secondListener != EspBleInvalidListenerId) ++activeListeners;
 
@@ -69,13 +80,15 @@ void setup()
   advertising.setName("EspBle MultiListener Peer");
   advertising.addServiceUuid(SERVICE_UUID);
   advertising.start();
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == '?')
     {
       Serial.printf("ADVERTISING %u\n", ble.advertising().isAdvertising() ? 1 : 0);
@@ -101,6 +114,21 @@ void loop()
         removed ? 1 : 0, static_cast<unsigned>(firstListener));
       if (removed) --activeListeners;
       firstListener = EspBleInvalidListenerId;
+    }
+    else if (command == 'R')
+    {
+      // Back to the boot registration. "r" takes one listener out and "F" fills
+      // the list to capacity; a case that runs after either has to find the two
+      // this sketch starts with, and no more.
+      ble.gattServer().removeListener(firstListener);
+      ble.gattServer().removeListener(secondListener);
+      for (EspBleListenerId id = 0; id < 32; ++id)
+        ble.gattServer().removeListener(id);
+      registerFirstListener();
+      registerSecondListener();
+      activeListeners = (firstListener != EspBleInvalidListenerId ? 1u : 0u) +
+        (secondListener != EspBleInvalidListenerId ? 1u : 0u);
+      Serial.printf("LISTENERS_RESTORED total=%u\n", activeListeners);
     }
     else if (command == 'u')
     {
@@ -128,5 +156,6 @@ void loop()
   }
 
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

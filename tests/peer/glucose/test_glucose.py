@@ -3,7 +3,7 @@ import time
 
 GLUCOSE_PATTERN = re.compile(
     rb"GLUCOSE measurements=(\d+) seq=(\d+) concentration=(-?\d+) type_location=([0-9a-f]{2}) "
-    rb"racp_responses=(\d+) racp0=(\d+) racp2=(\d+) racp3=(\d+) context=(\w+)"
+    rb"racp_responses=(\d+) racp0=(\d+) racp2=(\d+) racp3=(\d+) context=(\w+)\r?\n"
 )
 
 
@@ -45,4 +45,4 @@ def test_glucose_racp_procedure(dut, peers):
 
     dut.write("d")
     dut.expect_exact("DISCONNECT_REQUESTED", timeout=10)
-    dut.expect(re.compile(rb"DISCONNECTED id=(\d+)"), timeout=20)
+    dut.expect(re.compile(rb"DISCONNECTED id=(\d+)\r?\n"), timeout=20)

@@ -1,5 +1,7 @@
 #include <EspBle.h>
 
+#include "../../../sketch_support/EspBleTestLifecycleEspBle.h"
+
 static constexpr const char *DEVICE_INFORMATION_SERVICE_UUID = "180a";
 static constexpr const char *MANUFACTURER_NAME_UUID = "2a29";
 static constexpr const char *MODEL_NUMBER_UUID = "2a24";
@@ -46,14 +48,17 @@ void setup()
   ble.advertising().setName("EspBle DIS Peer");
   ble.advertising().addServiceUuid(DEVICE_INFORMATION_SERVICE_UUID);
   ble.advertising().start();
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
-  if (Serial.available() > 0 && Serial.read() == '?')
+  if (Serial.available() > 0 && EspBleTestLifecycle::filter(Serial.read()) == '?')
   {
     Serial.printf("ADVERTISING %u\n", ble.advertising().isAdvertising() ? 1 : 0);
   }
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

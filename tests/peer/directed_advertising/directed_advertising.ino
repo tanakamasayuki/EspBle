@@ -1,5 +1,7 @@
 #include <EspBle.h>
 
+#include "../../sketch_support/EspBleTestLifecycleEspBle.h"
+
 static constexpr const char *TEST_SERVICE_UUID = "3d9b1c40-6f2e-4a8b-9f31-64697265637a";
 
 EspBle ble;
@@ -42,13 +44,15 @@ void setup()
     connectRequested = ble.connect(scanResult);
     Serial.println(connectRequested ? "CONNECT_REQUESTED" : "CONNECT_REQUEST_FAILED");
   });
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == 's' && !connectRequested)
     {
       EspBleScanConfig scanConfig;
@@ -69,5 +73,6 @@ void loop()
   }
 
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

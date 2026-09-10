@@ -4,6 +4,8 @@
 // Arduino-ESP32 ships. The SBC frames arriving here were negotiated, encoded
 // and packetised by that other stack.
 #include <EspBleClassic.h>
+
+#include "../../sketch_support/EspBleTestLifecycleClassic.h"
 #include <esp_mac.h>
 
 EspBleClassic bluetooth;
@@ -113,16 +115,20 @@ void setup()
 
   sinkStarted = bluetooth.a2dpSink().begin();
   reportReady();
+
+  EspBleTestLifecycle::beginClassic(bluetooth);
 }
 
 void loop()
 {
   bluetooth.update();
+  EspBleTestLifecycle::update();
 
   if (Serial.available())
   {
     String command = Serial.readStringUntil('\n');
     command.trim();
+    if (EspBleTestLifecycle::handleLine(command)) return;
     if (command == "?")
     {
       reportReady();

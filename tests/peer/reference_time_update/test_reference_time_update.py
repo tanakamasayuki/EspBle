@@ -1,6 +1,6 @@
 import re
 
-STATE_PATTERN = re.compile(rb"STATE valid=(\d+) current=(\d+) result=(\d+) context=(\w+)")
+STATE_PATTERN = re.compile(rb"STATE valid=(\d+) current=(\d+) result=(\d+) context=(\w+)\r?\n")
 
 
 def test_reference_time_update_service(dut, peers):
@@ -28,7 +28,7 @@ def test_reference_time_update_service(dut, peers):
     # Get Reference Update -> Update Pending.
     dut.write("g")
     dut.expect_exact("GET_REQUESTED", timeout=10)
-    get_cmd = device.expect(re.compile(rb"CONTROL_WRITE command=(\d+) context=(\w+)"), timeout=20)
+    get_cmd = device.expect(re.compile(rb"CONTROL_WRITE command=(\d+) context=(\w+)\r?\n"), timeout=20)
     assert int(get_cmd.group(1)) == 1, "server should receive Get Reference Update (1)"
     assert get_cmd.group(2) == b"loop"
 
@@ -40,7 +40,7 @@ def test_reference_time_update_service(dut, peers):
     # Cancel Reference Update -> Idle with Canceled result.
     dut.write("c")
     dut.expect_exact("CANCEL_REQUESTED", timeout=10)
-    cancel_cmd = device.expect(re.compile(rb"CONTROL_WRITE command=(\d+) context=(\w+)"), timeout=20)
+    cancel_cmd = device.expect(re.compile(rb"CONTROL_WRITE command=(\d+) context=(\w+)\r?\n"), timeout=20)
     assert int(cancel_cmd.group(1)) == 2, "server should receive Cancel Reference Update (2)"
 
     dut.write("r")
@@ -51,4 +51,4 @@ def test_reference_time_update_service(dut, peers):
 
     dut.write("d")
     dut.expect_exact("DISCONNECT_REQUESTED", timeout=10)
-    dut.expect(re.compile(rb"DISCONNECTED id=(\d+)"), timeout=20)
+    dut.expect(re.compile(rb"DISCONNECTED id=(\d+)\r?\n"), timeout=20)

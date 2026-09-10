@@ -13,6 +13,31 @@ BLEは接続、切断、Discovery、購読、Security、Bondingが複数の非�
 
 Peerを必要としないsuiteは`peer/`の中に1台構成として置きます（`classic_hid_profiles`、`classic_a2dp_sink_profile`、`classic_radio_settings`。いずれも`peer_device/`を持ちません）。別の「single」層は設けません——fixtureも実行方法も同じで、分ける理由が無いためです。**これらへ`--peer-profile`を渡すとpytestがunknown peerとして拒否する**ので、掃引commandは分けて実行します。
 
+## どの層をいつ回すか
+
+計画は1回の実行ではありません。下ほど安くて頻繁、上ほど高くて稀な層で、それぞれが下の層には
+答えられない問いに答えます。
+
+| 層 | 必要なもの | いつ | 費用 |
+|---|---|---|---|
+| `unit/` | g++ だけ | 毎push、CI で | 19 test、8秒 |
+| `peer/<suite>` | 治具 | そのsuiteを触っている間 | 1 suite、1分未満 |
+| `pytest`（unit + peer） | 治具 | mergeの前 | 113 test、約78分 |
+| `pytest --clean` | 治具 | releaseの前、coreやlibraryを上げた後 | 上記 + 全compile |
+| build matrix | 不要 | 毎push（狭く）と必要時（全面） | `compile-examples`、`board-matrix`、`core-matrix` |
+| `manual/` | 3台目か人 | 見る・聞く・抜き差しが要るとき | 明示して実行 |
+
+`testpaths`により、引数なしの`pytest`は判断の要らない2層、`unit`と`peer`を意味します。
+`manual/`はいつも繋がっているとは限らない機材を要求するので、明示して実行します。
+
+**`--clean`はversionを上げたときのためにあります。** 何も再利用しないので普段は不適切で、
+coreやlibraryを動かした直後だけ正しいです。普段の速さを支えている再利用が、そのときだけは
+古いbuildを隠します。
+
+**いちばんよく回るのはunit層です。** `src/`の純粋なC++をシステムのg++でcompileし、普通の
+プログラムとして走らせます。boardもcoreの導入もserial portも要りません。**CIで回せる唯一の層**
+でもあります。これより上はすべて治具を必要とします。
+
 ## Peerハードウェア
 
 Peerテストは次の3構成を使い分けます。
@@ -543,6 +568,59 @@ serialの1行は分割して届きます。patternの最後のfieldが可変長�
 `data=abcdef12`と出力した相手から`data=abcdef1`を読み取りました。この形のpatternは`\r?\n`で
 終端します。captureの後ろに同じpattern内の別リテラルが続く場合は、そのリテラルが届くまで
 matchしないので問題ありません。
+
+`peer/`のpatternで末尾がcaptureのものは、6件を除いてすべて改行で止めています。除外の理由は、
+2件がfieldの後にも同じ行の続きを出すこと、3件が行頭のtagを持たない部分一致であること、
+1件が**`expect`が既に取得した文字列に対する検索**であることです。**最後の1件が罠です。**
+取得済みの文字列は`expect`が止まった位置で終わっているので、そこに改行を要求すると永久に
+一致しません。同じpatternでも、`expect`に渡すなら改行で止めるのが正しく、`re.search`に渡す
+なら間違いになります。これを手で足して`dual_host_smoke`をfull runで落としました。残る4件は
+その場にコメントを置いてあります。
+
+## boardは来たときの状態で返す
+
+全moduleが1テストで、moduleは必ずuploadから始まりboardがresetされるので、テストからテストへ
+持ち越される状態はありません。**戻すものが無い**ので、後片付けはcommand 1つです。
+`tests/peer/conftest.py`のautouse fixtureが毎test後にSTOP（`0x04`）を送り、sketchは接続・
+advertise・scanのいずれも無くなった時点で`STOPPED`を返します。応答は「byteを受け取った」では
+なく「状態に到達した」の合図なので、sketchはpredicateを登録し`EspBleTestLifecycle::update()`
+経由で印字します。仕組みは`tests/sketch_support/EspBleTestLifecycle.h`にあります。
+
+このcommandは次のtestのためではなく、治具のためにあります。次のuploadまでadvertiseし続ける
+boardは、治具を次に使う人のscanに映ります。途中で落ちたrunは、誰かが気づくまでその状態を
+残します。
+
+**戻すのは止めるより難しく、それが1 module 1テストを保つ理由の1つです。** 以前のこのsuiteは、
+同じmoduleの2本目のために毎test後にboot状態へ戻していました。そこから4件の不具合が出て、
+どれも同じ形でした。状態がsketchの変数ではなくlibraryの登録簿、callbackの枠、GATTの属性、
+無線のhardwareにあり、それを写した変数だけを戻すと写しと実体がずれます。**戻さないより
+悪くなります。** 止めるだけなら、何も戻さないのでこの形が起きません。
+
+uploadを越えて残るものが2つあり、これらはfixtureの担当ではありません。1つは不揮発領域で、
+`arduino-cli`はNVSを消さないのでペアリングのbondはupload、session、日をまたいで残ります。
+bondを扱うsuiteがtestの冒頭で両側を消すのはこのためです。もう1つはresetの届かない範囲に
+あるもので、P4 + C6の構成では無線そのものが該当します。controllerはC6で動くので、P4を
+resetしても止まりません。
+
+接続idはbootから数え続けます。caseがboardを共有する統合testは、`id=`を番号で名指しせず
+patternで受けます。`id=1`になるのはbootして最初の接続だけです。
+
+testは自分のapplication状態を開始時に整えるのをやめません。後片付けが守るのは環境で、
+`_reset()`型の開始処理の代わりにはなりません。開始処理はtest単体の正しさと、`-k`で1本だけ
+回せることを担います。
+
+### boardに状態を尋ねるとresetしてしまう
+
+serial portを開くとDTRとRTSが立ち、これはESP32にとってresetの操作です。run後にboardへ
+問い合わせても、答えるのはbootし直したsketchです。この方法で`STOP`を確かめるとboot状態が
+返り、失敗したように見えます。実際にpeerは`ADVERTISING 1`と答え、Classic DUTは起動時出力を
+そのまま流しました。開く前に両線を落としても同じです。この治具のboardはCH343
+（`1a86:55d3`）のbridge経由でENにつながっていますが、native USB CDCのboardも例外ではなく、
+そちらは1200 bpsで開くとrebootします。入口が違うだけで同じ読み違いができます。**観測は別のboardから行います。**
+対象のboardには触れず、もう1台にscannerを焼いて聞きます。`STOP`の後、8秒間に聞こえた
+advertiser 10件のなかにpeerはいませんでした。対照も取ります。peerをresetしてboot状態に戻し、
+同じscannerで聞こえることを確認します。「聞こえない」だけなら、scannerが壊れている場合も
+同じ結果になるからです。
 
 ## 合格条件
 

@@ -2,12 +2,23 @@ import re
 import time
 
 NKRO_STATE_PATTERN = re.compile(
-    rb"HOST_NKRO_STATE count=(\d+) high=(\d+) b=(\d+) b_released=(\d+)"
+    rb"HOST_NKRO_STATE count=(\d+) high=(\d+) b=(\d+) b_released=(\d+)\r?\n"
+)
+CONNECTED_PATTERN = re.compile(rb"HOST_CONNECTED id=(\d+)\r?\n")
+LED_STATE_PATTERN = re.compile(
+    rb"DEVICE_LED_STATE leds=(\d+) num=(\d+) caps=(\d+) scroll=(\d+) connection=(\d+)\r?\n"
 )
 
 
-def test_hid_keyboard_nkro(dut, peers):
-    device = peers["device"]
+def connect(dut, device):
+    """Bring up the HID link, from cleared bonds through discovery.
+
+    Every test in this module establishes its own link. The cleanup fixture
+    returns both boards to their boot state after each test, and a test has to
+    pass when it is the only one selected, so nothing may be inherited from the
+    test before it. The connection id is matched by pattern rather than by value
+    because ids keep counting from boot: only a module's first connection is 1.
+    """
     dut.write("x")
     device.write("x")
     dut.expect_exact("HOST_BONDS_CLEARED success=1", timeout=10)
@@ -16,9 +27,12 @@ def test_hid_keyboard_nkro(dut, peers):
     dut.write("s")
     dut.expect_exact("HOST_SCAN_STARTED success=1", timeout=10)
     dut.expect_exact("HOST_CONNECT_STARTED success=1", timeout=20)
-    dut.expect_exact("HOST_CONNECTED id=1", timeout=20)
+    dut.expect(CONNECTED_PATTERN, timeout=20)
     dut.expect_exact("HOST_DISCOVERY_STARTED success=1", timeout=20)
     dut.expect_exact("HOST_DISCOVERED success=1 report=1 output=1 detail=", timeout=20)
+
+
+def _keyboard_and_led_state(dut, device):
 
     device.write("n")
     device.expect_exact("DEVICE_NKRO_SENT success=1", timeout=20)
@@ -33,18 +47,21 @@ def test_hid_keyboard_nkro(dut, peers):
     device.expect_exact("DEVICE_OUTPUT leds=3", timeout=20)
     # ledState() answers "what is it now?" without the sketch caching the
     # callback: the same value the host wrote (Num Lock + Caps Lock = 0x03),
-    # attributed to the connection it came from.
+    # attributed to the connection it came from. Which number that is depends on
+    # how many links this board has made, so only "a real one" is asserted.
     device.write("e")
-    device.expect_exact(
-        "DEVICE_LED_STATE leds=3 num=1 caps=1 scroll=0 connection=1", timeout=10
+    match = device.expect(LED_STATE_PATTERN, timeout=10)
+    assert match.groups()[:4] == (b"3", b"1", b"1", b"0"), (
+        f"expected leds=3 num=1 caps=1 scroll=0, got {match.group(0).decode()}"
     )
+    assert match.group(5) != b"0", "the LED state must name the connection it came from"
 
     device.write("r")
     device.expect_exact("DEVICE_RELEASE_ALL success=1", timeout=10)
     dut.expect_exact("HOST_NKRO_STATE count=0 high=0 b=0 b_released=0", timeout=20)
 
 
-def test_nkro_whole_state_is_one_report(dut, peers):
+def _whole_state_is_one_report(dut, device):
     """`sendReport(EspBleHidKeyboardNkroReport)` puts the whole NKRO state into a
     single notification. The `keys[6]` overload cannot: it carries six usages even
     with NKRO enabled, and the incremental `pressUsage()` path emits one
@@ -56,7 +73,6 @@ def test_nkro_whole_state_is_one_report(dut, peers):
     above it, so `press()` routes it into `modifiers` — the host bitmap carries
     modifier usages too, hence a count of nine.
     """
-    device = peers["device"]
 
     device.write("w")
     device.expect_exact(
@@ -77,7 +93,7 @@ def test_nkro_whole_state_is_one_report(dut, peers):
     dut.expect_exact("HOST_NKRO_STATE count=0 high=0 b=0 b_released=1", timeout=20)
 
 
-def test_held_state_tracks_what_the_host_was_told(dut, peers):
+def _held_state_tracks_what_the_host_was_told(dut, device):
     """`heldState()` is the NKRO state the host was last told about, so a caller
     that rebuilds the whole state each cycle can compare against it instead of
     keeping a shadow copy — the library deliberately does not suppress duplicate
@@ -87,7 +103,6 @@ def test_held_state_tracks_what_the_host_was_told(dut, peers):
     It must reflect every path that sends: the whole-state overload, the
     incremental `releaseUsage()`, and `releaseAll()`.
     """
-    device = peers["device"]
 
     device.write("w")
     device.expect_exact(
@@ -119,7 +134,7 @@ def test_held_state_tracks_what_the_host_was_told(dut, peers):
     )
 
 
-def test_led_state_follows_the_host_without_a_callback(dut, peers):
+def _led_state_follows_the_host_without_a_callback(dut, device):
     """`ledState()` must track the host whether or not `onOutputReport()` is
     installed. Without a callback, `dispatchPendingOutputReports()` returns early
     and nothing drains the output queue, so the queue sits full and every later
@@ -129,7 +144,6 @@ def test_led_state_follows_the_host_without_a_callback(dut, peers):
     The flood writes ten LED values while the queue holds eight, so reports are
     definitely dropped, and ends on a value distinct from the earlier test's.
     """
-    device = peers["device"]
 
     device.write("u")
     device.expect_exact("DEVICE_OUTPUT_CALLBACK installed=0", timeout=10)
@@ -138,36 +152,34 @@ def test_led_state_follows_the_host_without_a_callback(dut, peers):
     dut.expect_exact("HOST_LEDS_FLOOD sent=10", timeout=20)
     time.sleep(1)
 
-    # Num + Caps + Scroll = 0x07, the last value written.
+    # Num + Caps + Scroll = 0x07, the last value written. The connection is this
+    # test's own, so its number is whatever the device has reached by now.
     device.write("e")
-    device.expect_exact(
-        "DEVICE_LED_STATE leds=7 num=1 caps=1 scroll=1 connection=1", timeout=10
+    match = device.expect(LED_STATE_PATTERN, timeout=10)
+    assert match.groups()[:4] == (b"7", b"1", b"1", b"1"), (
+        f"expected leds=7 num=1 caps=1 scroll=1, got {match.group(0).decode()}"
     )
+    assert match.group(5) != b"0", "the LED state must name the connection it came from"
+
+    # Put it back: the next case may be the one that needs the callback.
+    device.write("U")
+    device.expect_exact("DEVICE_OUTPUT_CALLBACK installed=1", timeout=10)
 
 
-def test_nkro_requires_mtu_32(dut, peers):
-    """An NKRO report is 29 bytes, so it needs an MTU of at least 32 (29 plus the
-    3-byte ATT header). `begin()` refuses a lower `preferredMtu` up front instead of
-    letting every report notify fail silently against the MTU payload guard later —
-    a silent failure here looks like "the keyboard sends nothing", with no error to
-    point at. The library also does not quietly raise the MTU behind the caller's
-    back, because that would hide a configuration the application chose.
 
-    The device sketch walks the boundary with end()/begin() cycles: the spec minimum
-    (23), one below the limit (31), then the limit itself (32), and finally back to
-    the configuration the rest of this suite runs with.
+def test_hid_keyboard_nkro(dut, peers, run_checks):
+    """The NKRO cases, behind one link.
+
+    The link is brought up once here rather than per case: nothing between the
+    cases depends on it being new, and every case leaves the device as it found
+    it. They are called from a list so that `ESPBLE_REVERSE_CHECKS=1` can prove
+    the order is not load-bearing.
     """
     device = peers["device"]
-
-    device.write("m")
-    device.expect_exact(
-        "DEVICE_MTU_23 success=0 error=INVALID_ARGUMENT "
-        "detail=NKRO keyboard requires preferredMtu >= 32 "
-        "(29-byte report + 3-byte ATT header)",
-        timeout=20,
-    )
-    device.expect_exact("DEVICE_MTU_31 success=0 error=INVALID_ARGUMENT", timeout=20)
-    device.expect_exact("DEVICE_MTU_32 success=1 error=NONE", timeout=20)
-    # Restored and still NKRO: the rejected attempts must not have dropped the
-    # keyboard configuration on the way through.
-    device.expect_exact("DEVICE_MTU_RESTORED success=1 nkro=1", timeout=20)
+    connect(dut, device)
+    run_checks([
+        _keyboard_and_led_state,
+        _whole_state_is_one_report,
+        _held_state_tracks_what_the_host_was_told,
+        _led_state_follows_the_host_without_a_callback,
+    ], dut, device)

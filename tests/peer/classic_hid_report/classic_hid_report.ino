@@ -1,4 +1,6 @@
 #include <EspBleClassic.h>
+
+#include "../../sketch_support/EspBleTestLifecycleClassic.h"
 #include <esp_mac.h>
 
 static const uint8_t ReportDescriptor[] = {
@@ -101,11 +103,14 @@ void setup()
   });
 
   startDevice();
+
+  EspBleTestLifecycle::beginClassic(bluetooth);
 }
 
 void loop()
 {
   bluetooth.update();
+  EspBleTestLifecycle::update();
   if (bluetooth.hidDevice().connected() && !inputSent)
   {
     const uint8_t input[] = {0x00, 0x7f, 0x80, 0xff};
@@ -114,7 +119,7 @@ void loop()
   }
   if (Serial.available())
   {
-    const char command = static_cast<char>(Serial.read());
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == 'r')
     {
       bluetooth.end();

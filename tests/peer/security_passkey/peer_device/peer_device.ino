@@ -1,4 +1,6 @@
 #include <EspBle.h>
+
+#include "../../../sketch_support/EspBleTestLifecycleEspBle.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
@@ -80,13 +82,15 @@ void setup()
   advertising.setName("EspBle Passkey Peer");
   advertising.addServiceUuid(TEST_SERVICE_UUID);
   advertising.start();
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == 'x')
     {
       const bool cleared = ble.deleteAllBonds();
@@ -104,5 +108,6 @@ void loop()
   }
 
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

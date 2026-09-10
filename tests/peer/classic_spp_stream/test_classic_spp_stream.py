@@ -11,7 +11,7 @@ def test_spp_stream_adapter_behaves_like_a_stream(dut, peers, probe):
     """
     peer = peers["device"]
     probe(peer, "?\n", re.compile(rb"PEER_STATE session=0 bytes=0 "))
-    ready = probe(dut, "a\n", re.compile(rb"ADDRESS ([0-9a-f:]+)"))
+    ready = probe(dut, "a\n", re.compile(rb"ADDRESS ([0-9a-f:]+)\r?\n"))
     address = ready.group(1).decode()
 
     peer.write("c" + address + "\n")
@@ -52,7 +52,7 @@ def test_spp_stream_adapter_behaves_like_a_stream(dut, peers, probe):
     dut.expect_exact("STREAM_BULK requested=2500 written=2500", timeout=20)
     dut.write("f\n")
     flushed = dut.expect(
-        re.compile(rb"STREAM_FLUSH pending=0 elapsed=(\d+)"), timeout=20
+        re.compile(rb"STREAM_FLUSH pending=0 elapsed=(\d+)\r?\n"), timeout=20
     )
     assert int(flushed.group(1)) < 1000, flushed.group(1)
     # flush() waits for the local queue to drain, which is not the same as the
@@ -67,7 +67,7 @@ def test_spp_stream_adapter_behaves_like_a_stream(dut, peers, probe):
     # took instead of stalling: 12 packets asked for, a queue that holds 8.
     dut.write("n\n")
     nowait = dut.expect(
-        re.compile(rb"STREAM_NOWAIT requested=11880 written=(\d+) elapsed=(\d+)"),
+        re.compile(rb"STREAM_NOWAIT requested=11880 written=(\d+) elapsed=(\d+)\r?\n"),
         timeout=20,
     )
     written = int(nowait.group(1))

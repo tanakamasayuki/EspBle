@@ -2,6 +2,8 @@
 // Service. Weight Measurement (0x2A9D) is an indication carrying a uint16 weight
 // at 0.005 kg resolution; Weight Scale Feature (0x2A9E) is a readable uint32.
 #include <EspBle.h>
+
+#include "../../../sketch_support/EspBleTestLifecycleEspBle.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
@@ -59,13 +61,15 @@ void setup()
   ble.advertising().setName("EspBle Scale Peer");
   ble.advertising().addServiceUuid(WEIGHT_SCALE_SERVICE_UUID);
   ble.advertising().start();
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == '?')
     {
       Serial.printf("ADVERTISING %u\n", ble.advertising().isAdvertising() ? 1 : 0);
@@ -85,5 +89,6 @@ void loop()
     }
   }
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

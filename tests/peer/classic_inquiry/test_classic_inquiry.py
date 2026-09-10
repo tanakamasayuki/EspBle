@@ -59,7 +59,7 @@ def test_inquiry_finds_the_peer_and_reports_completion(dut, peers):
     # The scan ends on its own once the duration elapses; five seconds is
     # rounded up to the controller's 1.28 s units.
     completed = dut.expect(
-        re.compile(rb"INQUIRY_COMPLETE cancelled=0 results=(\d+) dropped=(\d+)"),
+        re.compile(rb"INQUIRY_COMPLETE cancelled=0 results=(\d+) dropped=(\d+)\r?\n"),
         timeout=40,
     )
     assert int(completed.group(1)) >= 1

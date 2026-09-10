@@ -3,6 +3,8 @@
 // on the BLE wrapper Arduino-ESP32 ships. Two EspBle boards would exercise one
 // encoder against its own decoder; this pair does not.
 #include <EspBle.h>
+
+#include "../../sketch_support/EspBleTestLifecycleEspBle.h"
 #include <EspBleMidiProfile.h>
 
 EspBle ble;
@@ -84,6 +86,8 @@ void setup()
   });
 
   Serial.println("MIDIHOST_READY");
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
@@ -92,6 +96,7 @@ void loop()
   {
     String command = Serial.readStringUntil('\n');
     command.trim();
+    if (EspBleTestLifecycle::handleLine(command)) return;
     if (command == "?")
     {
       Serial.println("MIDIHOST_READY");
@@ -128,5 +133,6 @@ void loop()
   }
 
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

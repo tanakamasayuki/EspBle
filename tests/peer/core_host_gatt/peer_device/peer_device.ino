@@ -7,6 +7,8 @@
 #include <BLEServer.h>
 #include <BLEUtils.h>
 
+#include "../../../sketch_support/EspBleTestLifecycle.h"
+
 static const char *ServiceUuid = "2f7a1000-9d0b-4f6a-9b41-1c8f3a5d0001";
 static const char *DataUuid = "2f7a1001-9d0b-4f6a-9b41-1c8f3a5d0001";
 static const char *NotifyUuid = "2f7a1002-9d0b-4f6a-9b41-1c8f3a5d0001";
@@ -21,6 +23,7 @@ uint16_t connectionId = 0;
 uint16_t notifySubscribers = 0;
 uint16_t indicateSubscribers = 0;
 uint32_t notifyCounter = 0;
+bool stackStopped = false;
 
 String toHex(const uint8_t *data, size_t length)
 {
@@ -149,14 +152,27 @@ void setup()
   BLEDevice::startAdvertising();
 
   reportReady();
+
+  // onDisconnect advertises again on its own, so RECOVER only drops the link.
+  // deinit() takes the radio down synchronously, so STOP is complete at once.
+  EspBleTestLifecycle::Hooks hooks;
+  hooks.stop = []() {
+    stackStopped = true;
+    BLEDevice::deinit(false);
+  };
+  EspBleTestLifecycle::begin(hooks);
 }
 
 void loop()
 {
+  EspBleTestLifecycle::update();
   if (Serial.available())
   {
     String command = Serial.readStringUntil('\n');
     command.trim();
+    if (EspBleTestLifecycle::handleLine(command)) return;
+    // STOP has taken the stack down; the commands have nothing left to act on.
+    if (stackStopped) return;
     if (command == "?")
     {
       reportReady();

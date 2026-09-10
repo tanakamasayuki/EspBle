@@ -1,4 +1,6 @@
 #include <EspBle.h>
+
+#include "../../sketch_support/EspBleTestLifecycleEspBle.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
@@ -51,11 +53,13 @@ void setup()
     ble.scanner().stop();
     Serial.printf("SCAN_STOPPED dropped=%u\n", static_cast<unsigned>(ble.scanner().droppedResultCount()));
   });
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
-  if (Serial.available() > 0 && Serial.read() == 's' && !scanStarted)
+  if (Serial.available() > 0 && EspBleTestLifecycle::filter(Serial.read()) == 's' && !scanStarted)
   {
     EspBleScanConfig scanConfig;
     scanConfig.active = true;
@@ -65,5 +69,6 @@ void loop()
   }
 
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

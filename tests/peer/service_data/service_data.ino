@@ -2,6 +2,8 @@
 // block, then look one up by UUID with serviceDataFor().
 #include <EspBle.h>
 
+#include "../../sketch_support/EspBleTestLifecycleEspBle.h"
+
 static constexpr const char *LOOKUP_UUID = "181A";
 
 EspBle ble;
@@ -59,13 +61,15 @@ void setup()
       Serial.println("SERVICE_DATA_LOOKUP missing");
     }
   });
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == 's')
     {
       reported = false;
@@ -76,5 +80,6 @@ void loop()
   }
 
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

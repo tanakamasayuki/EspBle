@@ -1,6 +1,6 @@
 import re
 
-PAYLOAD_PATTERN = re.compile(rb"SCANNER_PAYLOAD len=(\d+) hex=([0-9a-f]+)")
+PAYLOAD_PATTERN = re.compile(rb"SCANNER_PAYLOAD len=(\d+) hex=([0-9a-f]+)\r?\n")
 
 
 def _parse_ad_structures(payload: bytes):

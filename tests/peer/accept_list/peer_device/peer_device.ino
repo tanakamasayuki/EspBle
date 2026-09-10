@@ -3,6 +3,8 @@
 // listed, so nobody may connect) and the default open policy.
 #include <EspBle.h>
 
+#include "../../../sketch_support/EspBleTestLifecycleEspBle.h"
+
 static constexpr const char *SERVICE_UUID = "FEAD";
 // An address no board will ever present, so a restricted policy rejects every
 // connection request without needing to know the central's own address.
@@ -51,13 +53,15 @@ void setup()
   ble.advertising().setName("EspBle Accept List");
   ble.advertising().addServiceUuid(SERVICE_UUID);
   restartAdvertising(EspBleAdvertisingFilterPolicy::ConnectionFromAcceptList, "restricted");
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == 'r')
     {
       restartAdvertising(EspBleAdvertisingFilterPolicy::ConnectionFromAcceptList, "restricted");
@@ -73,5 +77,6 @@ void loop()
   }
 
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

@@ -4,6 +4,8 @@
 // time offset, and an appended E2E-CRC. The CRC is computed with the shared
 // EspBleCgmCrc.h codec (CRC-16/MCRF4XX), the same codec the client verifies with.
 #include <EspBle.h>
+
+#include "../../../sketch_support/EspBleTestLifecycleEspBle.h"
 #include <EspBleCgmCrc.h>
 #include <EspBleMedicalFloat.h>
 #include <freertos/FreeRTOS.h>
@@ -85,13 +87,15 @@ void setup()
   ble.advertising().setName("EspBle CGM Peer");
   ble.advertising().addServiceUuid(CGM_SERVICE_UUID);
   ble.advertising().start();
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == '?')
     {
       Serial.printf("ADVERTISING %u\n", ble.advertising().isAdvertising() ? 1 : 0);
@@ -106,5 +110,6 @@ void loop()
     }
   }
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

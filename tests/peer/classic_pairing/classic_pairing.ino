@@ -1,4 +1,6 @@
 #include <EspBleClassic.h>
+
+#include "../../sketch_support/EspBleTestLifecycleClassic.h"
 #include <esp_mac.h>
 
 EspBleClassic bluetooth;
@@ -78,15 +80,18 @@ void setup()
   esp_read_mac(address, ESP_MAC_BT);
   Serial.printf("PAIR_READY address=%02x:%02x:%02x:%02x:%02x:%02x\n",
     address[0], address[1], address[2], address[3], address[4], address[5]);
+
+  EspBleTestLifecycle::beginClassic(bluetooth);
 }
 
 void loop()
 {
   bluetooth.update();
+  EspBleTestLifecycle::update();
 
   if (Serial.available())
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == 'b') reportBonds("PAIR_BONDS");
     else if (command == 'n')
     {

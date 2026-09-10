@@ -4,6 +4,8 @@
 // Response. Set Silent Mode (1) switches Ringer Setting to Silent and notifies;
 // Cancel Silent Mode (3) switches it back to Normal and notifies.
 #include <EspBle.h>
+
+#include "../../../sketch_support/EspBleTestLifecycleEspBle.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
@@ -85,18 +87,21 @@ void setup()
   ble.advertising().setName("EspBle PASS Peer");
   ble.advertising().addServiceUuid(PASS_SERVICE_UUID);
   ble.advertising().start();
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == '?')
     {
       Serial.printf("ADVERTISING %u\n", ble.advertising().isAdvertising() ? 1 : 0);
     }
   }
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

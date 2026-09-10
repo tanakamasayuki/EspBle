@@ -4,6 +4,8 @@
 // cross the stack boundary here.
 #include <EspBle.h>
 
+#include "../../sketch_support/EspBleTestLifecycleEspBle.h"
+
 static const char *ServiceUuid = "2f7a2000-9d0b-4f6a-9b41-1c8f3a5d0002";
 static const char *SecureUuid = "2f7a2001-9d0b-4f6a-9b41-1c8f3a5d0002";
 
@@ -82,6 +84,8 @@ void setup()
   });
 
   Serial.println("SECGATT_READY");
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
@@ -90,6 +94,7 @@ void loop()
   {
     String command = Serial.readStringUntil('\n');
     command.trim();
+    if (EspBleTestLifecycle::handleLine(command)) return;
     if (command == "?")
     {
       Serial.println("SECGATT_READY");
@@ -140,5 +145,6 @@ void loop()
   }
 
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

@@ -1,5 +1,8 @@
 #include <EspBleClassic.h>
 #include <EspBle.h>
+
+#include "../../../sketch_support/EspBleTestLifecycleClassic.h"
+#include "../../../sketch_support/EspBleTestLifecycleEspBle.h"
 #include <EspBleHciBroker.h>
 #include <esp_mac.h>
 #include <esp_system.h>
@@ -282,6 +285,32 @@ bool runDestructorCycle(bool classicFirst)
   return started && survivor;
 }
 
+// Both hosts answer the lifecycle commands together: a transition is complete
+// only once the Classic side and the BLE side both report it. Tests end the
+// stacks and restart them, so RECOVER also brings back whichever host a test
+// left down, the way setup() started it. File-scope so the capture-less
+// lambdas can reach the hooks.
+EspBleTestLifecycle::Hooks classicLifecycle;
+EspBleTestLifecycle::Hooks bleLifecycle;
+
+void beginDualLifecycle()
+{
+  EspBleTestLifecycle::attachClassic(classic);
+  EspBleTestLifecycle::attachEspBle(ble);
+  classicLifecycle = EspBleTestLifecycle::classicHooks();
+  bleLifecycle = EspBleTestLifecycle::espBleHooks();
+  EspBleTestLifecycle::Hooks hooks;
+  // The sketch's own 'e' command ends BLE first; STOP takes the same path.
+  hooks.stop = []() {
+    bleLifecycle.stop();
+    classicLifecycle.stop();
+  };
+  hooks.stopped = []() {
+    return bleLifecycle.stopped() && classicLifecycle.stopped();
+  };
+  EspBleTestLifecycle::begin(hooks);
+}
+
 void setup()
 {
   Serial.begin(115200);
@@ -368,16 +397,20 @@ void setup()
     (void)ble.deleteAllBonds();
 #endif
   Serial.println("DUAL_PEER_READY");
+
+  beginDualLifecycle();
 }
 
 void loop()
 {
   classic.update();
   ble.update();
+  EspBleTestLifecycle::update();
   if (Serial.available())
   {
     String command = Serial.readStringUntil('\n');
     command.trim();
+    if (EspBleTestLifecycle::handleLine(command)) return;
     if (command.startsWith("c"))
       Serial.printf("DUAL_PEER_CONNECT %u\n",
         classic.hidHost().connect(command.c_str() + 1) ? 1 : 0);

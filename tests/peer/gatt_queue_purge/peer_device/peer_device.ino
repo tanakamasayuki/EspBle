@@ -4,6 +4,8 @@
 // connect/disconnect.
 #include <EspBle.h>
 
+#include "../../../sketch_support/EspBleTestLifecycleEspBle.h"
+
 static constexpr const char *SERVICE_UUID = "6b1d0000-9c4e-4a71-8f2d-3e5a7c9b1000";
 static const char *CHARACTERISTIC_UUIDS[] = {
   "6b1d0001-9c4e-4a71-8f2d-3e5a7c9b1000",
@@ -63,13 +65,15 @@ void setup()
   ble.advertising().setName("EspBle Queue Purge");
   ble.advertising().addServiceUuid(SERVICE_UUID);
   ble.advertising().start();
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == '?')
     {
       Serial.printf("PERIPHERAL_READY advertising=%u chars=%u\n",
@@ -78,5 +82,6 @@ void loop()
     }
   }
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

@@ -86,7 +86,7 @@ CLASSIC_OPCODES = {
 def read_heap(device, command, prefix):
     device.write(command)
     match = device.expect(
-        re.compile(prefix + rb" free=(\d+) min=(\d+) largest=(\d+)"),
+        re.compile(prefix + rb" free=(\d+) min=(\d+) largest=(\d+)\r?\n"),
         timeout=10,
     )
     return tuple(int(match.group(index)) for index in range(1, 4))
@@ -97,7 +97,7 @@ def test_nimble_and_custom_classic_host_run_together(dut, peers):
     peer.expect_exact("DUAL_PEER_READY", timeout=20)
     ready = dut.expect(
         re.compile(
-            rb"DUAL_READY classic=([0-9a-f:]+) ble=([0-9a-f:]+) type=(\d+)"
+            rb"DUAL_READY classic=([0-9a-f:]+) ble=([0-9a-f:]+) type=(\d+)\r?\n"
         ),
         timeout=30,
     )
@@ -390,7 +390,7 @@ def test_nimble_and_custom_classic_host_run_together(dut, peers):
     for diag in (dut_diag.group(0), peer_diag.group(0)):
         command = re.search(
             rb"cmd=(\d+),(\d+)/(\d+),(\d+) qmax=(\d+) "
-            rb"qfull=(\d+) mismatch=(\d+) busy=(\d+)",
+            rb"qfull=(\d+) mismatch=(\d+) busy=(\d+)\r?\n",
             diag,
         )
         assert command is not None
@@ -402,6 +402,8 @@ def test_nimble_and_custom_classic_host_run_together(dut, peers):
         assert command.group(6) == b"0"
         assert command.group(7) == b"0"
         assert command.group(8) == b"0"
+        # Searched inside the text the expect above already captured, which
+        # stops at the digits, so this one must not require the newline.
         masks = re.search(rb"masks=(\d+)/(\d+)", diag)
         assert masks is not None
         assert int(masks.group(1)) >= 3
@@ -654,7 +656,7 @@ def test_nimble_and_custom_classic_host_run_together(dut, peers):
                 prefix
                 + rb" completed=(\d+) restarted=(\d+) busy=(\d+) qfull=(\d+) "
                 rb"mismatch=(\d+) unknown=(\d+) heap_before=(\d+) "
-                rb"heap_after=(\d+) error=(\S+)"
+                rb"heap_after=(\d+) error=(\S+)\r?\n"
             ),
             timeout=120,
         )

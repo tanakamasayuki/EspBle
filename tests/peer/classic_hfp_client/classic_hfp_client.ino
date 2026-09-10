@@ -1,8 +1,12 @@
 #include <EspBleClassic.h>
+
+#include "../../sketch_support/EspBleTestLifecycleClassic.h"
 #include <esp_mac.h>
 #if defined(ESPBLE_TEST_DUAL_HFP)
 #include <EspBle.h>
 #include <EspBleHciBroker.h>
+
+#include "../../sketch_support/EspBleTestLifecycleEspBle.h"
 #endif
 
 EspBleClassic bluetooth;
@@ -47,6 +51,29 @@ bool startDualBleServer()
   dualBle.advertising().setName("EspBle Dual HFP");
   dualBle.advertising().addServiceUuid(DualHfpServiceUuid);
   return dualBle.advertising().start();
+}
+
+// Both hosts answer the lifecycle commands together: a transition is complete
+// only once the Classic side and the BLE side both report it. File-scope so
+// the capture-less lambdas can reach the hooks.
+EspBleTestLifecycle::Hooks classicLifecycle;
+EspBleTestLifecycle::Hooks bleLifecycle;
+
+void beginDualLifecycle()
+{
+  EspBleTestLifecycle::attachClassic(bluetooth);
+  EspBleTestLifecycle::attachEspBle(dualBle);
+  classicLifecycle = EspBleTestLifecycle::classicHooks();
+  bleLifecycle = EspBleTestLifecycle::espBleHooks();
+  EspBleTestLifecycle::Hooks hooks;
+  hooks.stop = []() {
+    classicLifecycle.stop();
+    bleLifecycle.stop();
+  };
+  hooks.stopped = []() {
+    return classicLifecycle.stopped() && bleLifecycle.stopped();
+  };
+  EspBleTestLifecycle::begin(hooks);
 }
 #endif
 
@@ -156,6 +183,12 @@ void setup()
 #endif
   Serial.printf("HFP_CLIENT_READY address=%s\n",
     classicAddress().c_str());
+
+#if defined(ESPBLE_TEST_DUAL_HFP)
+  beginDualLifecycle();
+#else
+  EspBleTestLifecycle::beginClassic(bluetooth);
+#endif
 }
 
 void reportReady()
@@ -175,8 +208,10 @@ void loop()
 #if defined(ESPBLE_TEST_DUAL_HFP)
   dualBle.update();
 #endif
+  EspBleTestLifecycle::update();
   if (!Serial.available()) { delay(1); return; }
   const String command = Serial.readStringUntil('\n');
+  if (EspBleTestLifecycle::handleLine(command)) return;
   if (command == "?")
     reportReady();
   else if (command.startsWith("c"))

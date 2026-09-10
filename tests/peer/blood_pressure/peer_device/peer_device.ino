@@ -3,6 +3,8 @@
 // systolic/diastolic/mean values are IEEE-11073 16-bit SFLOATs; Blood Pressure
 // Feature (0x2A49) is a readable 16-bit field.
 #include <EspBle.h>
+
+#include "../../../sketch_support/EspBleTestLifecycleEspBle.h"
 #include <EspBleMedicalFloat.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -61,13 +63,15 @@ void setup()
   ble.advertising().setName("EspBle BP Peer");
   ble.advertising().addServiceUuid(BLOOD_PRESSURE_SERVICE_UUID);
   ble.advertising().start();
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == '?')
     {
       Serial.printf("ADVERTISING %u\n", ble.advertising().isAdvertising() ? 1 : 0);
@@ -87,5 +91,6 @@ void loop()
     }
   }
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

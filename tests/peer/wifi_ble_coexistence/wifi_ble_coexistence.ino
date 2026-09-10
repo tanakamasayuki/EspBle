@@ -1,5 +1,7 @@
 #include <EspBle.h>
 
+#include "../../sketch_support/EspBleTestLifecycleEspBle.h"
+
 #if defined(CONFIG_ESP_HOSTED_ENABLE_BT_NIMBLE)
 
 #include <WiFi.h>
@@ -122,13 +124,15 @@ void setup()
   delay(500);
   configureBleCallbacks();
   Serial.println("READY");
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == '?')
     {
       Serial.println("ESP_HOSTED_CAPABLE 1");
@@ -189,6 +193,7 @@ void loop()
 
   if (bleStarted) ble.update();
   delay(1);
+  EspBleTestLifecycle::update();
 }
 
 #else
@@ -202,7 +207,7 @@ void setup()
 
 void loop()
 {
-  if (Serial.available() > 0 && Serial.read() == '?')
+  if (Serial.available() > 0 && EspBleTestLifecycle::filter(Serial.read()) == '?')
   {
     Serial.println("ESP_HOSTED_CAPABLE 0");
   }

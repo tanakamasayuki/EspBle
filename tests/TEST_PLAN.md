@@ -13,6 +13,33 @@ BLE connection, disconnection, discovery, subscription, security, and bonding sp
 
 Suites that need no peer live under `peer/` as single-board suites (`classic_hid_profiles`, `classic_a2dp_sink_profile` and `classic_radio_settings`, none of which has a `peer_device/`). There is no separate `single` layer: the fixture and the way they run are the same, so splitting them buys nothing. **Passing `--peer-profile` to one of them is rejected as an unknown peer**, so run them as their own command.
 
+## How often each layer runs
+
+The plan is not one run. It is layers, cheap and frequent at the bottom, costly
+and rare at the top, and each answers something the layer below cannot.
+
+| Layer | What it needs | When | Cost |
+|---|---|---|---|
+| `unit/` | g++ only | every push, in CI | 19 tests, 8 s |
+| `peer/<suite>` | the fixture | while working on that suite | one suite, under a minute |
+| `pytest` (unit + peer) | the fixture | before merging | 113 tests, ~78 min |
+| `pytest --clean` | the fixture | before a release, and after a core or library upgrade | the above plus full compiles |
+| build matrices | nothing | per push (narrow) and on demand (exhaustive) | `compile-examples`, `board-matrix`, `core-matrix` |
+| `manual/` | a third board or a person | when the thing being checked needs eyes, ears or hands | named explicitly |
+
+`testpaths` makes `pytest` with no arguments mean the two layers that need no
+judgement call: `unit` and `peer`. `manual/` is named explicitly because it wants
+hardware that is not always attached.
+
+**`--clean` is for upgrades.** It reuses nothing, which is exactly wrong for
+everyday work and exactly right after moving the core or a library: the reuse
+that makes the normal run fast is what hides a stale build then.
+
+**The unit layer is the one that runs most.** It compiles the pure C++ under
+`src/` with the system g++ and runs it as an ordinary program — no board, no
+core installation, no serial port. That is also why it is the only layer CI can
+run: everything above it needs the fixture.
+
 ## Peer Hardware
 
 Peer tests use three fixture configurations.
@@ -434,6 +461,72 @@ its way, and it then captures a truncated value: `service_data` read
 `data=abcdef1` from a board that had printed `data=abcdef12`. End such a pattern
 with `\r?\n`. A capture followed by another literal in the same pattern is
 already safe, because the literal cannot match until it has arrived.
+
+Every pattern in `peer/` that ends in a capture is anchored, except six that
+cannot be: two lines carry more text after the field, three match a fragment
+with no line tag of their own, and one is searched inside text an `expect`
+already captured. **That last one is the trap.** The captured text stops where
+the expect stopped, so a pattern applied to it must not require a newline that
+was never captured — the same pattern, anchored, is right for `expect` and
+wrong for `re.search`. Anchoring one of those by hand cost a full-run failure
+in `dual_host_smoke`; the four that stay unanchored say so in a comment.
+
+## Leave the board as you found it
+
+Every module holds one test and every module begins with an upload, which
+resets the board, so no state is ever carried from one test to the next. There
+is nothing to restore, and the cleanup is one command: the autouse fixture in
+`tests/peer/conftest.py` sends STOP (`0x04`) after each test, and the sketch
+answers `STOPPED` once nothing is connected, advertising or scanning. The reply
+means the state has been reached, not that the byte arrived, so the sketch
+registers a predicate and prints through `EspBleTestLifecycle::update()`. The
+mechanics are in `tests/sketch_support/EspBleTestLifecycle.h`.
+
+The command exists for the fixture, not for the next test. A board that keeps
+advertising until its next upload shows up in the scans of whoever has the rig
+next, and a run that fails halfway would otherwise leave it that way until
+someone notices.
+
+**Restoring is harder than stopping, which is a reason to keep one test per
+module.** An earlier version of this suite returned each board to its boot state
+after every test so that a second test in the same module could follow. Four
+defects came out of that, all the same shape: the state was not in the sketch's
+variables but in a library registry, a callback slot, a GATT attribute or the
+radio hardware, and resetting the variable that mirrored it left the mirror
+disagreeing with reality — worse than doing nothing. Stopping needs none of
+that, because it puts nothing back.
+
+Two things do survive an upload and are therefore not the fixture's problem.
+Non-volatile storage is one: `arduino-cli` does not erase NVS, so pairing bonds
+outlive uploads, sessions and days, which is why every bond suite clears both
+sides at the start of its test. The other is anything outside the reach of the
+reset signal, which on the P4 + C6 fixture includes the radio itself: the
+controller runs on the C6, and resetting the P4 does not stop it.
+
+Connection ids keep counting from boot. A merged test whose cases share a board
+must match `id=` with a pattern rather than naming a number, because only the
+first connection of a boot is `id=1`.
+
+Tests still normalise their own application state at the start. The cleanup
+protects the environment; it does not replace `_reset()`-style setup, which is
+what makes a test correct on its own and runnable alone with `-k`.
+
+### Asking a board what it is doing resets it
+
+Opening a serial port asserts DTR and RTS, which is the reset gesture on an
+ESP32, so a query sent to a board after a run answers from a sketch that has
+just booted. Checking that `STOP` worked this way reports the boot state and
+looks like a failure: the peer answered `ADVERTISING 1` and the Classic DUT
+printed its whole startup sequence. Deasserting both lines before the open does
+not help. The fixture's boards reach the chip's EN through a CH343 bridge
+(`1a86:55d3`), but a board on native USB CDC is not exempt: it reboots on a
+1200 bps open instead, so the same misreading is available through a different
+door. **Observe from a second board instead.** Leave the board under
+observation untouched, flash a scanner onto another one, and listen: after
+`STOP` the peer was absent from ten advertisers heard in eight seconds. Take the
+control as well — reset the peer back into its boot state and hear it again with
+the same scanner — because "not heard" on its own also describes a broken
+scanner.
 
 ## Pass Criteria
 

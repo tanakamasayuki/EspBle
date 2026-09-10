@@ -1,4 +1,6 @@
 #include <EspBle.h>
+
+#include "../../../sketch_support/EspBleTestLifecycleEspBle.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
@@ -15,6 +17,15 @@ EspBleGattDescriptor testDescriptorDescriptor;
 EspBleGattService slowServiceService;
 EspBleGattCharacteristic slowCharacteristicCharacteristic;
 TaskHandle_t loopTask = nullptr;
+
+// The values a reader expects to find. A test writes to this characteristic, so
+// RECOVER puts the boot values back: the next test may be one that reads first.
+static bool restoreTestValues()
+{
+  auto &gattServer = ble.gattServer();
+  return gattServer.setValue(testCharacteristicCharacteristic, String("peer-ready")) &&
+    gattServer.setDescriptorValue(testDescriptorDescriptor, String("peer-description"));
+}
 
 void setup()
 {
@@ -33,8 +44,7 @@ void setup()
   if (!(testServiceService = gattServer.addService(TEST_SERVICE_UUID)).valid() ||
       !(testCharacteristicCharacteristic = gattServer.addCharacteristic(testServiceService, TEST_CHARACTERISTIC_UUID, characteristicConfig)).valid() ||
       !(testDescriptorDescriptor = gattServer.addDescriptor(testCharacteristicCharacteristic, TEST_DESCRIPTOR_UUID, descriptorConfig)).valid() ||
-      !gattServer.setValue(testCharacteristicCharacteristic, String("peer-ready")) ||
-      !gattServer.setDescriptorValue(testDescriptorDescriptor, String("peer-description")))
+      !restoreTestValues())
   {
     Serial.printf("GATT_CONFIG_FAILED %s %s\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
     return;
@@ -101,13 +111,15 @@ void setup()
   {
     Serial.printf("ADVERTISING_FAILED %s %s\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
   }
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == '?')
     {
       Serial.printf("ADVERTISING %u\n", ble.advertising().isAdvertising() ? 1 : 0);
@@ -122,5 +134,6 @@ void loop()
   }
 
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

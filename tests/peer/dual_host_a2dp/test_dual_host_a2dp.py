@@ -10,7 +10,7 @@ def test_a2dp_and_avrcp_while_ble_gatt_remains_live(dut, peers, probe):
             re.compile(
                 rb"DUAL_A2DP_DIAGNOSTICS acl_tx=(\d+),(\d+) "
                 rb"acl_rx=(\d+),(\d+) unknown=(\d+) mismatch=(\d+) "
-                rb"qfull=(\d+) coex=(\d+)"
+                rb"qfull=(\d+) coex=(\d+)\r?\n"
             ),
             timeout=10,
         )
@@ -130,7 +130,7 @@ def test_a2dp_and_avrcp_while_ble_gatt_remains_live(dut, peers, probe):
 
     disconnected = dut.expect(
         re.compile(
-            rb"A2DP_SINK_DISCONNECTED id=\d+ packets=(\d+) bytes=(\d+)"
+            rb"A2DP_SINK_DISCONNECTED id=\d+ packets=(\d+) bytes=(\d+)\r?\n"
         ),
         timeout=30,
     )

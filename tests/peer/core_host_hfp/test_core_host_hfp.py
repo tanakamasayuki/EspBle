@@ -15,7 +15,7 @@ def test_hfp_interoperates_with_the_core_bluedroid_audio_gateway(dut, peers, pro
     """
     peer = peers["device"]
 
-    ready = probe(peer, "?\n", re.compile(rb"HFPPEER_READY address=([0-9a-f:]+)"))
+    ready = probe(peer, "?\n", re.compile(rb"HFPPEER_READY address=([0-9a-f:]+)\r?\n"))
     ag_address = ready.group(1)
     probe(dut, "?\n", re.compile(rb"HFPCLIENT_READY started=1 address=[0-9a-f:]+"))
 
@@ -26,7 +26,7 @@ def test_hfp_interoperates_with_the_core_bluedroid_audio_gateway(dut, peers, pro
     dut.expect(re.compile(rb"HFPCLIENT_CONNECT requested=1"), timeout=10)
     peer.expect(re.compile(rb"HFPPEER_CONNECTION state=2 peer=[0-9a-f:]+"), timeout=60)
     connection = dut.expect(
-        re.compile(rb"HFPCLIENT_CONNECTION state=3 peer=[0-9a-f:]+ features=(\d+)"),
+        re.compile(rb"HFPCLIENT_CONNECTION state=3 peer=[0-9a-f:]+ features=(\d+)\r?\n"),
         timeout=60,
     )
     assert int(connection.group(1)) > 0, "the AG advertised no features"

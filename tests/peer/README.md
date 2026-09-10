@@ -57,9 +57,16 @@ peer/<suite>/
   test_<suite>.py    generates the input and decides the result
 ```
 
+Every sketch also answers the reserved STOP command that the autouse fixture in
+[`conftest.py`](conftest.py) sends after each test, through [`../sketch_support/EspBleTestLifecycle.h`](../sketch_support/EspBleTestLifecycle.h);
+a sketch that does not is reported as a warning after every test. The header comment
+describes the four edits a new sketch needs, and the [tests README](../README.md#board-state-between-tests)
+describes what pytest sends.
+
 **What every suite covers, and what counts as a pass, is in the [test plan](../TEST_PLAN.md)** —
 this file does not repeat it. When you add a suite, add it to the test plan in both languages as
 well, so that every directory under `tests/peer` appears in both.
 
-Before writing a new suite, read "Do not wait for a startup banner" and "Anchor a trailing
-variable-length field" in the test plan. Both describe failures that happened on hardware.
+Before writing a new suite, read "Do not wait for a startup banner", "Anchor a trailing
+variable-length field" and "Leave the board as you found it" in the test plan. The first two
+describe failures that happened on hardware; the third is the contract every sketch keeps.

@@ -5,6 +5,8 @@
 // peer_device sketch exercises.
 #include <EspBle.h>
 
+#include "../../sketch_support/EspBleTestLifecycleEspBle.h"
+
 static constexpr const char *SERVICE_UUID = "FEAE";
 static constexpr const char *CHARACTERISTIC_UUID = "2ae3";
 
@@ -29,6 +31,30 @@ String connectionOrder;
 EspBleListenerId connectedFirstListener = EspBleInvalidListenerId;
 EspBleListenerId connectedSecondListener = EspBleInvalidListenerId;
 
+// Registered by setup() and again by the "R" command: two cases take listeners
+// out, and a case that runs after them has to find the boot registration.
+static void registerWrittenListeners()
+{
+  firstListener = ble.addCharacteristicWrittenListener([](const EspBleGattResult &) {
+    ++firstCount;
+  });
+  secondListener = ble.addCharacteristicWrittenListener([](const EspBleGattResult &) {
+    ++secondCount;
+  });
+}
+
+static void registerConnectedListeners()
+{
+  connectedFirstListener = ble.addConnectedListener([](const EspBleConnection &) {
+    ++connectedFirstCount;
+    connectionOrder += '1';
+  });
+  connectedSecondListener = ble.addConnectedListener([](const EspBleConnection &) {
+    ++connectedSecondCount;
+    connectionOrder += '2';
+  });
+}
+
 void setup()
 {
   Serial.begin(115200);
@@ -46,12 +72,7 @@ void setup()
     ++primaryCount;
     Serial.printf("WRITE_DONE success=%u\n", result.success ? 1 : 0);
   });
-  firstListener = ble.addCharacteristicWrittenListener([](const EspBleGattResult &) {
-    ++firstCount;
-  });
-  secondListener = ble.addCharacteristicWrittenListener([](const EspBleGattResult &) {
-    ++secondCount;
-  });
+  registerWrittenListeners();
   Serial.printf("LISTENERS_REGISTERED first=%u second=%u\n",
     static_cast<unsigned>(firstListener), static_cast<unsigned>(secondListener));
 
@@ -63,14 +84,7 @@ void setup()
     // Writing by UUID needs the characteristic discovered first.
     ble.discoverCharacteristic(connection.id, SERVICE_UUID, CHARACTERISTIC_UUID);
   });
-  connectedFirstListener = ble.addConnectedListener([](const EspBleConnection &) {
-    ++connectedFirstCount;
-    connectionOrder += '1';
-  });
-  connectedSecondListener = ble.addConnectedListener([](const EspBleConnection &) {
-    ++connectedSecondCount;
-    connectionOrder += '2';
-  });
+  registerConnectedListeners();
   ble.addDisconnectedListener([](const EspBleConnection &) {
     ++disconnectedListenerCount;
   });
@@ -88,13 +102,15 @@ void setup()
     ble.scanner().stop();
     Serial.println(ble.connect(scanResult) ? "CONNECT_REQUESTED" : "CONNECT_REQUEST_FAILED");
   });
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == 'c')
     {
       EspBleScanConfig scanConfig;
@@ -149,6 +165,25 @@ void loop()
         removed ? 1 : 0, static_cast<unsigned>(secondListener));
       secondListener = EspBleInvalidListenerId;
     }
+    else if (command == 'R')
+    {
+      // Back to the boot registration, so a case can build its own premise.
+      if (secondListener == EspBleInvalidListenerId ||
+          firstListener == EspBleInvalidListenerId)
+      {
+        ble.removeGattListener(firstListener);
+        ble.removeGattListener(secondListener);
+        registerWrittenListeners();
+      }
+      if (connectedSecondListener == EspBleInvalidListenerId ||
+          connectedFirstListener == EspBleInvalidListenerId)
+      {
+        ble.removeConnectionListener(connectedFirstListener);
+        ble.removeConnectionListener(connectedSecondListener);
+        registerConnectedListeners();
+      }
+      Serial.println("LISTENERS_RESTORED");
+    }
     else if (command == 'd' && connectionId != 0)
     {
       Serial.println(ble.disconnect(connectionId) ? "DISCONNECT_REQUESTED" : "DISCONNECT_FAILED");
@@ -156,5 +191,6 @@ void loop()
   }
 
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }

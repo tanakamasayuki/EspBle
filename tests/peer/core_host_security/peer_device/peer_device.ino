@@ -10,6 +10,8 @@
 #include <BLEUtils.h>
 #include <esp_gap_ble_api.h>
 
+#include "../../../sketch_support/EspBleTestLifecycle.h"
+
 static const char *ServiceUuid = "2f7a2000-9d0b-4f6a-9b41-1c8f3a5d0002";
 static const char *SecureUuid = "2f7a2001-9d0b-4f6a-9b41-1c8f3a5d0002";
 
@@ -20,6 +22,7 @@ uint16_t connectionId = 0;
 bool authenticated = false;
 bool bondedFlag = false;
 unsigned encryptedReads = 0;
+bool stackStopped = false;
 
 void reportReady()
 {
@@ -163,14 +166,27 @@ void setup()
   BLEDevice::startAdvertising();
 
   reportReady();
+
+  // onDisconnect advertises again on its own, so RECOVER only drops the link.
+  // deinit() takes the radio down synchronously, so STOP is complete at once.
+  EspBleTestLifecycle::Hooks hooks;
+  hooks.stop = []() {
+    stackStopped = true;
+    BLEDevice::deinit(false);
+  };
+  EspBleTestLifecycle::begin(hooks);
 }
 
 void loop()
 {
+  EspBleTestLifecycle::update();
   if (Serial.available())
   {
     String command = Serial.readStringUntil('\n');
     command.trim();
+    if (EspBleTestLifecycle::handleLine(command)) return;
+    // STOP has taken the stack down; the commands have nothing left to act on.
+    if (stackStopped) return;
     if (command == "?")
     {
       reportReady();

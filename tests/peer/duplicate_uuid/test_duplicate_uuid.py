@@ -1,9 +1,9 @@
 import re
 
-READ = re.compile(rb"READ handle=(\d+) value=(\S+)")
+READ = re.compile(rb"READ handle=(\d+) value=(\S+)\r?\n")
 SUBSCRIBED = re.compile(rb"SUBSCRIBED handle=(\d+) ok=(\d)")
-NOTIFY = re.compile(rb"NOTIFY handle=(\d+) value=(\S+)")
-HANDLES = re.compile(rb"HANDLES first=(\d+) duplicate=(\d+) other=(\d+)")
+NOTIFY = re.compile(rb"NOTIFY handle=(\d+) value=(\S+)\r?\n")
+HANDLES = re.compile(rb"HANDLES first=(\d+) duplicate=(\d+) other=(\d+)\r?\n")
 
 
 def test_duplicate_uuid_registration(dut, peers):

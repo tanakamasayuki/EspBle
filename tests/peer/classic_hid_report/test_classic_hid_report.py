@@ -18,13 +18,13 @@ def connect_and_exchange(dut, peer, address):
         announced.add(line.group(1) or line.group(2))
     assert announced == {b"CONNECTED", b"INPUT_ACCEPTED"}
     incoming = peer.expect(
-        re.compile(rb"CLASSIC_HIDH_INPUT id=(\d+) length=(\d+) hex=([0-9a-f]+)"),
+        re.compile(rb"CLASSIC_HIDH_INPUT id=(\d+) length=(\d+) hex=([0-9a-f]+)\r?\n"),
         timeout=20,
     )
     assert incoming.group(3) in (b"007f80ff", b"01007f80ff")
     peer.expect_exact("CLASSIC_HIDH_OUTPUT_ACCEPTED 1", timeout=10)
     outgoing = dut.expect(
-        re.compile(rb"CLASSIC_HIDD_OUTPUT id=(\d+) length=(\d+) hex=([0-9a-f]+)"),
+        re.compile(rb"CLASSIC_HIDD_OUTPUT id=(\d+) length=(\d+) hex=([0-9a-f]+)\r?\n"),
         timeout=20,
     )
     assert outgoing.group(1) == b"2"
@@ -35,7 +35,7 @@ def connect_and_exchange(dut, peer, address):
 def test_classic_hid_device_to_host_report_and_output(dut, peers, probe):
     peer = peers["device"]
     probe(peer, "a\n", re.compile(rb"CLASSIC_HIDH_READY"))
-    ready = probe(dut, "a", re.compile(rb"CLASSIC_HIDD_READY address=([0-9a-f:]+)"))
+    ready = probe(dut, "a", re.compile(rb"CLASSIC_HIDD_READY address=([0-9a-f:]+)\r?\n"))
     address = ready.group(1)
     connect_and_exchange(dut, peer, address)
 
@@ -67,7 +67,7 @@ def test_classic_hid_device_to_host_report_and_output(dut, peers, probe):
     dut.write("r")
     dut.expect_exact("CLASSIC_HIDD_ENDED", timeout=20)
     restarted = dut.expect(
-        re.compile(rb"CLASSIC_HIDD_READY address=([0-9a-f:]+)"), timeout=20
+        re.compile(rb"CLASSIC_HIDD_READY address=([0-9a-f:]+)\r?\n"), timeout=20
     )
     assert restarted.group(1) == address
     connect_and_exchange(dut, peer, address)

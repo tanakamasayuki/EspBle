@@ -3,6 +3,8 @@
 // notifyServicesChanged(). The Generic Attribute service (0x1801) and its
 // Service Changed characteristic (0x2A05) are provided by the backend.
 #include <EspBle.h>
+
+#include "../../../sketch_support/EspBleTestLifecycleEspBle.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
@@ -46,13 +48,15 @@ void setup()
   ble.advertising().setName("EspBle SvcChg Peer");
   ble.advertising().addServiceUuid(MARKER_SERVICE_UUID);
   ble.advertising().start();
+
+  EspBleTestLifecycle::beginEspBle(ble);
 }
 
 void loop()
 {
   if (Serial.available() > 0)
   {
-    const char command = Serial.read();
+    const char command = EspBleTestLifecycle::filter(Serial.read());
     if (command == '?')
     {
       Serial.printf("ADVERTISING %u\n", ble.advertising().isAdvertising() ? 1 : 0);
@@ -65,5 +69,6 @@ void loop()
     }
   }
   ble.update();
+  EspBleTestLifecycle::update();
   delay(1);
 }
