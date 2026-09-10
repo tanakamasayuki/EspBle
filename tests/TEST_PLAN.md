@@ -27,9 +27,12 @@ and rare at the top, and each answers something the layer below cannot.
 | build matrices | nothing | per push (narrow) and on demand (exhaustive) | `compile-examples`, `board-matrix`, `core-matrix` |
 | `manual/` | a third board or a person | when the thing being checked needs eyes, ears or hands | named explicitly |
 
-`testpaths` makes `pytest` with no arguments mean the two layers that need no
-judgement call: `unit` and `peer`. `manual/` is named explicitly because it wants
-hardware that is not always attached.
+`pytest` with no arguments means everything except `manual/`, which is kept out
+with `norecursedirs` rather than by listing what is in. A list of what is in
+would have to be updated whenever a directory is added, and forgetting would
+drop that directory from the default run without saying so; forgetting to
+exclude something is at least loud. `manual/` still runs when it is named on the
+command line.
 
 **`--clean` is for upgrades.** It reuses nothing, which is exactly wrong for
 everyday work and exactly right after moving the core or a library: the reuse

@@ -15,7 +15,9 @@ filterwarnings = [
     "ignore:record_xml_attribute is an experimental feature:pytest.PytestExperimentalApiWarning",
 ]
 addopts = "--save-state"
-# The default run is the two layers that need no judgement call: host-side unit
-# tests and the peer suites. manual/ needs hardware that is not always attached
-# or a person to watch, so it is named explicitly when it is wanted.
-testpaths = ["unit", "peer"]
+# No testpaths: a directory added later would be missing from the list and would
+# then be skipped by the default run without saying so. The default is instead
+# everything, minus the one directory that is deliberately out — manual/ needs
+# hardware that is not always attached, or a person to watch. Naming it on the
+# command line still works, which is how manual/README says to run it.
+norecursedirs = ["manual", "*/build", "*/output"]
