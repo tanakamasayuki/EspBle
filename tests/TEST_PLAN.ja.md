@@ -27,10 +27,12 @@ Peerを必要としないsuiteは`peer/`の中に1台構成として置きます
 | build matrix | 不要 | 毎push（狭く）と必要時（全面） | `compile-examples`、`board-matrix`、`core-matrix` |
 | `manual/` | 3台目か人 | 見る・聞く・抜き差しが要るとき | 明示して実行 |
 
-引数なしの`pytest`は`manual/`以外のすべてです。`norecursedirs`で外す形にしていて、入るものを
-列挙する形にはしていません。列挙するとdirectoryを足すたびに書き足す必要があり、忘れると既定の
-実行からそのdirectoryが黙って落ちます。外し忘れるほうは、少なくとも気づけます。`manual/`は
-コマンドラインで指定すれば走ります。
+引数なしの`pytest`は、testに見えるものすべてです。設定にはdirectoryを入れる列挙も外す列挙も
+書いていません。manualのsuiteが外れているのは`test_*.py`という名前でないからで、これは
+`pytest .`を含めてどの起動の仕方でも効きます。入るものを列挙するとdirectoryを足したときに黙って
+落ち、外すものを列挙するとpytest自身の既定値を書き直さない限り`.venv`まで降ります。名前で守る
+代償は`pytest manual/`が0件になることで、これらのtestはファイルを名指しして実行します
+（`manual/README.md`参照）。
 
 **`--clean`はversionを上げたときのためにあります。** 何も再利用しないので普段は不適切で、
 coreやlibraryを動かした直後だけ正しいです。普段の速さを支えている再利用が、そのときだけは

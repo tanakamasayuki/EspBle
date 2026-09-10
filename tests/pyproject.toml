@@ -15,9 +15,9 @@ filterwarnings = [
     "ignore:record_xml_attribute is an experimental feature:pytest.PytestExperimentalApiWarning",
 ]
 addopts = "--save-state"
-# No testpaths: a directory added later would be missing from the list and would
-# then be skipped by the default run without saying so. The default is instead
-# everything, minus the one directory that is deliberately out — manual/ needs
-# hardware that is not always attached, or a person to watch. Naming it on the
-# command line still works, which is how manual/README says to run it.
-norecursedirs = ["manual", "*/build", "*/output"]
+# Nothing here lists or excludes directories. `pytest` with no arguments means
+# everything that looks like a test, and what is kept out of it is kept out by
+# its file name: the manual suites are not named `test_*.py`, so collection
+# never picks them up however the run is started. A list of what is in would go
+# stale silently when a directory is added, and a list of what is out has to
+# restate pytest's own defaults or collection walks .venv.

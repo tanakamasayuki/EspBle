@@ -27,12 +27,13 @@ and rare at the top, and each answers something the layer below cannot.
 | build matrices | nothing | per push (narrow) and on demand (exhaustive) | `compile-examples`, `board-matrix`, `core-matrix` |
 | `manual/` | a third board or a person | when the thing being checked needs eyes, ears or hands | named explicitly |
 
-`pytest` with no arguments means everything except `manual/`, which is kept out
-with `norecursedirs` rather than by listing what is in. A list of what is in
-would have to be updated whenever a directory is added, and forgetting would
-drop that directory from the default run without saying so; forgetting to
-exclude something is at least loud. `manual/` still runs when it is named on the
-command line.
+`pytest` with no arguments means everything that looks like a test. Nothing in
+the configuration lists directories in or out: the manual suites stay out
+because they are not named `test_*.py`, which holds however the run is started,
+including `pytest .`. Listing what is in goes stale silently when a directory is
+added; listing what is out has to restate pytest's own defaults or collection
+walks `.venv`. The cost of the naming rule is that `pytest manual/` collects
+nothing, so those tests are run by naming the file — see `manual/README.md`.
 
 **`--clean` is for upgrades.** It reuses nothing, which is exactly wrong for
 everyday work and exactly right after moving the core or a library: the reuse

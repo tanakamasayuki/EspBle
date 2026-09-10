@@ -6,14 +6,19 @@ of `tests/peer/` so the default `pytest peer/` run never depends on the extra
 board.
 
 Each test skips automatically when a required peer port is not configured, so
-running the whole directory without the extra board is safe.
+running one without the extra board is safe.
 
 ## Run
+
+**Name the file.** These tests are deliberately not named `test_*.py`, which is
+what keeps them out of every default run — including `pytest` and `pytest .` —
+without any setting to get wrong. The cost is that naming the directory
+collects nothing: `pytest manual/` reports "no tests ran" rather than an error.
 
 From `tests/`, with the extra board's port set in `.env`:
 
 ```
-uv run --env-file .env pytest manual/
+uv run --env-file .env pytest manual/multi_connection/multi_connection.py
 ```
 
 ## Boards / ports
