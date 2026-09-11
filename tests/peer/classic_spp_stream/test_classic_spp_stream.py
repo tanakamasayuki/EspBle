@@ -65,6 +65,8 @@ def test_spp_stream_adapter_behaves_like_a_stream(dut, peers, probe):
 
     # With the write timeout at zero a write that does not fit reports what it
     # took instead of stalling: 12 packets asked for, a queue that holds 8.
+    peer.write("z\n")
+    peer.expect_exact("PEER_RESET", timeout=10)
     dut.write("n\n")
     nowait = dut.expect(
         re.compile(rb"STREAM_NOWAIT requested=11880 written=(\d+) elapsed=(\d+)"),
@@ -75,6 +77,15 @@ def test_spp_stream_adapter_behaves_like_a_stream(dut, peers, probe):
     assert int(nowait.group(2)) < 200, nowait.group(2)
     dut.write("f\n")
     dut.expect(re.compile(rb"STREAM_FLUSH pending=0 elapsed=\d+"), timeout=20)
+    # flush() only drains the sender's queue. Wait for the peer to dispatch all
+    # accepted packets before resetting its counters for the read-side checks.
+    probe(
+        peer,
+        "?\n",
+        re.compile(
+            rb"PEER_STATE session=\d+ bytes=" + str(written).encode() + rb" "
+        ),
+    )
 
     # The read side: readStringUntil() with the Stream timeout, then parseInt(),
     # which needs nothing but read() and peek() and so proves the adapter is a
