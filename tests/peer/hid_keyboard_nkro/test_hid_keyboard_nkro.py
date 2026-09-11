@@ -2,11 +2,11 @@ import re
 import time
 
 NKRO_STATE_PATTERN = re.compile(
-    rb"HOST_NKRO_STATE count=(\d+) high=(\d+) b=(\d+) b_released=(\d+)\r?\n"
+    rb"HOST_NKRO_STATE count=(\d+) high=(\d+) b=(\d+) b_released=(\d+)"
 )
-CONNECTED_PATTERN = re.compile(rb"HOST_CONNECTED id=(\d+)\r?\n")
+CONNECTED_PATTERN = re.compile(rb"HOST_CONNECTED id=(\d+)")
 LED_STATE_PATTERN = re.compile(
-    rb"DEVICE_LED_STATE leds=(\d+) num=(\d+) caps=(\d+) scroll=(\d+) connection=(\d+)\r?\n"
+    rb"DEVICE_LED_STATE leds=(\d+) num=(\d+) caps=(\d+) scroll=(\d+) connection=(\d+)"
 )
 
 

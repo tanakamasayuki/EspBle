@@ -22,7 +22,7 @@ def test_service_changed(dut, peers):
     device.expect_exact("SERVICE_CHANGED sent=1", timeout=10)
 
     indication = dut.expect(re.compile(
-        rb"SC_INDICATION valid=(\d+) indication=(\d+) start=(\d+) end=(\d+) context=(\w+)\r?\n"), timeout=20)
+        rb"SC_INDICATION valid=(\d+) indication=(\d+) start=(\d+) end=(\d+) context=(\w+)"), timeout=20)
     assert indication.group(1) == b"1", "Service Changed payload should be 4 bytes"
     assert indication.group(2) == b"1", "must arrive as an indication"
     assert int(indication.group(3)) == 1, "start handle should be 0x0001"
@@ -35,4 +35,4 @@ def test_service_changed(dut, peers):
 
     dut.write("d")
     dut.expect_exact("DISCONNECT_REQUESTED", timeout=10)
-    dut.expect(re.compile(rb"DISCONNECTED id=(\d+)\r?\n"), timeout=20)
+    dut.expect(re.compile(rb"DISCONNECTED id=(\d+)"), timeout=20)

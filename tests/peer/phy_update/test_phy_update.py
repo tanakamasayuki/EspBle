@@ -16,28 +16,28 @@ def test_phy_update(dut, peers):
     dut.expect_exact("CONNECT_REQUESTED", timeout=20)
 
     connected = dut.expect(re.compile(
-        rb"CONNECTED id=(\d+) tx_phy=(\d+) rx_phy=(\d+) context=(\w+)\r?\n"), timeout=20)
+        rb"CONNECTED id=(\d+) tx_phy=(\d+) rx_phy=(\d+) context=(\w+)"), timeout=20)
     assert int(connected.group(2)) > 0, "initial tx PHY should be populated"
     assert int(connected.group(3)) > 0, "initial rx PHY should be populated"
     assert connected.group(4) == b"loop"
-    device.expect(re.compile(rb"PEER_CONNECTED id=(\d+) tx_phy=(\d+) rx_phy=(\d+)\r?\n"), timeout=20)
+    device.expect(re.compile(rb"PEER_CONNECTED id=(\d+) tx_phy=(\d+) rx_phy=(\d+)"), timeout=20)
 
     # The central requests the 2M PHY in both directions.
     dut.write("p")
     dut.expect_exact("PHY_REQUESTED", timeout=10)
 
     updated = dut.expect(re.compile(
-        rb"PHY_UPDATED tx_phy=(\d+) rx_phy=(\d+) context=(\w+)\r?\n"), timeout=20)
+        rb"PHY_UPDATED tx_phy=(\d+) rx_phy=(\d+) context=(\w+)"), timeout=20)
     assert int(updated.group(1)) == 2, "central should report the negotiated 2M tx PHY"
     assert int(updated.group(2)) == 2, "central should report the negotiated 2M rx PHY"
     assert updated.group(3) == b"loop", "must be delivered from update()/loop"
 
     peer_updated = device.expect(re.compile(
-        rb"PEER_PHY_UPDATED tx_phy=(\d+) rx_phy=(\d+) context=(\w+)\r?\n"), timeout=20)
+        rb"PEER_PHY_UPDATED tx_phy=(\d+) rx_phy=(\d+) context=(\w+)"), timeout=20)
     assert int(peer_updated.group(1)) == 2, "peripheral should report the negotiated 2M tx PHY"
     assert int(peer_updated.group(2)) == 2, "peripheral should report the negotiated 2M rx PHY"
     assert peer_updated.group(3) == b"loop"
 
     dut.write("d")
     dut.expect_exact("DISCONNECT_REQUESTED", timeout=10)
-    dut.expect(re.compile(rb"DISCONNECTED id=(\d+)\r?\n"), timeout=20)
+    dut.expect(re.compile(rb"DISCONNECTED id=(\d+)"), timeout=20)

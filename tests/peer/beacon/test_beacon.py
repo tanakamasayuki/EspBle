@@ -15,7 +15,7 @@ def test_beacon(dut, peers):
     dut.write("s")
     dut.expect_exact("SCAN_STARTED", timeout=10)
     beacon = dut.expect(re.compile(
-        rb"BEACON connectable=(\d+) scannable=(\d+) mfglen=(\d+) mfg=([0-9a-f]*) context=(\w+)\r?\n"),
+        rb"BEACON connectable=(\d+) scannable=(\d+) mfglen=(\d+) mfg=([0-9a-f]*) context=(\w+)"),
         timeout=30)
     assert beacon.group(1) == b"0", "beacon must advertise as non-connectable"
     assert beacon.group(2) == b"0", "beacon must advertise as non-scannable"

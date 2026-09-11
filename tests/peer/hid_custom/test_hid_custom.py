@@ -22,8 +22,8 @@ def test_hid_custom(dut, peers):
     dut.write("s")
     dut.expect_exact("SCAN_STARTED", timeout=10)
     dut.expect_exact("CONNECT_REQUESTED", timeout=20)
-    dut.expect(re.compile(rb"CONNECTED id=(\d+)\r?\n"), timeout=20)
-    device.expect(re.compile(rb"HID_CONNECTED id=(\d+)\r?\n"), timeout=20)
+    dut.expect(re.compile(rb"CONNECTED id=(\d+)"), timeout=20)
+    device.expect(re.compile(rb"HID_CONNECTED id=(\d+)"), timeout=20)
 
     # Discovery pairs each 0x2A4D Report characteristic with its own 0x2908 Report
     # Reference. The pairing is by owning value handle; the UUID pair cannot do it.
@@ -31,7 +31,7 @@ def test_hid_custom(dut, peers):
     pairs = {}
     for _ in range(3):
         pair = dut.expect(re.compile(
-            rb"REPORT_PAIR char=(\d+) ref=(\d+) notify=(\d+) write=(\d+) wwr=(\d+)\r?\n"),
+            rb"REPORT_PAIR char=(\d+) ref=(\d+) notify=(\d+) write=(\d+) wwr=(\d+)"),
             timeout=20)
         char_handle = int(pair.group(1))
         pairs[char_handle] = {
@@ -53,7 +53,7 @@ def test_hid_custom(dut, peers):
     roles = {}
     for _ in range(3):
         ref = dut.expect(re.compile(
-            rb"REPORT_REF desc=(\d+) char=(\d+) id=(\d+) type=(\d+) context=(\w+)\r?\n"),
+            rb"REPORT_REF desc=(\d+) char=(\d+) id=(\d+) type=(\d+) context=(\w+)"),
             timeout=20)
         desc_handle = int(ref.group(1))
         char_handle = int(ref.group(2))
@@ -69,7 +69,7 @@ def test_hid_custom(dut, peers):
     assert set(roles) == {1, 2, 3}, "one Input, one Output and one Feature report"
 
     resolved = dut.expect(re.compile(
-        rb"REPORTS_RESOLVED input=(\d+) output=(\d+) feature=(\d+) distinct=(\d+)\r?\n"),
+        rb"REPORTS_RESOLVED input=(\d+) output=(\d+) feature=(\d+) distinct=(\d+)"),
         timeout=20)
     input_handle = int(resolved.group(1))
     output_handle = int(resolved.group(2))
@@ -98,7 +98,7 @@ def test_hid_custom(dut, peers):
     # Read and length-check the arbitrary Report Map.
     dut.write("m")
     dut.expect_exact("READ_REQUESTED", timeout=10)
-    report_map = dut.expect(re.compile(rb"REPORT_MAP success=(\d+) length=(\d+)\r?\n"), timeout=20)
+    report_map = dut.expect(re.compile(rb"REPORT_MAP success=(\d+) length=(\d+)"), timeout=20)
     assert report_map.group(1) == b"1", "Report Map read must succeed"
     assert int(report_map.group(2)) == 47, "Report Map must be the full custom descriptor"
 
@@ -106,14 +106,14 @@ def test_hid_custom(dut, peers):
     dut.write("S")
     dut.expect_exact("SUBSCRIBE_REQUESTED", timeout=10)
     subscribed = dut.expect(re.compile(
-        rb"INPUT_SUBSCRIBED success=(\d+) handle=(\d+) context=(\w+)\r?\n"), timeout=20)
+        rb"INPUT_SUBSCRIBED success=(\d+) handle=(\d+) context=(\w+)"), timeout=20)
     assert subscribed.group(1) == b"1", "subscribe by handle must succeed"
     assert int(subscribed.group(2)) == input_handle, "result handle must echo the input handle"
 
     device.write("i")
     device.expect_exact("INPUT_SENT", timeout=10)
     report = dut.expect(re.compile(
-        rb"INPUT_REPORT handle=(\d+) delta=(-?\d+) buttons=(\d+) context=(\w+)\r?\n"), timeout=20)
+        rb"INPUT_REPORT handle=(\d+) delta=(-?\d+) buttons=(\d+) context=(\w+)"), timeout=20)
     assert int(report.group(1)) == input_handle, "notification handle must be the input handle"
     assert int(report.group(2)) == 5, "dial delta should decode to +5"
     assert int(report.group(3)) == 1, "buttons bitfield should be 0x01"
@@ -123,12 +123,12 @@ def test_hid_custom(dut, peers):
     dut.write("o")
     dut.expect_exact("OUTPUT_WRITE_REQUESTED", timeout=10)
     written = dut.expect(re.compile(
-        rb"OUTPUT_WRITTEN success=(\d+) handle=(\d+) context=(\w+)\r?\n"), timeout=20)
+        rb"OUTPUT_WRITTEN success=(\d+) handle=(\d+) context=(\w+)"), timeout=20)
     assert written.group(1) == b"1", "write by handle must succeed"
     assert int(written.group(2)) == output_handle, "result handle must echo the output handle"
 
     output = device.expect(re.compile(
-        rb"OUTPUT_REPORT id=(\d+) len=(\d+) byte0=(\d+) context=(\w+)\r?\n"), timeout=20)
+        rb"OUTPUT_REPORT id=(\d+) len=(\d+) byte0=(\d+) context=(\w+)"), timeout=20)
     assert int(output.group(1)) == 1, "output report id should be 1"
     assert int(output.group(2)) == 1, "output report is 1 byte"
     assert int(output.group(3)) == 2, "output byte should be the written LED value 0x02"
@@ -139,14 +139,13 @@ def test_hid_custom(dut, peers):
     dut.write("f")
     dut.expect_exact("FEATURE_WRITE_REQUESTED", timeout=10)
     feature_written = dut.expect(re.compile(
-        # Not stopped at the newline: this line carries more after context=.
         rb"FEATURE_WRITTEN success=(\d+) handle=(\d+) context=(\w+)"), timeout=20)
     assert feature_written.group(1) == b"1", "feature write by handle must succeed"
     assert int(feature_written.group(2)) == feature_handle, \
         "result handle must echo the feature handle"
 
     feature = device.expect(re.compile(
-        rb"FEATURE_REPORT id=(\d+) len=(\d+) byte0=(\d+) byte1=(\d+) context=(\w+)\r?\n"),
+        rb"FEATURE_REPORT id=(\d+) len=(\d+) byte0=(\d+) byte1=(\d+) context=(\w+)"),
         timeout=20)
     assert int(feature.group(1)) == 1, "feature report id should be 1"
     assert int(feature.group(2)) == 2, "feature report is 2 bytes"
@@ -156,4 +155,4 @@ def test_hid_custom(dut, peers):
 
     dut.write("d")
     dut.expect_exact("DISCONNECT_REQUESTED", timeout=10)
-    dut.expect(re.compile(rb"DISCONNECTED id=(\d+)\r?\n"), timeout=20)
+    dut.expect(re.compile(rb"DISCONNECTED id=(\d+)"), timeout=20)

@@ -17,7 +17,7 @@ def start_connection(dut):
     dut.write("s")
     dut.expect_exact("SCAN_STARTED", timeout=10)
     seen = dut.expect(
-        re.compile(rb"RPA_SEEN addr=([0-9a-f:]+) type=(\d+)\r?\n"), timeout=20
+        re.compile(rb"RPA_SEEN addr=([0-9a-f:]+) type=(\d+)"), timeout=20
     )
     dut.expect_exact("CONNECT_REQUESTED", timeout=20)
     return parse_address(seen)
@@ -29,11 +29,11 @@ def expect_secure_connection(dut, peripheral, connection_id, initial_value):
         timeout=20,
     )
     central_peer = dut.expect(
-        re.compile(rb"RPA_CENTRAL_PEER addr=([0-9a-f:]+) type=(\d+)\r?\n"),
+        re.compile(rb"RPA_CENTRAL_PEER addr=([0-9a-f:]+) type=(\d+)"),
         timeout=10,
     )
     peripheral_peer = peripheral.expect(
-        re.compile(rb"RPA_PERIPHERAL_PEER addr=([0-9a-f:]+) type=(\d+)\r?\n"),
+        re.compile(rb"RPA_PERIPHERAL_PEER addr=([0-9a-f:]+) type=(\d+)"),
         timeout=20,
     )
     assert_rpa(*parse_address(central_peer))

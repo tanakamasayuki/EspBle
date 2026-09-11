@@ -35,7 +35,7 @@ def test_ble_midi_interoperates_with_a_core_bluedroid_device(dut, peers, probe):
     peer.write("n\n")
     peer.expect_exact("MIDIPEER_TX hex=80a1903c64", timeout=10)
     message = dut.expect(
-        re.compile(rb"MIDIHOST_MESSAGE index=1 status=90 data1=3c data2=64 ts=(\d+)\r?\n"),
+        re.compile(rb"MIDIHOST_MESSAGE index=1 status=90 data1=3c data2=64 ts=(\d+)"),
         timeout=20,
     )
     assert int(message.group(1)) == 0x21, "timestamp low bits were not decoded"
@@ -74,7 +74,7 @@ def test_ble_midi_interoperates_with_a_core_bluedroid_device(dut, peers, probe):
     dut.write("n\n")
     dut.expect_exact("MIDIHOST_NOTE_SENT 1", timeout=10)
     received = peer.expect(
-        re.compile(rb"MIDIPEER_RX count=1 length=(\d+) hex=([0-9a-f]+)\r?\n"), timeout=20
+        re.compile(rb"MIDIPEER_RX count=1 length=(\d+) hex=([0-9a-f]+)"), timeout=20
     )
     payload = received.group(2).decode()
     assert int(received.group(1)) == 5, "a single Note On must be five bytes"

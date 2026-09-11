@@ -18,7 +18,7 @@ def test_alert_notification_service(dut, peers):
     dut.expect_exact("CONNECT_REQUESTED", timeout=20)
     dut.expect_exact("CATEGORY_READ_REQUESTED", timeout=20)
 
-    category = dut.expect(re.compile(rb"CATEGORY_READ valid=(\d+) mask=([0-9a-f]{4}) context=(\w+)\r?\n"), timeout=20)
+    category = dut.expect(re.compile(rb"CATEGORY_READ valid=(\d+) mask=([0-9a-f]{4}) context=(\w+)"), timeout=20)
     assert category.group(1) == b"1", "Supported New Alert Category read failed"
     assert category.group(2) == b"0022", "expected Email + SMS/MMS bitmask"
     assert category.group(3) == b"loop"
@@ -31,14 +31,14 @@ def test_alert_notification_service(dut, peers):
     dut.write("c")
     dut.expect_exact("CONTROL_WRITE_REQUESTED", timeout=10)
     control = device.expect(
-        re.compile(rb"CONTROL_WRITE command=(\d+) category=(\d+) context=(\w+)\r?\n"), timeout=20)
+        re.compile(rb"CONTROL_WRITE command=(\d+) category=(\d+) context=(\w+)"), timeout=20)
     assert int(control.group(1)) == 2, "server should receive command 2"
     assert int(control.group(2)) == 1, "server should receive Email category 1"
     assert control.group(3) == b"loop"
     dut.expect_exact("CONTROL_WRITTEN success=1", timeout=20)
 
     alert = dut.expect(
-        re.compile(rb"NEW_ALERT valid=(\d+) category=(\d+) count=(\d+) text=(\w+) context=(\w+)\r?\n"), timeout=20)
+        re.compile(rb"NEW_ALERT valid=(\d+) category=(\d+) count=(\d+) text=(\w+) context=(\w+)"), timeout=20)
     assert alert.group(1) == b"1", "New Alert too short"
     assert int(alert.group(2)) == 1, "New Alert category should be Email (1)"
     assert int(alert.group(3)) == 3, "New Alert count should be 3"
@@ -53,4 +53,4 @@ def test_alert_notification_service(dut, peers):
 
     dut.write("d")
     dut.expect_exact("DISCONNECT_REQUESTED", timeout=10)
-    dut.expect(re.compile(rb"DISCONNECTED id=(\d+)\r?\n"), timeout=20)
+    dut.expect(re.compile(rb"DISCONNECTED id=(\d+)"), timeout=20)

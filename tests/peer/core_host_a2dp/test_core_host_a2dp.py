@@ -13,7 +13,7 @@ def test_a2dp_and_avrcp_interoperate_with_the_core_bluedroid_stack(dut, peers, p
     peer = peers["device"]
 
     ready = probe(
-        dut, "?\n", re.compile(rb"A2DPSINK_READY started=1 avrcp=1 address=([0-9a-f:]+)\r?\n")
+        dut, "?\n", re.compile(rb"A2DPSINK_READY started=1 avrcp=1 address=([0-9a-f:]+)")
     )
     sink_address = ready.group(1)
     probe(peer, "?\n", re.compile(rb"A2DPPEER_READY address=[0-9a-f:]+"))
@@ -29,7 +29,7 @@ def test_a2dp_and_avrcp_interoperate_with_the_core_bluedroid_stack(dut, peers, p
     # fixed sequence. 44.1 kHz stereo SBC is what the core's Source negotiates.
     codec_pattern = re.compile(
         rb"A2DPSINK_CODEC codec=(\d+) rate=(\d+) channels=(\d+) blocks=(\d+) "
-        rb"subbands=(\d+) bitpool=(\d+)-(\d+)\r?\n"
+        rb"subbands=(\d+) bitpool=(\d+)-(\d+)"
     )
     connected_pattern = re.compile(
         rb"A2DPSINK_CONNECTED id=\d+ peer=[0-9a-f:]+ mtu=\d+ incoming=1"

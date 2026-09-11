@@ -17,12 +17,12 @@ def assert_rpa(address, address_type):
 def expect_secure_read(dut, peer):
     peer.expect_exact("DUAL_BLE_CLIENT_CONNECTED", timeout=20)
     client_peer = peer.expect(
-        re.compile(rb"RPA_DUAL_CLIENT_PEER addr=([0-9a-f:]+) type=(\d+)\r?\n"),
+        re.compile(rb"RPA_DUAL_CLIENT_PEER addr=([0-9a-f:]+) type=(\d+)"),
         timeout=10,
     )
     dut.expect_exact("DUAL_BLE_SERVER_CONNECTED", timeout=20)
     server_peer = dut.expect(
-        re.compile(rb"RPA_DUAL_SERVER_PEER addr=([0-9a-f:]+) type=(\d+)\r?\n"),
+        re.compile(rb"RPA_DUAL_SERVER_PEER addr=([0-9a-f:]+) type=(\d+)"),
         timeout=10,
     )
     assert_rpa(*parse_address(client_peer))
@@ -46,7 +46,7 @@ def start_rpa_connection(peer):
     peer.write("g\n")
     peer.expect_exact("DUAL_BLE_SCAN 1", timeout=10)
     seen = peer.expect(
-        re.compile(rb"RPA_DUAL_SEEN addr=([0-9a-f:]+) type=(\d+)\r?\n"), timeout=20
+        re.compile(rb"RPA_DUAL_SEEN addr=([0-9a-f:]+) type=(\d+)"), timeout=20
     )
     assert_rpa(*parse_address(seen))
     peer.expect_exact("DUAL_BLE_CONNECT 1", timeout=20)
@@ -100,7 +100,7 @@ def test_rpa_bond_reconnect_and_reboot_restore_with_classic_hid(dut, peers):
         re.compile(rb"DUAL_PEER_READY(?: local=[0-9a-f:]+ type=1)?"), timeout=20
     )
     ready = dut.expect(
-        re.compile(rb"DUAL_READY classic=([0-9a-f:]+) ble=([0-9a-f:]+) type=(\d+)\r?\n"),
+        re.compile(rb"DUAL_READY classic=([0-9a-f:]+) ble=([0-9a-f:]+) type=(\d+)"),
         timeout=30,
     )
     assert ready.group(3) == b"1"
@@ -145,7 +145,7 @@ def test_rpa_bond_reconnect_and_reboot_restore_with_classic_hid(dut, peers):
         peer.write("p\n")
         peer.expect_exact("RPA_DUAL_OBSERVE 1", timeout=10)
         rotated = peer.expect(
-            re.compile(rb"RPA_DUAL_OBSERVED addr=([0-9a-f:]+) type=(\d+)\r?\n"),
+            re.compile(rb"RPA_DUAL_OBSERVED addr=([0-9a-f:]+) type=(\d+)"),
             timeout=20,
         )
         rotated_rpa, rotated_type = parse_address(rotated)
@@ -165,7 +165,7 @@ def test_rpa_bond_reconnect_and_reboot_restore_with_classic_hid(dut, peers):
     peer.write("p\n")
     peer.expect_exact("RPA_DUAL_OBSERVE 1", timeout=10)
     frozen = peer.expect(
-        re.compile(rb"RPA_DUAL_OBSERVED addr=([0-9a-f:]+) type=(\d+)\r?\n"),
+        re.compile(rb"RPA_DUAL_OBSERVED addr=([0-9a-f:]+) type=(\d+)"),
         timeout=20,
     )
     frozen_rpa, frozen_type = parse_address(frozen)
@@ -196,7 +196,7 @@ def test_rpa_bond_reconnect_and_reboot_restore_with_classic_hid(dut, peers):
     dut.write("a")
     dut.expect_exact("DUAL_BLE_ADVERTISING 1", timeout=10)
     observed = peer.expect(
-        re.compile(rb"RPA_DUAL_OBSERVED addr=([0-9a-f:]+) type=(\d+)\r?\n"),
+        re.compile(rb"RPA_DUAL_OBSERVED addr=([0-9a-f:]+) type=(\d+)"),
         timeout=20,
     )
     assert_rpa(*parse_address(observed))

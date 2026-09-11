@@ -4,12 +4,12 @@ import time
 HOST_MIDI_PATTERN = re.compile(
     rb"HOST_MIDI count=(\d+) "
     rb"m0_status=(\d+) m0_d1=(\d+) m0_d2=(\d+) m0_ts=(\d+) "
-    rb"m1_status=(\d+) m1_d1=(\d+) m1_d2=(\d+) m1_ts=(\d+) context=(\w+)\r?\n"
+    rb"m1_status=(\d+) m1_d1=(\d+) m1_d2=(\d+) m1_ts=(\d+) context=(\w+)"
 )
-HOST_IN_PATTERN = re.compile(rb"HOST_IN count=(\d+) length=(\d+) b2=(\d+) b3=(\d+) b4=(\d+)\r?\n")
+HOST_IN_PATTERN = re.compile(rb"HOST_IN count=(\d+) length=(\d+) b2=(\d+) b3=(\d+) b4=(\d+)")
 READY_PATTERN = re.compile(rb"HOST_READY (\d)")
 SYSEX_PATTERN = re.compile(
-    rb"SYSEX complete=(\d+) length=(\d+) first=(\d+) last=(\d+) sum=(\d+)\r?\n"
+    rb"SYSEX complete=(\d+) length=(\d+) first=(\d+) last=(\d+) sum=(\d+)"
 )
 
 
@@ -35,7 +35,7 @@ def test_midi_host_decodes_running_status(dut, peers):
 
     dut.write("s")
     dut.expect_exact("HOST_SCAN_STARTED", timeout=10)
-    dut.expect(re.compile(rb"HOST_CONNECTED id=(\d+)\r?\n"), timeout=20)
+    dut.expect(re.compile(rb"HOST_CONNECTED id=(\d+)"), timeout=20)
     assert _wait_ready(dut), "host did not finish MIDI discovery/subscription"
 
     dut.write("c")
@@ -87,4 +87,4 @@ def test_midi_host_decodes_running_status(dut, peers):
 
     dut.write("d")
     dut.expect_exact("HOST_DISCONNECT_REQUESTED", timeout=10)
-    dut.expect(re.compile(rb"HOST_DISCONNECTED id=(\d+)\r?\n"), timeout=20)
+    dut.expect(re.compile(rb"HOST_DISCONNECTED id=(\d+)"), timeout=20)

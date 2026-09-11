@@ -32,7 +32,6 @@ def test_classic_hid_profiles_match_the_ble_api(dut, peers):
     dut.expect_exact("DEVICE_KEY sent=1", timeout=10)
     peer.expect_exact("HOST_STATE modifiers=0 a=1", timeout=20)
     peer.expect(
-        # Not stopped at the newline: the sketch prints more of this line after raw=.
         re.compile(rb"HOST_KEY usage=4 ascii=97 pressed=1 released=0 modifiers=0 raw=(\d+)"),
         timeout=20,
     )

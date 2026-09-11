@@ -170,7 +170,7 @@ def test_hid_keyboard_host_discovery_state_and_leds(dut, peers):
     # ATT応答を待って呼び出しtaskをblockしない(10回+5ms間隔で200ms未満)。
     dut.write("L")
     match = dut.expect(
-        re.compile(rb"HOST_LEDS_TIMED success=(\d+) ms=(\d+)\r?\n"), timeout=20
+        re.compile(rb"HOST_LEDS_TIMED success=(\d+) ms=(\d+)"), timeout=20
     )
     led_success = int(match.group(1))
     led_ms = int(match.group(2))

@@ -13,7 +13,7 @@ def test_gatt_interoperates_with_the_core_bluedroid_stack(dut, peers, probe):
     peer = peers["device"]
 
     ready = probe(
-        peer, "?\n", re.compile(rb"COREPEER_READY address=([0-9a-f:]+)\r?\n")
+        peer, "?\n", re.compile(rb"COREPEER_READY address=([0-9a-f:]+)")
     )
     peer_address = ready.group(1).decode()
     probe(dut, "?\n", re.compile(rb"COREGATT_READY"))
@@ -24,7 +24,7 @@ def test_gatt_interoperates_with_the_core_bluedroid_stack(dut, peers, probe):
     dut.write("s\n")
     dut.expect_exact("COREGATT_SCAN started=1", timeout=10)
     connect = dut.expect(
-        re.compile(rb"COREGATT_CONNECT requested=1 peer=([0-9a-f:]+)\r?\n"), timeout=30
+        re.compile(rb"COREGATT_CONNECT requested=1 peer=([0-9a-f:]+)"), timeout=30
     )
     assert connect.group(1).decode() == peer_address, (
         "connected to a different address than the peer reported"
@@ -36,7 +36,7 @@ def test_gatt_interoperates_with_the_core_bluedroid_stack(dut, peers, probe):
     # characteristics, and the notify characteristic's CCCD must be visible to
     # the client or subscribing below could not work.
     discovered = dut.expect(
-        re.compile(rb"COREGATT_DISCOVERED success=1 chars=(\d+) notify_descs=(\d+)\r?\n"),
+        re.compile(rb"COREGATT_DISCOVERED success=1 chars=(\d+) notify_descs=(\d+)"),
         timeout=30,
     )
     assert int(discovered.group(1)) == 3, "expected three characteristics"
@@ -100,7 +100,7 @@ def test_gatt_interoperates_with_the_core_bluedroid_stack(dut, peers, probe):
     peer.expect_exact("COREPEER_DISCONNECTED", timeout=20)
     dut.expect(re.compile(rb"COREGATT_DISCONNECTED reason=\d+"), timeout=20)
     state = probe(
-        dut, "?\n", re.compile(rb"COREGATT_STATE connected=(\d+) discovered=(\d+)\r?\n")
+        dut, "?\n", re.compile(rb"COREGATT_STATE connected=(\d+) discovered=(\d+)")
     )
     assert state.group(1) == b"0" and state.group(2) == b"0"
 

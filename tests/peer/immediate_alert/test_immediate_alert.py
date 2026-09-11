@@ -14,22 +14,22 @@ def test_immediate_alert_service(dut, peers):
     dut.write("s")
     dut.expect_exact("SCAN_STARTED", timeout=10)
     dut.expect_exact("CONNECT_REQUESTED", timeout=20)
-    dut.expect(re.compile(rb"CONNECTED id=(\d+)\r?\n"), timeout=20)
+    dut.expect(re.compile(rb"CONNECTED id=(\d+)"), timeout=20)
 
     # High Alert via Write Without Response.
     dut.write("h")
     dut.expect_exact("HIGH_ALERT_REQUESTED", timeout=10)
-    high = device.expect(re.compile(rb"ALERT_LEVEL level=(\d+) context=(\w+)\r?\n"), timeout=20)
+    high = device.expect(re.compile(rb"ALERT_LEVEL level=(\d+) context=(\w+)"), timeout=20)
     assert int(high.group(1)) == 2, "server should receive High Alert level 2"
     assert high.group(2) == b"loop", "must be delivered from update()/loop"
 
     # No Alert via Write Without Response.
     dut.write("n")
     dut.expect_exact("NO_ALERT_REQUESTED", timeout=10)
-    no_alert = device.expect(re.compile(rb"ALERT_LEVEL level=(\d+) context=(\w+)\r?\n"), timeout=20)
+    no_alert = device.expect(re.compile(rb"ALERT_LEVEL level=(\d+) context=(\w+)"), timeout=20)
     assert int(no_alert.group(1)) == 0, "server should receive No Alert level 0"
     assert no_alert.group(2) == b"loop"
 
     dut.write("d")
     dut.expect_exact("DISCONNECT_REQUESTED", timeout=10)
-    dut.expect(re.compile(rb"DISCONNECTED id=(\d+)\r?\n"), timeout=20)
+    dut.expect(re.compile(rb"DISCONNECTED id=(\d+)"), timeout=20)

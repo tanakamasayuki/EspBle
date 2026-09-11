@@ -9,7 +9,7 @@ def test_peripheral_uses_random_static_address(dut, peers):
 
     dut.write("s")
     dut.expect_exact("SCAN_STARTED", timeout=10)
-    match = dut.expect(re.compile(rb"PEER_SEEN addr=([0-9a-fA-F:]+) type=(\d+)\r?\n"), timeout=20)
+    match = dut.expect(re.compile(rb"PEER_SEEN addr=([0-9a-fA-F:]+) type=(\d+)"), timeout=20)
 
     address = match.group(1).decode()
     address_type = int(match.group(2))

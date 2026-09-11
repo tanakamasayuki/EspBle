@@ -12,7 +12,7 @@ def test_spp_interoperates_with_the_core_bluedroid_host(dut, peers):
     peer = peers["device"]
     peer.expect_exact("COREPEER_READY", timeout=30)
     ready = dut.expect(
-        re.compile(rb"COREHOST_SERVER_READY address=([0-9a-f:]+) heap=(\d+)\r?\n"),
+        re.compile(rb"COREHOST_SERVER_READY address=([0-9a-f:]+) heap=(\d+)"),
         timeout=30,
     )
     dut.expect_exact("COREHOST_SERVER_STARTED", timeout=10)
@@ -24,7 +24,7 @@ def test_spp_interoperates_with_the_core_bluedroid_host(dut, peers):
     peer.expect_exact("COREPEER_CONNECT requested=1", timeout=20)
     peer.expect_exact("COREPEER_LINK connected=1", timeout=30)
     connected = dut.expect(
-        re.compile(rb"COREHOST_CONNECTED id=(\d+) incoming=1 peer=([0-9a-f:]+)\r?\n"),
+        re.compile(rb"COREHOST_CONNECTED id=(\d+) incoming=1 peer=([0-9a-f:]+)"),
         timeout=30,
     )
     session = connected.group(1)
@@ -85,7 +85,7 @@ def test_spp_interoperates_with_the_core_bluedroid_host(dut, peers):
     dut.write("r")
     dut.expect_exact("COREHOST_RESTART started=1", timeout=30)
     restarted = dut.expect(
-        re.compile(rb"COREHOST_SERVER_READY address=([0-9a-f:]+) heap=(\d+)\r?\n"),
+        re.compile(rb"COREHOST_SERVER_READY address=([0-9a-f:]+) heap=(\d+)"),
         timeout=20,
     )
     assert restarted.group(1) == address

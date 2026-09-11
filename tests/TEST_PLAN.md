@@ -466,14 +466,19 @@ its way, and it then captures a truncated value: `service_data` read
 with `\r?\n`. A capture followed by another literal in the same pattern is
 already safe, because the literal cannot match until it has arrived.
 
-Every pattern in `peer/` that ends in a capture is anchored, except six that
-cannot be: two lines carry more text after the field, three match a fragment
-with no line tag of their own, and one is searched inside text an `expect`
-already captured. **That last one is the trap.** The captured text stops where
-the expect stopped, so a pattern applied to it must not require a newline that
-was never captured — the same pattern, anchored, is right for `expect` and
-wrong for `re.search`. Anchoring one of those by hand cost a full-run failure
-in `dual_host_smoke`; the four that stay unanchored say so in a comment.
+**Anchor the pattern you are writing; do not sweep the suite for candidates.**
+That sweep was tried here and reverted. Deciding mechanically whether a field
+is the last one on its line needs two things to hold, and both are easy to get
+wrong. The pattern must be handed to `expect` and not to `re.search` over text
+an earlier `expect` already captured — the captured text stops where that
+expect stopped, so requiring a newline it never captured can never match. And
+the field must be last on **every** line the pattern can match, not just the
+one you had in mind: `DISCONNECTED id=(\d+)` also matches inside
+`DISCONNECTED id=1 context=loop`, and a sketch's format string ending in `\n`
+says nothing about that. Two static checks were written, each fixed the other's
+blind spot and introduced its own, and the second broke thirty tests in a clean
+full run. When you write a pattern, you know which line you mean; a script
+scanning afterwards does not.
 
 ## Leave the board as you found it
 

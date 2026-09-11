@@ -1,6 +1,6 @@
 import re
 
-HEAP = re.compile(rb"HEAP free=(\d+)\r?\n")
+HEAP = re.compile(rb"HEAP free=(\d+)")
 
 
 def test_discovery_cycles_do_not_leak_heap(dut, peers):

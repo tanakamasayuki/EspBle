@@ -3,14 +3,14 @@ import time
 
 QUERY_PATTERN = re.compile(
     rb"HOST_QUERY connected=(\d+) disconnected=(\d+) notifications=(\d+) "
-    rb"connections=(\d+) ready=(\d+) dropped=(\d+) scan=(\d+)\r?\n"
+    rb"connections=(\d+) ready=(\d+) dropped=(\d+) scan=(\d+)"
 )
-END_CONNECT_PATTERN = re.compile(rb"HOST_END_CONNECT connect=(\d+) ms=(\d+) begin=(\d+)\r?\n")
-CONNECT_FAILED_PATTERN = re.compile(rb"HOST_CONNECT_FAILED ms=(\d+) error=(\d+)\r?\n")
-HEAP_PATTERN = re.compile(rb"HOST_HEAP free=(\d+)\r?\n")
-END_CYCLE_PATTERN = re.compile(rb"HOST_END_CYCLE read=(\d+) begin=(\d+) heap=(\d+)\r?\n")
-CONNECTED_PATTERN = re.compile(rb"HOST_CONNECTED id=(\d+)\r?\n")
-DISCONNECTED_PATTERN = re.compile(rb"HOST_DISCONNECTED id=(\d+)\r?\n")
+END_CONNECT_PATTERN = re.compile(rb"HOST_END_CONNECT connect=(\d+) ms=(\d+) begin=(\d+)")
+CONNECT_FAILED_PATTERN = re.compile(rb"HOST_CONNECT_FAILED ms=(\d+) error=(\d+)")
+HEAP_PATTERN = re.compile(rb"HOST_HEAP free=(\d+)")
+END_CYCLE_PATTERN = re.compile(rb"HOST_END_CYCLE read=(\d+) begin=(\d+) heap=(\d+)")
+CONNECTED_PATTERN = re.compile(rb"HOST_CONNECTED id=(\d+)")
+DISCONNECTED_PATTERN = re.compile(rb"HOST_DISCONNECTED id=(\d+)")
 
 
 def _reset(dut, device):
@@ -34,7 +34,7 @@ def _connect(dut, device):
     dut.expect_exact("HOST_SCAN_STARTED success=1", timeout=10)
     dut.expect_exact("HOST_CONNECT_STARTED success=1", timeout=20)
     dut.expect(CONNECTED_PATTERN, timeout=20)
-    device.expect(re.compile(rb"DEVICE_CONNECTED id=(\d+)\r?\n"), timeout=20)
+    device.expect(re.compile(rb"DEVICE_CONNECTED id=(\d+)"), timeout=20)
 
 
 def _disconnect_event_survives_notification_flood(dut, peers):
@@ -65,7 +65,7 @@ def _disconnect_event_survives_notification_flood(dut, peers):
     device.expect_exact("DEVICE_BATTERY_BURST sent=10", timeout=10)
     device.write("d")
     device.expect_exact("DEVICE_DISCONNECT_STARTED success=1", timeout=10)
-    device.expect(re.compile(rb"DEVICE_DISCONNECTED id=(\d+)\r?\n"), timeout=20)
+    device.expect(re.compile(rb"DEVICE_DISCONNECTED id=(\d+)"), timeout=20)
     dut.expect_exact("HOST_RESUMED", timeout=20)
 
     dut.write("q")

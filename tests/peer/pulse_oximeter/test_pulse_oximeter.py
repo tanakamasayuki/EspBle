@@ -2,7 +2,7 @@ import re
 
 MEASUREMENT_PATTERN = re.compile(
     rb"PLX_MEASUREMENT valid=(\d+) indication=(\d+) flags=([0-9a-f]{2}) "
-    rb"spo2=(-?\d+) pulse=(-?\d+) context=(\w+)\r?\n"
+    rb"spo2=(-?\d+) pulse=(-?\d+) context=(\w+)"
 )
 
 
@@ -20,7 +20,7 @@ def test_pulse_oximeter_service(dut, peers):
     dut.expect_exact("CONNECT_REQUESTED", timeout=20)
     dut.expect_exact("FEATURES_READ_REQUESTED", timeout=20)
 
-    match = dut.expect(re.compile(rb"FEATURES_READ valid=(\d+) value=(\d+) context=(\w+)\r?\n"), timeout=20)
+    match = dut.expect(re.compile(rb"FEATURES_READ valid=(\d+) value=(\d+) context=(\w+)"), timeout=20)
     assert match.group(1) == b"1", "PLX Features read failed"
     assert int(match.group(2)) == 3, "expected PLX Features 0x0003"
     assert match.group(3) == b"loop"
@@ -47,4 +47,4 @@ def test_pulse_oximeter_service(dut, peers):
 
     dut.write("d")
     dut.expect_exact("DISCONNECT_REQUESTED", timeout=10)
-    dut.expect(re.compile(rb"DISCONNECTED id=(\d+)\r?\n"), timeout=20)
+    dut.expect(re.compile(rb"DISCONNECTED id=(\d+)"), timeout=20)

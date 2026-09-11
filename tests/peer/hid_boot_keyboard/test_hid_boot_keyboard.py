@@ -2,10 +2,10 @@ import re
 import time
 
 QUERY_PATTERN = re.compile(
-    rb"HOST_QUERY states=(\d+) releases=(\d+) connections=(\d+) ready=(\d+) invalid=(\d+)\r?\n"
+    rb"HOST_QUERY states=(\d+) releases=(\d+) connections=(\d+) ready=(\d+) invalid=(\d+)"
 )
 DISCOVERED_PATTERN = re.compile(
-    rb"HOST_DISCOVERED success=(\d+) report=(\d+) output=(\d+) battery=(\d+)\r?\n"
+    rb"HOST_DISCOVERED success=(\d+) report=(\d+) output=(\d+) battery=(\d+)"
 )
 
 
@@ -33,15 +33,15 @@ def test_boot_keyboard_without_report_ids(dut, peers):
     if status["connections"] != 0:
         dut.write("d")
         dut.expect_exact("HOST_DISCONNECT_STARTED success=1", timeout=10)
-        dut.expect(re.compile(rb"HOST_DISCONNECTED id=(\d+)\r?\n"), timeout=20)
+        dut.expect(re.compile(rb"HOST_DISCONNECTED id=(\d+)"), timeout=20)
     device.write("?")
     device.expect_exact("DEVICE_ADVERTISING 1", timeout=20)
 
     dut.write("s")
     dut.expect_exact("HOST_SCAN_STARTED success=1", timeout=10)
     dut.expect_exact("HOST_CONNECT_STARTED success=1", timeout=20)
-    dut.expect(re.compile(rb"HOST_CONNECTED id=(\d+)\r?\n"), timeout=20)
-    device.expect(re.compile(rb"DEVICE_CONNECTED id=(\d+)\r?\n"), timeout=20)
+    dut.expect(re.compile(rb"HOST_CONNECTED id=(\d+)"), timeout=20)
+    device.expect(re.compile(rb"DEVICE_CONNECTED id=(\d+)"), timeout=20)
 
     dut.write("i")
     dut.expect_exact("HOST_DISCOVERY_STARTED success=1", timeout=10)
@@ -75,5 +75,5 @@ def test_boot_keyboard_without_report_ids(dut, peers):
 
     dut.write("d")
     dut.expect_exact("HOST_DISCONNECT_STARTED success=1", timeout=10)
-    dut.expect(re.compile(rb"HOST_DISCONNECTED id=(\d+)\r?\n"), timeout=20)
+    dut.expect(re.compile(rb"HOST_DISCONNECTED id=(\d+)"), timeout=20)
     device.expect_exact("DEVICE_READVERTISING 1", timeout=20)

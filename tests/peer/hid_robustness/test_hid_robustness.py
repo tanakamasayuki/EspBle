@@ -3,14 +3,14 @@ import time
 
 QUERY_PATTERN = re.compile(
     rb"HOST_QUERY connected=(\d+) disconnected=(\d+) states=(\d+) releases=(\d+) "
-    rb"connections=(\d+) ready=(\d+) dropped=(\d+)\r?\n"
+    rb"connections=(\d+) ready=(\d+) dropped=(\d+)"
 )
 DISCOVER_DISCONNECT_PATTERN = re.compile(
-    rb"HOST_DISCOVER_DISCONNECT discover=(\d+) disconnect=(\d+) error=(\w+)\r?\n"
+    rb"HOST_DISCOVER_DISCONNECT discover=(\d+) disconnect=(\d+) error=(\w+)"
 )
-REBEGIN_PATTERN = re.compile(rb"HOST_REBEGIN success=(\d+) error=(\w+)\r?\n")
-INPUT_SENT_PATTERN = re.compile(rb"DEVICE_INPUT_SENT success=(\d+) error=(\w+)\r?\n")
-READY_PATTERN = re.compile(rb"DEVICE_READY ready=(\d+) error_kept=(\d+)\r?\n")
+REBEGIN_PATTERN = re.compile(rb"HOST_REBEGIN success=(\d+) error=(\w+)")
+INPUT_SENT_PATTERN = re.compile(rb"DEVICE_INPUT_SENT success=(\d+) error=(\w+)")
+READY_PATTERN = re.compile(rb"DEVICE_READY ready=(\d+) error_kept=(\d+)")
 
 
 def _reset(dut, device):
@@ -21,7 +21,7 @@ def _reset(dut, device):
     if match.group(5) != b"0":
         dut.write("d")
         dut.expect_exact("HOST_DISCONNECT_STARTED success=1", timeout=10)
-        dut.expect(re.compile(rb"HOST_DISCONNECTED id=(\d+)\r?\n"), timeout=20)
+        dut.expect(re.compile(rb"HOST_DISCONNECTED id=(\d+)"), timeout=20)
         dut.write("c")
         dut.expect_exact("HOST_COUNTERS_RESET", timeout=10)
     device.write("?")
@@ -32,8 +32,8 @@ def _connect(dut, device):
     dut.write("s")
     dut.expect_exact("HOST_SCAN_STARTED success=1", timeout=10)
     dut.expect_exact("HOST_CONNECT_STARTED success=1", timeout=20)
-    dut.expect(re.compile(rb"HOST_CONNECTED id=(\d+)\r?\n"), timeout=20)
-    device.expect(re.compile(rb"DEVICE_CONNECTED id=(\d+)\r?\n"), timeout=20)
+    dut.expect(re.compile(rb"HOST_CONNECTED id=(\d+)"), timeout=20)
+    device.expect(re.compile(rb"DEVICE_CONNECTED id=(\d+)"), timeout=20)
 
 
 def _discover(dut):
@@ -80,7 +80,7 @@ def _unsubscribed_input_report_is_not_sent(dut, peers):
 
     dut.write("d")
     dut.expect_exact("HOST_DISCONNECT_STARTED success=1", timeout=10)
-    dut.expect(re.compile(rb"HOST_DISCONNECTED id=(\d+)\r?\n"), timeout=20)
+    dut.expect(re.compile(rb"HOST_DISCONNECTED id=(\d+)"), timeout=20)
     device.expect_exact("DEVICE_READVERTISING 1", timeout=20)
 
 
@@ -120,7 +120,7 @@ def _device_ready_follows_the_subscription_gate(dut, peers):
 
     dut.write("d")
     dut.expect_exact("HOST_DISCONNECT_STARTED success=1", timeout=10)
-    dut.expect(re.compile(rb"HOST_DISCONNECTED id=(\d+)\r?\n"), timeout=20)
+    dut.expect(re.compile(rb"HOST_DISCONNECTED id=(\d+)"), timeout=20)
     device.expect_exact("DEVICE_READVERTISING 1", timeout=20)
     assert not _device_ready(device), "ready() must be false again after disconnection"
 
@@ -159,7 +159,7 @@ def _rollover_report_is_ignored(dut, peers):
 
     dut.write("d")
     dut.expect_exact("HOST_DISCONNECT_STARTED success=1", timeout=10)
-    dut.expect(re.compile(rb"HOST_DISCONNECTED id=(\d+)\r?\n"), timeout=20)
+    dut.expect(re.compile(rb"HOST_DISCONNECTED id=(\d+)"), timeout=20)
     device.expect_exact("DEVICE_READVERTISING 1", timeout=20)
 
 
@@ -181,7 +181,7 @@ def _release_event_survives_full_event_queue(dut, peers):
     device.expect_exact("DEVICE_FLOOD_SENT sent=9", timeout=15)
     device.write("d")
     device.expect_exact("DEVICE_DISCONNECT_STARTED success=1", timeout=10)
-    device.expect(re.compile(rb"DEVICE_DISCONNECTED id=(\d+)\r?\n"), timeout=20)
+    device.expect(re.compile(rb"DEVICE_DISCONNECTED id=(\d+)"), timeout=20)
     dut.expect_exact("HOST_RESUMED", timeout=20)
 
     status = _query(dut)
@@ -218,7 +218,7 @@ def _disconnect_deferred_during_discovery(dut, peers):
     # The worker finishes normally despite the pending disconnect...
     dut.expect_exact("HOST_DISCOVERED success=1", timeout=20)
     # ...then the deferred disconnect fires on its own (no second disconnect()).
-    dut.expect(re.compile(rb"HOST_DISCONNECTED id=(\d+)\r?\n"), timeout=20)
+    dut.expect(re.compile(rb"HOST_DISCONNECTED id=(\d+)"), timeout=20)
     device.expect_exact("DEVICE_READVERTISING 1", timeout=20)
 
 

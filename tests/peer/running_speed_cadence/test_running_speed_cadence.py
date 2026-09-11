@@ -2,7 +2,7 @@ import re
 
 MEASUREMENT_PATTERN = re.compile(
     rb"RSC_MEASUREMENT valid=(\d+) flags=([0-9a-f]{2}) speed=(\d+) cadence=(\d+) "
-    rb"stride=(\d+) distance=(\d+) context=(\w+)\r?\n"
+    rb"stride=(\d+) distance=(\d+) context=(\w+)"
 )
 
 
@@ -21,7 +21,7 @@ def test_running_speed_cadence_service(dut, peers):
     dut.expect_exact("CONNECT_REQUESTED", timeout=20)
     dut.expect_exact("LOCATION_READ_REQUESTED", timeout=20)
 
-    match = dut.expect(re.compile(rb"LOCATION_READ valid=(\d+) value=(\d+) context=(\w+)\r?\n"), timeout=20)
+    match = dut.expect(re.compile(rb"LOCATION_READ valid=(\d+) value=(\d+) context=(\w+)"), timeout=20)
     assert match.group(1) == b"1", "Sensor Location read failed"
     assert int(match.group(2)) == 2, "expected Sensor Location In Shoe (2)"
     assert match.group(3) == b"loop"
@@ -49,4 +49,4 @@ def test_running_speed_cadence_service(dut, peers):
 
     dut.write("d")
     dut.expect_exact("DISCONNECT_REQUESTED", timeout=10)
-    dut.expect(re.compile(rb"DISCONNECTED id=(\d+)\r?\n"), timeout=20)
+    dut.expect(re.compile(rb"DISCONNECTED id=(\d+)"), timeout=20)

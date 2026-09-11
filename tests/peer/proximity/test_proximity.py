@@ -18,21 +18,21 @@ def test_proximity_profile(dut, peers):
     dut.expect_exact("TX_POWER_READ_REQUESTED", timeout=20)
 
     # Tx Power Level is a signed int8.
-    tx = dut.expect(re.compile(rb"TX_POWER valid=(\d+) value=(-?\d+) context=(\w+)\r?\n"), timeout=20)
+    tx = dut.expect(re.compile(rb"TX_POWER valid=(\d+) value=(-?\d+) context=(\w+)"), timeout=20)
     assert tx.group(1) == b"1", "Tx Power Level read failed"
     assert int(tx.group(2)) == -8, "Tx Power Level should decode to -8 dBm"
     assert tx.group(3) == b"loop"
 
     # Initial Link Loss Alert Level.
     dut.expect_exact("ALERT_READ_REQUESTED", timeout=10)
-    initial = dut.expect(re.compile(rb"ALERT_LEVEL valid=(\d+) value=(\d+) context=(\w+)\r?\n"), timeout=20)
+    initial = dut.expect(re.compile(rb"ALERT_LEVEL valid=(\d+) value=(\d+) context=(\w+)"), timeout=20)
     assert initial.group(1) == b"1", "Alert Level read failed"
     assert int(initial.group(2)) == 0, "initial Alert Level should be No Alert (0)"
 
     # Write High Alert with response.
     dut.write("w")
     dut.expect_exact("ALERT_WRITE_REQUESTED", timeout=10)
-    server_write = device.expect(re.compile(rb"ALERT_WRITE level=(\d+) context=(\w+)\r?\n"), timeout=20)
+    server_write = device.expect(re.compile(rb"ALERT_WRITE level=(\d+) context=(\w+)"), timeout=20)
     assert int(server_write.group(1)) == 2, "server should receive High Alert level 2"
     assert server_write.group(2) == b"loop"
     dut.expect_exact("ALERT_WRITTEN success=1", timeout=20)
@@ -40,9 +40,9 @@ def test_proximity_profile(dut, peers):
     # Re-read Alert Level to confirm the server stored it.
     dut.write("a")
     dut.expect_exact("ALERT_READ_REQUESTED", timeout=10)
-    after = dut.expect(re.compile(rb"ALERT_LEVEL valid=(\d+) value=(\d+) context=(\w+)\r?\n"), timeout=20)
+    after = dut.expect(re.compile(rb"ALERT_LEVEL valid=(\d+) value=(\d+) context=(\w+)"), timeout=20)
     assert int(after.group(2)) == 2, "Alert Level should read back as the written 2"
 
     dut.write("d")
     dut.expect_exact("DISCONNECT_REQUESTED", timeout=10)
-    dut.expect(re.compile(rb"DISCONNECTED id=(\d+)\r?\n"), timeout=20)
+    dut.expect(re.compile(rb"DISCONNECTED id=(\d+)"), timeout=20)
