@@ -162,3 +162,15 @@ def test_hfp_cvsd_audio_disconnect_and_reconnect(dut, peers, probe):
     dut.expect(
         re.compile(rb"HFP_CLIENT_CALL active=0 setup=0 held=\d+"), timeout=20
     )
+
+    # Leave no live ACL connection for the next module that reuses the boards.
+    dut.write(b"q\n")
+    dut.expect_exact("HFP_CLIENT_DISCONNECT requested=1", timeout=10)
+    dut.expect(
+        re.compile(rb"HFP_CLIENT_CONNECTION state=0 peer=[0-9a-f:]*"),
+        timeout=30,
+    )
+    peer.expect(
+        re.compile(rb"HFP_AG_CONNECTION state=0 peer=[0-9a-f:]*"),
+        timeout=30,
+    )

@@ -1,7 +1,7 @@
 import re
 
 
-def test_classic_hid_profiles_match_the_ble_api(dut, peers):
+def test_classic_hid_profiles_match_the_ble_api(dut, peers, probe):
     """Classic HID through the profile API, decoded by the Classic HID Host.
 
     Both sides use the calls and the event shapes the BLE side uses. What makes
@@ -23,8 +23,11 @@ def test_classic_hid_profiles_match_the_ble_api(dut, peers):
     dut.expect(re.compile(rb"DEVICE_CONNECTED peer=[0-9a-f:]+"), timeout=30)
 
     # The descriptor has to reach the Host before any report can be decoded.
-    peer.write("?\n")
-    peer.expect(re.compile(rb"HOST_STATE connected=1 map=1 invalid=0"), timeout=20)
+    probe(
+        peer,
+        "?\n",
+        re.compile(rb"HOST_STATE connected=1 map=1 invalid=0"),
+    )
 
     # A key press: the state snapshot comes first, then the per-usage event,
     # the same order the BLE host uses. usage 0x04 is "a" on en-US.
