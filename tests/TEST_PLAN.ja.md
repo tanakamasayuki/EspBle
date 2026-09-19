@@ -247,6 +247,11 @@ profileを置いていないのは次の2種類だけです。
 
 ## 実装済みscenario
 
+テスト本体の前に、fixture bootstrapとして✅ `flash_bootstrap`（S3または明示P4 + S3 peer）と
+✅ `classic_flash_bootstrap`（無印ESP32 2台）を実行する。各profileの`EraseFlash=all`でfull runごとに
+一度だけ全消去し、default NVS partitionへのwrite/readと正の空きentry数を確認する。
+`espble_flash_bootstrap` markerを収集後に先頭へ移すため、directory名の辞書順には依存しない。
+
 1. ✅ `stack_smoke`: 同梱NimBLE backendのBLE APIで2台接続、read/writeと双方のSerialを確認する。
 2. ✅ `advertise_scan`: EspBle Advertising builderとScanner parser。
 3. ✅ `connect_disconnect`: Connection identity、local role、接続と切断のloop context。
@@ -603,9 +608,10 @@ boardは、治具を次に使う人のscanに映ります。途中で落ちたru
 無線のhardwareにあり、それを写した変数だけを戻すと写しと実体がずれます。**戻さないより
 悪くなります。** 止めるだけなら、何も戻さないのでこの形が起きません。
 
-uploadを越えて残るものが2つあり、これらはfixtureの担当ではありません。1つは不揮発領域で、
-`arduino-cli`はNVSを消さないのでペアリングのbondはupload、session、日をまたいで残ります。
-bondを扱うsuiteがtestの冒頭で両側を消すのはこのためです。もう1つはresetの届かない範囲に
+通常uploadを越えて残るものが2つあります。1つは不揮発領域で、`arduino-cli`はNVSを消さないため
+ペアリングのbondはupload、session、日をまたいで残ります。full runは先頭のbootstrapで一度
+全消去しますが、個別実行の独立性とtest自身の契約のため、bondを扱うsuiteも冒頭で両側を
+消し続けます。もう1つはresetの届かない範囲に
 あるもので、P4 + C6の構成では無線そのものが該当します。controllerはC6で動くので、P4を
 resetしても止まりません。
 

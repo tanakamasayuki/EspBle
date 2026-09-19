@@ -64,7 +64,7 @@ uv run --env-file .env pytest peer/connect_disconnect/ \
 
 ```sh
 uv run --env-file .env pytest \
-  peer/stack_smoke/ peer/connect_disconnect/ peer/gatt_read_write/ \
+  peer/flash_bootstrap/ peer/stack_smoke/ peer/connect_disconnect/ peer/gatt_read_write/ \
   peer/notify_indicate/ peer/mtu/ peer/wifi_ble_coexistence/ \
   --profile p4_peer_host \
   --peer-profile device:s3_peer_device
@@ -86,6 +86,19 @@ Wi-Fi情報はcompile-time defineとして渡され、verboseなArduino CLI comp
 現行Core/ESP-Hostedの既知制限に該当するSecurityと完全な初期化・終了反復は、P4代表suiteの必須合格項目から除外しています。上流versionを更新したときに再実行し、制限が解消したか確認します。
 
 `stack_smoke`はEspBleを使わず、Arduino-ESP32同梱NimBLE backendのBLE APIだけで親側をCentral、`peer_device/`側をPeripheralとして接続します。2台のポート、書き込み、無線接続、双方のSerial、テストfixture自体が動くことを、libraryと切り離して確認するための土台です。他のsuiteが落ちたときに、原因がfixture側かどうかを切り分けられます。
+
+## full run開始時のflash初期化
+
+`pytest`または`pytest peer/`のfull runでは、`flash_bootstrap`がS3 2台、
+`classic_flash_bootstrap`が無印ESP32 2台を、通常suiteより先に1回だけ全消去します。
+両testには`espble_flash_bootstrap` markerがあり、`tests/conftest.py`が収集順を先頭へ移すため、
+directory名の辞書順には依存しません。bootstrap sketchは全消去後のNVSへ実際にwrite/readし、
+空きentryがあることまで確認します。
+
+P4代表suiteでは上のコマンドのように`flash_bootstrap`も選択します。同じprofileでP4本体と
+S3 peerが初期化されます。P4のuploadはESP-Hosted controllerであるC6のflashまでは消去しません。
+個別suiteだけを選択した実行にはbootstrapは自動追加されないため、完全に初期化した条件が必要なら
+対象suiteと一緒に対応するbootstrap directoryも指定してください。
 
 ## test間のboard状態
 

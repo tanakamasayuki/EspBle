@@ -64,7 +64,7 @@ Run the representative P4 release suite with:
 
 ```sh
 uv run --env-file .env pytest \
-  peer/stack_smoke/ peer/connect_disconnect/ peer/gatt_read_write/ \
+  peer/flash_bootstrap/ peer/stack_smoke/ peer/connect_disconnect/ peer/gatt_read_write/ \
   peer/notify_indicate/ peer/mtu/ peer/wifi_ble_coexistence/ \
   --profile p4_peer_host \
   --peer-profile device:s3_peer_device
@@ -86,6 +86,21 @@ Arduino CLI command output. Use credentials dedicated to a disposable test AP.
 Security and repeated full initialization/deinitialization cases affected by the current Core/ESP-Hosted known limitations are not mandatory pass criteria for the representative P4 suite. Re-run them whenever the upstream versions change to determine whether those limitations have been resolved.
 
 `stack_smoke` uses no EspBle code: it connects the parent side as central and `peer_device/` as peripheral through the BLE API of the NimBLE backend bundled with Arduino-ESP32. It is the base that shows the two ports, flashing, the radio link, both serial monitors and the fixture itself work independently of the library, which is what tells you whether a failure elsewhere is the fixture's doing.
+
+## Flash initialization at the start of a full run
+
+For `pytest` and `pytest peer/` full runs, `flash_bootstrap` erases both S3
+boards and `classic_flash_bootstrap` erases both original ESP32 boards once,
+before the regular suites. Their `espble_flash_bootstrap` marker is moved to the
+front by `tests/conftest.py`, so this contract does not depend on directory
+sorting. Each bootstrap sketch also writes and reads NVS and requires a positive
+free-entry count after the erase.
+
+Include `flash_bootstrap` in a representative P4 command as shown above. Under
+that profile it erases the P4 and its S3 peer; uploading the P4 does not erase
+the separate ESP-Hosted C6 controller flash. Selecting an individual suite does
+not implicitly collect a bootstrap, so include the matching bootstrap directory
+when that run needs a completely fresh fixture.
 
 ## Board state between tests
 

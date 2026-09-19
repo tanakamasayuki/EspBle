@@ -22,6 +22,11 @@ The profile names do not describe BLE roles. Sketches are flashed to and run on 
 
 `pytest peer/` defaults to the two-S3 fixture. The P4 fixture may remain disconnected between runs; select it explicitly for Hosted-related changes, Core/C6 firmware updates, and release candidates. See the [tests README](../README.md) and [test policy](../TEST_PLAN.md#p4c6-esp-hosted-regression) for reference wiring, commands, frequency, and known-limit exclusions.
 
+At the start of a full run, `flash_bootstrap` (S3, with a P4 profile as well)
+and `classic_flash_bootstrap` (original ESP32) erase each fixture once and verify
+that NVS can be written, read, and still has free entries. A pytest marker moves
+them ahead of the regular suites, independently of directory sorting.
+
 ## Original ESP32
 
 The original ESP32 runs on the NimBLE host EspBle bundles for it (see [PLAN_ESP32.ja.md](../../docs/PLAN_ESP32.ja.md), Japanese). The two boards stay wired. pytest holds a port exclusively, so a second pytest run against the same board waits its turn; do not use `arduino-cli upload` or `esptool` directly -- they fail instead of waiting. This chip is also the only target with a Bluetooth Classic radio, so the Classic and dual-host suites run on the same pair.

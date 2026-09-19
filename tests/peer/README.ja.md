@@ -22,6 +22,10 @@ profile名はBLE roleを表しません。両側へsketchを転送・実行で�
 
 `pytest peer/`の既定はS3 2台です。P4は常時接続せず、Hosted関連変更、Core/C6 firmware更新、リリース候補でprofileを明示して代表suiteを実行します。P4+C6の推奨標準配線、実行コマンド、頻度、既知制限による対象外は[tests README](../README.ja.md)と[テスト計画](../TEST_PLAN.ja.md#p4c6-esp-hosted回帰)を参照してください。
 
+full runでは`flash_bootstrap`（S3、P4 profileにも対応）と
+`classic_flash_bootstrap`（無印ESP32）が各fixtureを一度全消去し、NVSのwrite/readと空き容量を
+確認してから通常suiteへ進みます。pytest markerで先頭へ移動するためdirectory名順には依存しません。
+
 ## 無印ESP32
 
 無印ESP32はEspBleが同梱するNimBLE hostで動きます（[PLAN_ESP32.ja.md](../../docs/PLAN_ESP32.ja.md)）。機材は常設2台です。portはpytestが排他で掴むので、別のpytestを同時に走らせても待ち合わせになります（`arduino-cli upload`や`esptool`を直接使うと待機せずに失敗するので使わないでください）。無印ESP32はBluetooth Classicを持つ唯一のtargetでもあるため、Classicとdual-hostのsuiteもこの2台で動きます。

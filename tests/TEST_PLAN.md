@@ -250,6 +250,13 @@ Future candidates include two Centrals connected to one Peripheral, and BLE HID 
 
 ## Implemented Scenarios
 
+Before the behavioral suites, ✅ `flash_bootstrap` (S3, or an explicitly selected
+P4 plus its S3 peer) and ✅ `classic_flash_bootstrap` (two original ESP32 boards)
+prepare the fixtures. `EraseFlash=all` erases each board once per full run, then
+the sketches verify a write/read against the default NVS partition and a positive
+free-entry count. The `espble_flash_bootstrap` marker is moved to the front after
+collection, so this does not depend on directory sorting.
+
 1. ✅ `stack_smoke`: connects two boards using the bundled NimBLE-backend BLE API and verifies read/write plus both serial streams.
 2. ✅ `advertise_scan`: EspBle Advertising builder and Scanner parser.
 3. ✅ `connect_disconnect`: connection identity, local role, and loop-context connect/disconnect delivery.
@@ -505,10 +512,11 @@ radio hardware, and resetting the variable that mirrored it left the mirror
 disagreeing with reality — worse than doing nothing. Stopping needs none of
 that, because it puts nothing back.
 
-Two things do survive an upload and are therefore not the fixture's problem.
-Non-volatile storage is one: `arduino-cli` does not erase NVS, so pairing bonds
-outlive uploads, sessions and days, which is why every bond suite clears both
-sides at the start of its test. The other is anything outside the reach of the
+Two things survive a regular upload. Non-volatile storage is one:
+`arduino-cli` does not normally erase NVS, so pairing bonds outlive uploads,
+sessions and days. A full run erases it once through the bootstrap, while every
+bond suite still clears both sides at the start for standalone-test independence
+and as part of its own contract. The other is anything outside the reach of the
 reset signal, which on the P4 + C6 fixture includes the radio itself: the
 controller runs on the C6, and resetting the P4 does not stop it.
 

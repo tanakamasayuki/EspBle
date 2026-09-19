@@ -29,6 +29,28 @@ def pytest_addoption(parser):
     )
 
 
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers",
+        "espble_flash_bootstrap: erase and verify a hardware fixture before the rest of a full run",
+    )
+
+
+def pytest_collection_modifyitems(items):
+    """Run explicitly marked fixture bootstrap modules before every other item.
+
+    Directory names are deliberately not part of this contract. New suites may
+    sort anywhere in the tree without getting ahead of the flash reset that
+    makes a full hardware run reproducible.
+    """
+    bootstrap = []
+    regular = []
+    for item in items:
+        target = bootstrap if item.get_closest_marker("espble_flash_bootstrap") else regular
+        target.append(item)
+    items[:] = bootstrap + regular
+
+
 def pytest_report_header(config):
     lines = []
     if config.getoption("core_version"):
