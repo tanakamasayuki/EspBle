@@ -1,9 +1,5 @@
-// en: PulseOximeterClient - connect to a Pulse Oximeter Service (0x1822), read
-//     PLX Features, subscribe to PLX Spot-Check Measurement indications, and
-//     decode the SpO2 and pulse rate SFLOATs.
-// ja: PulseOximeterClient - Pulse Oximeter Service（0x1822）へ接続し、PLX
-//     FeaturesをRead、PLX Spot-Check MeasurementのIndicationを購読して、SpO2と
-//     pulse rateのSFLOATをデコードする。
+// en: Features read and SpO2/pulse-rate measurement decoding
+// ja: Features ReadとSpO2/pulse-rate測定値のdecode
 #include <EspBle.h>
 #include <EspBleMedicalFloat.h>
 
@@ -16,22 +12,31 @@ EspBle ble;
 void setup()
 {
   Serial.begin(115200);
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!ble.begin())
   {
     Serial.printf("BLE initialization failed: %s\n", ble.lastErrorDetail().c_str());
     return;
   }
 
+  // en: Connection is established here; subsequent operations use this peer/session state.
+  // ja: ここで接続成立を確認し、この相手／セッションの情報で後続処理を行います。
   ble.onConnected([](const EspBleConnection &connection) {
     ble.readCharacteristic(connection.id, PLX_SERVICE_UUID, PLX_FEATURES_UUID);
   });
+  // en: Read results arrive asynchronously; check success and length before decoding.
+  // ja: Read結果は後から届くので、成功と長さを確認してからデコードします。
   ble.onCharacteristicRead([](const EspBleGattResult &result) {
     if (result.success && result.value.length() >= 2)
     {
-      // PLX Spot-Check Measurement is an indication (notifications = false).
+      // en: PLX Spot-Check Measurement is an indication (notifications = false).
+      // ja: PLX Spot-Check MeasurementはIndicateです（notifications = false）。
       ble.subscribe(result.connectionId, PLX_SERVICE_UUID, PLX_SPOT_CHECK_UUID, false);
     }
   });
+  // en: Check the characteristic and packet length before interpreting incoming bytes.
+  // ja: Characteristicとデータ長を確認してから受信バイトを解釈します。
   ble.onNotification([](const EspBleGattNotification &notification) {
     if (!notification.characteristicUuid.equalsIgnoreCase(PLX_SPOT_CHECK_UUID) ||
         notification.value.length() < 5)
@@ -43,6 +48,8 @@ void setup()
       espBleReadMedicalSFloatLE(spo2Bytes), espBleReadMedicalSFloatLE(prBytes));
   });
 
+  // en: Match a suitable peer before connecting; discovery alone does not mean a connection exists.
+  // ja: 条件に合う相手を選んで接続します。発見しただけでは接続は成立していません。
   ble.scanner().onResult([](const EspBleScanResult &result) {
     if (result.connectable && result.advertisesService(PLX_SERVICE_UUID))
     {
@@ -55,6 +62,8 @@ void setup()
 
 void loop()
 {
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   ble.update();
   delay(1);
 }

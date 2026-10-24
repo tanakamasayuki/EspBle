@@ -1,10 +1,5 @@
-// en: AcceptList - one Filter Accept List, two uses. It restricts who may connect
-//     to this device (BLE has no "approve this connection request" callback: the
-//     controller decides before the application hears about it), and it also
-//     filters which advertisers a scan reports.
-// ja: AcceptList - 1つのFilter Accept Listを2通りに使う。この機器へ接続できる相手を
-//     制限し（BLEには「接続要求を承認する」callbackが無く、アプリに届く前に
-//     controllerが判断する）、同じリストでscanに報告される相手も絞り込む。
+// en: Restrict who may connect with the Filter Accept List
+// ja: Filter Accept Listで接続できる相手を制限
 #include <EspBle.h>
 
 static constexpr const char *SERVICE_UUID = "5266f727-49d7-4eaf-a6f1-6163636570";
@@ -49,6 +44,8 @@ void setup()
 
   EspBleConfig config;
   config.deviceName = "EspBle Accept List";
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!ble.begin(config))
   {
     Serial.printf("BLE init failed: %s (%s)\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
@@ -68,16 +65,22 @@ void setup()
     return;
   }
 
+  // en: Connection is established here; subsequent operations use this peer/session state.
+  // ja: ここで接続成立を確認し、この相手／セッションの情報で後続処理を行います。
   ble.onConnected([](const EspBleConnection &connection) {
     // en: Only a peer on the accept list ever reaches this point.
     // ja: accept listに載っている相手だけがここへ到達する。
     Serial.printf("Connected id=%u from %s\n", connection.id, connection.peerAddress.c_str());
   });
+  // en: Handle link loss here; state from the old connection must not be assumed valid.
+  // ja: ここで切断に対応します。古い接続の状態を有効なままと考えないようにします。
   ble.onDisconnected([](const EspBleConnection &connection) {
     Serial.printf("Disconnected id=%u\n", connection.id);
     ble.advertising().start();
   });
 
+  // en: Match a suitable peer before connecting; discovery alone does not mean a connection exists.
+  // ja: 条件に合う相手を選んで接続します。発見しただけでは接続は成立していません。
   ble.scanner().onResult([](const EspBleScanResult &result) {
     Serial.printf(
       "Advertiser %s rssi=%d (%s scan)\n",
@@ -133,6 +136,8 @@ void loop()
     }
   }
 
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   ble.update();
   delay(1);
 }

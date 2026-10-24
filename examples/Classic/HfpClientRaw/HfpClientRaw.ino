@@ -1,10 +1,5 @@
-// en: The headset side of HFP: a call's control path plus already-encoded SCO
-//     audio. EspBle carries encoded payloads, so decoding CVSD or mSBC and
-//     driving a speaker belong to another library. An accessory also has things
-//     to say about itself, which is the second half of this sketch.
-// ja: HFPのheadset側。通話の制御経路と、encode済みのSCO音声を扱う。EspBleが運ぶのは
-//     encode済みpayloadなので、CVSDやmSBCのdecodeとspeakerの駆動は別libraryの担当。
-//     機器側から伝えることもあり、それがこのsketchの後半である。
+// en: Single-call control and raw CVSD/mSBC SCO transport
+// ja: 単一call controlとraw CVSD/mSBC SCO transport
 #include <EspBleClassic.h>
 
 EspBleClassic bluetooth;
@@ -19,6 +14,8 @@ void setup()
 
   EspBleClassicConfig stackConfig;
   stackConfig.deviceName = "EspBle HFP Client";
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!bluetooth.begin(stackConfig))
   {
     Serial.println(bluetooth.lastErrorDetail());
@@ -92,6 +89,8 @@ void setup()
   bluetooth.hfpClient().onInBandRingTone([](bool provided) {
     Serial.printf("in-band ring tone: %s\n", provided ? "phone" : "accessory");
   });
+  // en: This encoded SCO audio callback runs in the Bluetooth host context. Copy data before return, keep work bounded and do not replace the callback or call end from inside it.
+  // ja: この符号化SCO音声コールバックはBluetooth Hostの実行コンテキストで動きます。戻る前にデータをコピーし、処理を短く保ち、内部からコールバックの再登録やendを呼ばないようにします。
   bluetooth.hfpClient().onAudio(
     [](const EspBleClassicHfpEncodedAudioView &audio) {
       // en: audio.data is valid only inside this callback. Copy it into a
@@ -110,6 +109,8 @@ void setup()
 
 void loop()
 {
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   bluetooth.update();
   delay(1);
 }

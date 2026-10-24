@@ -24,6 +24,8 @@ the table under [Compatibility](#compatibility) lays the differences out.
 > work (ESP-Hosted). That slave needs **its own firmware, separate from this
 > library**, and what works depends on which chip it is and which version it runs.
 
+Start with the [example workflow](docs/GUIDE_EXAMPLES.md) for a first working pair, upload steps, API completion checks, callback contexts, data lifetime and adapting the sketches.
+
 ## Why use EspBle?
 
 - **Use the NimBLE stack the Core selected:** EspBle uses the ESP-IDF NimBLE

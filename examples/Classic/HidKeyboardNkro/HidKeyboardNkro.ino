@@ -1,8 +1,5 @@
-// en: A Bluetooth Classic (BR/EDR) keyboard with N-key rollover: every key is a
-//     bit, so there is no six-key limit. The calls are the same ones the BLE
-//     example uses (examples/Hid/KeyboardNkro).
-// ja: N-key rollover対応のBluetooth Classic（BR/EDR）keyboard。各キーが1 bitなので
-//     6キー制限が無い。呼び出しはBLE example（examples/Hid/KeyboardNkro）と同じ。
+// en: N-key rollover, with no six-key limit
+// ja: N-key rollover。6キー制限が無い
 #include <EspBleClassic.h>
 
 EspBleClassic bluetooth;
@@ -20,12 +17,16 @@ void setup()
 
   EspBleClassicHidProfileConfig hidConfig;
   hidConfig.name = "EspBle Classic NKRO";
+  // en: Compose the HID profile before stack initialization. If you change the report format, keep its descriptor and payload layout consistent.
+  // ja: スタック初期化前にHIDプロファイルを構成します。Report形式を変更するときはDescriptorとデータの並びを一致させます。
   bluetooth.hidKeyboard().configure(hidConfig);
 
   EspBleClassicConfig config;
   config.deviceName = "EspBle Classic NKRO";
   config.classOfDevice.majorDeviceClass = 0x05;
   config.classOfDevice.minorDeviceClass = 0x10;
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!bluetooth.begin(config))
   {
     Serial.printf("Classic init failed: %s: %s\n",
@@ -68,10 +69,14 @@ void loop()
     }
     else if (command == 'r')
     {
+      // en: Send a released state so the host does not keep keys or buttons logically held.
+      // ja: 解除状態を送信し、Host側でキーやボタンが押されたままにならないようにします。
       bluetooth.hidKeyboard().releaseAll();
     }
   }
 
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   bluetooth.update();
   delay(1);
 }

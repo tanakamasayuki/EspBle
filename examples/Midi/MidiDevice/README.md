@@ -34,3 +34,27 @@ SysEx chunk: start=1 end=0 length=16
 ## Related guides
 
 - [BLE guide §7 BLE MIDI](../../../docs/GUIDE_BLE_BASICS.md#7-ble-midi--connecting-as-an-instrument) — the packet format and timestamps
+
+## Before running this sketch
+
+See the [example workflow](../../../docs/GUIDE_EXAMPLES.md) for installation, board selection and the distinction between connection and subscription. Open [MidiDevice.ino](MidiDevice.ino), select the board and port, upload, and match the Serial monitor to `Serial.begin(...)`. Use the command table above or the sketch startup message for input keys.
+
+## How this example is structured
+
+MidiDevice - advertise a BLE MIDI peripheral. Send Note On/Off from serial input and print any MIDI a connected host sends back. Pairs with the MidiHost example or any BLE MIDI host (e.g. a phone/tablet DAW).
+
+## Follow the code and its APIs
+
+The entries below follow their first appearance in the source. Registering a callback does not run it; the matching event invokes it later.
+
+1. `midi.begin(...)` — Initialize the selected stack/profile and check its return value before starting dependent work. For BLE GATT servers, register the database before stack initialization.
+
+## Verify and adapt
+
+BLE MIDI carries performance events, not sampled audio. Select a MIDI input/output in the receiving application; pair Note On with Note Off and choose channels, notes and velocities in the API format. This example sends the off event immediately after the on event, so add nonblocking scheduling if you need an audible sustained note.
+
+Keep calling `ble.update()` from loop. Long waits for Serial input or periodic work postpone queued events and subsequent notifications.
+
+When troubleshooting, locate the last completed stage: initialization, discovery/advertising, connection, required security, discovery/subscription, then value exchange. Skip stages this example does not use; a quiet server is verified through peer reads or received updates. For bool-returning requests, distinguish immediate acceptance from later completion events. When adapting a minimal example that does not print every result, add return-value checks and a failure path.
+
+[Example index](../../README.md) · [Example workflow](../../../docs/GUIDE_EXAMPLES.md)

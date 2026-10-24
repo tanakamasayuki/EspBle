@@ -1,12 +1,5 @@
-// en: ConnectionInspector - interactive diagnostic tool: lists nearby connectable
-//     devices, connects to the one you pick, and dumps the connection snapshot (MTU,
-//     roles, security state). Also prints the bond store and diagnostic counters.
-//     Security is disabled here, so peripherals that require encryption reject reads but
-//     still accept the connection and show their link info.
-// ja: ConnectionInspector - 対話式の診断ツール。周囲のconnectableな機器を一覧し、選んだ
-//     相手へ接続してConnection snapshot（MTU・role・security状態）をダンプする。Bond store
-//     と診断カウンタも表示する。security無効なので、暗号化必須のPeripheralでも接続自体は成立し
-//     link情報を確認できる（Readは拒否される）。
+// en: Interactively connect and dump MTU, security state, bonds, counters
+// ja: 対話式に接続してMTU・security状態・Bond・カウンタをダンプ
 #include <EspBle.h>
 
 static constexpr size_t MaxFound = 10;
@@ -96,6 +89,8 @@ void setup()
 
   EspBleConfig config;
   config.deviceName = "EspBle Inspector";
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!ble.begin(config))
   {
     Serial.printf("BLE init failed: %s (%s)\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
@@ -108,6 +103,8 @@ void setup()
     currentId = connection.id;
     printConnection(connection);
   });
+  // en: Handle link loss here; state from the old connection must not be assumed valid.
+  // ja: ここで切断に対応します。古い接続の状態を有効なままと考えないようにします。
   ble.onDisconnected([](const EspBleConnection &connection) {
     currentId = 0;
     Serial.printf("DISCONNECTED id=%u\n", static_cast<unsigned>(connection.id));
@@ -175,6 +172,8 @@ void loop()
     }
   }
 
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   ble.update();
   delay(1);
 }

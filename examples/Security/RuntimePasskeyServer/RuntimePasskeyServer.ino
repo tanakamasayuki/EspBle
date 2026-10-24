@@ -1,10 +1,5 @@
-// en: RuntimePasskeyServer - the display side of Passkey Entry with a passkey that
-//     is generated per pairing instead of being fixed in the sketch. With no
-//     static passkey configured, the stack draws a fresh 6-digit value and hands
-//     it to onPasskeyDisplayed; a real product would show it on its screen.
-// ja: RuntimePasskeyServer - Passkey Entryの表示側。passkeyをsketchに固定せず、
-//     Pairingごとに生成する。静的passkeyを設定しなければスタックが6桁を新たに引き、
-//     onPasskeyDisplayed へ渡す。実機なら画面に表示する場面。
+// en: Display side of a passkey generated per pairing
+// ja: Pairingごとに生成されるpasskeyの表示側
 #include <EspBle.h>
 
 static constexpr const char *SERVICE_UUID = "9f78d820-802e-43e7-9003-706173736b79";
@@ -25,12 +20,16 @@ void setup()
   valueConfig.authenticatedRead = true;
 
   auto &gattServer = ble.gattServer();
+  // en: Register the local GATT service and its characteristics before ble.begin().
+  // ja: ble.begin()の前に、ローカルのGATT ServiceとCharacteristicを登録します。
   service = gattServer.addService(SERVICE_UUID);
   characteristic = gattServer.addCharacteristic(service, CHARACTERISTIC_UUID, valueConfig);
   gattServer.setValue(characteristic, String("MITM protected value"));
 
   EspBleConfig config;
   config.deviceName = "EspBle Runtime Passkey";
+  // en: Pairing secures the link; bonding saves trust for later connections (see README).
+  // ja: Pairingでリンクを保護し、Bondingで次回の接続用に信頼情報を保存します（README参照）。
   config.security.enabled = true;
   config.security.bonding = true;
   config.security.mitm = true;
@@ -51,6 +50,8 @@ void setup()
   ble.onPasskeyDisplayed([](const EspBlePasskeyDisplayed &event) {
     Serial.printf("Enter passkey %06u on the peer.\n", static_cast<unsigned>(event.passkey));
   });
+  // en: Read the security result and encrypted/authenticated/bonded flags; these describe different properties and must not be treated as interchangeable.
+  // ja: セキュリティ結果とencrypted・authenticated・bondedを確認します。これらは別の性質なので、同じ意味として扱わないようにします。
   ble.onSecurityChanged([](const EspBleSecurityChanged &event) {
     Serial.printf(
       "Security %s: encrypted=%u authenticated=%u bonded=%u\n",
@@ -59,6 +60,8 @@ void setup()
       event.connection.authenticated ? 1 : 0,
       event.connection.bonded ? 1 : 0);
   });
+  // en: Handle link loss here; state from the old connection must not be assumed valid.
+  // ja: ここで切断に対応します。古い接続の状態を有効なままと考えないようにします。
   ble.onDisconnected([](const EspBleConnection &) {
     ble.advertising().start();
   });
@@ -86,6 +89,8 @@ void loop()
       static_cast<unsigned>(ble.bondCount()));
   }
 
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   ble.update();
   delay(1);
 }

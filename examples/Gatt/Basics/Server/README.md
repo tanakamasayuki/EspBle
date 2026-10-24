@@ -82,3 +82,35 @@ Descriptor 10da4dd2-8eaa-4c69-9003-676174747277 wrote: descriptor value
 
 - [BLE guide §4 GATT](../../../../docs/GUIDE_BLE_BASICS.md#4-gatt--exchanging-data) — services, characteristics, notify and MTU
 - [BLE guide §5 UUIDs](../../../../docs/GUIDE_BLE_BASICS.md#5-understanding-uuids) — 16-bit and 128-bit forms
+
+## Before running this sketch
+
+See the [example workflow](../../../../docs/GUIDE_EXAMPLES.md) for installation, board selection and the distinction between connection and subscription. Open [Server.ino](Server.ino), select the board and port, upload, and match the Serial monitor to `Serial.begin(...)`. Use the command table above or the sketch startup message for input keys.
+
+The matching example is [Client](../Client/README.md). For a two-board test, start the peer first and ensure its advertisement/service matches this sketch's filter.
+
+## How this example is structured
+
+Server - expose a custom GATT service with one readable/writable characteristic. All GATT server configuration must happen before begin() (the backend cannot add services after the server starts). Operate it from Gatt/Client or a generic GATT app.
+
+## Follow the code and its APIs
+
+The entries below follow their first appearance in the source. Registering a callback does not run it; the matching event invokes it later.
+
+1. `gattServer.addService(...)` — Create the local service before BLE begin; the service UUID identifies a collection of characteristics, not a specific device.
+2. `gattServer.addCharacteristic(...)` — Declare the value and allowed operations before BLE begin. Read, write, notify and indicate are separate capabilities.
+3. `gattServer.setValue(...)` — Change the locally stored characteristic value. This alone does not send a notification or indication to a subscribed peer.
+4. `gattServer.onWritten(...)` — Handle writes from the peer after update dispatches the event. Validate the UUID, length and command/value before changing application state.
+5. `gattServer.onRead(...)` — This synchronous GATT read callback runs on the BLE stack task. Produce the value quickly with setValue; do not wait, print extensively or perform slow device I/O here.
+6. `ble.begin(...)` — Initialize the selected stack/profile and check its return value before starting dependent work. For BLE GATT servers, register the database before stack initialization.
+7. `advertising.addServiceUuid(...)` — Include the service in advertising so a service-filtered scanner can find it; advertising a UUID does not create the GATT service itself.
+
+## Verify and adapt
+
+The writable stored value and on-demand live value have different paths. Keep onRead short on the stack task; use onWritten in update context for application work following a peer write.
+
+Keep calling `ble.update()` from loop. The stack/host callbacks described above are exceptions: perform only the immediate response or bounded copy they require, rather than assuming they run from update.
+
+When troubleshooting, locate the last completed stage: initialization, discovery/advertising, connection, required security, discovery/subscription, then value exchange. Skip stages this example does not use; a quiet server is verified through peer reads or received updates. For bool-returning requests, distinguish immediate acceptance from later completion events. When adapting a minimal example that does not print every result, add return-value checks and a failure path.
+
+[Example index](../../../README.md) · [Example workflow](../../../../docs/GUIDE_EXAMPLES.md)

@@ -1,8 +1,5 @@
-// en: Classic device discovery. Every other Classic profile connects by
-//     address, so this is where an address comes from when the sketch does not
-//     already know one.
-// ja: Classicのdevice discovery。他のClassic profileはaddress指定で接続するため、
-//     addressを知らない場合の入手経路がここになる。
+// en: Device discovery: where an address comes from
+// ja: device discovery。addressの入手経路
 #include <EspBleClassic.h>
 
 EspBleClassic bluetooth;
@@ -13,6 +10,8 @@ void setup()
 
   EspBleClassicConfig config;
   config.deviceName = "EspBle Inquiry";
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!bluetooth.begin(config))
   {
     Serial.printf(

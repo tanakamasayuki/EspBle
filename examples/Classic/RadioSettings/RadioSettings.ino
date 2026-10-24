@@ -1,12 +1,5 @@
-// en: The three radio and link settings a Classic sketch can choose: transmit
-//     power, page timeout and the minimum encryption key size. None of them
-//     change what a profile does, so they are easiest to see through a
-//     connection attempt: a shorter page timeout is how long connect() takes to
-//     give up on a peer that is not there.
-// ja: Classicのsketchが選べる無線・linkの設定3つ: 送信電力、page timeout、
-//     暗号鍵の最小長。どれもprofileの動作を変えないため、接続試行で見るのが
-//     一番分かりやすい。page timeoutを短くすると、居ない相手に対してconnect()が
-//     諦めるまでの時間が短くなる。
+// en: Transmit power, page timeout and minimum encryption key size
+// ja: 送信電力・page timeout・暗号鍵の最小長
 #include <EspBleClassic.h>
 
 EspBleClassic bluetooth;
@@ -24,6 +17,8 @@ void setup()
 
   EspBleClassicConfig config;
   config.deviceName = "EspBle Classic Radio";
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!bluetooth.begin(config))
   {
     Serial.printf("Classic init failed: %s: %s\n",
@@ -67,6 +62,8 @@ void setup()
     Serial.printf("setMinimumEncryptionKeySize failed: %s\n",
       bluetooth.lastErrorName());
 
+  // en: Connection is established here; subsequent operations use this peer/session state.
+  // ja: ここで接続成立を確認し、この相手／セッションの情報で後続処理を行います。
   bluetooth.spp().onConnected([](const EspBleClassicSppSession &session) {
     Serial.printf("Connected to %s after %u ms\n",
       session.peerAddress.c_str(),
@@ -111,6 +108,8 @@ void loop()
     }
   }
 
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   bluetooth.update();
   delay(1);
 }

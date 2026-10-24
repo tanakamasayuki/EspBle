@@ -1,9 +1,5 @@
-// en: LocationNavigationServer - standard Location and Navigation Service
-//     (0x1819). Location and Speed (0x2A67) is notified with uint16 flags plus
-//     flags-selected fields; LN Feature (0x2A6A) is a readable uint32.
-// ja: LocationNavigationServer - 標準Location and Navigation Service（0x1819）。
-//     Location and Speed（0x2A67）をuint16 flags＋flagsで選ばれるフィールド付きで
-//     Notifyし、LN Feature（0x2A6A）はuint32としてReadできる。
+// en: Location and Speed notifications (speed + sint32 lat/lon) and LN Feature
+// ja: Location and SpeedのNotify（速度＋sint32緯度経度）とLN Feature
 #include <EspBle.h>
 
 static constexpr const char *LN_SERVICE_UUID = "1819";
@@ -28,6 +24,8 @@ void setup()
   EspBleGattCharacteristicConfig featureConfig;
   featureConfig.readable = true;
   auto &server = ble.gattServer();
+  // en: Register the local GATT service and its characteristics before ble.begin().
+  // ja: ble.begin()の前に、ローカルのGATT ServiceとCharacteristicを登録します。
   lnServiceService = server.addService(LN_SERVICE_UUID);
   locationAndSpeedCharacteristic = server.addCharacteristic(lnServiceService, LOCATION_AND_SPEED_UUID, measurementConfig);
   lnFeatureCharacteristic = server.addCharacteristic(lnServiceService, LN_FEATURE_UUID, featureConfig);
@@ -35,6 +33,8 @@ void setup()
 
   EspBleConfig config;
   config.deviceName = "EspBle Location Nav";
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!ble.begin(config))
   {
     Serial.printf("BLE initialization failed: %s\n", ble.lastErrorDetail().c_str());
@@ -76,9 +76,13 @@ void loop()
     measurement[10] = static_cast<uint8_t>((lon >> 16) & 0xFF);
     measurement[11] = static_cast<uint8_t>((lon >> 24) & 0xFF);
     ble.gattServer().setValue(locationAndSpeedCharacteristic, measurement, sizeof(measurement));
+    // en: Check send acceptance when adapting this example; it is separate from later completion.
+    // ja: 組み込む際は送信要求の受理を確認します。後から届く完了とは別です。
     ble.gattServer().notify(locationAndSpeedCharacteristic, measurement, sizeof(measurement));
   }
 
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   ble.update();
   delay(1);
 }

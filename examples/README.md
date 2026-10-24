@@ -2,6 +2,8 @@
 
 > 日本語版: [README.ja.md](README.ja.md)
 
+Start with the [example workflow](../docs/GUIDE_EXAMPLES.md) for a first working pair, upload steps, API completion checks, callback contexts, data lifetime and adapting the sketches.
+
 ## Read the guides first
 
 Before running an example, start with the [beginner's guide to BLE](../docs/GUIDE_BLE_BASICS.md). It gives a substantial explanation of the mechanisms and terminology behind the code: GAP (finding and connecting), security (pairing and bonding), GATT (exchanging data), UUIDs, HID and BLE MIDI. Reading the relevant guide section before its example makes it much easier to understand why each API call is there and what happens at runtime.

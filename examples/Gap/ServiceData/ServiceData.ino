@@ -1,9 +1,5 @@
-// en: ServiceData - broadcast a Service Data block: a payload tagged with the service
-//     UUID it belongs to. This is how a sensor publishes a reading without anyone
-//     connecting to it, and unlike Manufacturer Data it needs no company ID.
-// ja: ServiceData - Service Dataブロックを放送する。どのserviceの値かをUUIDで示した
-//     payloadで、センサーが「接続させずに値を配る」ときの標準的な方法。Manufacturer Data
-//     と違い、割り当て済みcompany IDが不要。
+// en: Broadcast a temperature as Service Data (AD 0x16); publish values without a connection
+// ja: Service Data（AD 0x16）で温度を放送。接続させずに値を配る
 #include <EspBle.h>
 
 // en: Environmental Sensing Service (0x181A). Using the SIG-assigned UUID means any
@@ -53,6 +49,8 @@ void setup()
 
   EspBleConfig config;
   config.deviceName = "EspBle Service Data";
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!ble.begin(config))
   {
     Serial.printf("BLE init failed: %s (%s)\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
@@ -84,6 +82,8 @@ void loop()
     publishTemperature();
   }
 
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   ble.update();
   delay(1);
 }

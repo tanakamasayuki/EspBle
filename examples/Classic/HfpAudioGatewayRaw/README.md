@@ -52,3 +52,26 @@ calling are not implemented.
 ## Related guides
 
 - [Classic guide §8 HFP](../../../docs/GUIDE_CLASSIC_BASICS.md#8-hfp) — the service-level connection, call control and raw SCO
+
+## Before running this sketch
+
+See the [example workflow](../../../docs/GUIDE_EXAMPLES.md) for installation, board selection and the distinction between connection and subscription. Open [HfpAudioGatewayRaw.ino](HfpAudioGatewayRaw.ino), select the board and port, upload, and match the Serial monitor to `Serial.begin(...)`. Use the command table above or the sketch startup message for input keys.
+
+## Follow the code and its APIs
+
+The entries below follow their first appearance in the source. Registering a callback does not run it; the matching event invokes it later.
+
+1. `bluetooth.begin(...)` — Initialize the selected stack/profile and check its return value before starting dependent work. Configure this Classic profile in the order shown by the sketch.
+2. `gateway.onAudio(...)` — This encoded SCO audio callback runs in the Bluetooth host context. Copy data before return, keep work bounded and do not replace the callback or call end from inside it.
+
+## Verify and adapt
+
+Call-state commands here simulate an audio gateway; they are not an actual telephone provider. Service-level connection and SCO audio connection are separate. Add a real call backend and external CVSD/mSBC processing for a complete application.
+
+Use the original ESP32 and a peer supporting this Classic profile. BLE-only hardware or a BLE-only phone application cannot substitute for a Classic SPP, HID or audio peer; use the root support information when selecting hardware.
+
+Keep calling `bluetooth.update()` from loop. The stack/host callbacks described above are exceptions: perform only the immediate response or bounded copy they require, rather than assuming they run from update.
+
+When troubleshooting, locate the last completed stage: initialization, discovery/advertising, connection, required security, discovery/subscription, then value exchange. Skip stages this example does not use; a quiet server is verified through peer reads or received updates. For bool-returning requests, distinguish immediate acceptance from later completion events. When adapting a minimal example that does not print every result, add return-value checks and a failure path.
+
+[Example index](../../README.md) · [Example workflow](../../../docs/GUIDE_EXAMPLES.md)

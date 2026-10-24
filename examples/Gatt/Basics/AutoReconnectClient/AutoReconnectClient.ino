@@ -1,12 +1,5 @@
-// en: AutoReconnectClient - connect to the Gatt/NotifyServer example and
-//     subscribe once. With auto-reconnect on and persistent subscriptions
-//     (on by default), if the link drops the library reconnects to the same
-//     peer and restores the subscription on its own, so notifications resume
-//     with no extra code.
-// ja: AutoReconnectClient - Gatt/NotifyServer example へ接続し一度だけ購読する。
-//     auto-reconnectを有効にすると、persistent subscription（既定on）と併せて、
-//     切断時にライブラリが同じpeerへ自動再接続し購読も自動復元するため、追加の
-//     コードなしでNotificationが再開する。
+// en: Auto-reconnect + persistent subscription: notifications resume after a drop
+// ja: auto-reconnect + persistent subscription: 切断後にNotificationが自動再開
 #include <EspBle.h>
 
 static constexpr const char *SERVICE_UUID = "71756360-5fa4-43bc-9003-6e6f74696679";
@@ -25,6 +18,8 @@ void setup()
   // en: persistentSubscriptions defaults to true; shown here for clarity.
   // ja: persistentSubscriptionsは既定true。ここでは明示のために記述。
   config.persistentSubscriptions = true;
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!ble.begin(config))
   {
     Serial.printf("BLE initialization failed: %s\n", ble.lastErrorDetail().c_str());
@@ -35,6 +30,8 @@ void setup()
   // ja: このpeerとの接続を維持する。想定外の切断時に自動で再接続する。
   ble.setAutoReconnect(true);
 
+  // en: Connection is established here; subsequent operations use this peer/session state.
+  // ja: ここで接続成立を確認し、この相手／セッションの情報で後続処理を行います。
   ble.onConnected([](const EspBleConnection &connection) {
     Serial.printf("Connected to %s\n", connection.peerAddress.c_str());
     // en: Subscribe once. On a later reconnect the library restores it, so this
@@ -45,6 +42,8 @@ void setup()
       ble.subscribe(connection.id, SERVICE_UUID, CHARACTERISTIC_UUID, true);
     }
   });
+  // en: Set application readiness only after result.success confirms the subscription. Link connection by itself is not a subscription.
+  // ja: result.successで購読成功を確認してから、アプリの準備完了とします。接続成立だけでは購読できていません。
   ble.onSubscribed([](const EspBleGattResult &result) {
     if (result.success)
     {
@@ -52,6 +51,8 @@ void setup()
       Serial.println("Subscription active (restored automatically after a reconnect).");
     }
   });
+  // en: Handle link loss here; state from the old connection must not be assumed valid.
+  // ja: ここで切断に対応します。古い接続の状態を有効なままと考えないようにします。
   ble.onDisconnected([](const EspBleConnection &) {
     // en: No reconnect code needed here - the library handles it. Allow the
     //     scanner path to run again only if it is ever needed for the first link.
@@ -59,9 +60,13 @@ void setup()
     Serial.println("Disconnected - auto-reconnect will restore the link.");
     connectionRequested = false;
   });
+  // en: Check the characteristic and packet length before interpreting incoming bytes.
+  // ja: Characteristicとデータ長を確認してから受信バイトを解釈します。
   ble.onNotification([](const EspBleGattNotification &notification) {
     Serial.printf("Notification: %s\n", notification.value.c_str());
   });
+  // en: Match a suitable peer before connecting; discovery alone does not mean a connection exists.
+  // ja: 条件に合う相手を選んで接続します。発見しただけでは接続は成立していません。
   ble.scanner().onResult([](const EspBleScanResult &scanResult) {
     if (connectionRequested || !scanResult.advertisesService(SERVICE_UUID))
     {

@@ -1,10 +1,5 @@
-// en: NumericComparisonServer - the peripheral half of Numeric Comparison pairing.
-//     Both sides declare DisplayYesNo and require MITM, so LE Secure Connections
-//     shows the same 6-digit value on both devices and each user confirms they
-//     match. Nobody types anything: the value is only ever compared.
-// ja: NumericComparisonServer - Numeric Comparison PairingのPeripheral側。
-//     両側が DisplayYesNo かつMITM要求とすると、LE Secure Connectionsが同じ6桁を
-//     両方に表示し、それぞれの利用者が一致を確認する。入力は不要で、値は比較するだけ。
+// en: Pairing by confirming the 6 digits shown on both sides (peripheral)
+// ja: 両側に出た6桁の一致を確認するPairing（Peripheral側）
 #include <EspBle.h>
 
 static constexpr const char *SERVICE_UUID = "9f78d830-802e-43e7-9003-706173736b79";
@@ -25,12 +20,16 @@ void setup()
   valueConfig.authenticatedRead = true;
 
   auto &gattServer = ble.gattServer();
+  // en: Register the local GATT service and its characteristics before ble.begin().
+  // ja: ble.begin()の前に、ローカルのGATT ServiceとCharacteristicを登録します。
   service = gattServer.addService(SERVICE_UUID);
   characteristic = gattServer.addCharacteristic(service, CHARACTERISTIC_UUID, valueConfig);
   gattServer.setValue(characteristic, String("MITM protected value"));
 
   EspBleConfig config;
   config.deviceName = "EspBle NumCmp";
+  // en: Pairing secures the link; bonding saves trust for later connections (see README).
+  // ja: Pairingでリンクを保護し、Bondingで次回の接続用に信頼情報を保存します（README参照）。
   config.security.enabled = true;
   config.security.bonding = true;
   config.security.mitm = true;
@@ -39,6 +38,8 @@ void setup()
   // ja: 表示＋Yes/No。Numeric Comparisonは両側がこれを申告し、両側がMITMを
   //     要求したときにだけ選ばれる。それ以外の組み合わせでは別の方式になる。
   config.security.ioCapability = EspBleSecurityIoCapability::DisplayYesNo;
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!ble.begin(config))
   {
     Serial.printf("BLE initialization failed: %s\n", ble.lastErrorDetail().c_str());
@@ -51,6 +52,8 @@ void setup()
       "Does the peer show %06u? Send 'y' to accept, 'n' to reject.\n",
       static_cast<unsigned>(event.passkey));
   });
+  // en: Read the security result and encrypted/authenticated/bonded flags; these describe different properties and must not be treated as interchangeable.
+  // ja: セキュリティ結果とencrypted・authenticated・bondedを確認します。これらは別の性質なので、同じ意味として扱わないようにします。
   ble.onSecurityChanged([](const EspBleSecurityChanged &event) {
     awaitingConfirmation = false;
     Serial.printf(
@@ -60,6 +63,8 @@ void setup()
       event.connection.authenticated ? 1 : 0,
       event.connection.bonded ? 1 : 0);
   });
+  // en: Handle link loss here; state from the old connection must not be assumed valid.
+  // ja: ここで切断に対応します。古い接続の状態を有効なままと考えないようにします。
   ble.onDisconnected([](const EspBleConnection &) {
     awaitingConfirmation = false;
     ble.advertising().start();
@@ -96,6 +101,8 @@ void loop()
     }
   }
 
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   ble.update();
   delay(1);
 }

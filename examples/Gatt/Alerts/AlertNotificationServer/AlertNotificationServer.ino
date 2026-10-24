@@ -1,13 +1,5 @@
-// en: AlertNotificationServer - standard Alert Notification Service (0x1811).
-//     Supported New Alert Category (0x2A47) is a readable uint16 bitmask; New
-//     Alert (0x2A46) is notified with Category ID + count + text; the Alert
-//     Notification Control Point (0x2A44) is writable. "Notify New Alert
-//     Immediately" (command 2) triggers a New Alert notification.
-// ja: AlertNotificationServer - 標準Alert Notification Service（0x1811）。
-//     Supported New Alert Category（0x2A47）はreadableなuint16 bitmask、New Alert
-//     （0x2A46）はCategory ID＋count＋text付きでNotify、Alert Notification Control
-//     Point（0x2A44）はwritable。「Notify New Alert Immediately」（command 2）で
-//     New AlertのNotificationを発火する。
+// en: Category bitmask read, Control Point writes, New Alert notifications
+// ja: category bitmask Read、Control Point write、New AlertのNotify
 #include <EspBle.h>
 
 static constexpr const char *ANS_SERVICE_UUID = "1811";
@@ -34,12 +26,16 @@ void setup()
   EspBleGattCharacteristicConfig controlConfig;
   controlConfig.writable = true;
   auto &server = ble.gattServer();
+  // en: Register the local GATT service and its characteristics before ble.begin().
+  // ja: ble.begin()の前に、ローカルのGATT ServiceとCharacteristicを登録します。
   ansServiceService = server.addService(ANS_SERVICE_UUID);
   supportedNewAlertCategoryCharacteristic = server.addCharacteristic(ansServiceService, SUPPORTED_NEW_ALERT_CATEGORY_UUID, categoryConfig);
   newAlertCharacteristic = server.addCharacteristic(ansServiceService, NEW_ALERT_UUID, alertConfig);
   alertControlPointCharacteristic = server.addCharacteristic(ansServiceService, ALERT_CONTROL_POINT_UUID, controlConfig);
   server.setValue(supportedNewAlertCategoryCharacteristic, supportedCategories, sizeof(supportedCategories));
 
+  // en: Handle writes from the peer after update dispatches the event. Validate the UUID, length and command/value before changing application state.
+  // ja: updateが配送した相手からの書き込みを処理します。UUID・長さ・コマンドや値を検証してからアプリの状態を変更します。
   server.onWritten([](const EspBleGattWrite &write) {
     if (!write.characteristicUuid.equalsIgnoreCase(ALERT_CONTROL_POINT_UUID) || write.value.length() < 2)
       return;
@@ -50,12 +46,16 @@ void setup()
     {
       Serial.printf("Notify New Alert for category %u\n", category);
       const uint8_t alert[5] = {category, 3, 'B', 'o', 'b'};
+      // en: Check send acceptance when adapting this example; it is separate from later completion.
+      // ja: 組み込む際は送信要求の受理を確認します。後から届く完了とは別です。
       ble.gattServer().notify(newAlertCharacteristic, alert, sizeof(alert));
     }
   });
 
   EspBleConfig config;
   config.deviceName = "EspBle Alert Notification";
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!ble.begin(config))
   {
     Serial.printf("BLE initialization failed: %s\n", ble.lastErrorDetail().c_str());
@@ -67,6 +67,8 @@ void setup()
 
 void loop()
 {
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   ble.update();
   delay(1);
 }

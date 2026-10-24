@@ -1,7 +1,5 @@
-// en: NotifyServer - a GATT server that notifies a counter value once per second, but
-//     only while at least one client subscribes. Pair with Gatt/SubscribeClient.
-// ja: NotifyServer - カウンタ値を1秒ごとにNotificationで送るGATT Server。
-//     ただしNotificationを購読しているClientがいる間だけ送る。Gatt/SubscribeClient と組み合わせる。
+// en: Subscription-gated periodic notifications
+// ja: 購読状態でgateした周期Notification
 #include <EspBle.h>
 
 static constexpr const char *SERVICE_UUID = "71756360-5fa4-43bc-9003-6e6f74696679";
@@ -11,7 +9,9 @@ EspBle ble;
 // en: Handle of the registered characteristic; every later operation uses it.
 // ja: 登録したCharacteristicのハンドル。以降の操作はすべてこれで指定する。
 EspBleGattCharacteristic counterCharacteristic;
-bool hasNotificationSubscriber = false; // en: is there a CCCD subscriber / ja: CCCD購読者がいるか
+// en: is there a CCCD subscriber
+// ja: CCCD購読者がいるか
+bool hasNotificationSubscriber = false;
 uint32_t lastNotification = 0;          // en: last send time / ja: 前回送信時刻
 uint32_t counter = 0;                   // en: counter value to send / ja: 送信するカウンタ値
 
@@ -22,7 +22,11 @@ void setup()
   auto &gattServer = ble.gattServer();
   EspBleGattCharacteristicConfig counterConfig;
   counterConfig.readable = true;
-  counterConfig.notifiable = true; // en: add Notify property and CCCD / ja: Notify propertyとCCCDを付与
+  // en: add Notify property and CCCD
+  // ja: Notify propertyとCCCDを付与
+  counterConfig.notifiable = true;
+  // en: Register the local GATT service and its characteristics before ble.begin().
+  // ja: ble.begin()の前に、ローカルのGATT ServiceとCharacteristicを登録します。
   const EspBleGattService service = gattServer.addService(SERVICE_UUID);
   counterCharacteristic = gattServer.addCharacteristic(service, CHARACTERISTIC_UUID, counterConfig);
 
@@ -45,6 +49,8 @@ void setup()
 
   EspBleConfig config;
   config.deviceName = "EspBle Notify Server";
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!ble.begin(config))
   {
     Serial.printf("BLE initialization failed: %s\n", ble.lastErrorDetail().c_str());
@@ -59,6 +65,8 @@ void setup()
 
 void loop()
 {
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   ble.update();
 
   // en: Send the counter every second, only while there is a subscriber.

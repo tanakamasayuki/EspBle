@@ -1,10 +1,5 @@
-// en: NumericComparisonClient - the central half of Numeric Comparison pairing.
-//     It declares DisplayYesNo and requires MITM, exactly like the server, so the
-//     same 6-digit value appears on both. After both users confirm, it reads a
-//     characteristic that only an authenticated link may read.
-// ja: NumericComparisonClient - Numeric Comparison PairingのCentral側。
-//     Server側と同じく DisplayYesNo かつMITM要求とするため、同じ6桁が両方に出る。
-//     両者が確認したあと、認証済みlinkでしか読めないCharacteristicをReadする。
+// en: The central half of the same
+// ja: 同上のCentral側
 #include <EspBle.h>
 
 static constexpr const char *SERVICE_UUID = "9f78d830-802e-43e7-9003-706173736b79";
@@ -20,10 +15,14 @@ void setup()
 
   EspBleConfig config;
   config.deviceName = "EspBle NumCmp Client";
+  // en: Pairing secures the link; bonding saves trust for later connections (see README).
+  // ja: Pairingでリンクを保護し、Bondingで次回の接続用に信頼情報を保存します（README参照）。
   config.security.enabled = true;
   config.security.bonding = true;
   config.security.mitm = true;
   config.security.ioCapability = EspBleSecurityIoCapability::DisplayYesNo;
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!ble.begin(config))
   {
     Serial.printf("BLE initialization failed: %s\n", ble.lastErrorDetail().c_str());
@@ -36,6 +35,8 @@ void setup()
       "Does the peer show %06u? Send 'y' to accept, 'n' to reject.\n",
       static_cast<unsigned>(event.passkey));
   });
+  // en: Read the security result and encrypted/authenticated/bonded flags; these describe different properties and must not be treated as interchangeable.
+  // ja: セキュリティ結果とencrypted・authenticated・bondedを確認します。これらは別の性質なので、同じ意味として扱わないようにします。
   ble.onSecurityChanged([](const EspBleSecurityChanged &event) {
     awaitingConfirmation = false;
     Serial.printf(
@@ -55,6 +56,8 @@ void setup()
       ble.readCharacteristic(result.connectionId, SERVICE_UUID, CHARACTERISTIC_UUID);
     }
   });
+  // en: Read results arrive asynchronously; check success and length before decoding.
+  // ja: Read結果は後から届くので、成功と長さを確認してからデコードします。
   ble.onCharacteristicRead([](const EspBleGattResult &result) {
     if (result.success)
     {
@@ -65,10 +68,14 @@ void setup()
       Serial.printf("Read failed: %s\n", result.detail.c_str());
     }
   });
+  // en: Handle link loss here; state from the old connection must not be assumed valid.
+  // ja: ここで切断に対応します。古い接続の状態を有効なままと考えないようにします。
   ble.onDisconnected([](const EspBleConnection &) {
     connectionRequested = false;
     awaitingConfirmation = false;
   });
+  // en: Match a suitable peer before connecting; discovery alone does not mean a connection exists.
+  // ja: 条件に合う相手を選んで接続します。発見しただけでは接続は成立していません。
   ble.scanner().onResult([](const EspBleScanResult &scanResult) {
     if (connectionRequested || !scanResult.advertisesService(SERVICE_UUID))
     {
@@ -106,6 +113,8 @@ void loop()
     }
   }
 
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   ble.update();
   delay(1);
 }

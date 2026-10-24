@@ -1,3 +1,5 @@
+// en: Vendor Input reception and Output / Feature writes
+// ja: Vendor Input受信とOutput / Feature書込み
 #include <EspBle.h>
 
 EspBle ble;
@@ -23,18 +25,28 @@ void setup()
   config.preferredMtu = 100;
   config.security.enabled = true;
   config.security.bonding = true;
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!ble.begin(config))
   {
     Serial.printf("BLE initialization failed: %s\n", ble.lastErrorDetail().c_str());
     return;
   }
+  // en: Connection is established here; subsequent operations use this peer/session state.
+  // ja: ここで接続成立を確認し、この相手／セッションの情報で後続処理を行います。
   ble.onConnected([](const EspBleConnection &connection) {
     connectionId = connection.id;
   });
+  // en: Read the security result and encrypted/authenticated/bonded flags; these describe different properties and must not be treated as interchangeable.
+  // ja: セキュリティ結果とencrypted・authenticated・bondedを確認します。これらは別の性質なので、同じ意味として扱わないようにします。
   ble.onSecurityChanged([](const EspBleSecurityChanged &event) {
     if (event.success) ble.hidHost().discover(event.connection.id);
   });
+  // en: Handle link loss here; state from the old connection must not be assumed valid.
+  // ja: ここで切断に対応します。古い接続の状態を有効なままと考えないようにします。
   ble.onDisconnected([](const EspBleConnection &) { connectionId = 0; });
+  // en: Match a suitable peer before connecting; discovery alone does not mean a connection exists.
+  // ja: 条件に合う相手を選んで接続します。発見しただけでは接続は成立していません。
   ble.scanner().onResult([](const EspBleScanResult &result) {
     if (connectionId != 0 || !result.advertisesService("1812")) return;
     ble.scanner().stop();
@@ -62,6 +74,8 @@ void loop()
         connectionId, report, sizeof(report)) ? "sent" : "failed");
     }
   }
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   ble.update();
   delay(1);
 }

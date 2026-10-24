@@ -1,9 +1,5 @@
-// en: MidiDevice - advertise a BLE MIDI peripheral. Send Note On/Off from serial
-//     input and print any MIDI a connected host sends back. Pairs with the
-//     MidiHost example or any BLE MIDI host (e.g. a phone/tablet DAW).
-// ja: MidiDevice - BLE MIDI PeripheralをAdvertiseする。Serial入力でNote On/Offを送信し、
-//     接続したHostから届くMIDIを表示する。MidiHost example や一般的なBLE MIDI Host
-//     （スマホ/タブレットのDAW等）と接続できる。
+// en: BLE MIDI peripheral: send Note On/Off, print received MIDI
+// ja: BLE MIDI Peripheral: Note On/Off送信、受信MIDI表示
 #include <EspBle.h>
 #include <EspBleMidiProfile.h>
 

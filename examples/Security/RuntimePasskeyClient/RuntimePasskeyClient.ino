@@ -1,10 +1,5 @@
-// en: RuntimePasskeyClient - the input side of Passkey Entry. It connects, pairing
-//     starts, and the stack asks for a passkey; the sketch answers with
-//     providePasskey() using a value typed into the serial monitor. That models a
-//     user reading the peer's display and typing what they see.
-// ja: RuntimePasskeyClient - Passkey Entryの入力側。接続するとPairingが始まり、
-//     スタックがpasskeyを要求する。sketchはSerialから入力された値を
-//     providePasskey() で答える。相手の表示を読んで人間が打ち込む場面の再現。
+// en: Input side, supplying the passkey at runtime with providePasskey()
+// ja: providePasskey()で実行時にpasskeyを入力する側
 #include <EspBle.h>
 
 static constexpr const char *SERVICE_UUID = "9f78d820-802e-43e7-9003-706173736b79";
@@ -19,6 +14,8 @@ void setup()
 
   EspBleConfig config;
   config.deviceName = "EspBle Runtime Passkey Client";
+  // en: Pairing secures the link; bonding saves trust for later connections (see README).
+  // ja: Pairingでリンクを保護し、Bondingで次回の接続用に信頼情報を保存します（README参照）。
   config.security.enabled = true;
   config.security.bonding = true;
   config.security.mitm = true;
@@ -32,6 +29,8 @@ void setup()
     return;
   }
 
+  // en: Connection is established here; subsequent operations use this peer/session state.
+  // ja: ここで接続成立を確認し、この相手／セッションの情報で後続処理を行います。
   ble.onConnected([](const EspBleConnection &connection) {
     // en: pairOnConnect is on by default, so pairing has already begun here.
     // ja: pairOnConnect は既定で有効なので、この時点でPairingは始まっている。
@@ -39,6 +38,8 @@ void setup()
       "Connected id=%u. Type p<passkey> (e.g. p123456) shown on the peer.\n",
       static_cast<unsigned>(connection.id));
   });
+  // en: Read the security result and encrypted/authenticated/bonded flags; these describe different properties and must not be treated as interchangeable.
+  // ja: セキュリティ結果とencrypted・authenticated・bondedを確認します。これらは別の性質なので、同じ意味として扱わないようにします。
   ble.onSecurityChanged([](const EspBleSecurityChanged &event) {
     Serial.printf(
       "Security %s: encrypted=%u authenticated=%u bonded=%u\n",
@@ -57,6 +58,8 @@ void setup()
       ble.readCharacteristic(result.connectionId, SERVICE_UUID, CHARACTERISTIC_UUID);
     }
   });
+  // en: Read results arrive asynchronously; check success and length before decoding.
+  // ja: Read結果は後から届くので、成功と長さを確認してからデコードします。
   ble.onCharacteristicRead([](const EspBleGattResult &result) {
     if (result.success)
     {
@@ -67,9 +70,13 @@ void setup()
       Serial.printf("Read failed: %s\n", result.detail.c_str());
     }
   });
+  // en: Handle link loss here; state from the old connection must not be assumed valid.
+  // ja: ここで切断に対応します。古い接続の状態を有効なままと考えないようにします。
   ble.onDisconnected([](const EspBleConnection &) {
     connectionRequested = false;
   });
+  // en: Match a suitable peer before connecting; discovery alone does not mean a connection exists.
+  // ja: 条件に合う相手を選んで接続します。発見しただけでは接続は成立していません。
   ble.scanner().onResult([](const EspBleScanResult &scanResult) {
     if (connectionRequested || !scanResult.advertisesService(SERVICE_UUID))
     {
@@ -112,6 +119,8 @@ void loop()
     }
   }
 
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   ble.update();
   delay(1);
 }

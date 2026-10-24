@@ -1,8 +1,5 @@
-// en: Scan - run a continuous active scan and print each advertisement's address,
-//     RSSI, and name. Minimal central example; pair with Gap/Advertise or observe
-//     nearby BLE devices.
-// ja: Scan - 継続的なactive scanを実行し、受信したadvertisementのaddress/RSSI/nameを表示する。
-//     Central側の最小例。Gap/Advertise exampleや周囲のBLE機器を観察できる。
+// en: Continuous active scan printing address / RSSI / name
+// ja: address / RSSI / nameを表示する継続active scan
 #include <EspBle.h>
 
 EspBle ble;
@@ -34,7 +31,9 @@ void setup()
   });
 
   EspBleScanConfig scanConfig;
-  scanConfig.active = true;        // en: active scan (also requests scan responses) / ja: active scan（scan responseも要求）
+  // en: active scan (also requests scan responses)
+  // ja: active scan（scan responseも要求）
+  scanConfig.active = true;
   scanConfig.durationSeconds = 0;  // en: 0 = scan until reset / ja: 0 = リセットまで無制限
   if (!ble.scanner().start(scanConfig))
   {

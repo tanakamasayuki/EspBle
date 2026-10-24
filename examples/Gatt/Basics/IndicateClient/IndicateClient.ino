@@ -1,9 +1,5 @@
-// en: IndicateClient - indication counterpart of SubscribeClient: subscribes with
-//     notifications=false, so the stack acknowledges every received value and the
-//     server's onSent() reports the confirmed delivery. Pair with Gatt/IndicateServer.
-// ja: IndicateClient - SubscribeClientのIndication版。notifications=false で購読するため、
-//     受信した各値をスタックが確認応答し、Server側の onSent() が配信確認を報告する。
-//     Gatt/IndicateServer と組み合わせる。
+// en: Subscribe to IndicateServer's indications
+// ja: IndicateServerのIndicationを購読
 #include <EspBle.h>
 
 static constexpr const char *SERVICE_UUID = "43a2c560-71b4-49bd-9003-696e64696361";
@@ -18,12 +14,16 @@ void setup()
 
   EspBleConfig config;
   config.deviceName = "EspBle Indicate Client";
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!ble.begin(config))
   {
     Serial.printf("BLE initialization failed: %s\n", ble.lastErrorDetail().c_str());
     return;
   }
 
+  // en: Connection is established here; subsequent operations use this peer/session state.
+  // ja: ここで接続成立を確認し、この相手／セッションの情報で後続処理を行います。
   ble.onConnected([](const EspBleConnection &connection) {
     // en: notifications=false subscribes to indications (writes 0x0002 to the CCCD).
     // ja: notifications=false でIndicationを購読する（CCCDへ0x0002を書き込む）。
@@ -32,6 +32,8 @@ void setup()
       Serial.printf("Subscribe request failed: %s\n", ble.lastErrorDetail().c_str());
     }
   });
+  // en: Set application readiness only after result.success confirms the subscription. Link connection by itself is not a subscription.
+  // ja: result.successで購読成功を確認してから、アプリの準備完了とします。接続成立だけでは購読できていません。
   ble.onSubscribed([](const EspBleGattResult &result) {
     if (!result.success)
     {
@@ -46,6 +48,8 @@ void setup()
       notification.indication ? "Indication" : "Notification",
       notification.value.c_str());
   });
+  // en: Match a suitable peer before connecting; discovery alone does not mean a connection exists.
+  // ja: 条件に合う相手を選んで接続します。発見しただけでは接続は成立していません。
   ble.scanner().onResult([](const EspBleScanResult &scanResult) {
     if (connectionRequested || !scanResult.advertisesService(SERVICE_UUID))
     {
@@ -62,6 +66,8 @@ void setup()
 
 void loop()
 {
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   ble.update();
   delay(1);
 }

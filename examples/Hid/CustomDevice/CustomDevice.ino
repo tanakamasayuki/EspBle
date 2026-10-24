@@ -1,15 +1,9 @@
-// en: CustomDevice - build a HID device with an ARBITRARY Report Descriptor using
-//     ble.hidCustom(). This example is a vendor-defined "control panel": a 2-byte
-//     input report (a signed dial delta + a button bitfield) and a 1-byte output
-//     report (an LED state written by the host). Custom reports are composed into
-//     the same HID service, so they can coexist with ble.hidKeyboard()/hidMouse().
-// ja: CustomDevice - ble.hidCustom() で任意のReport DescriptorのHIDデバイスを作る。
-//     この例はvendor定義の「コントロールパネル」: 2byteの入力Report（符号付きダイヤル差分
-//     ＋ボタンbit）と1byteの出力Report（HostがLED状態を書き込む）。カスタムReportは
-//     同じHID Serviceに合成されるので、ble.hidKeyboard()/hidMouse() とも共存できる。
+// en: Arbitrary Report Descriptor via ble.hidCustom() (input + output reports)
+// ja: ble.hidCustom()で任意Report Descriptor（入力＋出力Report）
 #include <EspBle.h>
 
-// Vendor-defined usage page 0xFF00, Report ID 1: a 2-byte input and a 1-byte output.
+// en: Vendor-defined usage page 0xFF00, Report ID 1: a 2-byte input and a 1-byte output.
+// ja: Vendor定義Usage Page 0xFF00、Report ID 1で、入力2バイト・出力1バイトです。
 static const uint8_t reportDescriptor[] = {
   0x06, 0x00, 0xFF,   // Usage Page (Vendor-Defined 0xFF00)
   0x09, 0x01,         // Usage (0x01)
@@ -42,6 +36,8 @@ void setup()
   // ja: begin() 前にカスタムHIDを構成する: raw Report Mapを設定し、各Report（id・byte数）を
   //     宣言する。Report ID 1〜6は、対応する内蔵profileを有効にしている場合のみ予約される。
   auto &custom = ble.hidCustom();
+  // en: Compose the HID profile before stack initialization. If you change the report format, keep its descriptor and payload layout consistent.
+  // ja: スタック初期化前にHIDプロファイルを構成します。Report形式を変更するときはDescriptorとデータの並びを一致させます。
   custom.configure();
   custom.addInputReport(1, 2);
   custom.addOutputReport(1, 1);
@@ -61,11 +57,15 @@ void setup()
   // ja: HOGPは通常暗号化linkを要求する。実機Host向けにはsecurityを有効化する。
   config.security.enabled = true;
   config.security.bonding = true;
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!ble.begin(config))
   {
     Serial.printf("BLE initialization failed: %s\n", ble.lastErrorDetail().c_str());
     return;
   }
+  // en: Handle link loss here; state from the old connection must not be assumed valid.
+  // ja: ここで切断に対応します。古い接続の状態を有効なままと考えないようにします。
   ble.onDisconnected([](const EspBleConnection &) { ble.advertising().start(); });
   ble.advertising().setName("EspBle Custom HID");
   ble.advertising().start();
@@ -80,6 +80,8 @@ void loop()
     // en: 2-byte input report: dial delta = +5, buttons = 0x01.
     // ja: 2byteの入力Report: ダイヤル差分 = +5、ボタン = 0x01。
     const uint8_t report[2] = {static_cast<uint8_t>(5), 0x01};
+    // en: Keep the report ID and payload layout consistent with the configured descriptor.
+    // ja: Report IDとデータの並びを、設定したDescriptorに一致させます。
     ble.hidCustom().sendInput(1, report, sizeof(report));
   }
   // en: Output/feature report events are delivered from this update().

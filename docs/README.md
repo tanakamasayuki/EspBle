@@ -4,6 +4,8 @@
 
 The design documents are written in Japanese. This guide lists them and shows the fastest reading order to understand the project's status.
 
+Start with the [example workflow](GUIDE_EXAMPLES.md) for a first working pair, upload steps, API completion checks, callback contexts, data lifetime and adapting the sketches.
+
 ## Get oriented (recommended order for newcomers)
 
 1. [../README.md](../README.md) — library overview, supported/unsupported chips, getting started

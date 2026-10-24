@@ -1,9 +1,5 @@
-// en: Connect - scan for a peripheral advertising a specific service UUID and connect.
-//     Shows the async model: connect() only accepts the request; completion/failure
-//     arrives later as an event delivered from update().
-// ja: Connect - 特定のService UUIDをadvertiseするPeripheralを探して接続する。
-//     非同期モデルの例: connect() は要求の受理だけを返し、完了/失敗は
-//     あとから update() 経由のイベントで届く。
+// en: Scan for a service UUID and connect; async connect/disconnect/failure events
+// ja: Service UUIDをscanして接続。非同期の接続/切断/失敗イベント
 #include <EspBle.h>
 
 // en: Replace with the service UUID advertised by the peripheral to connect to.
@@ -11,7 +7,9 @@
 static constexpr const char *TARGET_SERVICE_UUID = "5266f727-49d7-4eaf-a6f1-636f6e6e6563";
 
 EspBle ble;
-bool connectionRequested = false; // en: guard against duplicate requests / ja: 二重接続要求を防ぐフラグ
+// en: guard against duplicate requests
+// ja: 二重接続要求を防ぐフラグ
+bool connectionRequested = false;
 
 void setup()
 {
@@ -19,6 +17,8 @@ void setup()
 
   EspBleConfig config;
   config.deviceName = "EspBle Central";
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!ble.begin(config))
   {
     Serial.printf("BLE initialization failed: %s\n", ble.lastErrorDetail().c_str());
@@ -34,7 +34,9 @@ void setup()
   // ja: 切断。onConnected と同じ id が渡る。
   ble.onDisconnected([](const EspBleConnection &connection) {
     Serial.printf("Disconnected (id=%u)\n", connection.id);
-    connectionRequested = false; // en: allow retry on the next scan result / ja: 次のscan resultで再試行できるように戻す
+    // en: allow retry on the next scan result
+    // ja: 次のscan resultで再試行できるように戻す
+    connectionRequested = false;
   });
   // en: Asynchronous connection failure (unreachable, timeout, etc.).
   // ja: 非同期の接続失敗（到達不能・timeout等）。
@@ -48,11 +50,17 @@ void setup()
   ble.scanner().onResult([](const EspBleScanResult &scanResult) {
     if (connectionRequested || !scanResult.advertisesService(TARGET_SERVICE_UUID))
     {
-      return; // en: already requested, or not the target / ja: 既に接続要求済み、または対象外
+      // en: already requested, or not the target
+      // ja: 既に接続要求済み、または対象外
+      return;
     }
 
-    ble.scanner().stop();                          // en: stop scanning before connecting / ja: 接続前にscanを止める
-    connectionRequested = ble.connect(scanResult); // en: true if accepted (completion via event) / ja: 受理されれば true（完了はイベントで）
+    // en: stop scanning before connecting
+    // ja: 接続前にscanを止める
+    ble.scanner().stop();
+    // en: true if accepted (completion via event)
+    // ja: 受理されれば true（完了はイベントで）
+    connectionRequested = ble.connect(scanResult);
     if (!connectionRequested)
     {
       Serial.printf("Connection request rejected: %s\n", ble.lastErrorDetail().c_str());

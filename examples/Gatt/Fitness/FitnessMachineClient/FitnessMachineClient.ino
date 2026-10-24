@@ -1,9 +1,5 @@
-// en: FitnessMachineClient - connect to a Fitness Machine Service (0x1826), read
-//     Fitness Machine Feature, subscribe to Indoor Bike Data (0x2AD2), and
-//     decode the flags-driven instantaneous speed / cadence / power.
-// ja: FitnessMachineClient - Fitness Machine Service（0x1826）へ接続し、Fitness
-//     Machine FeatureをRead、Indoor Bike Data（0x2AD2）を購読して、flagsに従う
-//     instantaneous speed / cadence / power をデコードする。
+// en: Feature read and flags-driven Indoor Bike Data (speed/cadence/power) decoding
+// ja: Feature Readとflags駆動Indoor Bike Data（speed/cadence/power）のdecode
 #include <EspBle.h>
 
 static constexpr const char *FTMS_SERVICE_UUID = "1826";
@@ -21,15 +17,21 @@ static uint16_t u16(const String &value, size_t offset)
 void setup()
 {
   Serial.begin(115200);
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!ble.begin())
   {
     Serial.printf("BLE initialization failed: %s\n", ble.lastErrorDetail().c_str());
     return;
   }
 
+  // en: Connection is established here; subsequent operations use this peer/session state.
+  // ja: ここで接続成立を確認し、この相手／セッションの情報で後続処理を行います。
   ble.onConnected([](const EspBleConnection &connection) {
     ble.readCharacteristic(connection.id, FTMS_SERVICE_UUID, FITNESS_MACHINE_FEATURE_UUID);
   });
+  // en: Read results arrive asynchronously; check success and length before decoding.
+  // ja: Read結果は後から届くので、成功と長さを確認してからデコードします。
   ble.onCharacteristicRead([](const EspBleGattResult &result) {
     if (result.success && result.value.length() == 8)
     {
@@ -37,6 +39,8 @@ void setup()
       ble.subscribe(result.connectionId, FTMS_SERVICE_UUID, INDOOR_BIKE_DATA_UUID);
     }
   });
+  // en: Check the characteristic and packet length before interpreting incoming bytes.
+  // ja: Characteristicとデータ長を確認してから受信バイトを解釈します。
   ble.onNotification([](const EspBleGattNotification &notification) {
     if (!notification.characteristicUuid.equalsIgnoreCase(INDOOR_BIKE_DATA_UUID) ||
         notification.value.length() < 2)
@@ -53,11 +57,14 @@ void setup()
     if (flags & 0x0010) offset += 3;                                    // Total Distance
     if (flags & 0x0020) offset += 2;                                    // Resistance Level
     if (flags & 0x0040) { power = static_cast<int16_t>(u16(value, offset)); offset += 2; } // Instantaneous Power
-    // Speed is 0.01 km/h, cadence is 0.5 /min (so rpm = cadence / 2).
+    // en: Speed is 0.01 km/h, cadence is 0.5 /min (so rpm = cadence / 2).
+    // ja: 速度は0.01 km/h、ケイデンスは0.5回/分単位です（rpm = cadence / 2）。
     Serial.printf("Speed: %u.%02u km/h  Cadence: %u rpm  Power: %d W\n",
       speed / 100, speed % 100, cadence / 2, power);
   });
 
+  // en: Match a suitable peer before connecting; discovery alone does not mean a connection exists.
+  // ja: 条件に合う相手を選んで接続します。発見しただけでは接続は成立していません。
   ble.scanner().onResult([](const EspBleScanResult &result) {
     if (result.connectable && result.advertisesService(FTMS_SERVICE_UUID))
     {
@@ -70,6 +77,8 @@ void setup()
 
 void loop()
 {
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   ble.update();
   delay(1);
 }

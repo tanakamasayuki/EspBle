@@ -1,9 +1,5 @@
-// en: PulseOximeterServer - standard Pulse Oximeter Service / PLX (0x1822). PLX
-//     Spot-Check Measurement (0x2A5E) is indicated with SpO2 and pulse rate as
-//     IEEE-11073 16-bit SFLOATs; PLX Features (0x2A60) is readable.
-// ja: PulseOximeterServer - 標準Pulse Oximeter Service / PLX（0x1822）。PLX
-//     Spot-Check Measurement（0x2A5E）をSpO2とpulse rateのIEEE-11073 16-bit
-//     SFLOATでIndicateし、PLX Features（0x2A60）はReadできる。
+// en: SFLOAT SpO2/pulse-rate Spot-Check Measurement indications and Features
+// ja: SFLOAT SpO2/pulse-rate Spot-Check MeasurementのIndicateとFeatures
 #include <EspBle.h>
 #include <EspBleMedicalFloat.h>
 
@@ -28,6 +24,8 @@ void setup()
   EspBleGattCharacteristicConfig featuresConfig;
   featuresConfig.readable = true;
   auto &server = ble.gattServer();
+  // en: Register the local GATT service and its characteristics before ble.begin().
+  // ja: ble.begin()の前に、ローカルのGATT ServiceとCharacteristicを登録します。
   plxServiceService = server.addService(PLX_SERVICE_UUID);
   plxSpotCheckCharacteristic = server.addCharacteristic(plxServiceService, PLX_SPOT_CHECK_UUID, spotCheckConfig);
   plxFeaturesCharacteristic = server.addCharacteristic(plxServiceService, PLX_FEATURES_UUID, featuresConfig);
@@ -35,6 +33,8 @@ void setup()
 
   EspBleConfig config;
   config.deviceName = "EspBle Pulse Oximeter";
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!ble.begin(config))
   {
     Serial.printf("BLE initialization failed: %s\n", ble.lastErrorDetail().c_str());
@@ -60,9 +60,13 @@ void loop()
     espBleWriteMedicalSFloatLE(&measurement[1], static_cast<int16_t>(spo2), 0);
     espBleWriteMedicalSFloatLE(&measurement[3], 60, 0);
     ble.gattServer().setValue(plxSpotCheckCharacteristic, measurement, sizeof(measurement));
+    // en: Check send acceptance when adapting this example; it is separate from later completion.
+    // ja: 組み込む際は送信要求の受理を確認します。後から届く完了とは別です。
     ble.gattServer().indicate(plxSpotCheckCharacteristic, measurement, sizeof(measurement));
   }
 
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   ble.update();
   delay(1);
 }

@@ -1,13 +1,5 @@
-// en: Client - connect to the Gatt/Server example and run the central GATT client flow:
-//     database discovery -> known-UUID discovery -> read -> write -> descriptor access.
-//     Each step is a request API;
-//     completion arrives as an event from update(). The next operation is chained from
-//     the previous one's completion callback (central GATT operations are one-at-a-time).
-// ja: Client - Gatt/Server example へ接続し、CentralのGATT Clientフローを一通り実行する:
-//     Database一覧Discovery → 既知UUIDのDiscovery → Read → Write → Descriptor操作。
-//     各ステップは要求APIで受理され、
-//     完了は update() 経由のイベントとして届く。次の操作は前の操作の完了callbackから連鎖する
-//     （Central GATT操作は同時1件のため）。
+// en: Known-UUID discovery → read → write chain against the Server
+// ja: Serverに対する既知UUID Discovery → Read → Writeの連鎖
 #include <EspBle.h>
 
 // en: Same UUIDs as the Gatt/Server example.
@@ -29,6 +21,8 @@ void setup()
 
   EspBleConfig config;
   config.deviceName = "EspBle GATT Client";
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!ble.begin(config))
   {
     Serial.printf("BLE initialization failed: %s\n", ble.lastErrorDetail().c_str());

@@ -57,3 +57,32 @@ lower transmit power shortens the range. Both are trades, not improvements.
 ## Related guides
 
 - [Classic guide §2 Starting up and being visible](../../../docs/GUIDE_CLASSIC_BASICS.md#2-starting-up-and-being-visible) — transmit power, page timeout and discoverability
+
+## Before running this sketch
+
+See the [example workflow](../../../docs/GUIDE_EXAMPLES.md) for installation, board selection and the distinction between connection and subscription. Open [RadioSettings.ino](RadioSettings.ino), select the board and port, upload, and match the Serial monitor to `Serial.begin(...)`. Use the command table above or the sketch startup message for input keys.
+
+## How this example is structured
+
+The three radio and link settings a Classic sketch can choose: transmit power, page timeout and the minimum encryption key size. None of them change what a profile does, so they are easiest to see through a connection attempt: a shorter page timeout is how long connect() takes to give up on a peer that is not there.
+
+## Follow the code and its APIs
+
+The entries below follow their first appearance in the source. Registering a callback does not run it; the matching event invokes it later.
+
+1. `bluetooth.begin(...)` — Initialize the selected stack/profile and check its return value before starting dependent work. Configure this Classic profile in the order shown by the sketch.
+2. `bluetooth.spp().onConnected(...)` — Confirm the established link here and retain the peer/session information needed by this profile. An accepted connect request is earlier and does not prove that a usable link exists.
+3. `bluetooth.spp().onConnectionFailed(...)` — Observe failures that happen after a connection request was accepted, including an unavailable peer or a rejected connection.
+4. `bluetooth.spp().connect(...)` — Request a connection to the selected peer; wait for the connection event before using a connection ID or starting profile traffic.
+
+## Verify and adapt
+
+Change one radio/security parameter at a time and compare the reported result. A stronger transmit setting or longer page timeout cannot add a missing peer service, and encryption-key policy can reject otherwise discoverable peers.
+
+Use the original ESP32 and a peer supporting this Classic profile. BLE-only hardware or a BLE-only phone application cannot substitute for a Classic SPP, HID or audio peer; use the root support information when selecting hardware.
+
+Keep calling `bluetooth.update()` from loop. Long waits for Serial input or periodic work postpone queued events and subsequent notifications.
+
+When troubleshooting, locate the last completed stage: initialization, discovery/advertising, connection, required security, discovery/subscription, then value exchange. Skip stages this example does not use; a quiet server is verified through peer reads or received updates. For bool-returning requests, distinguish immediate acceptance from later completion events. When adapting a minimal example that does not print every result, add return-value checks and a failure path.
+
+[Example index](../../README.md) · [Example workflow](../../../docs/GUIDE_EXAMPLES.md)

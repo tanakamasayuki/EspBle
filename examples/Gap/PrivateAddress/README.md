@@ -54,3 +54,31 @@ Disconnected id=1
 ## Related guides
 
 - [BLE guide §2 GAP](../../../docs/GUIDE_BLE_BASICS.md#2-gap--finding-and-connecting) — advertising, scanning and connecting
+
+## Before running this sketch
+
+See the [example workflow](../../../docs/GUIDE_EXAMPLES.md) for installation, board selection and the distinction between connection and subscription. Open [PrivateAddress.ino](PrivateAddress.ino), select the board and port, upload, and match the Serial monitor to `Serial.begin(...)`. Use the command table above or the sketch startup message for input keys.
+
+The matching example is [ScanDump](../../Info/ScanDump/README.md). For a two-board test, start the peer first and ensure its advertisement/service matches this sketch's filter.
+
+## How this example is structured
+
+PrivateAddress - advertise with a private address instead of the factory public address, so passers-by cannot track this device by its address. RandomStatic      = a fixed random address (hides the public one, never rotates) ResolvablePrivate = an RPA the controller rotates; a bonded peer resolves it with the IRK exchanged at bonding, everyone else sees a changing address Set USE_RESOLVABLE_PRIVATE_ADDRESS to switch. Observe with Gap/Scan or Info/ScanDump: the address type shows as Random either way.
+
+## Follow the code and its APIs
+
+The entries below follow their first appearance in the source. Registering a callback does not run it; the matching event invokes it later.
+
+1. `ble.begin(...)` — Initialize the selected stack/profile and check its return value before starting dependent work. For BLE GATT servers, register the database before stack initialization.
+2. `ble.onConnected(...)` — Confirm the established link here and retain the peer/session information needed by this profile. An accepted connect request is earlier and does not prove that a usable link exists.
+3. `ble.onDisconnected(...)` — Clear readiness and any saved connection/session state here; old IDs must not be reused for a new peer. Restart scanning or advertising only where the sketch explicitly does so.
+
+## Verify and adapt
+
+Compare static random and resolvable private addressing with the mode switch. Address privacy differs from payload encryption; retain the required security/bonding configuration when testing reconnection with a rotating address.
+
+Keep calling `ble.update()` from loop. Long waits for Serial input or periodic work postpone queued events and subsequent notifications.
+
+When troubleshooting, locate the last completed stage: initialization, discovery/advertising, connection, required security, discovery/subscription, then value exchange. Skip stages this example does not use; a quiet server is verified through peer reads or received updates. For bool-returning requests, distinguish immediate acceptance from later completion events. When adapting a minimal example that does not print every result, add return-value checks and a failure path.
+
+[Example index](../../README.md) · [Example workflow](../../../docs/GUIDE_EXAMPLES.md)

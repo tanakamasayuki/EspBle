@@ -52,3 +52,40 @@ Input report: dial delta=5 buttons=1
 
 - [BLE guide §6 HID](../../../docs/GUIDE_BLE_BASICS.md#6-hid--acting-as-a-keyboard-or-a-mouse) — reports, descriptors and what a Host expects
 - [Writing a HID Report Descriptor](../../../docs/GUIDE_HID_DESCRIPTORS.md) — when you need your own descriptor, and how to verify it
+
+## Before running this sketch
+
+See the [example workflow](../../../docs/GUIDE_EXAMPLES.md) for installation, board selection and the distinction between connection and subscription. Open [CustomClient.ino](CustomClient.ino), select the board and port, upload, and match the Serial monitor to `Serial.begin(...)`. Use the command table above or the sketch startup message for input keys.
+
+The matching example is [CustomDevice](../CustomDevice/README.md). For a two-board test, start the peer first and ensure its advertisement/service matches this sketch's filter.
+
+## How this example is structured
+
+CustomClient - read a Custom HID device's arbitrary Report Descriptor and drive its reports using the generic GATT client. Pairs with the Hid/CustomDevice example. A HID device exposes several Report characteristics that share UUID 0x2A4D, so every attribute here is named by its distinct attribute HANDLE. Each report's role comes from its Report Reference descriptor (0x2908, report ID + type), which is read BY HANDLE: every Report Reference is 0x2908 under a 0x2A4D characteristic, so a service/characteristic/descriptor UUID triple cannot pick one out.
+
+## Follow the code and its APIs
+
+The entries below follow their first appearance in the source. Registering a callback does not run it; the matching event invokes it later.
+
+1. `ble.begin(...)` — Initialize the selected stack/profile and check its return value before starting dependent work. For BLE GATT servers, register the database before stack initialization.
+2. `ble.onConnected(...)` — Confirm the established link here and retain the peer/session information needed by this profile. An accepted connect request is earlier and does not prove that a usable link exists.
+3. `ble.discoverServices(...)` — Start remote database discovery; consume the results in its completion event instead of assuming the request immediately populated handles.
+4. `ble.onDisconnected(...)` — Clear readiness and any saved connection/session state here; old IDs must not be reused for a new peer. Restart scanning or advertising only where the sketch explicitly does so.
+5. `ble.onServicesDiscovered(...)` — Inspect discovery success and the returned database before using discovered service, characteristic or descriptor handles.
+6. `ble.subscribe(...)` — Enable updates for the remote characteristic. Notify and indicate subscriptions differ; use the mode matching the characteristic and wait for subscription completion.
+7. `ble.onNotification(...)` — Filter the characteristic and connection, then validate the binary layout before decoding updates. Indication data is also received through this API.
+8. `ble.scanner().onResult(...)` — Inspect the discovery result before selecting a peer. A name may be absent, and seeing a device does not prove it supports the intended connected service.
+9. `ble.connect(...)` — Request a connection to the selected peer; wait for the connection event before using a connection ID or starting profile traffic.
+10. `ble.writeCharacteristic(...)` — Queue a remote write and inspect its completion event. Write Without Response provides no ATT response proving the peer application acted on the data.
+
+## Verify and adapt
+
+Use a matching HID device and wait for profile discovery/readiness, not just the radio connection. Route each report according to its ID and descriptor; sending keyboard LED/output reports is the host-to-device direction, independent of receiving key input.
+
+A vendor-defined report needs a matching application/parser on the other end. Changing bytes in the descriptor requires updating report declarations and both encoders/decoders; do not infer the layout from a friendly device name.
+
+Keep calling `ble.update()` from loop. Long waits for Serial input or periodic work postpone queued events and subsequent notifications.
+
+When troubleshooting, locate the last completed stage: initialization, discovery/advertising, connection, required security, discovery/subscription, then value exchange. Skip stages this example does not use; a quiet server is verified through peer reads or received updates. For bool-returning requests, distinguish immediate acceptance from later completion events. When adapting a minimal example that does not print every result, add return-value checks and a failure path.
+
+[Example index](../../README.md) · [Example workflow](../../../docs/GUIDE_EXAMPLES.md)

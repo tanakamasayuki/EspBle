@@ -1,10 +1,5 @@
-// en: StaticPasskeyServer - a GATT server requiring MITM-authenticated pairing with a
-//     static 6-digit passkey. This board is the display side (DisplayOnly): it prints
-//     the passkey and the connecting central types it. The characteristic requires an
-//     authenticated link, so Just Works pairing cannot access it.
-// ja: StaticPasskeyServer - 静的6桁passkeyによるMITM認証Pairingを要求するGATT Server。
-//     ボードは表示側（DisplayOnly）で、passkeyをSerialへ表示する。接続するCentralがそれを入力する。
-//     CharacteristicはMITM認証済みlinkを要求するため、Just Works Pairingではアクセスできない。
+// en: MITM-authenticated characteristic with a static passkey (display side)
+// ja: 静的passkeyによるMITM認証Characteristic（表示側）
 #include <EspBle.h>
 
 static constexpr const char *SERVICE_UUID = "9f78d810-802e-43e7-9003-706173736b79";
@@ -30,19 +25,27 @@ void setup()
   valueConfig.authenticatedWrite = true;
 
   auto &gattServer = ble.gattServer();
+  // en: Register the local GATT service and its characteristics before ble.begin().
+  // ja: ble.begin()の前に、ローカルのGATT ServiceとCharacteristicを登録します。
   service = gattServer.addService(SERVICE_UUID);
   characteristic = gattServer.addCharacteristic(service, CHARACTERISTIC_UUID, valueConfig);
   gattServer.setValue(characteristic, String("MITM protected value"));
 
   EspBleConfig config;
   config.deviceName = "EspBle Passkey";
+  // en: Pairing secures the link; bonding saves trust for later connections (see README).
+  // ja: Pairingでリンクを保護し、Bondingで次回の接続用に信頼情報を保存します（README参照）。
   config.security.enabled = true;
   config.security.bonding = true;
-  config.security.mitm = true; // en: require MITM protection (passkey auth) / ja: MITM保護（passkey認証）を要求
+  // en: require MITM protection (passkey auth)
+  // ja: MITM保護（passkey認証）を要求
+  config.security.mitm = true;
   // en: display side / ja: 表示側
   config.security.ioCapability = EspBleSecurityIoCapability::DisplayOnly;
   config.security.staticPasskeyEnabled = true;
   config.security.staticPasskey = STATIC_PASSKEY;
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!ble.begin(config))
   {
     Serial.printf("BLE initialization failed: %s\n", ble.lastErrorDetail().c_str());
@@ -64,6 +67,8 @@ void setup()
       event.connection.authenticated ? 1 : 0,
       event.connection.bonded ? 1 : 0);
   });
+  // en: Handle link loss here; state from the old connection must not be assumed valid.
+  // ja: ここで切断に対応します。古い接続の状態を有効なままと考えないようにします。
   ble.onDisconnected([](const EspBleConnection &) {
     ble.advertising().start();
   });
@@ -76,6 +81,8 @@ void setup()
 
 void loop()
 {
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   ble.update();
   delay(1);
 }

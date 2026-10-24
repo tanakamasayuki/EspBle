@@ -1,8 +1,5 @@
-// en: Advertise - start connectable legacy advertising carrying a device name and a
-//     service UUID. Minimal peripheral example; observe it with a scanner app or the
-//     Gap/Scan example.
-// ja: Advertise - デバイス名とService UUIDを載せたconnectableなLegacy Advertisingを開始する。
-//     Peripheral側の最小例。汎用BLEスキャナアプリやGap/Scan exampleで受信できる。
+// en: Connectable legacy advertising with name + service UUID
+// ja: 名前+Service UUIDつきのconnectable Legacy Advertising
 #include <EspBle.h>
 
 EspBle ble;
@@ -15,6 +12,8 @@ void setup()
   // ja: begin() 前にデバイス名などのスタック設定を行う。
   EspBleConfig config;
   config.deviceName = "EspBle Advertiser"; // en: GAP device name / ja: GAPデバイス名
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!ble.begin(config))
   {
     // en: The failure reason is available via lastErrorName()/lastErrorDetail().
@@ -28,8 +27,12 @@ void setup()
   // ja: Advertising payloadを構築する。Service UUIDはサイズごとに単一の
   //     Complete List AD構造へまとめられる（CSS Part A 1.1）。
   auto &advertising = ble.advertising();
-  advertising.setName("EspBle Advertiser");     // en: put the local name in the payload / ja: local nameを載せる
-  advertising.addServiceUuid("1812");           // en: HID Service UUID (16-bit) / ja: HID Service UUID（16-bit表記）
+  // en: put the local name in the payload
+  // ja: local nameを載せる
+  advertising.setName("EspBle Advertiser");
+  // en: HID Service UUID (16-bit)
+  // ja: HID Service UUID（16-bit表記）
+  advertising.addServiceUuid("1812");
   // en: All three advertising channels (37/38/39) are used by default.
   //     setChannelMap() can drop the ones that overlap a busy Wi-Fi band, at the
   //     cost of taking longer to be found. Passing 0 restores all three.

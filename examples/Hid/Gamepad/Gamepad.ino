@@ -1,10 +1,5 @@
-// en: A BLE HID gamepad over GATT (HOGP): six signed axes, a hat switch and 32
-//     buttons. The same calls exist on the Classic side
-//     (examples/Classic/HidGamepad), which is what a peer that only speaks
-//     BR/EDR HID needs.
-// ja: GATT（HOGP）上のBLE HID gamepad。符号付き6軸、hat switch、32 button。
-//     Classic側にも同じ呼び出しがある（examples/Classic/HidGamepad）。BR/EDR HIDしか
-//     受け付けない相手にはそちらを使う。
+// en: Six axes, a hat switch and 32 buttons
+// ja: 6軸・hat switch・32 button
 #include <EspBle.h>
 
 EspBle ble;
@@ -25,6 +20,8 @@ void setup()
   // ja: HOGPは暗号化linkを要求するため、securityとbondingが必要。
   config.security.enabled = true;
   config.security.bonding = true;
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!ble.begin(config))
   {
     Serial.printf("BLE initialization failed: %s\n",
@@ -74,6 +71,8 @@ void loop()
       report.y = -96;
       report.hat = ESP_BLE_HID_GAMEPAD_HAT_UP;
       report.buttons = 0x0001;
+      // en: Keep the report ID and payload layout consistent with the configured descriptor.
+      // ja: Report IDとデータの並びを、設定したDescriptorに一致させます。
       ble.hidGamepad().sendReport(report);
     }
     else if (command == 'r')

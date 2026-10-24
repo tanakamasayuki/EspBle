@@ -1,9 +1,5 @@
-// en: A Classic HID host that receives decoded key and mouse events. The
-//     callbacks and event types are the ones the BLE host uses
-//     (examples/Hid/KeyboardHost); only the radio and the addressing differ.
-// ja: 復号済みのkeyboard / mouse eventを受け取るClassic HID Host。callbackと
-//     event型はBLE host（examples/Hid/KeyboardHost）と同じで、違うのは無線と
-//     相手の指定方法だけ。
+// en: Decoded key and mouse events from the peer's Report Descriptor
+// ja: 相手のReport Descriptorから復号したkeyboard / mouse event
 #include <EspBleClassic.h>
 
 EspBleClassic bluetooth;
@@ -59,6 +55,8 @@ void setup()
       report.reportId, static_cast<unsigned>(report.value.length()));
   });
 
+  // en: Connection is established here; subsequent operations use this peer/session state.
+  // ja: ここで接続成立を確認し、この相手／セッションの情報で後続処理を行います。
   keyboard.onConnected([](const EspBleClassicHidConnection &connection) {
     Serial.printf("Connected to %s\n", connection.peerAddress.c_str());
   });
@@ -70,6 +68,8 @@ void setup()
 
   EspBleClassicConfig config;
   config.deviceName = "EspBle Classic Keyboard Host";
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!bluetooth.begin(config) || !bluetooth.hidHost().begin())
   {
     Serial.printf("Classic initialization failed: %s\n",

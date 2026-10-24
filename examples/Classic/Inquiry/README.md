@@ -46,3 +46,30 @@ connections from someone who knows its address.
 ## Related guides
 
 - [Classic guide §3 Inquiry](../../../docs/GUIDE_CLASSIC_BASICS.md#3-inquiry) — what a scan returns, and the queries that take an address
+
+## Before running this sketch
+
+See the [example workflow](../../../docs/GUIDE_EXAMPLES.md) for installation, board selection and the distinction between connection and subscription. Open [Inquiry.ino](Inquiry.ino), select the board and port, upload, and match the Serial monitor to `Serial.begin(...)`. Use the command table above or the sketch startup message for input keys.
+
+## How this example is structured
+
+Classic device discovery. Every other Classic profile connects by address, so this is where an address comes from when the sketch does not already know one.
+
+## Follow the code and its APIs
+
+The entries below follow their first appearance in the source. Registering a callback does not run it; the matching event invokes it later.
+
+1. `bluetooth.begin(...)` — Initialize the selected stack/profile and check its return value before starting dependent work. Configure this Classic profile in the order shown by the sketch.
+2. `bluetooth.inquiry().onResult(...)` — Inspect the discovery result before selecting a peer. A name may be absent, and seeing a device does not prove it supports the intended connected service.
+
+## Verify and adapt
+
+Classic inquiry finds Classic peers; BLE-only devices are not a failed inquiry result. Put the intended peer in discoverable mode and record the address for the matching Classic client example.
+
+Use the original ESP32 and a peer supporting this Classic profile. BLE-only hardware or a BLE-only phone application cannot substitute for a Classic SPP, HID or audio peer; use the root support information when selecting hardware.
+
+Keep calling `bluetooth.update()` from loop. Long waits for Serial input or periodic work postpone queued events and subsequent notifications.
+
+When troubleshooting, locate the last completed stage: initialization, discovery/advertising, connection, required security, discovery/subscription, then value exchange. Skip stages this example does not use; a quiet server is verified through peer reads or received updates. For bool-returning requests, distinguish immediate acceptance from later completion events. When adapting a minimal example that does not print every result, add return-value checks and a failure path.
+
+[Example index](../../README.md) · [Example workflow](../../../docs/GUIDE_EXAMPLES.md)

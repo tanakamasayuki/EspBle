@@ -1,9 +1,5 @@
-// en: Bluetooth Classic (BR/EDR) media keys. Car audio units and older TVs
-//     accept Classic HID, so this is the transport for them; the calls are the
-//     same ones the BLE example uses (examples/Hid/ConsumerControl).
-// ja: Bluetooth Classic（BR/EDR）のメディアキー。car audioや古いTVはClassic HIDを
-//     受け付けるため、その相手にはこちらを使う。呼び出しはBLE example
-//     （examples/Hid/ConsumerControl）と同じ。
+// en: Media keys and system requests
+// ja: メディアキーとシステム要求
 #include <EspBleClassic.h>
 
 EspBleClassic bluetooth;
@@ -14,6 +10,8 @@ void setup()
 
   EspBleClassicHidProfileConfig hidConfig;
   hidConfig.name = "EspBle Classic Media";
+  // en: Compose the HID profile before stack initialization. If you change the report format, keep its descriptor and payload layout consistent.
+  // ja: スタック初期化前にHIDプロファイルを構成します。Report形式を変更するときはDescriptorとデータの並びを一致させます。
   bluetooth.hidConsumerControl().configure(hidConfig);
   // en: System Control sends power and sleep requests. It is a separate profile
   //     because a Host treats those differently from media keys.
@@ -23,6 +21,8 @@ void setup()
 
   EspBleClassicConfig config;
   config.deviceName = "EspBle Classic Media";
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!bluetooth.begin(config))
   {
     Serial.printf("Classic init failed: %s: %s\n",
@@ -30,6 +30,8 @@ void setup()
     return;
   }
 
+  // en: Connection is established here; subsequent operations use this peer/session state.
+  // ja: ここで接続成立を確認し、この相手／セッションの情報で後続処理を行います。
   bluetooth.hidDevice().onConnected(
     [](const EspBleClassicHidConnection &connection) {
       Serial.printf("Host connected: %s\n", connection.peerAddress.c_str());
@@ -78,6 +80,8 @@ void loop()
     }
   }
 
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   bluetooth.update();
   delay(1);
 }

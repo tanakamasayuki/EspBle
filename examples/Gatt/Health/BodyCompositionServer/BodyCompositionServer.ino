@@ -1,11 +1,5 @@
-// en: BodyCompositionServer - standard Body Composition Service (0x181B). Body
-//     Composition Measurement (0x2A9C) is indicated with uint16 flags, the
-//     mandatory Body Fat Percentage (0.1 %/LSB), and optional fields; Body
-//     Composition Feature (0x2A9B) is a readable uint32.
-// ja: BodyCompositionServer - 標準Body Composition Service（0x181B）。Body
-//     Composition Measurement（0x2A9C）をuint16 flags、必須のBody Fat Percentage
-//     （0.1 %/LSB）、任意フィールド付きでIndicateし、Body Composition Feature
-//     （0x2A9B）はuint32としてReadできる。
+// en: Body Fat Percentage + optional Weight Measurement indications and Feature
+// ja: Body Fat Percentage＋任意Weight MeasurementのIndicateとFeature
 #include <EspBle.h>
 
 static constexpr const char *BODY_COMPOSITION_SERVICE_UUID = "181b";
@@ -16,7 +10,9 @@ EspBle ble;
 EspBleGattService bodyCompositionServiceService;
 EspBleGattCharacteristic bodyCompositionMeasurementCharacteristic;
 EspBleGattCharacteristic bodyCompositionFeatureCharacteristic;
-const uint8_t feature[4] = {0x00, 0x02, 0x00, 0x00}; // en: bit 9 = Weight supported / ja: bit 9 = Weight対応
+// en: bit 9 = Weight supported
+// ja: bit 9 = Weight対応
+const uint8_t feature[4] = {0x00, 0x02, 0x00, 0x00};
 unsigned long lastUpdate = 0;
 uint16_t rawFat = 275; // en: 27.5 % / ja: 27.5 %
 
@@ -29,6 +25,8 @@ void setup()
   EspBleGattCharacteristicConfig featureConfig;
   featureConfig.readable = true;
   auto &server = ble.gattServer();
+  // en: Register the local GATT service and its characteristics before ble.begin().
+  // ja: ble.begin()の前に、ローカルのGATT ServiceとCharacteristicを登録します。
   bodyCompositionServiceService = server.addService(BODY_COMPOSITION_SERVICE_UUID);
   bodyCompositionMeasurementCharacteristic = server.addCharacteristic(bodyCompositionServiceService, BODY_COMPOSITION_MEASUREMENT_UUID, measurementConfig);
   bodyCompositionFeatureCharacteristic = server.addCharacteristic(bodyCompositionServiceService, BODY_COMPOSITION_FEATURE_UUID, featureConfig);
@@ -36,6 +34,8 @@ void setup()
 
   EspBleConfig config;
   config.deviceName = "EspBle Body Composition";
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!ble.begin(config))
   {
     Serial.printf("BLE initialization failed: %s\n", ble.lastErrorDetail().c_str());
@@ -68,9 +68,13 @@ void loop()
     measurement[4] = static_cast<uint8_t>(rawWeight & 0xFF);
     measurement[5] = static_cast<uint8_t>((rawWeight >> 8) & 0xFF);
     ble.gattServer().setValue(bodyCompositionMeasurementCharacteristic, measurement, sizeof(measurement));
+    // en: Check send acceptance when adapting this example; it is separate from later completion.
+    // ja: 組み込む際は送信要求の受理を確認します。後から届く完了とは別です。
     ble.gattServer().indicate(bodyCompositionMeasurementCharacteristic, measurement, sizeof(measurement));
   }
 
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   ble.update();
   delay(1);
 }

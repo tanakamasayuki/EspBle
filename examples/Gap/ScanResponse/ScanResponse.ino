@@ -1,9 +1,5 @@
-// en: ScanResponse - split the advertised data across two payloads. Legacy advertising
-//     gives 31 bytes; an active scanner asks for a second 31-byte scan response, so
-//     putting the bulky fields there doubles the budget.
-// ja: ScanResponse - 広告データを2つのpayloadへ分ける。Legacy advertisingは31byteだが、
-//     active scannerは2つ目の31byteであるscan responseを要求するので、かさばる項目を
-//     そちらへ置くと使える容量が倍になる。
+// en: Split the payload across advertising data and scan response to get past the 31-byte limit
+// ja: advertising payloadとscan responseの2面に分けて31byte制限を回避
 #include <EspBle.h>
 
 static constexpr const char *SERVICE_UUID = "5266f727-49d7-4eaf-a6f1-7363616e7270";
@@ -20,6 +16,8 @@ void setup()
 
   EspBleConfig config;
   config.deviceName = "EspBle Scan Response";
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!ble.begin(config))
   {
     Serial.printf("BLE init failed: %s (%s)\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
@@ -82,6 +80,8 @@ void setup()
 
 void loop()
 {
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   ble.update();
   delay(1);
 }

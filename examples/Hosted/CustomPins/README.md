@@ -44,3 +44,27 @@ for the complete pin table and troubleshooting guidance.
 
 - [ESP-Hosted setup (Japanese)](../../../docs/ESP_HOSTED_SETUP.ja.md) — wiring, versions and the C6 firmware
 - [Verified ESP-Hosted limitations (Japanese)](../../../docs/ESP_HOSTED_LIMITATIONS.ja.md) — what does not work yet, and why
+
+## Before running this sketch
+
+See the [example workflow](../../../docs/GUIDE_EXAMPLES.md) for installation, board selection and the distinction between connection and subscription. Open [CustomPins.ino](CustomPins.ino), select the board and port, upload, and match the Serial monitor to `Serial.begin(...)`. Use the command table above or the sketch startup message for input keys.
+
+## How this example is structured
+
+ESP32-P4 ESP-Hosted custom SDIO pins. Prefer selecting the correct Arduino board definition. Use this override only for custom hardware or when its board variant is not available.
+
+## Follow the code and its APIs
+
+The entries below follow their first appearance in the source. Registering a callback does not run it; the matching event invokes it later.
+
+1. `ble.begin(...)` — Initialize the selected stack/profile and check its return value before starting dependent work. For BLE GATT servers, register the database before stack initialization.
+
+## Verify and adapt
+
+Apply SDIO pins before BLE or Wi-Fi initializes the shared Hosted transport. Replace the entire board-specific pin set together; the sketch is not a way to add Bluetooth hardware to a board with no radio peer.
+
+Keep calling `ble.update()` from loop. Long waits for Serial input or periodic work postpone queued events and subsequent notifications.
+
+When troubleshooting, locate the last completed stage: initialization, discovery/advertising, connection, required security, discovery/subscription, then value exchange. Skip stages this example does not use; a quiet server is verified through peer reads or received updates. For bool-returning requests, distinguish immediate acceptance from later completion events. When adapting a minimal example that does not print every result, add return-value checks and a failure path.
+
+[Example index](../../README.md) · [Example workflow](../../../docs/GUIDE_EXAMPLES.md)

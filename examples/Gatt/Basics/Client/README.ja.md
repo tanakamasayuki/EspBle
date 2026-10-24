@@ -71,3 +71,38 @@ Live: 8421
 
 - [BLE入門ガイド §4 GATT編](../../../../docs/GUIDE_BLE_BASICS.ja.md#4-gatt編--データをやり取りする) — service・characteristic・notify・MTU
 - [BLE入門ガイド §5 UUID](../../../../docs/GUIDE_BLE_BASICS.ja.md#5-uuidを理解する) — 16-bitと128-bitの関係
+
+## 実行前の確認
+
+導入、ボード選択、接続と購読の違いは[サンプル実行ガイド](../../../../docs/GUIDE_EXAMPLES.ja.md)を参照してください。[Client.ino](Client.ino)を開いてボードとポートを選び、書き込み後にシリアルモニタを `Serial.begin(...)` の速度へ合わせます。操作キーは上記の表とスケッチの起動メッセージで確認します。
+
+対応する例は[Server](../Server/README.ja.md)です。2台で試す場合は相手側を先に起動し、この例のフィルタ条件に合う広告／サービスを用意してください。
+
+## この例の構成
+
+Client - Gatt/Server example へ接続し、CentralのGATT Clientフローを一通り実行する: Database一覧Discovery → 既知UUIDのDiscovery → Read → Write → Descriptor操作。 各ステップは要求APIで受理され、 完了は update() 経由のイベントとして届く。次の操作は前の操作の完了callbackから連鎖する （Central GATT操作は同時1件のため）。
+
+## コードを読む順序とAPI
+
+次の項目はソース中で最初に登場する順です。コールバックの登録順は実行順ではありません。イベントが届いたときに、その関数が実行されます。
+
+1. `ble.begin(...)` — 使用するスタック／プロファイルを初期化し、戻り値を確認してから後続処理を開始します。BLEのGATT Serverでは、スタック初期化前にデータベースを登録します。
+2. `ble.onConnected(...)` — このイベントで接続成立を確認し、プロファイルに必要な相手／セッション情報を保存します。connect要求の受理はそれより前で、利用可能なリンクの成立を意味しません。
+3. `ble.discoverServices(...)` — 相手のデータベース探索を開始します。要求直後にhandleがそろったと考えず、完了イベントで結果を使います。
+4. `ble.onServicesDiscovered(...)` — 探索の成否と取得したデータベースを確認してから、Service・Characteristic・Descriptorのhandleを使います。
+5. `ble.discoverCharacteristic(...)` — 対象のリモートCharacteristicを探し、対応する探索完了イベントから読み書きを続けます。
+6. `ble.onCharacteristicDiscovered(...)` — 探索成功を確認してから進みます。接続しただけでは対象UUIDの存在まで保証されません。
+7. `ble.readCharacteristic(...)` — 相手の値のReadをキューへ登録します。値は即時のboolではなくonCharacteristicReadへ届きます。
+8. `ble.onCharacteristicRead(...)` — 成功・UUID・値の長さを確認してからデコードします。バイナリのStringには0バイトも含まれるので、長さを使って処理します。
+9. `ble.writeCharacteristic(...)` — 相手へのWriteをキューへ登録し、完了イベントを確認します。Write Without Responseには、相手アプリの処理を保証するATT応答はありません。
+10. `ble.onCharacteristicWritten(...)` — 指定したWrite方式での結果をresult.successで確認します。コマンドの実行確認が必要なら、アプリ側の応答も用意します。
+
+## 確認と変更のポイント
+
+汎用GATT Clientは探索してからCharacteristicやDescriptorを操作します。Descriptorは特定のCharacteristicに属するため、取得したhandleを接続と所有する値に対応付けて扱います。
+
+`ble.update()` をloopで継続して呼びます。入力待ちや周期処理を長い待機で実装すると、キューの処理と次の通知が遅れます。
+
+失敗を調べる際は「初期化→探索／公開→接続→必要なセキュリティ→探索／購読→値の通信」のどこまで進んだかを確認します。この例で使わない段階は省き、表示が少ないServer例は相手側のReadや通知受信で確認します。boolを返す要求では、その場の受理と後の完了イベントを区別します。すべての呼び出し結果を表示しない最小例をアプリへ組み込む際は、各戻り値と失敗時の処理も追加してください。
+
+[サンプル一覧](../../../README.ja.md) · [サンプル実行ガイド](../../../../docs/GUIDE_EXAMPLES.ja.md)

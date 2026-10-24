@@ -1,10 +1,5 @@
-// en: ScanDump - diagnostic scanner that dumps every field EspBle extracts from each
-//     advertisement (UUID form, name presence, manufacturer data, service data) and
-//     decodes iBeacon payloads. Useful to see what a peripheral actually advertises
-//     before writing a scan filter.
-// ja: ScanDump - EspBleが各advertisementから取り出す全フィールド（UUID表記・nameの有無・
-//     Manufacturer Data・Service Data）をダンプし、iBeacon payloadはデコードする診断用
-//     スキャナ。scan filterを書く前に相手が実際に何をadvertiseしているか確認するのに使う。
+// en: Dump every advertisement field (UUIDs, manufacturer data, …)
+// ja: advertisementの全フィールド（UUID・Manufacturer Data等）をダンプ
 #include <EspBle.h>
 #include <EspBleIBeacon.h>
 
@@ -87,7 +82,9 @@ static bool startScan()
   ble.scanner().stop();
 
   EspBleScanConfig scanConfig;
-  scanConfig.active = true;       // en: also request scan responses (more names) / ja: scan responseも要求（nameが得やすい）
+  // en: also request scan responses (more names)
+  // ja: scan responseも要求（nameが得やすい）
+  scanConfig.active = true;
   scanConfig.durationSeconds = 0; // en: scan until reset / ja: リセットまでscan
   // en: With this false, a device that keeps changing its payload -- a sensor
   //     beacon -- is only reported once and the later values never appear.
@@ -107,6 +104,8 @@ void setup()
 {
   Serial.begin(115200);
 
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!ble.begin())
   {
     Serial.printf("BLE init failed: %s (%s)\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
@@ -189,6 +188,8 @@ void loop()
     }
   }
 
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   ble.update();
   delay(1);
 }

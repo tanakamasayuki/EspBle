@@ -1,13 +1,5 @@
-// en: BondManagementServer - standard Bond Management Service (0x181E). Bond
-//     Management Feature (0x2AA5) is a readable uint24 bit field of supported
-//     operations; the Bond Management Control Point (0x2AA4) is writable and
-//     receives op codes in onWritten. On "Delete bond of requesting device"
-//     (0x03), the server removes that peer's bond after it disconnects.
-// ja: BondManagementServer - 標準Bond Management Service（0x181E）。Bond
-//     Management Feature（0x2AA5）は対応操作のread可能なuint24 bit field、Bond
-//     Management Control Point（0x2AA4）はwritableでop codeをonWrittenで受け取る。
-//     「Delete bond of requesting device」（0x03）では、切断後にそのpeerのbondを
-//     削除する。
+// en: Bond Management Feature read, Control Point delete-bond op codes
+// ja: Bond Management Feature Read、Control Pointのbond削除op code
 #include <EspBle.h>
 
 static constexpr const char *BMS_SERVICE_UUID = "181e";
@@ -48,11 +40,15 @@ void setup()
   EspBleGattCharacteristicConfig featureConfig;
   featureConfig.readable = true;
   auto &server = ble.gattServer();
+  // en: Register the local GATT service and its characteristics before ble.begin().
+  // ja: ble.begin()の前に、ローカルのGATT ServiceとCharacteristicを登録します。
   bmsServiceService = server.addService(BMS_SERVICE_UUID);
   bondManagementControlPointCharacteristic = server.addCharacteristic(bmsServiceService, BOND_MANAGEMENT_CONTROL_POINT_UUID, controlConfig);
   bondManagementFeatureCharacteristic = server.addCharacteristic(bmsServiceService, BOND_MANAGEMENT_FEATURE_UUID, featureConfig);
   server.setValue(bondManagementFeatureCharacteristic, feature, sizeof(feature));
 
+  // en: Handle writes from the peer after update dispatches the event. Validate the UUID, length and command/value before changing application state.
+  // ja: updateが配送した相手からの書き込みを処理します。UUID・長さ・コマンドや値を検証してからアプリの状態を変更します。
   server.onWritten([](const EspBleGattWrite &write) {
     if (!write.characteristicUuid.equalsIgnoreCase(BOND_MANAGEMENT_CONTROL_POINT_UUID) || write.value.length() < 1)
       return;
@@ -66,9 +62,13 @@ void setup()
       deleteBondOnDisconnect = true;
   });
 
+  // en: Connection is established here; subsequent operations use this peer/session state.
+  // ja: ここで接続成立を確認し、この相手／セッションの情報で後続処理を行います。
   ble.onConnected([](const EspBleConnection &connection) {
     connectedPeer = connection.peerAddress;
   });
+  // en: Handle link loss here; state from the old connection must not be assumed valid.
+  // ja: ここで切断に対応します。古い接続の状態を有効なままと考えないようにします。
   ble.onDisconnected([](const EspBleConnection &connection) {
     if (deleteBondOnDisconnect)
     {
@@ -79,6 +79,8 @@ void setup()
 
   EspBleConfig config;
   config.deviceName = "EspBle Bond Management";
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!ble.begin(config))
   {
     Serial.printf("BLE initialization failed: %s\n", ble.lastErrorDetail().c_str());
@@ -90,6 +92,8 @@ void setup()
 
 void loop()
 {
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   ble.update();
   delay(1);
 }

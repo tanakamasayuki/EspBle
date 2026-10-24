@@ -1,9 +1,5 @@
-// en: A Bluetooth Classic (BR/EDR) HID gamepad. Older game consoles and PCs
-//     only accept Classic HID, so BLE is not an alternative for them; the calls
-//     are the same ones the BLE example uses (examples/Hid/Gamepad).
-// ja: Bluetooth Classic（BR/EDR）のHID gamepad。旧世代のゲーム機やPCはClassic HID
-//     しか受け付けないため、BLEでは代替できない。呼び出しはBLE example
-//     （examples/Hid/Gamepad）と同じ。
+// en: Axes, hat and buttons — the case BLE cannot replace
+// ja: 軸・hat・button。BLEでは代替できない用途
 #include <EspBleClassic.h>
 
 EspBleClassic bluetooth;
@@ -18,6 +14,8 @@ void setup()
   //     pairing時に読むdevice recordの一部になるため。
   EspBleClassicHidProfileConfig hidConfig;
   hidConfig.name = "EspBle Classic Gamepad";
+  // en: Compose the HID profile before stack initialization. If you change the report format, keep its descriptor and payload layout consistent.
+  // ja: スタック初期化前にHIDプロファイルを構成します。Report形式を変更するときはDescriptorとデータの並びを一致させます。
   bluetooth.hidGamepad().configure(hidConfig);
 
   EspBleClassicConfig config;
@@ -29,6 +27,8 @@ void setup()
   //     決める値である。Peripheral major classにgamepadのminor値を組み合わせる。
   config.classOfDevice.majorDeviceClass = 0x05;
   config.classOfDevice.minorDeviceClass = 0x02;
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!bluetooth.begin(config))
   {
     Serial.printf("Classic init failed: %s: %s\n",
@@ -36,10 +36,14 @@ void setup()
     return;
   }
 
+  // en: Connection is established here; subsequent operations use this peer/session state.
+  // ja: ここで接続成立を確認し、この相手／セッションの情報で後続処理を行います。
   bluetooth.hidDevice().onConnected(
     [](const EspBleClassicHidConnection &connection) {
       Serial.printf("Host connected: %s\n", connection.peerAddress.c_str());
     });
+  // en: Handle link loss here; state from the old connection must not be assumed valid.
+  // ja: ここで切断に対応します。古い接続の状態を有効なままと考えないようにします。
   bluetooth.hidDevice().onDisconnected(
     [](const EspBleClassicHidConnection &) {
       Serial.println("Host disconnected");
@@ -78,6 +82,8 @@ void loop()
       report.y = -96;
       report.hat = ESP_BLE_HID_GAMEPAD_HAT_UP;
       report.buttons = 0x0001;
+      // en: Keep the report ID and payload layout consistent with the configured descriptor.
+      // ja: Report IDとデータの並びを、設定したDescriptorに一致させます。
       bluetooth.hidGamepad().sendReport(report);
     }
     else if (command == 'r')

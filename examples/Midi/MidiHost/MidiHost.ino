@@ -1,10 +1,5 @@
-// en: MidiHost - connect to a BLE MIDI peripheral as a central: scan the MIDI
-//     service -> connect -> discover -> subscribe -> print MIDI messages. Send a
-//     note from serial input. Pairs with the MidiDevice example or a commercial
-//     BLE MIDI instrument.
-// ja: MidiHost - CentralとしてBLE MIDI Peripheralへ接続する。MIDI Serviceをscan →
-//     接続 → Discovery → 購読 → MIDIメッセージ表示。Serial入力でノート送信。
-//     MidiDevice example や市販BLE MIDI楽器と接続できる。
+// en: BLE MIDI central: discover/subscribe and print MIDI, send notes
+// ja: BLE MIDI Central: Discovery/購読してMIDI表示、ノート送信
 #include <EspBle.h>
 #include <EspBleMidiProfile.h>
 
@@ -33,6 +28,8 @@ void setup()
 
   EspBleConfig config;
   config.deviceName = "EspBle MIDI Host";
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!ble.begin(config))
   {
     Serial.printf("BLE initialization failed: %s\n", ble.lastErrorDetail().c_str());
@@ -43,12 +40,16 @@ void setup()
   // ja: begin() の後にHostのGATTコールバックを設定する。
   midi.begin();
 
+  // en: Connection is established here; subsequent operations use this peer/session state.
+  // ja: ここで接続成立を確認し、この相手／セッションの情報で後続処理を行います。
   ble.onConnected([](const EspBleConnection &connection) {
     deviceConnectionId = connection.id;
     // en: No security in this example, so discover immediately after connect.
     // ja: この例はsecurity無効なので、接続直後にDiscoveryする。
     midi.discover(connection.id);
   });
+  // en: Handle link loss here; state from the old connection must not be assumed valid.
+  // ja: ここで切断に対応します。古い接続の状態を有効なままと考えないようにします。
   ble.onDisconnected([](const EspBleConnection &) {
     deviceConnectionId = 0;
   });
@@ -72,6 +73,8 @@ void loop()
     const char command = Serial.read();
     if (command == 'n')
     {
+      // en: Channel 0 is the first MIDI channel; the immediate Note Off below ends this note.
+      // ja: channel 0は最初のMIDIチャンネルです。直後のNote Offでこの音を終了します。
       midi.sendNoteOn(deviceConnectionId, 0, 60, 100);
       midi.sendNoteOff(deviceConnectionId, 0, 60, 0);
     }

@@ -1,10 +1,5 @@
-// en: AVRCP Controller: the side that presses play and pause on the other
-//     device. examples/Classic/A2dpSinkAvrcp shows the Target side, which
-//     receives those presses. AVRCP carries control only — the audio travels
-//     over A2DP, and the AVRCP connection follows the A2DP one.
-// ja: AVRCP Controller。相手側の再生・停止を操作する側。Target側（押された操作を
-//     受ける側）はexamples/Classic/A2dpSinkAvrcpにある。AVRCPは操作だけを運び、
-//     音声はA2DPが運ぶ。AVRCPの接続はA2DP接続に追従する。
+// en: Press play on another device, ask for status and metadata
+// ja: 相手の再生操作、status・metadata要求
 #include <EspBleClassic.h>
 
 EspBleClassic bluetooth;
@@ -20,6 +15,8 @@ void setup()
 
   EspBleClassicConfig config;
   config.deviceName = "EspBle Classic AVRCP Controller";
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!bluetooth.begin(config))
   {
     Serial.printf("Classic init failed: %s: %s\n",
@@ -112,6 +109,8 @@ void loop()
       bluetooth.avrcp().setPlayerSetting(2, 2);
   }
 
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   bluetooth.update();
   delay(1);
 }

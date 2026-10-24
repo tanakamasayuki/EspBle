@@ -1,12 +1,5 @@
-// en: ConnectionParameters - tune a live connection. The parameters that decide
-//     responsiveness and power draw cannot be chosen when connecting; they are
-//     negotiated by the controller and then changed on the running link. This
-//     sketch connects, shows what was negotiated, and switches between a
-//     low-latency and a low-power profile, plus the 2M PHY.
-// ja: ConnectionParameters - 確立済みの接続を調整する。応答性と消費電力を決める
-//     パラメータは接続時に指定できず、controllerが決めた値で接続したあとに変更する。
-//     この例では接続して交渉結果を表示し、低遅延profileと省電力profileを切り替え、
-//     2M PHYへの変更も行う。
+// en: Change interval / latency / timeout and the PHY after connecting
+// ja: 接続後のinterval / latency / timeoutとPHYの変更
 #include <EspBle.h>
 
 // en: Any connectable peripheral works; Gap/Advertise advertises this UUID.
@@ -40,18 +33,24 @@ void setup()
 
   EspBleConfig config;
   config.deviceName = "EspBle Connection Parameters";
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!ble.begin(config))
   {
     Serial.printf("BLE init failed: %s (%s)\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
     return;
   }
 
+  // en: Match a suitable peer before connecting; discovery alone does not mean a connection exists.
+  // ja: 条件に合う相手を選んで接続します。発見しただけでは接続は成立していません。
   ble.scanner().onResult([](const EspBleScanResult &scanResult) {
     if (connectionId != 0 || !scanResult.advertisesService(TARGET_SERVICE_UUID)) return;
     ble.scanner().stop();
     ble.connect(scanResult);
   });
 
+  // en: Connection is established here; subsequent operations use this peer/session state.
+  // ja: ここで接続成立を確認し、この相手／セッションの情報で後続処理を行います。
   ble.onConnected([](const EspBleConnection &connection) {
     connectionId = connection.id;
     // en: These are the values the controller chose. They were not requested.
@@ -77,6 +76,8 @@ void setup()
     Serial.printf("CONNECT_FAILED peer=%s detail=%s\n",
       failure.peerAddress.c_str(), failure.detail.c_str());
   });
+  // en: Handle link loss here; state from the old connection must not be assumed valid.
+  // ja: ここで切断に対応します。古い接続の状態を有効なままと考えないようにします。
   ble.onDisconnected([](const EspBleConnection &connection) {
     connectionId = 0;
     Serial.printf("DISCONNECTED id=%u\n", connection.id);
@@ -128,6 +129,8 @@ void loop()
     }
   }
 
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   ble.update();
   delay(1);
 }

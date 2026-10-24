@@ -1,12 +1,5 @@
-// en: IBeacon - broadcast an Apple iBeacon. The iBeacon layout (proximity UUID
-//     + major + minor + measured power) is built by the backend-independent
-//     EspBleIBeacon.h codec and sent as manufacturer data on a non-connectable,
-//     non-scannable advertisement. Observe it with the Gap/Scan example or any
-//     beacon app.
-// ja: IBeacon - Apple iBeaconをbroadcastする。iBeaconレイアウト（proximity UUID
-//     ＋major＋minor＋measured power）はbackend非依存のEspBleIBeacon.h codecで
-//     組み立て、non-connectable・non-scannableなadvertisementのmanufacturer data
-//     として送信する。Gap/Scan exampleやbeaconアプリで受信できる。
+// en: Broadcast an Apple iBeacon (UUID / major / minor / measured power)
+// ja: Apple iBeacon（UUID / major / minor / measured power）をbroadcast
 #include <EspBle.h>
 #include <EspBleIBeacon.h>
 
@@ -18,6 +11,8 @@ void setup()
 
   EspBleConfig config;
   config.deviceName = "EspBle iBeacon";
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!ble.begin(config))
   {
     Serial.printf("BLE init failed: %s (%s)\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
@@ -50,6 +45,8 @@ void setup()
 
 void loop()
 {
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   ble.update();
   delay(1);
 }

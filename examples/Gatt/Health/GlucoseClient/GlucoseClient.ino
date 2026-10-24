@@ -1,11 +1,5 @@
-// en: GlucoseClient - connect to a Glucose Service (0x1808), subscribe to
-//     Glucose Measurement notifications and the Record Access Control Point
-//     (RACP) indications, then write "Report Stored Records (all)" and print the
-//     decoded measurements and the RACP response.
-// ja: GlucoseClient - Glucose Service（0x1808）へ接続し、Glucose Measurementの
-//     NotificationとRecord Access Control Point（RACP）のIndicationを購読し、
-//     「Report Stored Records（all）」を書き込んで、デコードした測定値とRACP応答を
-//     表示する。
+// en: RACP report-records request and measurement/response decoding
+// ja: RACPレコード要求とMeasurement/応答のdecode
 #include <EspBle.h>
 #include <EspBleMedicalFloat.h>
 
@@ -18,28 +12,38 @@ EspBle ble;
 void setup()
 {
   Serial.begin(115200);
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!ble.begin())
   {
     Serial.printf("BLE initialization failed: %s\n", ble.lastErrorDetail().c_str());
     return;
   }
 
+  // en: Connection is established here; subsequent operations use this peer/session state.
+  // ja: ここで接続成立を確認し、この相手／セッションの情報で後続処理を行います。
   ble.onConnected([](const EspBleConnection &connection) {
     ble.subscribe(connection.id, GLUCOSE_SERVICE_UUID, GLUCOSE_MEASUREMENT_UUID);
   });
+  // en: Set application readiness only after result.success confirms the subscription. Link connection by itself is not a subscription.
+  // ja: result.successで購読成功を確認してから、アプリの準備完了とします。接続成立だけでは購読できていません。
   ble.onSubscribed([](const EspBleGattResult &result) {
     if (result.characteristicUuid.equalsIgnoreCase(GLUCOSE_MEASUREMENT_UUID) && result.success)
     {
-      // RACP uses indications (notifications = false).
+      // en: RACP uses indications (notifications = false).
+      // ja: RACPにはIndicateを使います（notifications = false）。
       ble.subscribe(result.connectionId, GLUCOSE_SERVICE_UUID, RACP_UUID, false);
     }
     else if (result.characteristicUuid.equalsIgnoreCase(RACP_UUID) && result.success)
     {
-      // Report Stored Records (opcode 1), operator All records (1).
+      // en: Report Stored Records (opcode 1), operator All records (1).
+      // ja: Report Stored Recordsはopcode 1、全記録を指定するoperatorは1です。
       const uint8_t request[2] = {0x01, 0x01};
       ble.writeCharacteristic(result.connectionId, GLUCOSE_SERVICE_UUID, RACP_UUID, request, sizeof(request), true);
     }
   });
+  // en: Check the characteristic and packet length before interpreting incoming bytes.
+  // ja: Characteristicとデータ長を確認してから受信バイトを解釈します。
   ble.onNotification([](const EspBleGattNotification &notification) {
     if (notification.characteristicUuid.equalsIgnoreCase(GLUCOSE_MEASUREMENT_UUID) &&
         notification.value.length() >= 13)
@@ -58,6 +62,8 @@ void setup()
     }
   });
 
+  // en: Match a suitable peer before connecting; discovery alone does not mean a connection exists.
+  // ja: 条件に合う相手を選んで接続します。発見しただけでは接続は成立していません。
   ble.scanner().onResult([](const EspBleScanResult &result) {
     if (result.connectable && result.advertisesService(GLUCOSE_SERVICE_UUID))
     {
@@ -70,6 +76,8 @@ void setup()
 
 void loop()
 {
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   ble.update();
   delay(1);
 }

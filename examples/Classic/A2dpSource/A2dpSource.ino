@@ -1,11 +1,5 @@
-// en: A2DP Source: this device sends audio to a speaker or headset. EspBle
-//     carries already-encoded SBC frames — it does not encode, so the frames
-//     here come from a table. A real sketch takes them from an encoder such as
-//     PCMFlowBluetooth. The receiving side is examples/Classic/A2dpSinkRaw.
-// ja: A2DP Source。この機器がspeakerやheadsetへ音声を送る側になる。EspBleは
-//     encode済みのSBC frameを運ぶだけでencodeはしないため、ここでは固定表の
-//     frameを送る。実際のsketchではPCMFlowBluetoothのSbcEncoderから受け取る。
-//     受け取る側はexamples/Classic/A2dpSinkRaw。
+// en: Send encoded SBC frames with backpressure
+// ja: encode済みSBC frameをbackpressure付きで送信
 #include <EspBleClassic.h>
 
 EspBleClassic bluetooth;
@@ -30,6 +24,8 @@ void setup()
 
   EspBleClassicConfig config;
   config.deviceName = "EspBle Classic A2DP Source";
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!bluetooth.begin(config))
   {
     Serial.printf("Classic init failed: %s: %s\n",
@@ -37,11 +33,15 @@ void setup()
     return;
   }
 
+  // en: Connection is established here; subsequent operations use this peer/session state.
+  // ja: ここで接続成立を確認し、この相手／セッションの情報で後続処理を行います。
   bluetooth.a2dpSource().onConnected(
     [](const EspBleClassicA2dpConnection &connection) {
       Serial.printf("Connected to %s, media MTU %u\n",
         connection.peerAddress.c_str(), connection.mediaMtu);
     });
+  // en: Use the negotiated codec configuration; raw encoded packets are not PCM samples and need a matching external codec pipeline.
+  // ja: 交渉で決まったコーデック設定を使います。符号化パケットはPCMサンプルではないので、対応する外部コーデック処理が必要です。
   bluetooth.a2dpSource().onCodecConfigured(
     [](const EspBleClassicA2dpCodecConfig &codec) {
       // en: The Sink chooses from what this Source offered, so the encoder has
@@ -65,6 +65,8 @@ void setup()
     Serial.printf("Sink reports %u tenths of a millisecond\n",
       delay.tenthsOfMilliseconds);
   });
+  // en: Handle link loss here; state from the old connection must not be assumed valid.
+  // ja: ここで切断に対応します。古い接続の状態を有効なままと考えないようにします。
   bluetooth.a2dpSource().onDisconnected(
     [](const EspBleClassicA2dpConnection &) {
       streaming = false;
@@ -113,6 +115,8 @@ void loop()
     }
   }
 
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   bluetooth.update();
   delay(1);
 }

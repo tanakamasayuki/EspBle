@@ -1,9 +1,5 @@
-// en: KeyboardDevice - turn the board into a BLE HID keyboard (HID over GATT, fixed 6KRO).
-//     Paired from a PC/phone it types like a real keyboard; keystrokes are triggered by
-//     Serial commands. Also receives the host's LED output report (Num/Caps/Scroll Lock).
-// ja: KeyboardDevice - ボードをBLE HID keyboard（HID over GATT、固定6KRO）にする。
-//     PC/スマホからPairingすると普通のキーボードとして入力でき、キー入力はSerialコマンドで発生させる。
-//     Host側からのLED Output Report（Num/Caps/Scroll Lock）も受信する。
+// en: BLE keyboard typing via Serial commands, LED report reception
+// ja: SerialコマンドでキーをタイプするBLE keyboard。LED report受信
 #include <EspBle.h>
 
 EspBle ble;
@@ -25,6 +21,8 @@ void setup()
   // ja: onProtocolMode() を意味あるものにするため Boot Protocol を有効化（opt-in）。
   //     Report Protocol Modeだけでよければ既定のoffのままにする。
   keyboardConfig.bootProtocol = true;
+  // en: Compose the HID profile before stack initialization. If you change the report format, keep its descriptor and payload layout consistent.
+  // ja: スタック初期化前にHIDプロファイルを構成します。Report形式を変更するときはDescriptorとデータの並びを一致させます。
   keyboard.configure(keyboardConfig);
   // en: Notified when the host writes LED state (Num/Caps/Scroll Lock, etc.).
   // ja: HostがLED状態（Num/Caps/Scroll Lock等）を書き込むと通知される。
@@ -51,6 +49,8 @@ void setup()
   // ja: HOGPは暗号化linkを要求するため、security有効化が実質必須。
   config.security.enabled = true;
   config.security.bonding = true;
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!ble.begin(config))
   {
     Serial.printf("BLE initialization failed: %s\n", ble.lastErrorDetail().c_str());
@@ -81,12 +81,18 @@ void loop()
       // ja: Input Reportは modifier 1byte + 最大6 usage。Report IDやreserved byteは内部で処理。
       EspBleHidKeyboardInputReport report;
       report.modifiers = EspBleHidKeyboardInputReport::LeftShift;
-      report.keys[0] = 0x04; // en: HID usage: Keyboard a and A / ja: HID usage: Keyboard a and A
+      // en: HID usage: Keyboard a and A
+      // ja: HID usage: Keyboard a and A
+      report.keys[0] = 0x04;
+      // en: Keep the report ID and payload layout consistent with the configured descriptor.
+      // ja: Report IDとデータの並びを、設定したDescriptorに一致させます。
       keyboard.sendReport(report);
     }
     else if (command == 'r')
     {
-      keyboard.releaseAll(); // en: send an all-keys-released report / ja: 全キーreleaseのreportを送る
+      // en: send an all-keys-released report
+      // ja: 全キーreleaseのreportを送る
+      keyboard.releaseAll();
     }
   }
 

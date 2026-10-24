@@ -1,11 +1,5 @@
-// en: HealthThermometerServer - standard Health Thermometer Service (0x1809).
-//     Temperature Measurement (0x2A1C) is indicated as an IEEE-11073 32-bit
-//     FLOAT; Temperature Type (0x2A1D) is readable. Pairs with
-//     HealthThermometerClient or any Health Thermometer collector.
-// ja: HealthThermometerServer - 標準Health Thermometer Service（0x1809）。
-//     Temperature Measurement（0x2A1C）をIEEE-11073 32-bit FLOATでIndicateし、
-//     Temperature Type（0x2A1D）はReadできる。HealthThermometerClientや
-//     Health Thermometer collectorと接続できる。
+// en: IEEE-11073 FLOAT Temperature Measurement indications and Temperature Type
+// ja: IEEE-11073 FLOAT Temperature MeasurementのIndicateとTemperature Type
 #include <EspBle.h>
 #include <EspBleMedicalFloat.h>
 
@@ -30,6 +24,8 @@ void setup()
   EspBleGattCharacteristicConfig typeConfig;
   typeConfig.readable = true;
   auto &server = ble.gattServer();
+  // en: Register the local GATT service and its characteristics before ble.begin().
+  // ja: ble.begin()の前に、ローカルのGATT ServiceとCharacteristicを登録します。
   healthThermometerServiceService = server.addService(HEALTH_THERMOMETER_SERVICE_UUID);
   temperatureMeasurementCharacteristic = server.addCharacteristic(healthThermometerServiceService, TEMPERATURE_MEASUREMENT_UUID, measurementConfig);
   temperatureTypeCharacteristic = server.addCharacteristic(healthThermometerServiceService, TEMPERATURE_TYPE_UUID, typeConfig);
@@ -37,6 +33,8 @@ void setup()
 
   EspBleConfig config;
   config.deviceName = "EspBle Thermometer";
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!ble.begin(config))
   {
     Serial.printf("BLE initialization failed: %s\n", ble.lastErrorDetail().c_str());
@@ -58,7 +56,9 @@ void loop()
       temperatureHundredths = 3650;
 
     uint8_t measurement[5];
-    measurement[0] = 0x00; // en: Celsius, no timestamp/type / ja: 摂氏、timestamp/type無し
+    // en: Celsius, no timestamp/type
+    // ja: 摂氏、timestamp/type無し
+    measurement[0] = 0x00;
     espBleWriteMedicalFloat32LE(&measurement[1], temperatureHundredths, -2);
     ble.gattServer().setValue(temperatureMeasurementCharacteristic, measurement, sizeof(measurement));
     // en: indicate() only reaches subscribers; it is a no-op with none.
@@ -66,6 +66,8 @@ void loop()
     ble.gattServer().indicate(temperatureMeasurementCharacteristic, measurement, sizeof(measurement));
   }
 
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   ble.update();
   delay(1);
 }

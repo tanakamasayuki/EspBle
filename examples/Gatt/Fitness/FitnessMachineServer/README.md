@@ -33,3 +33,34 @@ The server is silent; observe the decoded values on the client.
 
 - [BLE guide §4 GATT](../../../../docs/GUIDE_BLE_BASICS.md#4-gatt--exchanging-data) — services, characteristics, notify and MTU
 - [BLE guide §5 UUIDs](../../../../docs/GUIDE_BLE_BASICS.md#5-understanding-uuids) — 16-bit and 128-bit forms
+
+## Before running this sketch
+
+See the [example workflow](../../../../docs/GUIDE_EXAMPLES.md) for installation, board selection and the distinction between connection and subscription. Open [FitnessMachineServer.ino](FitnessMachineServer.ino), select the board and port, upload, and match the Serial monitor to `Serial.begin(...)`. Use the command table above or the sketch startup message for input keys.
+
+The matching example is [FitnessMachineClient](../FitnessMachineClient/README.md). For a two-board test, start the peer first and ensure its advertisement/service matches this sketch's filter.
+
+## How this example is structured
+
+FitnessMachineServer - standard Fitness Machine Service (0x1826) as used by smart trainers / indoor bikes. Indoor Bike Data (0x2AD2) is notified with 16-bit flags followed by instantaneous speed (0.01 km/h), cadence (0.5 /min), and signed power (W); Fitness Machine Feature (0x2ACC) is a readable 8-byte pair of feature bitmaps.
+
+## Follow the code and its APIs
+
+The entries below follow their first appearance in the source. Registering a callback does not run it; the matching event invokes it later.
+
+1. `server.addService(...)` — Create the local service before BLE begin; the service UUID identifies a collection of characteristics, not a specific device.
+2. `server.addCharacteristic(...)` — Declare the value and allowed operations before BLE begin. Read, write, notify and indicate are separate capabilities.
+3. `server.setValue(...)` — Change the locally stored characteristic value. This alone does not send a notification or indication to a subscribed peer.
+4. `ble.begin(...)` — Initialize the selected stack/profile and check its return value before starting dependent work. For BLE GATT servers, register the database before stack initialization.
+5. `ble.advertising().addServiceUuid(...)` — Include the service in advertising so a service-filtered scanner can find it; advertising a UUID does not create the GATT service itself.
+6. `ble.gattServer().notify(...)` — Queue an update for subscribers and check acceptance; this does not carry an ATT confirmation from the receiver. Use send results or an application acknowledgement where needed.
+
+## Verify and adapt
+
+Indoor Bike Data is flags-driven: speed, cadence and power have different scales and optional positions. This example exchanges sample bike data; it does not implement a complete exercise-machine control system.
+
+Keep calling `ble.update()` from loop. Long waits for Serial input or periodic work postpone queued events and subsequent notifications.
+
+When troubleshooting, locate the last completed stage: initialization, discovery/advertising, connection, required security, discovery/subscription, then value exchange. Skip stages this example does not use; a quiet server is verified through peer reads or received updates. For bool-returning requests, distinguish immediate acceptance from later completion events. When adapting a minimal example that does not print every result, add return-value checks and a failure path.
+
+[Example index](../../../README.md) · [Example workflow](../../../../docs/GUIDE_EXAMPLES.md)

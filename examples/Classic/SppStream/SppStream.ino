@@ -1,11 +1,5 @@
-// en: SPP through an Arduino Stream, for code written against Serial. The
-//     session is still opened and closed with the SPP API; the Stream only
-//     borrows it, so print(), readStringUntil() and parseInt() work over
-//     Bluetooth without giving up the session events.
-// ja: SPPをArduinoのStreamとして扱う。Serial向けに書かれたcodeをそのまま使える。
-//     sessionを開閉するのは従来どおりSPPのAPIで、Streamはそれを借りるだけなので、
-//     print()やreadStringUntil()、parseInt()をBluetooth越しに使いながらsessionの
-//     eventも受け取れる。
+// en: SPP as an Arduino Stream, for code written against Serial
+// ja: SPPをArduinoのStreamとして扱う。Serial向けのcodeがそのまま動く
 #include <EspBleClassic.h>
 
 EspBleClassic bluetooth;
@@ -17,6 +11,8 @@ void setup()
 
   EspBleClassicConfig config;
   config.deviceName = "EspBle Classic SPP Stream";
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!bluetooth.begin(config))
   {
     Serial.printf("Classic init failed: %s: %s\n",
@@ -40,6 +36,8 @@ void setup()
     //     書く。
     stream.println("EspBle SPP stream ready");
   });
+  // en: Handle link loss here; state from the old connection must not be assumed valid.
+  // ja: ここで切断に対応します。古い接続の状態を有効なままと考えないようにします。
   bluetooth.spp().onDisconnected([](const EspBleClassicSppSession &session) {
     if (session.id == stream.session()) stream.detach();
     Serial.println("Disconnected");
@@ -67,6 +65,8 @@ void setup()
 
 void loop()
 {
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   bluetooth.update();
 
   // en: Serial-style reading: a line at a time. available() and read() are the

@@ -1,8 +1,5 @@
-// en: DirectedAdvertise - advertise to exactly one peer. A directed advertisement
-//     names the target address in the PDU, so only that peer may connect, and it
-//     carries no payload at all.
-// ja: DirectedAdvertise - 相手を1台に限定してadvertiseする。有向advertisingはPDUに
-//     宛先アドレスを載せるため、その相手だけが接続でき、payloadは一切載らない。
+// en: Directed advertising aimed at a single peer; carries no payload
+// ja: 相手を1台に指定したDirected Advertising。payloadは載らない
 #include <EspBle.h>
 
 static constexpr const char *SERVICE_UUID = "3d9b1c40-6f2e-4a8b-9f31-646972656374";
@@ -58,15 +55,21 @@ void setup()
 
   EspBleConfig config;
   config.deviceName = "EspBle Directed";
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!ble.begin(config))
   {
     Serial.printf("BLE init failed: %s (%s)\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
     return;
   }
 
+  // en: Connection is established here; subsequent operations use this peer/session state.
+  // ja: ここで接続成立を確認し、この相手／セッションの情報で後続処理を行います。
   ble.onConnected([](const EspBleConnection &connection) {
     Serial.printf("Connected id=%u from %s\n", connection.id, connection.peerAddress.c_str());
   });
+  // en: Handle link loss here; state from the old connection must not be assumed valid.
+  // ja: ここで切断に対応します。古い接続の状態を有効なままと考えないようにします。
   ble.onDisconnected([](const EspBleConnection &connection) {
     Serial.printf("Disconnected id=%u\n", connection.id);
     // en: Advertising stops when a connection is established; restart it here.
@@ -110,6 +113,8 @@ void loop()
     }
   }
 
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   ble.update();
   delay(1);
 }

@@ -1,12 +1,5 @@
-// en: ProximityServer - the Proximity profile Reporter role. It hosts two
-//     standard services at once: the Link Loss Service (0x1803) with a
-//     read/write Alert Level (0x2A06), and the Tx Power Service (0x1804) with a
-//     read-only signed-int8 Tx Power Level (0x2A07). A real Reporter alerts on
-//     link loss according to the configured Alert Level.
-// ja: ProximityServer - ProximityプロファイルのReporter役。2つの標準Serviceを
-//     同時にホストする: Link Loss Service（0x1803、read/writeのAlert Level
-//     0x2A06）と、Tx Power Service（0x1804、read専用のsigned int8 Tx Power Level
-//     0x2A07）。実機のReporterは設定されたAlert Levelに従いlink loss時に鳴動する。
+// en: Proximity Reporter: Link Loss Alert Level + Tx Power (two services)
+// ja: Proximity Reporter: Link Loss Alert Level＋Tx Power（2 Service）
 #include <EspBle.h>
 
 static constexpr const char *LINK_LOSS_SERVICE_UUID = "1803";
@@ -33,6 +26,8 @@ void setup()
   auto &server = ble.gattServer();
   const uint8_t initialAlert = 0; // en: No Alert / ja: No Alert
   const uint8_t txPowerByte = static_cast<uint8_t>(txPowerLevel);
+  // en: Register the local GATT service and its characteristics before ble.begin().
+  // ja: ble.begin()の前に、ローカルのGATT ServiceとCharacteristicを登録します。
   linkLossServiceService = server.addService(LINK_LOSS_SERVICE_UUID);
   alertLevelCharacteristic = server.addCharacteristic(linkLossServiceService, ALERT_LEVEL_UUID, alertLevelConfig);
   txPowerServiceService = server.addService(TX_POWER_SERVICE_UUID);
@@ -40,6 +35,8 @@ void setup()
   server.setValue(alertLevelCharacteristic, &initialAlert, sizeof(initialAlert));
   server.setValue(txPowerLevelCharacteristic, &txPowerByte, sizeof(txPowerByte));
 
+  // en: Handle writes from the peer after update dispatches the event. Validate the UUID, length and command/value before changing application state.
+  // ja: updateが配送した相手からの書き込みを処理します。UUID・長さ・コマンドや値を検証してからアプリの状態を変更します。
   server.onWritten([](const EspBleGattWrite &write) {
     if (!write.characteristicUuid.equalsIgnoreCase(ALERT_LEVEL_UUID) || write.value.length() != 1)
       return;
@@ -51,6 +48,8 @@ void setup()
 
   EspBleConfig config;
   config.deviceName = "EspBle Proximity";
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!ble.begin(config))
   {
     Serial.printf("BLE initialization failed: %s\n", ble.lastErrorDetail().c_str());
@@ -62,6 +61,8 @@ void setup()
 
 void loop()
 {
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   ble.update();
   delay(1);
 }

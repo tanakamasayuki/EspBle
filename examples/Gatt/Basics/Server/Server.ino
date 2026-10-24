@@ -1,9 +1,5 @@
-// en: Server - expose a custom GATT service with one readable/writable characteristic.
-//     All GATT server configuration must happen before begin() (the backend cannot add
-//     services after the server starts). Operate it from Gatt/Client or a generic GATT app.
-// ja: Server - Read/Write可能なCharacteristicを1つ持つ独自GATT Serviceを公開する。
-//     GATT Server構成はすべて begin() 前に登録する（backendはserver開始後の
-//     Service追加ができないため）。Gatt/Client example や汎用GATTアプリから操作できる。
+// en: Custom service with a readable/writable characteristic
+// ja: Read/Write可能なCharacteristicを持つ独自Service
 #include <EspBle.h>
 
 // en: Custom 128-bit UUIDs (service / characteristic / descriptor).
@@ -76,7 +72,9 @@ void setup()
 
   EspBleConfig config;
   config.deviceName = "EspBle GATT Server";
-  if (!ble.begin(config)) // en: GATT database is finalized and started here / ja: ここでGATT databaseが確定・開始する
+  // en: GATT database is finalized and started here
+  // ja: ここでGATT databaseが確定・開始する
+  if (!ble.begin(config))
   {
     Serial.printf("BLE initialization failed: %s\n", ble.lastErrorDetail().c_str());
     return;

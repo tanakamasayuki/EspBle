@@ -1,11 +1,5 @@
-// en: CyclingPowerServer - standard Cycling Power Service (0x1818). Cycling
-//     Power Measurement (0x2A63) is notified with 16-bit flags and a signed
-//     16-bit instantaneous power (watts); Cycling Power Feature (0x2A65) and
-//     Sensor Location (0x2A5D) are readable.
-// ja: CyclingPowerServer - 標準Cycling Power Service（0x1818）。Cycling Power
-//     Measurement（0x2A63）を16bit flagsと符号付き16bit instantaneous power
-//     （ワット）でNotifyし、Cycling Power Feature（0x2A65）とSensor Location
-//     （0x2A5D）はReadできる。
+// en: Signed 16-bit power Cycling Power Measurement notifications, Feature, Sensor Location
+// ja: 符号付き16bit power Cycling Power MeasurementのNotify、Feature、Sensor Location
 #include <EspBle.h>
 
 static constexpr const char *CYCLING_POWER_SERVICE_UUID = "1818";
@@ -32,6 +26,8 @@ void setup()
   EspBleGattCharacteristicConfig readConfig;
   readConfig.readable = true;
   auto &server = ble.gattServer();
+  // en: Register the local GATT service and its characteristics before ble.begin().
+  // ja: ble.begin()の前に、ローカルのGATT ServiceとCharacteristicを登録します。
   cyclingPowerServiceService = server.addService(CYCLING_POWER_SERVICE_UUID);
   cyclingPowerMeasurementCharacteristic = server.addCharacteristic(cyclingPowerServiceService, CYCLING_POWER_MEASUREMENT_UUID, measurementConfig);
   cyclingPowerFeatureCharacteristic = server.addCharacteristic(cyclingPowerServiceService, CYCLING_POWER_FEATURE_UUID, readConfig);
@@ -41,6 +37,8 @@ void setup()
 
   EspBleConfig config;
   config.deviceName = "EspBle Cycling Power";
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!ble.begin(config))
   {
     Serial.printf("BLE initialization failed: %s\n", ble.lastErrorDetail().c_str());
@@ -62,14 +60,20 @@ void loop()
       power = 200;
 
     uint8_t measurement[4];
-    measurement[0] = 0x00; // en: 16-bit flags, no optional fields / ja: 16bit flags、optionalなし
+    // en: 16-bit flags, no optional fields
+    // ja: 16bit flags、optionalなし
+    measurement[0] = 0x00;
     measurement[1] = 0x00;
     measurement[2] = static_cast<uint8_t>(static_cast<uint16_t>(power) & 0xFF);
     measurement[3] = static_cast<uint8_t>((static_cast<uint16_t>(power) >> 8) & 0xFF);
     ble.gattServer().setValue(cyclingPowerMeasurementCharacteristic, measurement, sizeof(measurement));
+    // en: Check send acceptance when adapting this example; it is separate from later completion.
+    // ja: 組み込む際は送信要求の受理を確認します。後から届く完了とは別です。
     ble.gattServer().notify(cyclingPowerMeasurementCharacteristic, measurement, sizeof(measurement));
   }
 
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   ble.update();
   delay(1);
 }

@@ -1,8 +1,5 @@
-// en: CompileSmoke - minimal sketch that only checks the library builds and links
-//     on the target board. It does not initialize the BLE stack; it just includes
-//     the header and prints the library version.
-// ja: CompileSmoke - ライブラリが対象ボードでビルド・リンクできることだけを確認する
-//     最小sketch。BLEスタックは初期化せず、ヘッダのincludeとバージョン表示のみ行う。
+// en: Minimal build check; prints the library version
+// ja: 最小のビルド確認。ライブラリバージョンを表示
 #include <EspBle.h>
 
 void setup()

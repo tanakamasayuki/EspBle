@@ -1,9 +1,5 @@
-// en: The dialling side of SPP. A server waits and is found; a client has to
-//     know an address and then find the channel behind it, which is the part
-//     examples/Classic/SppServer cannot show.
-// ja: SPPの接続する側。serverは待って見つけられる側だが、clientはaddressを知り、
-//     その先のchannelを解決する必要がある。examples/Classic/SppServerでは示せない
-//     部分がここにある。
+// en: Dial an address, resolve or name the RFCOMM channel
+// ja: address指定で接続し、RFCOMM channelを解決または指定する
 #include <EspBleClassic.h>
 
 EspBleClassic bluetooth;
@@ -20,6 +16,8 @@ void setup()
 
   EspBleClassicConfig config;
   config.deviceName = "EspBle Classic SPP Client";
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!bluetooth.begin(config))
   {
     Serial.printf("Classic init failed: %s: %s\n",
@@ -27,6 +25,8 @@ void setup()
     return;
   }
 
+  // en: Connection is established here; subsequent operations use this peer/session state.
+  // ja: ここで接続成立を確認し、この相手／セッションの情報で後続処理を行います。
   bluetooth.spp().onConnected([](const EspBleClassicSppSession &session) {
     sessionId = session.id;
     Serial.printf("Connected to %s (session %u)\n",
@@ -43,6 +43,8 @@ void setup()
       Serial.printf("Connection to %s failed: %s\n",
         failure.peerAddress.c_str(), failure.detail.c_str());
     });
+  // en: Handle link loss here; state from the old connection must not be assumed valid.
+  // ja: ここで切断に対応します。古い接続の状態を有効なままと考えないようにします。
   bluetooth.spp().onDisconnected([](const EspBleClassicSppSession &session) {
     if (session.id == sessionId) sessionId = 0;
     Serial.println("Disconnected");
@@ -98,6 +100,8 @@ void loop()
     }
   }
 
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   bluetooth.update();
   delay(1);
 }

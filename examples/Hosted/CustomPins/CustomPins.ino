@@ -1,13 +1,13 @@
-// ESP32-P4 ESP-Hosted custom SDIO pins.
-// Prefer selecting the correct Arduino board definition. Use this override only
-// for custom hardware or when its board variant is not available.
+// en: Override ESP-Hosted SDIO pins before ble.begin() when they differ from the board variant
+// ja: board variantと異なるESP-Hosted SDIO pinをble.begin()前に上書き
 #include <EspBle.h>
 
 #if defined(CONFIG_ESP_HOSTED_ENABLE_BT_NIMBLE)
 #include "esp32-hal-hosted.h"
 #endif
 
-// M5Stack Tab5 wiring. Replace every value together for other hardware.
+// en: M5Stack Tab5 wiring. Replace every value together for other hardware.
+// ja: M5Stack Tab5用の配線です。別の基板では端子群をまとめて置き換えます。
 static constexpr int8_t HOSTED_CLK = 12;
 static constexpr int8_t HOSTED_CMD = 13;
 static constexpr int8_t HOSTED_D0 = 11;
@@ -25,8 +25,8 @@ void setup()
   delay(500);
 
 #if defined(CONFIG_ESP_HOSTED_ENABLE_BT_NIMBLE)
-  // This must run before ble.begin() and before any Wi-Fi API initializes the
-  // same shared ESP-Hosted transport.
+  // en: This must run before ble.begin() and before any Wi-Fi API initializes the same shared ESP-Hosted transport.
+  // ja: ble.begin()および共有ESP-Hosted Transportを初期化するWi-Fi APIより前に実行します。
   if (!hostedSetPins(
         HOSTED_CLK, HOSTED_CMD,
         HOSTED_D0, HOSTED_D1, HOSTED_D2, HOSTED_D3,
@@ -44,6 +44,8 @@ void setup()
 
   EspBleConfig config;
   config.deviceName = "EspBle Hosted Custom Pins";
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   bleStarted = ble.begin(config);
   if (!bleStarted)
   {
@@ -60,6 +62,8 @@ void setup()
 
 void loop()
 {
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   if (bleStarted) ble.update();
   delay(1);
 }

@@ -1,3 +1,5 @@
+// en: Standard Device Information strings and PnP ID
+// ja: 標準Device Information文字列とPnP ID
 #include <EspBle.h>
 
 static constexpr const char *DEVICE_INFORMATION_SERVICE_UUID = "180a";
@@ -26,6 +28,8 @@ void setup()
     0x78, 0x56, // Product ID 0x5678, little-endian
     0x00, 0x01  // Product version 0x0100, little-endian
   };
+  // en: Register the local GATT service and its characteristics before ble.begin().
+  // ja: ble.begin()の前に、ローカルのGATT ServiceとCharacteristicを登録します。
   if (!(deviceInformationServiceService = server.addService(DEVICE_INFORMATION_SERVICE_UUID)).valid() ||
       !(manufacturerNameCharacteristic = server.addCharacteristic(deviceInformationServiceService, MANUFACTURER_NAME_UUID, readable)).valid() ||
       !(modelNumberCharacteristic = server.addCharacteristic(deviceInformationServiceService, MODEL_NUMBER_UUID, readable)).valid() ||
@@ -43,6 +47,8 @@ void setup()
 
   EspBleConfig config;
   config.deviceName = "EspBle Device Info";
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!ble.begin(config))
   {
     Serial.printf("BLE initialization failed: %s\n", ble.lastErrorDetail().c_str());
@@ -57,6 +63,8 @@ void setup()
 
 void loop()
 {
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   ble.update();
   delay(1);
 }

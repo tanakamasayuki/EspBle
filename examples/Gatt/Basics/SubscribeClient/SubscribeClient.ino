@@ -1,7 +1,5 @@
-// en: SubscribeClient - connect to the Gatt/NotifyServer example, subscribe to
-//     notifications, and print each received value.
-// ja: SubscribeClient - Gatt/NotifyServer example へ接続し、Notificationを購読して
-//     受信値を表示する。
+// en: Subscribe to NotifyServer and print notifications
+// ja: NotifyServerを購読してNotificationを表示
 #include <EspBle.h>
 
 static constexpr const char *SERVICE_UUID = "71756360-5fa4-43bc-9003-6e6f74696679";
@@ -16,6 +14,8 @@ void setup()
 
   EspBleConfig config;
   config.deviceName = "EspBle Subscribe Client";
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!ble.begin(config))
   {
     Serial.printf("BLE initialization failed: %s\n", ble.lastErrorDetail().c_str());
@@ -43,6 +43,8 @@ void setup()
   ble.onNotification([](const EspBleGattNotification &notification) {
     Serial.printf("Notification: %s\n", notification.value.c_str());
   });
+  // en: Match a suitable peer before connecting; discovery alone does not mean a connection exists.
+  // ja: 条件に合う相手を選んで接続します。発見しただけでは接続は成立していません。
   ble.scanner().onResult([](const EspBleScanResult &scanResult) {
     if (connectionRequested || !scanResult.advertisesService(SERVICE_UUID))
     {

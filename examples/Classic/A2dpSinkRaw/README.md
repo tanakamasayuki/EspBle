@@ -44,3 +44,30 @@ measures; this library cannot work it out.
 
 - [Classic guide §7 A2DP and AVRCP](../../../docs/GUIDE_CLASSIC_BASICS.md#7-a2dp-and-avrcp) — encoded media, codec configuration and control
 - [PCMFlowBluetooth A2DP Sink examples](https://github.com/tanakamasayuki/PCMFlowBluetooth/tree/main/examples) — SBC decoding, PCMFlow and speaker output
+
+## Before running this sketch
+
+See the [example workflow](../../../docs/GUIDE_EXAMPLES.md) for installation, board selection and the distinction between connection and subscription. Open [A2dpSinkRaw.ino](A2dpSinkRaw.ino), select the board and port, upload, and match the Serial monitor to `Serial.begin(...)`. Use the command table above or the sketch startup message for input keys.
+
+The matching example is [A2dpSource](../A2dpSource/README.md). For a two-board test, prepare the matching Classic profile on the peer; make the accepting device discoverable when needed and configure the initiating side with its address.
+
+## Follow the code and its APIs
+
+The entries below follow their first appearance in the source. Registering a callback does not run it; the matching event invokes it later.
+
+1. `bluetooth.a2dpSink().onConnected(...)` — Confirm the established link here and retain the peer/session information needed by this profile. An accepted connect request is earlier and does not prove that a usable link exists.
+2. `bluetooth.a2dpSink().onCodecConfigured(...)` — Use the negotiated codec configuration; raw encoded packets are not PCM samples and need a matching external codec pipeline.
+3. `bluetooth.a2dpSink().onMedia(...)` — This encoded audio callback runs in the Bluetooth host context. Copy borrowed payload bytes to a bounded queue before returning; decode and play them elsewhere.
+4. `bluetooth.begin(...)` — Initialize the selected stack/profile and check its return value before starting dependent work. Configure this Classic profile in the order shown by the sketch.
+
+## Verify and adapt
+
+The received payload is encoded SBC, not PCM, and this sketch only reports it. For audible playback add a decoder, bounded buffering and an audio output pipeline; keep those outside the host callback.
+
+Use the original ESP32 and a peer supporting this Classic profile. BLE-only hardware or a BLE-only phone application cannot substitute for a Classic SPP, HID or audio peer; use the root support information when selecting hardware.
+
+Keep calling `bluetooth.update()` from loop. The stack/host callbacks described above are exceptions: perform only the immediate response or bounded copy they require, rather than assuming they run from update.
+
+When troubleshooting, locate the last completed stage: initialization, discovery/advertising, connection, required security, discovery/subscription, then value exchange. Skip stages this example does not use; a quiet server is verified through peer reads or received updates. For bool-returning requests, distinguish immediate acceptance from later completion events. When adapting a minimal example that does not print every result, add return-value checks and a failure path.
+
+[Example index](../../README.md) · [Example workflow](../../../docs/GUIDE_EXAMPLES.md)

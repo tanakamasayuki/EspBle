@@ -1,24 +1,5 @@
-// en: One Bluetooth Classic (BR/EDR) HID device that is a keyboard, a mouse and
-//     media keys at once. Classic registers a single device record, so all of it
-//     goes into one composed Report Descriptor and each profile keeps its own
-//     report ID. Mirrors examples/Hid/CompositeKeyboardMouse on the BLE side.
-//
-//     How many profiles fit is limited here in a way it is not on BLE: the
-//     Report Descriptor and the three profile strings share one SDP record and
-//     may total 214 bytes. These three come to 144 descriptor bytes and the
-//     strings below to 57, so 201 fits. Adding the gamepad makes the descriptor
-//     212 and nothing registers — see examples/Classic/HidGamepad for that one
-//     on its own.
-// ja: keyboard、mouse、メディアキーを兼ねる1台のBluetooth Classic（BR/EDR）
-//     HID device。Classicはdevice recordを1つ登録するため、すべてが1つの合成
-//     Report Descriptorに入り、profileごとにreport IDが分かれる。
-//     BLE側のexamples/Hid/CompositeKeyboardMouseと対になる。
-//
-//     合成できるprofile数にはBLEには無い上限がある。Report Descriptorとprofileの
-//     文字列3つは1つのSDP recordを共有し、合計214 byteまで。この3つでdescriptorは
-//     144 byte、下の文字列が57 byteなので201 byteで収まる。gamepadを加えると
-//     descriptorが212 byteになり何も登録されない——単独の例は
-//     examples/Classic/HidGamepadにある。
+// en: Keyboard, mouse and media keys in one device, and the SDP record limit on how many fit
+// ja: keyboard・mouse・メディアキーを1台で兼ねる。合成数のSDP record上限も示す
 #include <EspBleClassic.h>
 
 EspBleClassic bluetooth;
@@ -36,6 +17,8 @@ void setup()
   //     組み合わせはbegin()が拒否する——誰も到達できないdeviceを起動しないため。
   EspBleClassicHidProfileConfig hidConfig;
   hidConfig.name = "EspBle Classic Composite";
+  // en: Compose the HID profile before stack initialization. If you change the report format, keep its descriptor and payload layout consistent.
+  // ja: スタック初期化前にHIDプロファイルを構成します。Report形式を変更するときはDescriptorとデータの並びを一致させます。
   bluetooth.hidKeyboard().configure(hidConfig);
   bluetooth.hidMouse().configure(hidConfig);
   bluetooth.hidConsumerControl().configure(hidConfig);
@@ -54,6 +37,8 @@ void setup()
   //     その姿で提示する。
   config.classOfDevice.majorDeviceClass = 0x05;
   config.classOfDevice.minorDeviceClass = 0x10;
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!bluetooth.begin(config))
   {
     Serial.printf("Classic init failed: %s: %s\n",
@@ -61,6 +46,8 @@ void setup()
     return;
   }
 
+  // en: Connection is established here; subsequent operations use this peer/session state.
+  // ja: ここで接続成立を確認し、この相手／セッションの情報で後続処理を行います。
   bluetooth.hidDevice().onConnected(
     [](const EspBleClassicHidConnection &connection) {
       Serial.printf("Host connected: %s\n", connection.peerAddress.c_str());
@@ -80,17 +67,23 @@ void loop()
     // ja: profileはdeviceを共有するがreportは共有しない。呼び出しはそれぞれの
     //     report IDで出るため、keyboardしか解釈しないHostは他を無視する。
     if (command == 'k') bluetooth.hidKeyboard().write("hi");
+    // en: Mouse coordinates here are relative deltas, not absolute screen positions.
+    // ja: ここでのマウス座標は相対移動量で、画面上の絶対位置ではありません。
     else if (command == 'm') bluetooth.hidMouse().move(20, 0);
     else if (command == 'v')
       bluetooth.hidConsumerControl().click(
         ESP_BLE_HID_CONSUMER_CONTROL_VOLUME_UP);
     else if (command == 'r')
     {
+      // en: Send a released state so the host does not keep keys or buttons logically held.
+      // ja: 解除状態を送信し、Host側でキーやボタンが押されたままにならないようにします。
       bluetooth.hidKeyboard().releaseAll();
       bluetooth.hidMouse().releaseAll();
     }
   }
 
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   bluetooth.update();
   delay(1);
 }

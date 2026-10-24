@@ -1,12 +1,5 @@
-// en: Beacon - broadcast a non-connectable, non-scannable beacon carrying
-//     manufacturer data. setConnectable(false) makes it a pure broadcaster (no
-//     GATT connection possible); setScanResponseEnabled(false) makes it
-//     non-scannable; setInterval() controls the advertising interval. Observe it
-//     with the Gap/Scan example or any scanner app.
-// ja: Beacon - manufacturer dataを載せたnon-connectable・non-scannableなbeaconを
-//     broadcastする。setConnectable(false) で純粋なbroadcaster（GATT接続不可）に、
-//     setScanResponseEnabled(false) でnon-scannableに、setInterval() で送信間隔を
-//     制御する。Gap/Scan exampleや汎用スキャナアプリで受信できる。
+// en: Non-connectable, non-scannable beacon with manufacturer data and interval control
+// ja: manufacturer data＋間隔制御のnon-connectable・non-scannable beacon
 #include <EspBle.h>
 
 EspBle ble;
@@ -25,6 +18,8 @@ void setup()
 
   EspBleConfig config;
   config.deviceName = "EspBle Beacon";
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!ble.begin(config))
   {
     Serial.printf("BLE init failed: %s (%s)\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
@@ -44,6 +39,8 @@ void setup()
 
 void loop()
 {
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   ble.update();
   delay(1);
 }

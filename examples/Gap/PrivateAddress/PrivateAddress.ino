@@ -1,18 +1,5 @@
-// en: PrivateAddress - advertise with a private address instead of the factory public
-//     address, so passers-by cannot track this device by its address.
-//       RandomStatic      = a fixed random address (hides the public one, never rotates)
-//       ResolvablePrivate = an RPA the controller rotates; a bonded peer resolves it
-//                           with the IRK exchanged at bonding, everyone else sees a
-//                           changing address
-//     Set USE_RESOLVABLE_PRIVATE_ADDRESS to switch. Observe with Gap/Scan or
-//     Info/ScanDump: the address type shows as Random either way.
-// ja: PrivateAddress - 工場出荷のpublic addressの代わりにprivate addressでadvertiseし、
-//     周囲からアドレスで追跡されないようにする。
-//       RandomStatic      = 固定random address（public addressを隠すが回転はしない）
-//       ResolvablePrivate = controllerが回転させるRPA。bonded peerはbonding時に交換した
-//                           IRKで解決でき、それ以外からは変化するアドレスに見える
-//     USE_RESOLVABLE_PRIVATE_ADDRESS で切り替える。Gap/ScanやInfo/ScanDumpで受信すると
-//     どちらもaddress typeはRandomになる。
+// en: Advertise with a random static / resolvable private address
+// ja: random static / resolvable private addressでadvertise
 #include <EspBle.h>
 
 // en: false = RandomStatic (works standalone), true = RPA (requires bonding).
@@ -48,12 +35,16 @@ void setup()
     config.ownAddressType = EspBleOwnAddressType::RandomStatic;
   }
 
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!ble.begin(config))
   {
     Serial.printf("BLE init failed: %s (%s)\n", ble.lastErrorName(), ble.lastErrorDetail().c_str());
     return;
   }
 
+  // en: Connection is established here; subsequent operations use this peer/session state.
+  // ja: ここで接続成立を確認し、この相手／セッションの情報で後続処理を行います。
   ble.onConnected([](const EspBleConnection &connection) {
     // en: peerAddress is what this device sees. If the peer also uses an RPA and
     //     is bonded, the backend resolves it to the identity address.
@@ -62,6 +53,8 @@ void setup()
     Serial.printf("Connected id=%u peer=%s bonded=%d\n",
       connection.id, connection.peerAddress.c_str(), connection.bonded ? 1 : 0);
   });
+  // en: Handle link loss here; state from the old connection must not be assumed valid.
+  // ja: ここで切断に対応します。古い接続の状態を有効なままと考えないようにします。
   ble.onDisconnected([](const EspBleConnection &connection) {
     Serial.printf("Disconnected id=%u\n", connection.id);
     ble.advertising().start();
@@ -81,6 +74,8 @@ void setup()
 
 void loop()
 {
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   ble.update();
   delay(1);
 }

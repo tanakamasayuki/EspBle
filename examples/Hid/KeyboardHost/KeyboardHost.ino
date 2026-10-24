@@ -1,13 +1,11 @@
-// en: KeyboardHost - connect to a BLE keyboard as a HID host: scan the HID service ->
-//     pair -> discover -> print key events. Works with commercial BLE keyboards and with
-//     the KeyboardDevice example. Also writes the keyboard LEDs.
-// ja: KeyboardHost - HID HostとしてBLE keyboardへ接続する。HID Serviceをscan → Pairing →
-//     Discovery → キーイベント表示。市販BLE keyboardでも KeyboardDevice example でも使える。
-//     keyboard LEDの書込みも行う。
+// en: Connect to composite BLE HID, print every supported report type, write keyboard LEDs
+// ja: 複合BLE HIDへ接続し、全対応Reportを種別別表示。keyboard LED書込み
 #include <EspBle.h>
 
 EspBle ble;
-EspBleConnectionId keyboardConnectionId = 0; // en: currently connected keyboard / ja: 現在接続中のkeyboard
+// en: currently connected keyboard
+// ja: 現在接続中のkeyboard
+EspBleConnectionId keyboardConnectionId = 0;
 
 void setup()
 {
@@ -72,12 +70,16 @@ void setup()
   // ja: 市販keyboardはHID属性に暗号化を要求するため、security有効化が必要。
   config.security.enabled = true;
   config.security.bonding = true;
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!ble.begin(config))
   {
     Serial.printf("BLE initialization failed: %s\n", ble.lastErrorDetail().c_str());
     return;
   }
 
+  // en: Connection is established here; subsequent operations use this peer/session state.
+  // ja: ここで接続成立を確認し、この相手／セッションの情報で後続処理を行います。
   ble.onConnected([](const EspBleConnection &connection) {
     keyboardConnectionId = connection.id;
   });
@@ -97,6 +99,8 @@ void setup()
       ble.hidHost().discover(event.connection.id);
     }
   });
+  // en: Handle link loss here; state from the old connection must not be assumed valid.
+  // ja: ここで切断に対応します。古い接続の状態を有効なままと考えないようにします。
   ble.onDisconnected([](const EspBleConnection &) {
     keyboardConnectionId = 0;
   });

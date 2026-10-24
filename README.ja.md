@@ -19,6 +19,8 @@ Arduino-ESP32同梱の`BLEDevice` / `BLEClient` / `BLEServer`などのラッパ�
 > **ESP32-P4**はBLE無線を持たず、SDIOでつないだslave側のチップがBLEを担当します（ESP-Hosted）。
 > slaveには**このライブラリとは別のfirmware**が要り、使える範囲はそのチップとversionで変わります。
 
+初めて使う場合は[サンプル実行ガイド](docs/GUIDE_EXAMPLES.ja.md)を参照してください。目的別の最初の組み合わせ、書き込み、APIの完了確認、コールバックとデータの寿命、変更時の注意を説明しています。
+
 ## なぜEspBleを使うのか
 
 - **Coreが選定したNimBLEをそのまま使う:** Arduino-ESP32が選定・buildしたESP-IDFの

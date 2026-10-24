@@ -1,3 +1,5 @@
+// en: Standard Temperature, Humidity, and Pressure values
+// ja: 標準Temperature、Humidity、Pressure値
 #include <EspBle.h>
 
 static constexpr const char *ENVIRONMENTAL_SENSING_SERVICE_UUID = "181a";
@@ -34,6 +36,8 @@ static void publishTemperature()
   encode16(static_cast<uint16_t>(temperatureHundredths), temperatureValue);
   auto &server = ble.gattServer();
   server.setValue(temperatureCharacteristic, temperatureValue, sizeof(temperatureValue));
+  // en: Check send acceptance when adapting this example; it is separate from later completion.
+  // ja: 組み込む際は送信要求の受理を確認します。後から届く完了とは別です。
   const bool notified = server.notify(temperatureCharacteristic, temperatureValue, sizeof(temperatureValue));
   Serial.printf("Temperature raw: %d (notification accepted: %u)\n",
     temperatureHundredths, notified ? 1 : 0);
@@ -52,6 +56,8 @@ void setup()
   EspBleGattCharacteristicConfig readable;
   readable.readable = true;
   auto &server = ble.gattServer();
+  // en: Register the local GATT service and its characteristics before ble.begin().
+  // ja: ble.begin()の前に、ローカルのGATT ServiceとCharacteristicを登録します。
   if (!(environmentalSensingServiceService = server.addService(ENVIRONMENTAL_SENSING_SERVICE_UUID)).valid() ||
       !(temperatureCharacteristic = server.addCharacteristic(environmentalSensingServiceService, TEMPERATURE_UUID, temperatureConfig)).valid() ||
       !(humidityCharacteristic = server.addCharacteristic(environmentalSensingServiceService, HUMIDITY_UUID, readable)).valid() ||
@@ -67,6 +73,8 @@ void setup()
 
   EspBleConfig config;
   config.deviceName = "EspBle Environmental";
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!ble.begin(config))
   {
     Serial.printf("BLE initialization failed: %s\n", ble.lastErrorDetail().c_str());
@@ -94,6 +102,8 @@ void loop()
       publishTemperature();
     }
   }
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   ble.update();
   delay(1);
 }

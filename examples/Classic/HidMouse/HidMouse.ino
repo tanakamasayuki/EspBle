@@ -1,7 +1,5 @@
-// en: A Bluetooth Classic (BR/EDR) HID mouse. The calls are the same ones the
-//     BLE example uses (examples/Hid/Mouse); only the radio differs.
-// ja: Bluetooth Classic（BR/EDR）のHID mouse。呼び出しはBLE example
-//     （examples/Hid/Mouse）と同じで、違うのは無線だけ。
+// en: Motion, clicks, wheel and drag
+// ja: 移動・クリック・wheel・ドラッグ
 #include <EspBleClassic.h>
 
 EspBleClassic bluetooth;
@@ -12,6 +10,8 @@ void setup()
 
   EspBleClassicHidProfileConfig hidConfig;
   hidConfig.name = "EspBle Classic Mouse";
+  // en: Compose the HID profile before stack initialization. If you change the report format, keep its descriptor and payload layout consistent.
+  // ja: スタック初期化前にHIDプロファイルを構成します。Report形式を変更するときはDescriptorとデータの並びを一致させます。
   bluetooth.hidMouse().configure(hidConfig);
 
   EspBleClassicConfig config;
@@ -22,6 +22,8 @@ void setup()
   //     未分類ではなくmouseとして扱うため。
   config.classOfDevice.majorDeviceClass = 0x05;
   config.classOfDevice.minorDeviceClass = 0x20;
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!bluetooth.begin(config))
   {
     Serial.printf("Classic init failed: %s: %s\n",
@@ -29,6 +31,8 @@ void setup()
     return;
   }
 
+  // en: Connection is established here; subsequent operations use this peer/session state.
+  // ja: ここで接続成立を確認し、この相手／セッションの情報で後続処理を行います。
   bluetooth.hidDevice().onConnected(
     [](const EspBleClassicHidConnection &connection) {
       Serial.printf("Host connected: %s\n", connection.peerAddress.c_str());
@@ -75,10 +79,14 @@ void loop()
     }
     else if (command == 'r')
     {
+      // en: Send a released state so the host does not keep keys or buttons logically held.
+      // ja: 解除状態を送信し、Host側でキーやボタンが押されたままにならないようにします。
       bluetooth.hidMouse().releaseAll();
     }
   }
 
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   bluetooth.update();
   delay(1);
 }

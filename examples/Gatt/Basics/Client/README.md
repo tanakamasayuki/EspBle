@@ -71,3 +71,38 @@ Live: 8421
 
 - [BLE guide §4 GATT](../../../../docs/GUIDE_BLE_BASICS.md#4-gatt--exchanging-data) — services, characteristics, notify and MTU
 - [BLE guide §5 UUIDs](../../../../docs/GUIDE_BLE_BASICS.md#5-understanding-uuids) — 16-bit and 128-bit forms
+
+## Before running this sketch
+
+See the [example workflow](../../../../docs/GUIDE_EXAMPLES.md) for installation, board selection and the distinction between connection and subscription. Open [Client.ino](Client.ino), select the board and port, upload, and match the Serial monitor to `Serial.begin(...)`. Use the command table above or the sketch startup message for input keys.
+
+The matching example is [Server](../Server/README.md). For a two-board test, start the peer first and ensure its advertisement/service matches this sketch's filter.
+
+## How this example is structured
+
+Client - connect to the Gatt/Server example and run the central GATT client flow: database discovery -> known-UUID discovery -> read -> write -> descriptor access. Each step is a request API; completion arrives as an event from update(). The next operation is chained from the previous one's completion callback (central GATT operations are one-at-a-time).
+
+## Follow the code and its APIs
+
+The entries below follow their first appearance in the source. Registering a callback does not run it; the matching event invokes it later.
+
+1. `ble.begin(...)` — Initialize the selected stack/profile and check its return value before starting dependent work. For BLE GATT servers, register the database before stack initialization.
+2. `ble.onConnected(...)` — Confirm the established link here and retain the peer/session information needed by this profile. An accepted connect request is earlier and does not prove that a usable link exists.
+3. `ble.discoverServices(...)` — Start remote database discovery; consume the results in its completion event instead of assuming the request immediately populated handles.
+4. `ble.onServicesDiscovered(...)` — Inspect discovery success and the returned database before using discovered service, characteristic or descriptor handles.
+5. `ble.discoverCharacteristic(...)` — Find the requested remote characteristic and use the corresponding discovery completion to continue reading or writing.
+6. `ble.onCharacteristicDiscovered(...)` — Continue only if discovery succeeded; a connection alone does not guarantee that the requested UUID exists.
+7. `ble.readCharacteristic(...)` — Queue a remote value read; the value arrives in onCharacteristicRead, not in the immediate bool return.
+8. `ble.onCharacteristicRead(...)` — Check success, UUID and value length before decoding. Binary String values can contain zero bytes and must be processed by length.
+9. `ble.writeCharacteristic(...)` — Queue a remote write and inspect its completion event. Write Without Response provides no ATT response proving the peer application acted on the data.
+10. `ble.onCharacteristicWritten(...)` — Check result.success for the write outcome at the selected write mode; use a separate application response if you need confirmation of a command action.
+
+## Verify and adapt
+
+The generic GATT client shows discovery before characteristic and descriptor operations. A descriptor belongs to a particular characteristic; keep returned handles paired with their connection and owning value.
+
+Keep calling `ble.update()` from loop. Long waits for Serial input or periodic work postpone queued events and subsequent notifications.
+
+When troubleshooting, locate the last completed stage: initialization, discovery/advertising, connection, required security, discovery/subscription, then value exchange. Skip stages this example does not use; a quiet server is verified through peer reads or received updates. For bool-returning requests, distinguish immediate acceptance from later completion events. When adapting a minimal example that does not print every result, add return-value checks and a failure path.
+
+[Example index](../../../README.md) · [Example workflow](../../../../docs/GUIDE_EXAMPLES.md)

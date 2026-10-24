@@ -1,11 +1,5 @@
-// en: ImmediateAlertClient - the Find Me profile locator role. Connect to an
-//     Immediate Alert Service (0x1802) and write Alert Level (0x2A06) with Write
-//     Without Response to make the target alert. This example raises High Alert
-//     on connect and clears it after five seconds.
-// ja: ImmediateAlertClient - Find Meプロファイルのlocator役。Immediate Alert
-//     Service（0x1802）へ接続し、Alert Level（0x2A06）へWrite Without Responseで
-//     書き込んでターゲットを鳴動させる。この例では接続時にHigh Alertを出し、
-//     5秒後に解除する。
+// en: Find Me locator: raise/clear Alert Level via Write Without Response
+// ja: Find Me locator: Write Without ResponseでAlert Levelを鳴動/解除
 #include <EspBle.h>
 
 static constexpr const char *IMMEDIATE_ALERT_SERVICE_UUID = "1802";
@@ -27,12 +21,16 @@ static void writeAlertLevel(uint8_t level)
 void setup()
 {
   Serial.begin(115200);
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!ble.begin())
   {
     Serial.printf("BLE initialization failed: %s\n", ble.lastErrorDetail().c_str());
     return;
   }
 
+  // en: Connection is established here; subsequent operations use this peer/session state.
+  // ja: ここで接続成立を確認し、この相手／セッションの情報で後続処理を行います。
   ble.onConnected([](const EspBleConnection &connection) {
     connectionId = connection.id;
     writeAlertLevel(2); // en: High Alert / ja: High Alert
@@ -40,11 +38,15 @@ void setup()
     alerting = true;
     Serial.println("High Alert sent");
   });
+  // en: Handle link loss here; state from the old connection must not be assumed valid.
+  // ja: ここで切断に対応します。古い接続の状態を有効なままと考えないようにします。
   ble.onDisconnected([](const EspBleConnection &connection) {
     connectionId = 0;
     alerting = false;
   });
 
+  // en: Match a suitable peer before connecting; discovery alone does not mean a connection exists.
+  // ja: 条件に合う相手を選んで接続します。発見しただけでは接続は成立していません。
   ble.scanner().onResult([](const EspBleScanResult &result) {
     if (result.connectable && result.advertisesService(IMMEDIATE_ALERT_SERVICE_UUID))
     {
@@ -66,6 +68,8 @@ void loop()
     Serial.println("No Alert sent");
   }
 
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   ble.update();
   delay(1);
 }

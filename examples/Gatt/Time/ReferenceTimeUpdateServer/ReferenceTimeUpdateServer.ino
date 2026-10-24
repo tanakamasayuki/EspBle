@@ -1,13 +1,5 @@
-// en: ReferenceTimeUpdateServer - standard Reference Time Update Service
-//     (0x1806). Time Update Control Point (0x2A16) is Write Without Response
-//     (1 = Get Reference Update, 2 = Cancel Reference Update); Time Update State
-//     (0x2A17) is a readable 2-byte value (Current State + Result). Control
-//     Point writes transition the read-only state.
-// ja: ReferenceTimeUpdateServer - 標準Reference Time Update Service（0x1806）。
-//     Time Update Control Point（0x2A16）はWrite Without Response（1 = Get
-//     Reference Update、2 = Cancel）、Time Update State（0x2A17）はread可能な
-//     2バイト値（Current State＋Result）。Control Point書き込みでread専用stateを
-//     遷移させる。
+// en: Time Update Control Point drives a readable Time Update State
+// ja: Time Update Control Pointがread可能なTime Update Stateを駆動
 #include <EspBle.h>
 
 static constexpr const char *RTUS_SERVICE_UUID = "1806";
@@ -38,11 +30,15 @@ void setup()
   EspBleGattCharacteristicConfig stateConfig;
   stateConfig.readable = true;
   auto &server = ble.gattServer();
+  // en: Register the local GATT service and its characteristics before ble.begin().
+  // ja: ble.begin()の前に、ローカルのGATT ServiceとCharacteristicを登録します。
   rtusServiceService = server.addService(RTUS_SERVICE_UUID);
   timeUpdateControlPointCharacteristic = server.addCharacteristic(rtusServiceService, TIME_UPDATE_CONTROL_POINT_UUID, controlConfig);
   timeUpdateStateCharacteristic = server.addCharacteristic(rtusServiceService, TIME_UPDATE_STATE_UUID, stateConfig);
   server.setValue(timeUpdateStateCharacteristic, timeUpdateState, sizeof(timeUpdateState));
 
+  // en: Handle writes from the peer after update dispatches the event. Validate the UUID, length and command/value before changing application state.
+  // ja: updateが配送した相手からの書き込みを処理します。UUID・長さ・コマンドや値を検証してからアプリの状態を変更します。
   server.onWritten([](const EspBleGattWrite &write) {
     if (!write.characteristicUuid.equalsIgnoreCase(TIME_UPDATE_CONTROL_POINT_UUID) || write.value.length() != 1)
       return;
@@ -61,6 +57,8 @@ void setup()
 
   EspBleConfig config;
   config.deviceName = "EspBle Time Update";
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!ble.begin(config))
   {
     Serial.printf("BLE initialization failed: %s\n", ble.lastErrorDetail().c_str());
@@ -72,6 +70,8 @@ void setup()
 
 void loop()
 {
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   ble.update();
   delay(1);
 }

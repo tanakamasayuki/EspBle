@@ -1,12 +1,5 @@
-// en: FitnessMachineServer - standard Fitness Machine Service (0x1826) as used
-//     by smart trainers / indoor bikes. Indoor Bike Data (0x2AD2) is notified
-//     with 16-bit flags followed by instantaneous speed (0.01 km/h), cadence
-//     (0.5 /min), and signed power (W); Fitness Machine Feature (0x2ACC) is a
-//     readable 8-byte pair of feature bitmaps.
-// ja: FitnessMachineServer - スマートトレーナー/屋内バイクで使われる標準Fitness
-//     Machine Service（0x1826）。Indoor Bike Data（0x2AD2）を16bit flags＋
-//     instantaneous speed（0.01 km/h）・cadence（0.5/min）・符号付きpower（W）で
-//     Notifyし、Fitness Machine Feature（0x2ACC）は8byteのfeature bitmap対をReadできる。
+// en: Fitness Machine (FTMS) Indoor Bike Data notifications and Feature
+// ja: Fitness Machine（FTMS）Indoor Bike DataのNotifyとFeature
 #include <EspBle.h>
 
 static constexpr const char *FTMS_SERVICE_UUID = "1826";
@@ -17,7 +10,8 @@ EspBle ble;
 EspBleGattService ftmsServiceService;
 EspBleGattCharacteristic indoorBikeDataCharacteristic;
 EspBleGattCharacteristic fitnessMachineFeatureCharacteristic;
-// Fitness Machine Features = 0x00000006 (Cadence + Total Distance supported).
+// en: Fitness Machine Features = 0x00000006 (Cadence + Total Distance supported).
+// ja: Fitness Machine Featuresの0x00000006は、CadenceとTotal Distanceへの対応を示します。
 const uint8_t feature[8] = {0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 uint16_t speed = 3000; // en: 0.01 km/h units / ja: 0.01 km/h単位
 unsigned long lastUpdate = 0;
@@ -31,6 +25,8 @@ void setup()
   EspBleGattCharacteristicConfig readConfig;
   readConfig.readable = true;
   auto &server = ble.gattServer();
+  // en: Register the local GATT service and its characteristics before ble.begin().
+  // ja: ble.begin()の前に、ローカルのGATT ServiceとCharacteristicを登録します。
   ftmsServiceService = server.addService(FTMS_SERVICE_UUID);
   indoorBikeDataCharacteristic = server.addCharacteristic(ftmsServiceService, INDOOR_BIKE_DATA_UUID, measurementConfig);
   fitnessMachineFeatureCharacteristic = server.addCharacteristic(ftmsServiceService, FITNESS_MACHINE_FEATURE_UUID, readConfig);
@@ -38,6 +34,8 @@ void setup()
 
   EspBleConfig config;
   config.deviceName = "EspBle Fitness Machine";
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!ble.begin(config))
   {
     Serial.printf("BLE initialization failed: %s\n", ble.lastErrorDetail().c_str());
@@ -73,9 +71,13 @@ void loop()
     data[6] = static_cast<uint8_t>(static_cast<uint16_t>(power) & 0xFF);
     data[7] = static_cast<uint8_t>((static_cast<uint16_t>(power) >> 8) & 0xFF);
     ble.gattServer().setValue(indoorBikeDataCharacteristic, data, sizeof(data));
+    // en: Check send acceptance when adapting this example; it is separate from later completion.
+    // ja: 組み込む際は送信要求の受理を確認します。後から届く完了とは別です。
     ble.gattServer().notify(indoorBikeDataCharacteristic, data, sizeof(data));
   }
 
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   ble.update();
   delay(1);
 }

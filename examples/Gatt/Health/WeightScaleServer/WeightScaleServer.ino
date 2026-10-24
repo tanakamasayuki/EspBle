@@ -1,9 +1,5 @@
-// en: WeightScaleServer - standard Weight Scale Service (0x181D). Weight
-//     Measurement (0x2A9D) is indicated as a uint16 at 0.005 kg resolution;
-//     Weight Scale Feature (0x2A9E) is a readable uint32.
-// ja: WeightScaleServer - 標準Weight Scale Service（0x181D）。Weight Measurement
-//     （0x2A9D）を0.005 kg分解能のuint16でIndicateし、Weight Scale Feature
-//     （0x2A9E）はuint32としてReadできる。
+// en: uint16 Weight Measurement indications (0.005 kg resolution) and Feature
+// ja: uint16 Weight Measurement（0.005 kg分解能）のIndicateとFeature
 #include <EspBle.h>
 
 static constexpr const char *WEIGHT_SCALE_SERVICE_UUID = "181d";
@@ -27,6 +23,8 @@ void setup()
   EspBleGattCharacteristicConfig featureConfig;
   featureConfig.readable = true;
   auto &server = ble.gattServer();
+  // en: Register the local GATT service and its characteristics before ble.begin().
+  // ja: ble.begin()の前に、ローカルのGATT ServiceとCharacteristicを登録します。
   weightScaleServiceService = server.addService(WEIGHT_SCALE_SERVICE_UUID);
   weightMeasurementCharacteristic = server.addCharacteristic(weightScaleServiceService, WEIGHT_MEASUREMENT_UUID, measurementConfig);
   weightScaleFeatureCharacteristic = server.addCharacteristic(weightScaleServiceService, WEIGHT_SCALE_FEATURE_UUID, featureConfig);
@@ -34,6 +32,8 @@ void setup()
 
   EspBleConfig config;
   config.deviceName = "EspBle Weight Scale";
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!ble.begin(config))
   {
     Serial.printf("BLE initialization failed: %s\n", ble.lastErrorDetail().c_str());
@@ -55,13 +55,19 @@ void loop()
       rawWeight = 14000;
 
     uint8_t measurement[3];
-    measurement[0] = 0x00; // en: SI (kg), no optional fields / ja: SI（kg）、optionalなし
+    // en: SI (kg), no optional fields
+    // ja: SI（kg）、optionalなし
+    measurement[0] = 0x00;
     measurement[1] = static_cast<uint8_t>(rawWeight & 0xFF);
     measurement[2] = static_cast<uint8_t>((rawWeight >> 8) & 0xFF);
     ble.gattServer().setValue(weightMeasurementCharacteristic, measurement, sizeof(measurement));
+    // en: Check send acceptance when adapting this example; it is separate from later completion.
+    // ja: 組み込む際は送信要求の受理を確認します。後から届く完了とは別です。
     ble.gattServer().indicate(weightMeasurementCharacteristic, measurement, sizeof(measurement));
   }
 
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   ble.update();
   delay(1);
 }

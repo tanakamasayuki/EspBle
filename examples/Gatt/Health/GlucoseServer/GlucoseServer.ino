@@ -1,14 +1,5 @@
-// en: GlucoseServer - standard Glucose Service (0x1808) with the Record Access
-//     Control Point (RACP). When a client writes "Report Stored Records (all)",
-//     the server notifies one Glucose Measurement (sequence, base time, SFLOAT
-//     concentration) and then indicates the RACP response. Sends are queued, so
-//     onSent here is a deliberate choice: the RACP "operation complete" response
-//     is indicated only after the measurement is confirmed delivered.
-// ja: GlucoseServer - Record Access Control Point（RACP）付きの標準Glucose
-//     Service（0x1808）。Clientが「Report Stored Records（all）」を書き込むと、
-//     Glucose Measurement（sequence、base time、SFLOAT濃度）を1件Notifyし、続けて
-//     RACP応答をIndicateする。送信はFIFOにqueueされるので、ここでonSentを使うのは
-//     意図的で、measurementの配送完了を待ってからRACPの「完了」応答をIndicateする。
+// en: Record Access Control Point: RACP write → Measurement notify → RACP indicate
+// ja: Record Access Control Point: RACP write → Measurement notify → RACP indicate
 #include <EspBle.h>
 #include <EspBleMedicalFloat.h>
 
@@ -38,12 +29,16 @@ void setup()
   racpConfig.writable = true;
   racpConfig.indicatable = true;
   auto &server = ble.gattServer();
+  // en: Register the local GATT service and its characteristics before ble.begin().
+  // ja: ble.begin()の前に、ローカルのGATT ServiceとCharacteristicを登録します。
   glucoseServiceService = server.addService(GLUCOSE_SERVICE_UUID);
   glucoseMeasurementCharacteristic = server.addCharacteristic(glucoseServiceService, GLUCOSE_MEASUREMENT_UUID, measurementConfig);
   glucoseFeatureCharacteristic = server.addCharacteristic(glucoseServiceService, GLUCOSE_FEATURE_UUID, featureConfig);
   racpCharacteristic = server.addCharacteristic(glucoseServiceService, RACP_UUID, racpConfig);
   server.setValue(glucoseFeatureCharacteristic, feature, sizeof(feature));
 
+  // en: Handle writes from the peer after update dispatches the event. Validate the UUID, length and command/value before changing application state.
+  // ja: updateが配送した相手からの書き込みを処理します。UUID・長さ・コマンドや値を検証してからアプリの状態を変更します。
   server.onWritten([](const EspBleGattWrite &write) {
     if (!write.characteristicUuid.equalsIgnoreCase(RACP_UUID))
       return;
@@ -63,6 +58,8 @@ void setup()
       espBleWriteMedicalSFloatLE(&measurement[10], 99, 0);
       measurement[12] = 0x11;
       racpState = RACP_SEND_MEASUREMENT;
+      // en: Check send acceptance when adapting this example; it is separate from later completion.
+      // ja: 組み込む際は送信要求の受理を確認します。後から届く完了とは別です。
       ble.gattServer().notify(glucoseMeasurementCharacteristic, measurement, sizeof(measurement));
     }
   });
@@ -82,6 +79,8 @@ void setup()
 
   EspBleConfig config;
   config.deviceName = "EspBle Glucose";
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!ble.begin(config))
   {
     Serial.printf("BLE initialization failed: %s\n", ble.lastErrorDetail().c_str());
@@ -93,6 +92,8 @@ void setup()
 
 void loop()
 {
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   ble.update();
   delay(1);
 }

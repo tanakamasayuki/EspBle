@@ -1,8 +1,5 @@
-// en: Classic pairing under application control. Without a security config the
-//     stack pairs with Just Works and accepts every request, which is fine for
-//     a closed setup and wrong for anything a stranger can reach.
-// ja: applicationがClassic pairingを制御する例。security未設定ではJust Worksで
-//     全要求を自動承諾する。閉じた環境なら十分だが、第三者が届く場所では不適切。
+// en: Application-controlled pairing and bond management
+// ja: applicationが制御するpairingとbond管理
 #include <EspBleClassic.h>
 
 EspBleClassic bluetooth;
@@ -27,6 +24,8 @@ void setup()
       bluetooth.confirmNumericComparison(event.peerAddress.c_str(), true);
     });
 
+  // en: Read the security result and encrypted/authenticated/bonded flags; these describe different properties and must not be treated as interchangeable.
+  // ja: セキュリティ結果とencrypted・authenticated・bondedを確認します。これらは別の性質なので、同じ意味として扱わないようにします。
   bluetooth.onSecurityChanged([](const EspBleClassicSecurityChanged &event) {
     Serial.printf(
       "Pairing with %s %s (status=%d)\n", event.peerAddress.c_str(),
@@ -41,6 +40,8 @@ void setup()
   // ja: DisplayYesNoは両者が同じ数字を比較する構成。DisplayOnlyはpasskeyを表示、
   //     KeyboardOnlyはpasskeyを入力する。
   config.security.ioCapability = EspBleClassicSecurityIoCapability::DisplayYesNo;
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!bluetooth.begin(config))
   {
     Serial.printf(

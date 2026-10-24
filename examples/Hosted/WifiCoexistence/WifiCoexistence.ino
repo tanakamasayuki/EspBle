@@ -1,10 +1,5 @@
-// en: Wi-Fi and BLE at the same time on ESP32-P4, which has no radio of its own
-//     and reaches both through an ESP32-C6 over ESP-Hosted. The two share one
-//     transport, so the order of starting and stopping them matters in a way it
-//     does not on a SoC with a built-in controller.
-// ja: ESP32-P4でWi-FiとBLEを同時に使う例。P4は自前の無線を持たず、ESP-Hosted経由で
-//     ESP32-C6を通して両方を使う。1つのtransportを共有するため、内蔵controllerを
-//     持つSoCとは違い、開始と停止の順序が意味を持つ。
+// en: Wi-Fi and BLE over one shared ESP-Hosted transport, and the order they stop in
+// ja: 1つの共有ESP-Hosted transportでWi-FiとBLEを同時利用し、停止順序を示す
 #include <EspBle.h>
 
 #if defined(CONFIG_ESP_HOSTED_ENABLE_BT_NIMBLE)
@@ -48,6 +43,8 @@ void setup()
 
   EspBleConfig config;
   config.deviceName = "EspBle Hosted Coexistence";
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!ble.begin(config))
   {
     Serial.printf("BLE initialization failed: %s\n",
@@ -55,6 +52,8 @@ void setup()
     return;
   }
 
+  // en: Match a suitable peer before connecting; discovery alone does not mean a connection exists.
+  // ja: 条件に合う相手を選んで接続します。発見しただけでは接続は成立していません。
   ble.scanner().onResult([](const EspBleScanResult &result) {
     // en: Scanning while Wi-Fi carries traffic is the point of the example: both
     //     go through the same C6, so this is where contention would show.
@@ -96,6 +95,8 @@ void loop()
     }
   }
 
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   ble.update();
   delay(1);
 }

@@ -1,9 +1,5 @@
-// en: One Central holding several Peripheral connections at once. Each has its
-//     own connection ID, and every operation names the connection it applies
-//     to — nothing in this library is implicitly "the current connection".
-// ja: 1つのCentralが複数のPeripheral接続を同時に保持する例。接続ごとにIDがあり、
-//     すべての操作は対象の接続を明示する。このlibraryに「現在の接続」という暗黙の
-//     対象は無い。
+// en: Hold several peripheral connections at once, each named by its own ID
+// ja: 複数のperipheral接続を同時に保持し、接続ごとのIDで指定する
 #include <EspBle.h>
 
 EspBle ble;
@@ -22,6 +18,8 @@ void setup()
 
   EspBleConfig config;
   config.deviceName = "EspBle Multi Central";
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!ble.begin(config))
   {
     Serial.printf("BLE initialization failed: %s\n",
@@ -29,6 +27,8 @@ void setup()
     return;
   }
 
+  // en: Connection is established here; subsequent operations use this peer/session state.
+  // ja: ここで接続成立を確認し、この相手／セッションの情報で後続処理を行います。
   ble.onConnected([](const EspBleConnection &connection) {
     if (peerCount < MaximumPeers) peers[peerCount++] = connection.id;
     Serial.printf("Connected %s as id %u (%u held)\n",
@@ -41,6 +41,8 @@ void setup()
     if (peerCount < MaximumPeers) ble.scanner().start();
   });
 
+  // en: Handle link loss here; state from the old connection must not be assumed valid.
+  // ja: ここで切断に対応します。古い接続の状態を有効なままと考えないようにします。
   ble.onDisconnected([](const EspBleConnection &connection) {
     // en: An ID belongs to one connection for its whole life, so removing the
     //     right entry is a matter of matching it — a later connection to the
@@ -70,6 +72,8 @@ void setup()
       result.value.length() > 0 ? static_cast<uint8_t>(result.value[0]) : 0);
   });
 
+  // en: Match a suitable peer before connecting; discovery alone does not mean a connection exists.
+  // ja: 条件に合う相手を選んで接続します。発見しただけでは接続は成立していません。
   ble.scanner().onResult([](const EspBleScanResult &result) {
     // en: Only devices offering the test service are collected, and only while
     //     there is room. Without the second check a full Central keeps trying
@@ -106,6 +110,8 @@ void loop()
     }
   }
 
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   ble.update();
   delay(1);
 }

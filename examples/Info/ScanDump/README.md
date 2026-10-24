@@ -57,3 +57,28 @@ counters: droppedScanResults=0 droppedEvents=0
 ## Related guides
 
 - [BLE guide §1 What BLE is](../../../docs/GUIDE_BLE_BASICS.md#1-what-ble-is) — the vocabulary the rest of the docs use
+
+## Before running this sketch
+
+See the [example workflow](../../../docs/GUIDE_EXAMPLES.md) for installation, board selection and the distinction between connection and subscription. Open [ScanDump.ino](ScanDump.ino), select the board and port, upload, and match the Serial monitor to `Serial.begin(...)`. Use the command table above or the sketch startup message for input keys.
+
+## How this example is structured
+
+ScanDump - diagnostic scanner that dumps every field EspBle extracts from each advertisement (UUID form, name presence, manufacturer data, service data) and decodes iBeacon payloads. Useful to see what a peripheral actually advertises before writing a scan filter.
+
+## Follow the code and its APIs
+
+The entries below follow their first appearance in the source. Registering a callback does not run it; the matching event invokes it later.
+
+1. `ble.begin(...)` — Initialize the selected stack/profile and check its return value before starting dependent work. For BLE GATT servers, register the database before stack initialization.
+2. `ble.scanner().onResult(...)` — Inspect the discovery result before selecting a peer. A name may be absent, and seeing a device does not prove it supports the intended connected service.
+
+## Verify and adapt
+
+Use this to inspect parsed advertising fields, not as a raw RF packet sniffer. Check duplicate settings and dropped-result counters before concluding that a changing beacon stopped updating.
+
+Keep calling `ble.update()` from loop. Long waits for Serial input or periodic work postpone queued events and subsequent notifications.
+
+When troubleshooting, locate the last completed stage: initialization, discovery/advertising, connection, required security, discovery/subscription, then value exchange. Skip stages this example does not use; a quiet server is verified through peer reads or received updates. For bool-returning requests, distinguish immediate acceptance from later completion events. When adapting a minimal example that does not print every result, add return-value checks and a failure path.
+
+[Example index](../../README.md) · [Example workflow](../../../docs/GUIDE_EXAMPLES.md)

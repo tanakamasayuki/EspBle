@@ -1,9 +1,5 @@
-// en: BloodPressureServer - standard Blood Pressure Service (0x1810). Blood
-//     Pressure Measurement (0x2A35) is indicated with systolic/diastolic/mean
-//     as IEEE-11073 16-bit SFLOATs; Blood Pressure Feature (0x2A49) is readable.
-// ja: BloodPressureServer - 標準Blood Pressure Service（0x1810）。Blood Pressure
-//     Measurement（0x2A35）をsystolic/diastolic/meanのIEEE-11073 16-bit SFLOATで
-//     Indicateし、Blood Pressure Feature（0x2A49）はReadできる。
+// en: IEEE-11073 SFLOAT systolic/diastolic/mean Measurement indications and Feature
+// ja: IEEE-11073 SFLOAT systolic/diastolic/meanのMeasurement IndicateとFeature
 #include <EspBle.h>
 #include <EspBleMedicalFloat.h>
 
@@ -27,6 +23,8 @@ void setup()
   EspBleGattCharacteristicConfig featureConfig;
   featureConfig.readable = true;
   auto &server = ble.gattServer();
+  // en: Register the local GATT service and its characteristics before ble.begin().
+  // ja: ble.begin()の前に、ローカルのGATT ServiceとCharacteristicを登録します。
   bloodPressureServiceService = server.addService(BLOOD_PRESSURE_SERVICE_UUID);
   bloodPressureMeasurementCharacteristic = server.addCharacteristic(bloodPressureServiceService, BLOOD_PRESSURE_MEASUREMENT_UUID, measurementConfig);
   bloodPressureFeatureCharacteristic = server.addCharacteristic(bloodPressureServiceService, BLOOD_PRESSURE_FEATURE_UUID, featureConfig);
@@ -34,6 +32,8 @@ void setup()
 
   EspBleConfig config;
   config.deviceName = "EspBle Blood Pressure";
+  // en: Check initialization before starting dependent operations.
+  // ja: 初期化の成功を確認してから後続の処理を始めます。
   if (!ble.begin(config))
   {
     Serial.printf("BLE initialization failed: %s\n", ble.lastErrorDetail().c_str());
@@ -56,9 +56,13 @@ void loop()
     espBleWriteMedicalSFloatLE(&measurement[3], 80, 0);
     espBleWriteMedicalSFloatLE(&measurement[5], 93, 0);
     ble.gattServer().setValue(bloodPressureMeasurementCharacteristic, measurement, sizeof(measurement));
+    // en: Check send acceptance when adapting this example; it is separate from later completion.
+    // ja: 組み込む際は送信要求の受理を確認します。後から届く完了とは別です。
     ble.gattServer().indicate(bloodPressureMeasurementCharacteristic, measurement, sizeof(measurement));
   }
 
+  // en: Dispatch queued events regularly; keep loop responsive while waiting for user input.
+  // ja: イベントを定期的に配送します。入力待ちの間もloopを止めないようにします。
   ble.update();
   delay(1);
 }
