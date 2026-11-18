@@ -50,7 +50,7 @@ jobs:
         # Each target is split into shards over the sorted example list to cut
         # wall time (~20 s per example). 6 targets x 3 shards = 18 jobs stays
         # under the 20 concurrent jobs a free account runs at once.
-        shard: [0, 1, 2]
+        shard: [1, 2, 3]
     env:
       SHARDS: 3
 
@@ -90,7 +90,7 @@ jobs:
 
       - name: Verify Classic archive and link isolation
         # Checks the library itself, not a target build; once is enough.
-        if: ${{ matrix.profile == 'esp32' && matrix.shard == 0 }}
+        if: ${{ matrix.profile == 'esp32' && matrix.shard == 1 }}
         run: python3 tools/release_hooks/pre_bump.py
 
       - name: Compile examples (${{ matrix.profile }})
@@ -110,7 +110,7 @@ jobs:
             fi
             # Deal the examples that have this profile round-robin, so every
             # shard gets a similar share of each example group.
-            mine=$((index % SHARDS == SHARD))
+            mine=$((index % SHARDS == SHARD - 1))
             index=$((index + 1))
             [ "${mine}" -eq 1 ] || continue
             echo "::group::${sketch} (${PROFILE})"
