@@ -25,6 +25,11 @@ on:
       - "tests/unit/hci_router/test_classic_namespaced_calls.py"
       - ".github/workflows/compile-examples.yml"
   workflow_dispatch:
+    inputs:
+      core_version:
+        description: "arduino-esp32 version to build with instead of the one each sketch.yaml pins (e.g. 3.3.13). Empty keeps the pinned versions. Only this run's checkout is rewritten."
+        required: false
+        default: ""
 
 jobs:
   compile:
@@ -37,11 +42,28 @@ jobs:
       - name: Setup arduino-cli
         uses: arduino/setup-arduino-cli@v2
 
+      - name: Override the core version
+        if: ${{ inputs.core_version != '' }}
+        env:
+          CORE_VERSION: ${{ inputs.core_version }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$CORE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$ ]]; then
+            echo "::error::core_version must look like 3.3.13 or 3.3.13-rc1: $CORE_VERSION"
+            exit 1
+          fi
+          find examples -name sketch.yaml -print0 \
+            | xargs -0 sed -i -E "s/esp32:esp32 \([^)]*\)/esp32:esp32 ($CORE_VERSION)/"
+          grep -rhoE "esp32:esp32 \([^)]*\)" --include=sketch.yaml examples | sort | uniq -c
+          echo "Built with Arduino-ESP32 $CORE_VERSION (sketch.yaml rewritten in this run only)" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Cache Arduino platform
         uses: actions/cache@v4
         with:
           path: ~/.arduino15
-          key: arduino-esp32-${{ hashFiles('examples/CompileSmoke/sketch.yaml') }}
+          # The override step runs first, so the hash already reflects the
+          # requested core; the input keeps the key distinct even if it does not.
+          key: arduino-esp32-${{ inputs.core_version }}-${{ hashFiles('examples/CompileSmoke/sketch.yaml') }}
 
       - name: Verify Classic archive and link isolation
         run: python3 tools/release_hooks/pre_bump.py
