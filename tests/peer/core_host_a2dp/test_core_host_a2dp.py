@@ -13,7 +13,7 @@ def test_a2dp_and_avrcp_interoperate_with_the_core_bluedroid_stack(dut, peers, p
     peer = peers["device"]
 
     ready = probe(
-        dut, "?\n", re.compile(rb"A2DPSINK_READY started=1 avrcp=1 address=([0-9a-f:]+)")
+        dut, "?\n", re.compile(rb"A2DPSINK_READY started=1 avrcp=1 address=([0-9a-f]{2}(?::[0-9a-f]{2}){5})")
     )
     sink_address = ready.group(1)
     probe(peer, "?\n", re.compile(rb"A2DPPEER_READY address=[0-9a-f:]+"))

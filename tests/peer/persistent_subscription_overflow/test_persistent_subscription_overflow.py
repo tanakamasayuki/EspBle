@@ -19,7 +19,7 @@ def test_persistent_subscription_registry_overflow_is_counted(dut, peers):
 
     peripheral.write("?")
     ready = peripheral.expect(re.compile(
-        rb"PERIPHERAL_READY advertising=(\d+) chars=(\d+) address=([0-9a-fA-F:]+)"),
+        rb"PERIPHERAL_READY advertising=(\d+) chars=(\d+) address=([0-9a-fA-F]{2}(?::[0-9a-fA-F]{2}){5})"),
         timeout=20)
     assert ready.group(1) == b"1", "peripheral must be advertising"
     assert int(ready.group(2)) == 12, "peripheral must expose 12 notifiable characteristics"
@@ -56,7 +56,7 @@ def test_persistent_subscription_registry_overflow_is_counted(dut, peers):
     # The peer comes back as a different address, so the central restores nothing.
     peripheral.write("R")
     readdressed = peripheral.expect(re.compile(
-        rb"PERIPHERAL_READDRESSED success=(\d+) address=([0-9a-fA-F:]+)"), timeout=30)
+        rb"PERIPHERAL_READDRESSED success=(\d+) address=([0-9a-fA-F]{2}(?::[0-9a-fA-F]{2}){5})"), timeout=30)
     assert readdressed.group(1) == b"1", "re-init must succeed"
     random_static_address = readdressed.group(2).decode()
     assert random_static_address.lower() != public_address.lower(), \

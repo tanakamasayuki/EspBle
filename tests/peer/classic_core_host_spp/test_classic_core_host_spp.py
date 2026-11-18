@@ -24,7 +24,7 @@ def test_spp_interoperates_with_the_core_bluedroid_host(dut, peers):
     peer.expect_exact("COREPEER_CONNECT requested=1", timeout=20)
     peer.expect_exact("COREPEER_LINK connected=1", timeout=30)
     connected = dut.expect(
-        re.compile(rb"COREHOST_CONNECTED id=(\d+) incoming=1 peer=([0-9a-f:]+)"),
+        re.compile(rb"COREHOST_CONNECTED id=(\d+) incoming=1 peer=([0-9a-f]{2}(?::[0-9a-f]{2}){5})"),
         timeout=30,
     )
     session = connected.group(1)

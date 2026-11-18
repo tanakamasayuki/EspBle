@@ -9,13 +9,13 @@ def test_hfp_client_control_and_external_codec_audio(dut, peers, probe):
         dut, "?\n", re.compile(rb"HFP_CLIENT_EXCLUSION ag=0 error=InvalidState")
     )
     client = dut.expect(
-        re.compile(rb"HFP_CLIENT_READY address=([0-9a-f:]+)"), timeout=10
+        re.compile(rb"HFP_CLIENT_READY address=([0-9a-f]{2}(?::[0-9a-f]{2}){5})"), timeout=10
     )
     probe(
         peer, "?\n", re.compile(rb"HFP_AG_EXCLUSION client=0 error=InvalidState")
     )
     ag = peer.expect(
-        re.compile(rb"HFP_AG_READY address=([0-9a-f:]+)"), timeout=10
+        re.compile(rb"HFP_AG_READY address=([0-9a-f]{2}(?::[0-9a-f]{2}){5})"), timeout=10
     )
     assert client.group(1) != ag.group(1)
 

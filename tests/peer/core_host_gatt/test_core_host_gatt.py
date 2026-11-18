@@ -13,7 +13,7 @@ def test_gatt_interoperates_with_the_core_bluedroid_stack(dut, peers, probe):
     peer = peers["device"]
 
     ready = probe(
-        peer, "?\n", re.compile(rb"COREPEER_READY address=([0-9a-f:]+)")
+        peer, "?\n", re.compile(rb"COREPEER_READY address=([0-9a-f]{2}(?::[0-9a-f]{2}){5})")
     )
     peer_address = ready.group(1).decode()
     probe(dut, "?\n", re.compile(rb"COREGATT_READY"))
@@ -24,7 +24,7 @@ def test_gatt_interoperates_with_the_core_bluedroid_stack(dut, peers, probe):
     dut.write("s\n")
     dut.expect_exact("COREGATT_SCAN started=1", timeout=10)
     connect = dut.expect(
-        re.compile(rb"COREGATT_CONNECT requested=1 peer=([0-9a-f:]+)"), timeout=30
+        re.compile(rb"COREGATT_CONNECT requested=1 peer=([0-9a-f]{2}(?::[0-9a-f]{2}){5})"), timeout=30
     )
     assert connect.group(1).decode() == peer_address, (
         "connected to a different address than the peer reported"

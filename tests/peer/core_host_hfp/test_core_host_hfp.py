@@ -15,7 +15,7 @@ def test_hfp_interoperates_with_the_core_bluedroid_audio_gateway(dut, peers, pro
     """
     peer = peers["device"]
 
-    ready = probe(peer, "?\n", re.compile(rb"HFPPEER_READY address=([0-9a-f:]+)"))
+    ready = probe(peer, "?\n", re.compile(rb"HFPPEER_READY address=([0-9a-f]{2}(?::[0-9a-f]{2}){5})"))
     ag_address = ready.group(1)
     probe(dut, "?\n", re.compile(rb"HFPCLIENT_READY started=1 address=[0-9a-f:]+"))
 
