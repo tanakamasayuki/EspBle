@@ -6,7 +6,7 @@ dependencies = [
     "pytest>=8",
     "pytest-embedded>=2.0",
     "pytest-embedded-serial>=2.0",
-    "pytest-embedded-arduino-cli>=1.6.0",
+    "pytest-embedded-arduino-cli>=1.12.0",
     "pytest-html>=4.1.1",
 ]
 
@@ -15,6 +15,18 @@ filterwarnings = [
     "ignore:record_xml_attribute is an experimental feature:pytest.PytestExperimentalApiWarning",
 ]
 addopts = "--save-state"
+# Named board pairings for `pytest --combo <name>` / `--combo all`. BLE is
+# wireless, so any host/device pairing works; these are the ones run routinely.
+# Names read <primary>_<device>: the primary runs the suite sketch (always the
+# Central), the device runs peer_device/ (always the Peripheral). `p4_s3`
+# needs the P4+C6 fixture.
+arduino_combos = [
+  "s3_s3:       primary=s3_peer_host,device=s3_peer_device",
+  "esp32_esp32: primary=esp32_peer_host,device=esp32_peer_device",
+  "esp32_s3:    primary=esp32_peer_host,device=s3_peer_device",
+  "s3_esp32:    primary=s3_peer_host,device=esp32_peer_device",
+  "p4_s3:       primary=p4_peer_host,device=s3_peer_device",
+]
 # Nothing here lists or excludes directories. `pytest` with no arguments means
 # everything that looks like a test, and what is kept out of it is kept out by
 # its file name: the manual suites are not named `test_*.py`, so collection
