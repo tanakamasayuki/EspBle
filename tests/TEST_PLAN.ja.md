@@ -50,7 +50,7 @@ Peerテストは次の3構成を使い分けます。
 |---|---|---|---|---|
 | 標準回帰 | ESP32-S3 | ESP32-S3 | EspBleの全機能と通常のNimBLE経路 | 常時接続を推奨 |
 | 無印ESP32回帰 | ESP32 | ESP32またはESP32-S3 | EspBle同梱NimBLE host、Bluetooth Classic、dual-host | 常時接続を推奨 |
-| ESP-Hosted回帰 | ESP32-P4 + ESP32-C6 | ESP32-S3 | SDIO、ESP-Hosted、C6 controller、Wi-Fi/BLE共存 | 必要時の接続でよい |
+| ESP-Hosted回帰 | ESP32-P4 + ESP32-C6、またはESP32-S3 | ESP32-S3、またはESP32-P4 + ESP32-C6 | SDIO、ESP-Hosted、C6 controller、Wi-Fi/BLE共存。P4をCentralとPeripheralの両方に置く | 必要時の接続でよい |
 
 標準回帰にはEspUsbHost/EspUsbDeviceなどで常時接続されているESP32-S3 2台を共用します。BLE通信のためのボード間配線は不要です。各ボードをPCへ接続するSerial/給電だけを使用します。
 
@@ -61,6 +61,7 @@ pytest-embedded-cliの既存規約に従います。
 - 通常の親側profile: `s3_peer_host`
 - P4親側profile: `p4_peer_host`
 - 2台目profile: `s3_peer_device`
+- P4の2台目profile: `p4_peer_device`（P4がPeripheralになる側。`p4_peer_host`と同じ実機）
 - 2台目directory: `peer_device/`
 - Python fixture: `peers["device"]`
 

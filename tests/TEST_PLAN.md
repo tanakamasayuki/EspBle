@@ -52,7 +52,7 @@ Peer tests use three fixture configurations.
 |---|---|---|---|---|
 | Baseline regression | ESP32-S3 | ESP32-S3 | All EspBle features and the normal NimBLE path | Keeping both connected is recommended |
 | Original-ESP32 regression | ESP32 | ESP32 or ESP32-S3 | The NimBLE host EspBle bundles, Bluetooth Classic, and dual-host | Keeping both connected is recommended |
-| ESP-Hosted regression | ESP32-P4 + ESP32-C6 | ESP32-S3 | SDIO, ESP-Hosted, C6 controller, and Wi-Fi/BLE coexistence | Connect only when required |
+| ESP-Hosted regression | ESP32-P4 + ESP32-C6, or ESP32-S3 | ESP32-S3, or ESP32-P4 + ESP32-C6 | SDIO, ESP-Hosted, C6 controller, and Wi-Fi/BLE coexistence, with the P4 as both Central and Peripheral | Connect only when required |
 
 The baseline reuses the two ESP32-S3 boards kept connected for EspUsbHost/EspUsbDevice. No signal wiring is required between BLE peers; each board only needs serial, power, and a connection to the test host.
 
@@ -63,6 +63,7 @@ The setup follows the existing pytest-embedded-cli conventions:
 - normal parent profile: `s3_peer_host`
 - P4 parent profile: `p4_peer_host`
 - second-board profile: `s3_peer_device`
+- P4 second-board profile: `p4_peer_device` (the P4 as the Peripheral; the same board as `p4_peer_host`)
 - second-board directory: `peer_device/`
 - Python fixture: `peers["device"]`
 

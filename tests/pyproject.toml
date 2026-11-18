@@ -18,14 +18,15 @@ addopts = "--save-state"
 # Named board pairings for `pytest --combo <name>` / `--combo all`. BLE is
 # wireless, so any host/device pairing works; these are the ones run routinely.
 # Names read <primary>_<device>: the primary runs the suite sketch (always the
-# Central), the device runs peer_device/ (always the Peripheral). `p4_s3`
-# needs the P4+C6 fixture.
+# Central), the device runs peer_device/ (always the Peripheral). The P4+C6
+# fixture is one board, so P4 pairs only with S3, once on each side.
 arduino_combos = [
   "s3_s3:       primary=s3_peer_host,device=s3_peer_device",
   "esp32_esp32: primary=esp32_peer_host,device=esp32_peer_device",
   "esp32_s3:    primary=esp32_peer_host,device=s3_peer_device",
   "s3_esp32:    primary=s3_peer_host,device=esp32_peer_device",
   "p4_s3:       primary=p4_peer_host,device=s3_peer_device",
+  "s3_p4:       primary=s3_peer_host,device=p4_peer_device",
 ]
 # Nothing here lists or excludes directories. `pytest` with no arguments means
 # everything that looks like a test, and what is kept out of it is kept out by

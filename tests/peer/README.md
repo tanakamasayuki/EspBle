@@ -17,6 +17,20 @@ The profiles and environment variables reuse the existing EspUsbHost/EspUsbDevic
 | original-ESP32 parent | `esp32_peer_host` | `TEST_SERIAL_PORT_ESP32_PEER_HOST` |
 | second peer | `s3_peer_device` | `TEST_SERIAL_PORT_PEER_DEVICE_S3_PEER_DEVICE` |
 | second peer (original ESP32) | `esp32_peer_device` | `TEST_SERIAL_PORT_PEER_DEVICE_ESP32_PEER_DEVICE` |
+| second peer (ESP-Hosted) | `p4_peer_device` | `TEST_SERIAL_PORT_PEER_DEVICE_P4_PEER_DEVICE` |
+
+The P4+C6 fixture is a single board, so `p4_peer_host` and `p4_peer_device` point at the same port. One run never puts it on both sides; it pairs with an S3 once as the parent and once as the peer.
+
+The routine pairings are named in `arduino_combos` in `tests/pyproject.toml` and are selected with `--combo <name>`. A name reads `<parent>_<peer>`; the parent is the Central and the peer is the Peripheral.
+
+| name | parent (Central) | peer (Peripheral) |
+|---|---|---|
+| `s3_s3` | `s3_peer_host` | `s3_peer_device` |
+| `esp32_esp32` | `esp32_peer_host` | `esp32_peer_device` |
+| `esp32_s3` | `esp32_peer_host` | `s3_peer_device` |
+| `s3_esp32` | `s3_peer_host` | `esp32_peer_device` |
+| `p4_s3` | `p4_peer_host` | `s3_peer_device` |
+| `s3_p4` | `s3_peer_host` | `p4_peer_device` |
 
 The profile names do not describe BLE roles. Sketches are flashed to and run on both boards, and both serial ports are observed from pytest. Within a suite the parent-side sketch is the central and the `peer_device/` sketch the peripheral; which physical board takes which side is chosen with `--profile` and `--peer-profile`.
 
