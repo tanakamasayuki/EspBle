@@ -121,11 +121,11 @@ An overview of what EspBle supports: the BLE equivalents of what EspUsbHost / Es
 
 ESP32-S3/C3/C6/H2 and similar targets have no Bluetooth Classic radio. On the original ESP32, using `EspBleClassic`
 automatically selects the custom-built Classic-only Bluedroid host. That precompiled host is ABI-bound to
-ESP-IDF 5.5.5 / xtensa-esp32 GCC 14.2.0; the measured core range is Arduino-ESP32 3.2.0 through 3.3.11, with HFP audio (SCO) needing 3.3.8 or newer. Classic has shipped since 1.3.0 with no support or compatibility guarantee; what each ⚠️ row states is what has been verified on hardware, and interoperability with external devices is unverified. Dual-host support remains experimental.
+ESP-IDF 5.5.5 / xtensa-esp32 GCC 14.2.0; the measured core range is Arduino-ESP32 3.2.0 through 3.3.11 plus 3.3.13, with HFP audio (SCO) needing 3.3.8 or newer. Classic has shipped since 1.3.0 with no support or compatibility guarantee; what each ⚠️ row states is what has been verified on hardware, and interoperability with external devices is unverified. Dual-host support remains experimental.
 
 | Feature | Status | Notes |
 |---|---|---|
-| Bluetooth Classic (BR/EDR) in general | ⚠️ | Selected automatically when `EspBleClassic` is used on the original ESP32 (measured core range 3.2.0–3.3.11); other SoCs have no BR/EDR radio |
+| Bluetooth Classic (BR/EDR) in general | ⚠️ | Selected automatically when `EspBleClassic` is used on the original ESP32 (measured core range 3.2.0–3.3.11 plus 3.3.13); other SoCs have no BR/EDR radio |
 | A2DP (audio streaming) | ⚠️ | Sink/Source SBC negotiation and encoded-payload transport; the released [PCMFlowBluetooth](https://github.com/tanakamasayuki/PCMFlowBluetooth) library provides SBC encoding/decoding, PCM, and speaker/microphone examples |
 | HFP (hands-free) | ⚠️ | Client/Audio Gateway SLC, outgoing/incoming/answer/end, selectable CVSD/mSBC raw SCO with AG codec selection, role exclusion, and the Client's operator name, subscriber number, memory dial, NREC and Apple battery reporting are implemented and hardware-verified; call waiting and three-way calling (CHLD, BTRH) are not implemented, and external-device interoperability remains |
 | AVRCP (media control) | ⚠️ | CT/TG passthrough, metadata/play-status requests, and absolute volume; external-target metadata interoperability remains |

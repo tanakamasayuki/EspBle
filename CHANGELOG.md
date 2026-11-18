@@ -1,6 +1,17 @@
 # Changelog / 変更履歴
 
 ## Unreleased
+- (EN) Verified with Arduino-ESP32 3.3.13 (ESP-IDF release/v5.5, ESP-Hosted host
+  2.13.1): every peer suite on ESP32-S3, the original ESP32 and P4 + C6, and the
+  examples and tests now pin 3.3.13. The original-ESP32 `#warning` for unverified
+  cores now starts above 3.3.13. On P4 + C6 the first LE Secure Connections
+  pairing now succeeds, but security on a bonded reconnect is still not reported,
+  so Security/bonding there remains unsupported.
+- (JA) Arduino-ESP32 3.3.13（ESP-IDF release/v5.5、ESP-Hosted Host 2.13.1）で検証した。
+  ESP32-S3、無印ESP32、P4 + C6で全Peer suiteを実行し、exampleとtestのpinを3.3.13にした。
+  無印ESP32の未検証Coreの`#warning`は3.3.13超から出る。P4 + C6では初回のLE Secure
+  Connections pairingが成功するようになったが、bond後の再接続でSecurityが報告されないため、
+  そこでのSecurity/bondingは引き続き未対応。
 
 ## 1.3.0
 - (EN) No breaking change: every public declaration of 1.2.0 keeps its signature,

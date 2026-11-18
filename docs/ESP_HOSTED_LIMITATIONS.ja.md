@@ -67,6 +67,19 @@ Arduino Coreが上記ESP-IDF修正を取り込むのを待つか、内蔵BLE Con
 S3/C3/C6/H2を使用する。Arduino Core向けの手動投稿用issue案は
 [ESP_HOSTED_SC_ISSUE.md](ESP_HOSTED_SC_ISSUE.md)に保存している。
 
+### Core 3.3.13での再測定（2026-11-19）
+
+Core 3.3.13（ESP-IDF `release/v5.5` `a45de8cc`、上記`9fd7cb7`を含む。Host側ESP-Hosted 2.13.1）、
+C6 Slave 2.12.11で`security_bond`と`hid_keyboard_host`をP4 central / S3 peripheralで実行した。
+
+- 初回のLE Secure Connections pairingは成功する。P4は`success=1 encrypted=1 bonded=1 key=16`を
+  報告し、DHKey check failureは出なくなった。
+- bond後の再接続では、S3 peripheralは2回目のSecurity eventを報告するが、P4 centralは報告
+  しない。上の「bond再接続時はP4側のSecurity eventが欠落する」と同じ症状が残っている。
+
+このためCore 3.3.13でもP4/C6のSecurity、bondingとそれを前提にするHIDは対応済みと扱わない。
+Host 2.13.1とSlave 2.12.11の版がずれた状態での結果であり、Slaveを2.13.1へ揃えた再測定は未実施。
+
 ## `end()`後の再`begin()`
 
 Arduino-ESP32 3.3.11同梱のESP-Hosted 2.12.11では、完全な

@@ -237,7 +237,7 @@ covered in the [Classic communication guide](../docs/GUIDE_CLASSIC_BASICS.md).
 
 Using `EspBleClassic` selects the separately built Classic host automatically.
 The precompiled host's measured core range is Arduino-ESP32 3.2.0 through
-3.3.11 (HFP audio needs 3.3.8 or newer).
+3.3.11 plus 3.3.13 (HFP audio needs 3.3.8 or newer).
 There is no build flag: starting both `EspBle` and `EspBleClassic` is what makes
 a sketch dual-host, and starting one is what makes it single-host.
 

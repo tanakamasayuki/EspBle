@@ -454,6 +454,24 @@ IDF v5.5.5とbyte一致）、`src/`のbluedroid API includeを自前へ張り替
 | 3.3.9 | 5.5.4 | ✅ | — | — | ✅ |
 | 3.3.10 | 5.5.4 | ✅ | ✅ 4 passed | ✅ 6 suite | ✅ |
 | 3.3.11 | 5.5.5 | ✅ | 全回帰 | ✅ 6 passed（契約vendor後の回帰） | ✅ |
+| 3.3.13 | 5.5.6相当（`release/v5.5` `a45de8cc`） | ✅ | 全回帰 | ✅ 全Peer suite | ✅ |
+
+3.3.12は測定していない。
+
+### 3.3.13の全回帰（2026-11-19）
+
+全sketch.yamlを3.3.13にpinし、`--clean`でbuildしてから全Peer suiteを組ごとに実行した。
+3.3.13はcontrollerの`libbtdm_app.a`が3.3.12から変わっているが、archiveとvendoringした
+NimBLEはcompile / linkが通り、実機でも動いた。
+
+| 組（Central_Peripheral） | 結果 |
+| --- | --- |
+| `s3_s3` | 70 passed |
+| `esp32_esp32` | 90 passed（初回のupload失敗1件とtest側の正規表現の不具合1件は、再実行と修正で解消） |
+| `esp32_s3` | 66 passed。`lifecycle_stress`が4回中1回、scan後に`HOST_CONNECT_STARTED`を出さず失敗（再現せず） |
+| `s3_esp32` | 70 passed |
+| `p4_s3` | 29 passed、2 failed（bond後の再接続でP4のSecurity eventが出ない。ESP-Hostedの既知制限） |
+| `s3_p4` | 29 passed（`lifecycle_stress`のpeer lossはHostedでは作れないためskip） |
 
 ## 残っているリスク
 

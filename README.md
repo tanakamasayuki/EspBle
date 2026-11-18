@@ -181,9 +181,11 @@ supplies. **In this setup the BLE radio work happens on the slave, not on the P4
 Verified host/slave versions, the slave firmware update procedure and the supported
 subset are in the Japanese [ESP-Hosted setup guide](docs/ESP_HOSTED_SETUP.ja.md).
 
-With Core 3.3.11 and a C6 slave, a P4 ECC defect in the bundled IDF blocks LE Secure
-Connections, bonding and dependent HID paths, and repeated `begin()` after `end()`
-is limited as well. Both are recorded in the Japanese
+On P4 + C6, LE Secure Connections, bonding and dependent HID paths, and repeated
+`begin()` after `end()`, have known limitations. With Core 3.3.11 a P4 ECC defect in
+the bundled IDF made the first pairing fail. With Core 3.3.13 the first pairing and
+bond succeed, but the P4 reports no security event when a bonded peer reconnects, so
+these paths are still not treated as supported. Both are recorded in the Japanese
 [known limitations](docs/ESP_HOSTED_LIMITATIONS.ja.md).
 
 For a Tab5 or a custom board whose SDIO wiring differs from the generic P4, select
@@ -193,7 +195,7 @@ the bilingual [Hosted/CustomPins example](examples/Hosted/CustomPins/)).
 
 ### Core version
 
-Development and the peer tests run on arduino-esp32 3.3.11. The minimum
+Development and the peer tests run on arduino-esp32 3.3.13 (every peer suite on S3, the original ESP32, and P4 + C6). The minimum
 supported core differs per chip, and the reason is always the same question:
 who brings the BLE host.
 
@@ -204,8 +206,8 @@ who brings the BLE host.
 | ESP32-S3 / C3 / C6 / H2 | **The core's bundled NimBLE** | **3.3.0** | The 3.2.x-generation prebuilt libraries were built with Bluedroid as the BLE host, so the NimBLE EspBle calls does not exist there. The core switched to NimBLE in 3.3.0. Those versions stop at the `EspBle requires the NimBLE backend` `#error` |
 | ESP32-P4 (+C6 ESP-Hosted) | **The core provides it** (NimBLE over Hosted) | **3.3.1** | 3.3.0 does not provide NimBLE for the P4's Hosted configuration |
 
-The original-ESP32 range is measured: 3.2.0 through 3.3.11 all compile and link,
-and 3.2.1 / 3.3.0 / 3.3.7 / 3.3.8 / 3.3.10 / 3.3.11 are hardware-verified (Japanese
+The original-ESP32 range is measured: 3.2.0 through 3.3.11 and 3.3.13 all compile and link,
+and 3.2.1 / 3.3.0 / 3.3.7 / 3.3.8 / 3.3.10 / 3.3.11 / 3.3.13 are hardware-verified (3.3.12 was not measured) (Japanese
 [core-version test plan](docs/PLAN_CORE_VERSION_MATRIX.ja.md)). The other chips'
 ranges are measured by CI.
 
@@ -213,7 +215,7 @@ ranges are measured by CI.
 - **Board Build Coverage** workflow → `docs/BOARDS.<version>.md` (the examples present when the workflow runs, across ESP32-S3 / ESP32 / C3 / C6 / H2 / P4 at one Core version)
 
 Both are manual (`workflow_dispatch`) because a full sweep rewrites and rebuilds
-every sketch. Cores newer than 3.3.11 are treated as unverified rather than
+every sketch. Cores newer than 3.3.13 are treated as unverified rather than
 known-broken: on the original ESP32 they build with a `#warning`.
 
 ## Getting started

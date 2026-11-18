@@ -150,9 +150,10 @@ ESP-Hosted NimBLE構成で利用します。**この構成ではBLEを実行す�
 検証済みのHost/Slave version、slave firmwareの更新方法、対応済み範囲は
 [ESP-Hostedセットアップ](docs/ESP_HOSTED_SETUP.ja.md)にあります。
 
-Core 3.3.11とC6 slaveの組み合わせでは、同梱IDFのP4 ECC不具合により、LE Secure Connections、bonding、
-それを前提とするHID、および`end()`後の複数回の再`begin()`に
-[既知制限](docs/ESP_HOSTED_LIMITATIONS.ja.md)があります。
+P4 + C6では、LE Secure Connections、bonding、それを前提とするHID、および`end()`後の複数回の再`begin()`に
+[既知制限](docs/ESP_HOSTED_LIMITATIONS.ja.md)があります。Core 3.3.11では同梱IDFのP4 ECC不具合で初回の
+pairingが失敗しました。Core 3.3.13では初回のpairingとbondは成功しますが、bond後の再接続でP4側のSecurity
+eventが出ないため、まだ対応済みとは扱いません。
 
 Tab5や独自基板でSDIO pin配置がgeneric P4と異なる場合は、正しいboard variantを選ぶか、初期化前にCoreの
 pin設定を上書きします（[SDIO pinの選択と上書き](docs/ESP_HOSTED_SETUP.ja.md#sdio-pinの選択と上書き)、
@@ -160,7 +161,7 @@ pin設定を上書きします（[SDIO pinの選択と上書き](docs/ESP_HOSTED
 
 ### coreバージョン
 
-開発とPeerテストはarduino-esp32 3.3.11で行っています。対応下限はチップごとに違い、
+開発とPeerテストはarduino-esp32 3.3.13で行っています（S3、無印ESP32、P4 + C6の全Peer suite）。対応下限はチップごとに違い、
 その理由は「BLE hostを誰が持ってくるか」で決まります。
 
 | 対象 | hostの出所 | 最小Core | なぜそこか |
@@ -170,15 +171,15 @@ pin設定を上書きします（[SDIO pinの選択と上書き](docs/ESP_HOSTED
 | ESP32-S3 / C3 / C6 / H2 | **Core同梱のNimBLE** | **3.3.0** | 3.2.x世代のprebuilt libraryはBLE hostがBluedroidで、EspBleが呼ぶNimBLEが存在しない。CoreがNimBLEへ切り替えたのが3.3.0。該当版では`EspBle requires the NimBLE backend`の`#error`で止まる |
 | ESP32-P4（+C6 ESP-Hosted） | **Coreが提供**（Hosted経由のNimBLE） | **3.3.1** | 3.3.0のP4はHosted構成のNimBLEが未提供 |
 
-無印ESP32の範囲は実測です。3.2.0〜3.3.11のcompile / linkが全て通り、3.2.1 / 3.3.0 / 3.3.7 /
-3.3.8 / 3.3.10 / 3.3.11は実機でも確認済みです（[core版数のテスト計画](docs/PLAN_CORE_VERSION_MATRIX.ja.md)）。
+無印ESP32の範囲は実測です。3.2.0〜3.3.11と3.3.13のcompile / linkが全て通り、3.2.1 / 3.3.0 / 3.3.7 /
+3.3.8 / 3.3.10 / 3.3.11 / 3.3.13は実機でも確認済みです（3.3.12は未測定）（[core版数のテスト計画](docs/PLAN_CORE_VERSION_MATRIX.ja.md)）。
 他チップの範囲はCIが計測します。
 
 - **Core Compatibility Matrix** ワークフロー → `docs/COMPATIBILITY.<version>.md`（代表BLE exampleをarduino-esp32の各リリースに対してビルド）
 - **Board Build Coverage** ワークフロー → `docs/BOARDS.<version>.md`（workflow実行時点のexampleを1つのCoreバージョンでESP32-S3 / ESP32 / C3 / C6 / H2 / P4に対してビルド）
 
 どちらもフルsweepが全sketchを書き換えて再ビルドするため、手動実行（`workflow_dispatch`）です。
-なお3.3.11より新しいCoreは、壊れると分かっているのではなく未検証という扱いで、
+なお3.3.13より新しいCoreは、壊れると分かっているのではなく未検証という扱いで、
 無印ESP32では`#warning`を出したうえでbuildは通します。
 
 ## はじめかた

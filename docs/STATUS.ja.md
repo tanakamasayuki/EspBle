@@ -11,7 +11,7 @@ Arduino-ESP32 3.3.11に同梱されるNimBLEホストAPIを直接使い、Centra
 ESP32-P4 + ESP32-C6のESP-Hosted構成は、compile、scan、接続、GATT read/write、
 notify/indicate、MTU、Wi-Fi/BLE共存と共有transport lifecycleに加え、Security非依存の
 代表Peer testをP4/S3で実機確認済みです。
-Security/bondingはCore 3.3.11同梱IDFのP4 ECC不具合、複数回の完全再初期化は
+Security/bondingはbond後の再接続でP4側のSecurity eventが出ないこと（Core 3.3.13。3.3.11ではP4 ECC不具合）、複数回の完全再初期化は
 Hosted 2.12.11のresource leakにより、
 [ESP-Hostedの既知制限](ESP_HOSTED_LIMITATIONS.ja.md)として上流修正取り込み待ちです。
 この構成でBLEを実行するのはslave側のチップで、slave firmwareはEspBleの配布物ではなく別途
@@ -46,15 +46,15 @@ BLE MIDIはbackend非依存のpacket codec（timestamp・running status・複数
   未検証です。BLEとClassicの同時利用もflagは不要で（`begin()`したhostで決まります）、ただし実験扱いのままです。
 - 無印ESP32の対応Coreは3.2.0以上です（BLEもClassicも）。Classic hostのbuildに使った
   Bluedroid API headerを`src/esp32/include/`へ同梱しているため、宣言と構造体レイアウトは
-  Coreの版に依存しません。実測で3.2.0〜3.3.11のcompile / linkが全て通り、3.2.1 / 3.3.0 / 3.3.7 /
-  3.3.8 / 3.3.10 / 3.3.11は実機（BLE代表smokeとClassic主要suite。3.3.7はClassic suiteのみ）でも確認済みです。例外はHFP audio
+  Coreの版に依存しません。実測で3.2.0〜3.3.11と3.3.13のcompile / linkが全て通り、3.2.1 / 3.3.0 / 3.3.7 /
+  3.3.8 / 3.3.10 / 3.3.11は実機（BLE代表smokeとClassic主要suite。3.3.7はClassic suiteのみ）、3.3.13は全Peer suiteで確認済みです（3.3.12は未測定）。例外はHFP audio
   （SCO）で、3.3.7以前のCoreはprebuilt controllerがPCM audio pathのため使えず、実機確認済みの
-  下限は3.3.8です。3.2.0未満は未測定のため理由付きの`#error`、3.3.11超は未検証である旨の
+  下限は3.3.8です。3.2.0未満は未測定のため理由付きの`#error`、3.3.13超は未検証である旨の
   `#warning`を出します。測定記録は[core版数のテスト計画](PLAN_CORE_VERSION_MATRIX.ja.md)です。
-- Core 3.3.11のP4/C6 ESP-Hosted構成では、同梱ESP-IDF 5.5.5のTinyCrypt/ECC不具合で
-  LE Secure ConnectionsがDHKey check failureとなるため、Security、bonding、それを
-  前提とするHIDは未対応です。ESP-IDF `release/v5.5`では`9fd7cb7`で修正済みですが、
-  Arduino Coreへの取り込み待ちです。またArduino-ESP32 3.3.11の
+- P4/C6 ESP-Hosted構成のSecurity、bonding、それを前提とするHIDは未対応です。Core 3.3.11では
+  同梱ESP-IDF 5.5.5のTinyCrypt/ECC不具合でLE Secure ConnectionsがDHKey check failureと
+  なりました。修正（ESP-IDF `9fd7cb7`）を含むCore 3.3.13では初回のpairingとbondは成功しますが、
+  bond後の再接続でP4側のSecurity eventが出ません。またArduino-ESP32 3.3.11の
   Hosted 2.12.11では複数回の完全deinit/initでSDIO mempool確保に失敗するため、
   `begin()`は起動後1回とし、再開にはP4を再起動します。詳細は
   [ESP-Hostedの既知制限](ESP_HOSTED_LIMITATIONS.ja.md)を参照してください。

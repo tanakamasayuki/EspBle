@@ -234,7 +234,7 @@ Classicのinquiry・SPP・HID・音声の仕組みは
 [Classic通信の入門ガイド](../docs/GUIDE_CLASSIC_BASICS.ja.md)で説明しています。
 
 `EspBleClassic`を使うと独自buildしたClassic hostが自動選択されます。build flagはありません。
-precompiled hostの対応Coreは実測でArduino-ESP32 3.2.0〜3.3.11です（HFP audioのみ3.3.8以上）。
+precompiled hostの対応Coreは実測でArduino-ESP32 3.2.0〜3.3.11と3.3.13です（HFP audioのみ3.3.8以上）。
 `EspBle`と`EspBleClassic`の両方を開始すればdual-host、片方だけなら単一hostになります。
 
 **2つの無線は届く相手が違い、それが選択の基準になります。**BLE HID（HOGP）は2015年前後以降の

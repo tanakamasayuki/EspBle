@@ -121,11 +121,11 @@ EspUsbHost / EspUsbDeviceで扱っている機能のBLE版、およびBLEで一�
 
 ESP32-S3/C3/C6/H2等はBluetooth Classicを搭載しないため利用できません。無印ESP32では`EspBleClassic`の利用時に
 独自buildしたClassic-only Bluedroid hostを自動選択します。このprecompiled hostはESP-IDF 5.5.5 / xtensa-esp32 GCC 14.2.0のABIに固定しており、
-対応Coreは実測でArduino-ESP32 3.2.0〜3.3.11です（HFP audio（SCO）のみ3.3.8以上）。Classicは1.3.0から同梱しており、サポートや互換性の保証は掲げません。各⚠️行に書いてあるのが実機で確認した範囲であり、外部機器との相互運用は未検証です。dual-hostは実験扱いのままです。
+対応Coreは実測でArduino-ESP32 3.2.0〜3.3.11と3.3.13です（HFP audio（SCO）のみ3.3.8以上）。Classicは1.3.0から同梱しており、サポートや互換性の保証は掲げません。各⚠️行に書いてあるのが実機で確認した範囲であり、外部機器との相互運用は未検証です。dual-hostは実験扱いのままです。
 
 | 機能 | 状況 | 備考 |
 |---|---|---|
-| Bluetooth Classic（BR/EDR）全般 | ⚠️ | 無印ESP32で`EspBleClassic`利用時に自動選択（対応Coreは実測で3.2.0〜3.3.11）。他SoCはBR/EDR無線を持たない |
+| Bluetooth Classic（BR/EDR）全般 | ⚠️ | 無印ESP32で`EspBleClassic`利用時に自動選択（対応Coreは実測で3.2.0〜3.3.11と3.3.13）。他SoCはBR/EDR無線を持たない |
 | A2DP（オーディオストリーミング） | ⚠️ | Sink/SourceのSBC negotiationとencode済みpayload transport。SBC encode/decode、PCM、speaker／microphone exampleは正式リリース済みの[PCMFlowBluetooth](https://github.com/tanakamasayuki/PCMFlowBluetooth)が担当 |
 | HFP（ハンズフリー） | ⚠️ | Client/Audio GatewayのSLC、発信・着信・応答・終了、CVSD・mSBC raw SCO API、AG codec選択、role排他に加え、Client側のoperator名・subscriber番号・memory dial・NREC・Apple電池残量通知を実装し実機確認済み。通話待ち・三者通話（CHLD / BTRH）は未実装。外部機器相互運用は未確認 |
 | AVRCP（メディア操作） | ⚠️ | CT/TG passthrough、metadata/play-status要求、absolute volume。metadata応答の外部Target相互運用は未完了 |

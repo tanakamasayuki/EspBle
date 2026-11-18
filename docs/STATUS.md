@@ -12,7 +12,7 @@ On ESP32-P4 + ESP32-C6 through ESP-Hosted, compilation, scanning, connections,
 GATT read/write, notify/indicate, MTU, Wi-Fi/BLE coexistence and shared-transport
 lifecycle, plus the representative non-security peer regression have been verified with a
 P4/S3 pair. Security/bonding is blocked by
-the P4 ECC defect in Core 3.3.11's bundled IDF, while repeated full
+the missing security event on a bonded reconnect (Core 3.3.13; on 3.3.11 the P4 ECC defect), while repeated full
 reinitialization is blocked by the Hosted 2.12.11 resource leak; both await
 upstream fixes and are tracked in the documented
 [ESP-Hosted limitations](ESP_HOSTED_LIMITATIONS.ja.md).
@@ -46,19 +46,20 @@ For how to run them see [tests/TEST_PLAN.md](../tests/TEST_PLAN.md); for the rel
 - On the original ESP32, the supported core range is Arduino-ESP32 3.2.0 and newer,
   for BLE and Classic alike. The Bluedroid API headers the Classic host was built
   against ship in `src/esp32/include/`, so its declarations and struct layouts do
-  not depend on the core version. Measured: 3.2.0 through 3.3.11 all compile and
+  not depend on the core version. Measured: 3.2.0 through 3.3.11 and 3.3.13 all compile and
   link, and 3.2.1 / 3.3.0 / 3.3.7 / 3.3.8 / 3.3.10 / 3.3.11 are hardware-verified
   (representative BLE smoke plus the main Classic suites; on 3.3.7 the Classic
-  suites only). The exception is HFP audio (SCO), whose
+  suites only), 3.3.13 with every peer suite (3.3.12 was not measured). The exception is HFP audio (SCO), whose
   hardware-verified floor is 3.3.8: cores up to 3.3.7 ship a prebuilt controller
   built with the PCM audio path, which cannot carry it. Below 3.2.0 is unmeasured
-  and stops at an `#error` that says why; above 3.3.11 a `#warning` states the
+  and stops at an `#error` that says why; above 3.3.13 a `#warning` states the
   version is unverified. The measurement record is the Japanese
   [core-version test plan](PLAN_CORE_VERSION_MATRIX.ja.md).
-- With Core 3.3.11 on P4/C6 ESP-Hosted, the TinyCrypt/ECC defect in the bundled
-  IDF 5.5.5 makes LE Secure Connections fail with a DHKey check error, so
-  Security, bonding, and dependent HID paths are not supported. ESP-IDF
-  `release/v5.5` fixes this in `9fd7cb7`, but Arduino Core has not bundled it yet. With
+- On P4/C6 ESP-Hosted, Security, bonding, and dependent HID paths are not
+  supported. With Core 3.3.11 the TinyCrypt/ECC defect in the bundled IDF 5.5.5
+  made LE Secure Connections fail with a DHKey check error. Core 3.3.13, which
+  includes the ESP-IDF fix `9fd7cb7`, completes the first pairing and bond, but
+  the P4 reports no security event when a bonded peer reconnects. With
   ESP-Hosted 2.12.11 in Arduino-ESP32 3.3.11, repeated full deinit/init can also
   fail to allocate the SDIO mempool; call `begin()` once per boot and restart
   the P4 to start again. See the [ESP-Hosted limitations](ESP_HOSTED_LIMITATIONS.ja.md).
