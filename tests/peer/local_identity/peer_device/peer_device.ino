@@ -66,7 +66,15 @@ void loop()
     else if (command == 'l' || command == 'h')
     {
       // Ask for a low / high level; the radio applies the nearest it supports.
-      Serial.printf("SET_TX_POWER %d\n", ble.setTxPower(command == 'l' ? -12 : 9) ? 1 : 0);
+      // With ESP-Hosted the co-processor owns the transmit power, so the call
+      // must fail; hosted= tells the test which contract to check.
+#if defined(CONFIG_ESP_HOSTED_ENABLE_BT_NIMBLE)
+      const int hosted = 1;
+#else
+      const int hosted = 0;
+#endif
+      Serial.printf(
+        "SET_TX_POWER %d hosted=%d\n", ble.setTxPower(command == 'l' ? -12 : 9) ? 1 : 0, hosted);
       Serial.printf("TX_POWER %d\n", static_cast<int>(ble.txPower()));
       restartAdvertising();
     }

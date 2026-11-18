@@ -2,6 +2,7 @@ import re
 
 OBSERVED = re.compile(rb"OBSERVED address=(\S+) type=(\d+) txpower=(\S+)")
 LOCAL = re.compile(rb"LOCAL_ADDRESS (\S+) type=(\d+)")
+SET_TX_POWER = re.compile(rb"SET_TX_POWER (\d) hosted=(\d)")
 
 
 def _observe(dut, command="s"):
@@ -33,16 +34,24 @@ def test_local_identity(dut, peers):
     # Power Level is filled in by the controller, so the change is visible over
     # the air.
     peripheral.write("l")
-    peripheral.expect_exact("SET_TX_POWER 1", timeout=10)
-    peripheral.expect_exact("TX_POWER -12", timeout=10)
-    _, _, low_observed = _observe(dut)
-    assert low_observed == "-12", f"advertised Tx Power {low_observed}, expected -12"
+    set_result = peripheral.expect(SET_TX_POWER, timeout=10)
+    if set_result.group(2) == b"1":
+        # ESP-Hosted (P4 + C6): the co-processor owns the transmit power, so
+        # setTxPower() must refuse and txPower() must report INT8_MIN rather
+        # than a level the radio is not using. Nothing changes on air to check.
+        assert set_result.group(1) == b"0", "setTxPower() claimed success on ESP-Hosted"
+        peripheral.expect_exact("TX_POWER -128", timeout=10)
+    else:
+        assert set_result.group(1) == b"1", "setTxPower() failed"
+        peripheral.expect_exact("TX_POWER -12", timeout=10)
+        _, _, low_observed = _observe(dut)
+        assert low_observed == "-12", f"advertised Tx Power {low_observed}, expected -12"
 
-    peripheral.write("h")
-    peripheral.expect_exact("SET_TX_POWER 1", timeout=10)
-    peripheral.expect_exact("TX_POWER 9", timeout=10)
-    _, _, high_observed = _observe(dut)
-    assert high_observed == "9", f"advertised Tx Power {high_observed}, expected 9"
+        peripheral.write("h")
+        peripheral.expect_exact("SET_TX_POWER 1 hosted=0", timeout=10)
+        peripheral.expect_exact("TX_POWER 9", timeout=10)
+        _, _, high_observed = _observe(dut)
+        assert high_observed == "9", f"advertised Tx Power {high_observed}, expected 9"
 
     # The reason code passed to disconnect() must reach the peer.
     _observe(dut, "c")

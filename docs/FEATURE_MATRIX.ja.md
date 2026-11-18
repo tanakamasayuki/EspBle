@@ -104,7 +104,7 @@ EspUsbHost / EspUsbDeviceで扱っている機能のBLE版、およびBLEで一�
 | Directed Advertising（送信） | ✅ | `EspBleAdvertising::setDirectedTarget(address, addressType, highDuty)` / `clearDirectedTarget()`。`ble_gap_adv_start()`を直接呼ぶ。仕様上ADデータを載せられないためpayloadは送出されず、指定した相手だけが接続できる。highDutyは3.75 ms間隔・最大1.28秒。相手がRPAを使う場合はボンド経由で解決するため先にボンディングが必要。`directed_advertising` Peerで検証済み |
 | Directed Advertising（受信） | ⚠️ | 自分宛のADV_DIRECT_INDはスキャン結果として届き、address / addressType / rssi / connectable=true / scannable=false を持つ（仕様上ADデータを載せないため他は空）。そのまま接続可。ただし**advertisement typeを公開していないため判別不能**で、「connectable かつ non-scannable かつ payload空」からの推測になる |
 | スキャン側のFilter Accept List | ✅ | `EspBleScanConfig::acceptListOnly`。`ble_gap_disc()` の filter policy に渡すため、許可リスト外のアドバタイズはコントローラが捨てアプリまで届かない。`accept_list` Peerで、リストが空なら1件も報告されず、アドレス追加後は報告されることを検証済み |
-| 送信電力の変更 | ✅ | `EspBle::setTxPower(dBm)` / `txPower()`。無線が対応する飛び飛びの値（-12..+9 dBm、3 dB刻み）へ丸める。`local_identity` Peerで、設定値がadvertisingのTx Power Levelとして電波に出ることを検証済み |
+| 送信電力の変更 | ✅ | `EspBle::setTxPower(dBm)` / `txPower()`。無線が対応する飛び飛びの値（-12..+9 dBm、3 dB刻み）へ丸める。`local_identity` Peerで、設定値がadvertisingのTx Power Levelとして電波に出ることを検証済み。ESP-Hosted（P4 + C6）では送信電力をco-processorが持つため、`setTxPower()`は`BackendFailure`で失敗し、`txPower()`は`INT8_MIN`を返す（`local_identity`のP4 Peerで確認） |
 | 自分のアドレスの取得 | ✅ | `EspBle::localAddress()` / `localAddressType()`。RPA使用時は回転のたびに変わる現在値。`local_identity` Peerで、相手がスキャンで観測したアドレスと一致することを検証済み |
 | 接続時のパラメータ / PHY指定 | 🔧 | `connect()`でConnection IntervalやPHYを指定できない。接続確立後に`updateConnectionParameters()`/`updatePhy()`で変更する |
 | 切断理由の指定（送信側） | ✅ | `disconnect(id, reason)`。`disconnectReason`はHCIコードへ正規化して公開する（backendは0x200オフセット付きで報告するため）ので、渡した値がそのまま相手に現れる。`local_identity` Peerで検証済み |
