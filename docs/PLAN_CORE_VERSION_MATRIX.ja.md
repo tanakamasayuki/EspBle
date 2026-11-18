@@ -470,7 +470,7 @@ NimBLEはcompile / linkが通り、実機でも動いた。
 | `esp32_esp32` | 90 passed（初回のupload失敗1件とtest側の正規表現の不具合1件は、再実行と修正で解消） |
 | `esp32_s3` | 66 passed。`lifecycle_stress`が4回中1回、scan後に`HOST_CONNECT_STARTED`を出さず失敗（再現せず） |
 | `s3_esp32` | 70 passed |
-| `p4_s3` | 29 passed、2 failed（bond後の再接続でP4のSecurity eventが出ない。ESP-Hostedの既知制限） |
+| `p4_s3` | 29 passed、2 failed（bond後の再接続でP4のSecurity eventが出ない。ESP-Hostedの既知制限。C6 Slaveを2.13.1へ揃えても同じ） |
 | `s3_p4` | 29 passed（`lifecycle_stress`のpeer lossはHostedでは作れないためskip） |
 
 ## 残っているリスク

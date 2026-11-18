@@ -77,8 +77,16 @@ C6 Slave 2.12.11で`security_bond`と`hid_keyboard_host`をP4 central / S3 perip
 - bond後の再接続では、S3 peripheralは2回目のSecurity eventを報告するが、P4 centralは報告
   しない。上の「bond再接続時はP4側のSecurity eventが欠落する」と同じ症状が残っている。
 
+その後、C6 SlaveをCore 3.3.13同梱の`ESP_HostedOTA`で2.13.1へ更新し、Host/Slaveとも2.13.1で
+再測定した（2026-11-19）。
+
+- P4 centralの`security_bond`と`hid_keyboard_host`は、同じ症状（再接続時にP4のSecurity eventが
+  出ない）で失敗した。版のずれが原因ではない。
+- P4をperipheralにした`security_bond`（S3 central）は成功した。bond後の再接続を含め、P4側の
+  Security eventも欠けない。症状はP4がcentralのときに限られる。
+- `lifecycle_stress`はP4 central / peripheralの両方で成功した（peer lossはHostedでは作れないためskip）。
+
 このためCore 3.3.13でもP4/C6のSecurity、bondingとそれを前提にするHIDは対応済みと扱わない。
-Host 2.13.1とSlave 2.12.11の版がずれた状態での結果であり、Slaveを2.13.1へ揃えた再測定は未実施。
 
 ## `end()`後の再`begin()`
 

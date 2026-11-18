@@ -126,8 +126,10 @@ ESP-Hosted構成でBLEを実行するのはP4ではなく**slave側のチップ*
 | P4側 ESP-Hosted Host | 2.12.11 |
 | C6側 ESP-Hosted Slave | 2.12.11を推奨 |
 
-Core 3.3.13ではP4側のHostが2.13.1になる。2026-11-19の3.3.13の回帰は、Slaveを2.12.11のまま
-（Host 2.13.1との不一致のまま）実施した。
+Core 3.3.13ではP4側のHostが2.13.1になる。2026-11-19の3.3.13の回帰は、Slave 2.12.11のまま
+全suiteを実行したあと、Core 3.3.13同梱の`ESP_HostedOTA`でSlaveを2.13.1へ更新し、Security関連の
+suiteを再実行した（結果は[既知制限](ESP_HOSTED_LIMITATIONS.ja.md)）。更新は起動時のlogに何も
+出さずに終わることがあるため、成否はEspBleのtest logの`ESP_HOSTED_VERSION`で確認する。
 
 HostとSlaveはArduino Coreが提供する同じversionへ揃える。実機に入っていたSlave
 2.3.2では、基本的なGATT通信は成功したがLE Secure ConnectionsのDHKey checkに
