@@ -1,6 +1,8 @@
 import re
 import time
 
+import pytest
+
 QUERY_PATTERN = re.compile(
     rb"HOST_QUERY connected=(\d+) disconnected=(\d+) notifications=(\d+) "
     rb"connections=(\d+) ready=(\d+) dropped=(\d+) scan=(\d+)"
@@ -50,7 +52,14 @@ def test_peer_loss_is_detected_via_supervision_timeout(dut, peers):
     _connect(dut, device)
 
     device.write("X")
-    device.expect_exact("DEVICE_RADIO_KILLED", timeout=10)
+    killed = device.expect(
+        re.compile(rb"DEVICE_RADIO_(KILLED|KILL_UNSUPPORTED hosted=1)"), timeout=10
+    )
+    if killed.group(1) != b"KILLED":
+        # The P4's controller runs on the C6 co-processor and cannot be silenced
+        # from the P4, and resetting the P4 leaves the C6 radio up. The central's
+        # supervision-timeout handling is covered by the other pairings.
+        pytest.skip("peer cannot silence its radio: controller is on the ESP-Hosted co-processor")
 
     # NimBLE's default supervision timeout is a few seconds; allow margin.
     dut.expect(DISCONNECTED_PATTERN, timeout=30)

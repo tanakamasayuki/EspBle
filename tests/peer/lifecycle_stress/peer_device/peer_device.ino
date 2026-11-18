@@ -1,7 +1,15 @@
 #include <EspBle.h>
 
 #include "../../../sketch_support/EspBleTestLifecycleEspBle.h"
+// The 'X' command silences the radio by disabling the local controller. With
+// ESP-Hosted (P4 + C6) the controller runs on the co-processor and cannot be
+// disabled from here, so the sketch reports that instead.
+#if defined(CONFIG_ESP_HOSTED_ENABLE_BT_NIMBLE)
+#define PEER_CAN_KILL_RADIO 0
+#else
 #include <esp_bt.h>
+#define PEER_CAN_KILL_RADIO 1
+#endif
 
 EspBle ble;
 EspBleConnectionId connectionId = 0;
@@ -83,10 +91,14 @@ void loop()
       // terminate so the central only notices via supervision timeout. The
       // BLE stack on this board is unusable afterwards; the test module ends
       // here and the next module reflashes the board.
+#if PEER_CAN_KILL_RADIO
       Serial.println("DEVICE_RADIO_KILLED");
       Serial.flush();
       radioKilled = true;
       esp_bt_controller_disable();
+#else
+      Serial.println("DEVICE_RADIO_KILL_UNSUPPORTED hosted=1");
+#endif
     }
   }
 
