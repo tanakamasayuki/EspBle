@@ -31,9 +31,30 @@ on:
         required: false
         default: ""
 
+concurrency:
+  group: compile-examples-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   compile:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # One job per target so the targets build in parallel and a failure names
+        # its target. These are the targets the examples declare (see
+        # docs/BOARDS.*.md); m5stack_tab5 is a board variant of esp32p4 used by two
+        # examples and is left to the manual board matrix. Examples without the
+        # job's profile (the Classic ones outside esp32) are skipped.
+        profile: [esp32s3, esp32, esp32c3, esp32c6, esp32h2, esp32p4]
+        # Each target is split into shards over the sorted example list to cut
+        # wall time (~20 s per example). 6 targets x 3 shards = 18 jobs stays
+        # under the 20 concurrent jobs a free account runs at once.
+        shard: [0, 1, 2]
+    env:
+      SHARDS: 3
+
+    name: compile (${{ matrix.profile }} ${{ matrix.shard }}/3)
 
     steps:
       - name: Checkout
@@ -60,37 +81,50 @@ jobs:
       - name: Cache Arduino platform
         uses: actions/cache@v4
         with:
+          # The esp32 platform install (several GB, every target's libs) is the
+          # same for all jobs, so they share one key instead of one per target.
           path: ~/.arduino15
-          # The override step runs first, so the hash already reflects the
-          # requested core; the input keeps the key distinct even if it does not.
-          key: arduino-esp32-${{ inputs.core_version }}-${{ hashFiles('examples/CompileSmoke/sketch.yaml') }}
+          # Keyed on the pinned platform lines, so a core bump busts it; the
+          # override step runs first, so a requested core is already in the hash.
+          key: arduino-esp32-${{ inputs.core_version }}-${{ hashFiles('examples/**/sketch.yaml') }}
 
       - name: Verify Classic archive and link isolation
+        # Checks the library itself, not a target build; once is enough.
+        if: ${{ matrix.profile == 'esp32' && matrix.shard == 0 }}
         run: python3 tools/release_hooks/pre_bump.py
 
-      - name: Compile all examples
+      - name: Compile examples (${{ matrix.profile }})
+        env:
+          PROFILE: ${{ matrix.profile }}
+          SHARD: ${{ matrix.shard }}
         run: |
           set -euo pipefail
           status=0
-          for sketch in $(find examples -name sketch.yaml -printf '%h\n' | sort); do
-            # Most examples build for esp32s3. Classic examples only run on the
-            # original ESP32, so they ship an esp32 profile instead; fall back to
-            # each sketch's default profile rather than failing on a missing one.
-            if grep -qE '^[[:space:]]+esp32s3:' "${sketch}/sketch.yaml"; then
-              profile=esp32s3
-            else
-              profile=$(grep -oP '^default_profile:\s*\K\S+' "${sketch}/sketch.yaml" || true)
-            fi
-            if [ -z "${profile}" ]; then
-              echo "::error::no usable profile: ${sketch}"
-              status=1
+          built=0
+          skipped=0
+          index=0
+          for sketch in $(find examples -name sketch.yaml -printf '%h\n' | LC_ALL=C sort); do
+            if ! grep -qE "^[[:space:]]+${PROFILE}:" "${sketch}/sketch.yaml"; then
+              skipped=$((skipped + 1))
               continue
             fi
-            echo "::group::${sketch} (${profile})"
-            if ! arduino-cli compile --profile "${profile}" "${sketch}"; then
-              echo "::error::compile failed: ${sketch} (${profile})"
+            # Deal the examples that have this profile round-robin, so every
+            # shard gets a similar share of each example group.
+            mine=$((index % SHARDS == SHARD))
+            index=$((index + 1))
+            [ "${mine}" -eq 1 ] || continue
+            echo "::group::${sketch} (${PROFILE})"
+            if arduino-cli compile --profile "${PROFILE}" "${sketch}"; then
+              built=$((built + 1))
+            else
+              echo "::error::compile failed: ${sketch} (${PROFILE})"
               status=1
             fi
             echo "::endgroup::"
           done
+          echo "${PROFILE} shard ${SHARD}/${SHARDS}: ${built} built of ${index} with this profile, ${skipped} without it" | tee -a "$GITHUB_STEP_SUMMARY"
+          if [ "${built}" -eq 0 ]; then
+            echo "::error::shard ${SHARD} of ${PROFILE} built nothing"
+            status=1
+          fi
           exit "${status}"
