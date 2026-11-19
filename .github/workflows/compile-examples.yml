@@ -1,4 +1,10 @@
 name: Compile Examples
+# A manual run names the core it built with; push and PR runs keep their usual title.
+run-name: >-
+  ${{ github.event_name == 'workflow_dispatch'
+      && format('Compile Examples - Arduino-ESP32 {0}', inputs.core_version || 'pinned')
+      || github.event_name == 'pull_request' && github.event.pull_request.title
+      || github.event.head_commit.message }}
 
 on:
   push:
@@ -54,7 +60,7 @@ jobs:
     env:
       SHARDS: 3
 
-    name: compile (${{ matrix.profile }} ${{ matrix.shard }}/3)
+    name: ${{ matrix.profile }} ${{ matrix.shard }}/3 (${{ inputs.core_version || 'pinned core' }})
 
     steps:
       - name: Checkout
