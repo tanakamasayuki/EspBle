@@ -1,11 +1,9 @@
 // midi_host peer_device: a BLE MIDI peripheral implemented with the bundled
-// Arduino-ESP32 NimBLE API (not EspBle). It notifies a hand-crafted BLE MIDI
+// Arduino-ESP32 BLE API (not EspBle). It notifies a hand-crafted BLE MIDI
 // packet that uses running status so the EspBle MIDI Host DUT is validated
 // against an independent sender, and it captures host writes.
 #include <Arduino.h>
-#include <BLEDevice.h>
-#include <BLEServer.h>
-#include <BLEUtils.h>
+#include <BLE.h>
 
 #include "../../../sketch_support/EspBleTestLifecycle.h"
 
@@ -13,11 +11,11 @@
 #error "EspBle peer tests require the Arduino-ESP32 NimBLE backend"
 #endif
 
-static constexpr const char *MIDI_SERVICE_UUID = "03B80E5A-EDE8-4B33-A751-6CE34EC4C700";
-static constexpr const char *MIDI_IO_UUID = "7772E5DB-3868-4112-A1A9-F2669D106BF3";
+static const BLEUUID MIDI_SERVICE_UUID("03B80E5A-EDE8-4B33-A751-6CE34EC4C700");
+static const BLEUUID MIDI_IO_UUID("7772E5DB-3868-4112-A1A9-F2669D106BF3");
 
-BLEServer *server = nullptr;
-BLECharacteristic *midiCharacteristic = nullptr;
+BLEServer server;
+BLECharacteristic midiCharacteristic;
 bool advertising = false;
 bool stackStopped = false;
 
@@ -81,71 +79,75 @@ static void feedSysEx(const uint8_t *data, size_t length)
   }
 }
 
-class ServerCallbacks : public BLEServerCallbacks
+// Runs on the BLE stack task.
+static void onMidiWrite(BLECharacteristic &characteristic, const BLEConnInfo &)
 {
-  void onConnect(BLEServer *) override { advertising = false; }
-  void onDisconnect(BLEServer *) override
+  size_t length = 0;
+  const uint8_t *value = characteristic.getValue(&length);
+  if (value == nullptr)
   {
-    BLEDevice::startAdvertising();
-    advertising = true;
+    length = 0;
   }
-};
-
-class CharacteristicCallbacks : public BLECharacteristicCallbacks
-{
-  void onWrite(BLECharacteristic *characteristic) override
-  {
-    String value = characteristic->getValue();
-    hostInLength = value.length() < sizeof(hostIn) ? value.length() : sizeof(hostIn);
-    for (size_t i = 0; i < hostInLength; ++i)
-      hostIn[i] = static_cast<uint8_t>(value[i]);
-    ++hostInCount;
-    static uint8_t packet[512];
-    const size_t copy = value.length() < sizeof(packet) ? value.length() : sizeof(packet);
-    for (size_t i = 0; i < copy; ++i)
-      packet[i] = static_cast<uint8_t>(value[i]);
-    feedSysEx(packet, copy);
-  }
-};
+  hostInLength = length < sizeof(hostIn) ? length : sizeof(hostIn);
+  for (size_t i = 0; i < hostInLength; ++i)
+    hostIn[i] = value[i];
+  ++hostInCount;
+  static uint8_t packet[512];
+  const size_t copy = length < sizeof(packet) ? length : sizeof(packet);
+  for (size_t i = 0; i < copy; ++i)
+    packet[i] = value[i];
+  feedSysEx(packet, copy);
+}
 
 void setup()
 {
   Serial.begin(115200);
   delay(500);
 
-  if (!BLEDevice::init("EspBle MIDI Peer"))
+  if (!BLE.begin("EspBle MIDI Peer"))
   {
     Serial.println("PERIPHERAL_INIT_FAILED");
     return;
   }
 
-  server = BLEDevice::createServer();
-  server->setCallbacks(new ServerCallbacks());
-  BLEService *service = server->createService(MIDI_SERVICE_UUID);
-  midiCharacteristic = service->createCharacteristic(
+  server = BLE.createServer();
+  server.onConnect([](BLEServer &, const BLEConnInfo &) { advertising = false; });
+  // The server advertises again by itself once a link drops.
+  server.advertiseOnDisconnect(true);
+  server.onDisconnect([](BLEServer &, const BLEConnInfo &, uint8_t) { advertising = true; });
+  BLEService service = server.createService(MIDI_SERVICE_UUID);
+  midiCharacteristic = service.createCharacteristic(
     MIDI_IO_UUID,
-    BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE_NR |
-      BLECharacteristic::PROPERTY_NOTIFY);
-  midiCharacteristic->setCallbacks(new CharacteristicCallbacks());
-  midiCharacteristic->setValue((uint8_t *)nullptr, 0); // BLE MIDI read is empty
-  service->start();
+    BLEProperty::Read | BLEProperty::WriteNR | BLEProperty::Notify,
+    BLEPermission::ReadWriteOpen);
+  midiCharacteristic.onWrite(onMidiWrite);
+  midiCharacteristic.setValue(String()); // BLE MIDI read is empty
+  if (!server.start())
+  {
+    Serial.println("PERIPHERAL_INIT_FAILED");
+    return;
+  }
 
-  BLEAdvertising *advertisingHandle = BLEDevice::getAdvertising();
-  advertisingHandle->addServiceUUID(MIDI_SERVICE_UUID);
-  advertisingHandle->setScanResponse(true);
-  BLEDevice::startAdvertising();
+  BLEAdvertising advertisingHandle = BLE.getAdvertising();
+  advertisingHandle.addServiceUUID(MIDI_SERVICE_UUID);
+  advertisingHandle.setScanResponse(true);
+  if (!BLE.startAdvertising())
+  {
+    Serial.println("PERIPHERAL_INIT_FAILED");
+    return;
+  }
   advertising = true;
   Serial.println("PERIPHERAL_READY");
 
   // The sketch tracks no connection id; the wrapper's own peer map has them.
   // onDisconnect advertises again, and the predicate covers the case where it
-  // did not. deinit() takes the radio down synchronously, so STOP is complete
+  // did not. end() takes the radio down synchronously, so STOP is complete
   // at once.
   EspBleTestLifecycle::Hooks hooks;
   hooks.stop = []() {
     stackStopped = true;
     advertising = false;
-    BLEDevice::deinit(false);
+    BLE.end(false);
   };
   EspBleTestLifecycle::begin(hooks);
 }
@@ -162,14 +164,14 @@ void loop()
     {
       Serial.printf("ADVERTISING %u\n", advertising ? 1 : 0);
     }
-    else if (command == 'm' && midiCharacteristic != nullptr)
+    else if (command == 'm' && midiCharacteristic)
     {
       // Two Note On messages in one packet using running status. Header 0x81
       // -> timestampHigh=1; 0xA5 -> ts=165; second message (0xA6 -> ts=166)
       // omits the status byte and reuses 0x90.
       uint8_t packet[] = {0x81, 0xA5, 0x90, 0x3C, 0x40, 0xA6, 0x40, 0x40};
-      midiCharacteristic->setValue(packet, sizeof(packet));
-      midiCharacteristic->notify();
+      midiCharacteristic.setValue(packet, sizeof(packet));
+      midiCharacteristic.notify();
       Serial.println("NOTIFIED");
     }
     else if (command == 'q')

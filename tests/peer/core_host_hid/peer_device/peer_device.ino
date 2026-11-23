@@ -1,13 +1,8 @@
 // Peer for the core-host HID interoperability test. It links no EspBle code:
-// the HOGP device is built from BLEHIDDevice, which Arduino-ESP32 ships on top
-// of Bluedroid. The DUT's HID Host therefore parses a Report Map produced by a
+// the HOGP device is built from BLEHIDDevice, which Arduino-ESP32 ships and
+// which runs on Bluedroid on the original ESP32. The DUT's HID Host therefore parses a Report Map produced by a
 // different stack than its own.
-#include <BLEDevice.h>
-#include <BLEHIDDevice.h>
-#include <BLESecurity.h>
-#include <BLEServer.h>
-#include <BLEUtils.h>
-#include <esp_gap_ble_api.h>
+#include <BLE.h>
 
 #include "../../../sketch_support/EspBleTestLifecycle.h"
 
@@ -49,9 +44,9 @@ static const uint8_t ReportMap[] = {
 };
 
 BLEHIDDevice *hid = nullptr;
-BLECharacteristic *inputReport = nullptr;
-BLECharacteristic *outputReport = nullptr;
-BLEServer *server = nullptr;
+BLECharacteristic inputReport;
+BLECharacteristic outputReport;
+BLEServer server;
 bool linkUp = false;
 uint16_t connectionId = 0;
 unsigned ledWrites = 0;
@@ -61,67 +56,47 @@ bool stackStopped = false;
 void reportReady()
 {
   Serial.printf("HIDPEER_READY address=%s\n",
-    BLEDevice::getAddress().toString().c_str());
+    BLE.getAddress().toString().c_str());
   Serial.printf("HIDPEER_STATE connected=%u led_writes=%u leds=%02x\n",
     linkUp ? 1 : 0, ledWrites, lastLeds);
 }
 
-class ServerCallbacks : public BLEServerCallbacks
+// The handlers below run on the BLE stack task.
+static void onConnect(BLEServer &, const BLEConnInfo &connection)
 {
-  void onConnect(BLEServer *serverInstance, esp_ble_gatts_cb_param_t *param) override
-  {
-    linkUp = true;
-    connectionId = param->connect.conn_id;
-    Serial.printf("HIDPEER_CONNECTED id=%u\n", connectionId);
-  }
+  linkUp = true;
+  connectionId = connection.getHandle();
+  Serial.printf("HIDPEER_CONNECTED id=%u\n", connectionId);
+}
 
-  void onDisconnect(BLEServer *serverInstance) override
-  {
-    linkUp = false;
-    Serial.println("HIDPEER_DISCONNECTED");
-    BLEDevice::startAdvertising();
-  }
-};
-
-class SecurityCallbacks : public BLESecurityCallbacks
+static void onDisconnect(BLEServer &, const BLEConnInfo &, uint8_t)
 {
-  uint32_t onPassKeyRequest() override
-  {
-    return 0;
-  }
-  void onPassKeyNotify(uint32_t passKey) override {}
-  bool onSecurityRequest() override
-  {
-    return true;
-  }
-  bool onConfirmPIN(uint32_t pin) override
-  {
-    return true;
-  }
-  void onAuthenticationComplete(esp_ble_auth_cmpl_t result) override
-  {
-    Serial.printf("HIDPEER_AUTH success=%u\n", result.success ? 1 : 0);
-  }
-};
+  linkUp = false;
+  Serial.println("HIDPEER_DISCONNECTED");
+  // The server advertises again by itself (advertiseOnDisconnect).
+}
 
-class OutputCallbacks : public BLECharacteristicCallbacks
+static void onAuthenticationComplete(const BLEConnInfo &, bool success)
 {
-  void onWrite(BLECharacteristic *characteristic) override
-  {
-    const String value = characteristic->getValue();
-    ++ledWrites;
-    lastLeds = value.length() != 0 ? static_cast<uint8_t>(value[0]) : 0;
-    // The LED report travels host to device, so this is the return direction of
-    // the same cross-stack path the input reports take.
-    Serial.printf("HIDPEER_LED count=%u value=%02x\n", ledWrites, lastLeds);
-  }
-};
+  Serial.printf("HIDPEER_AUTH success=%u\n", success ? 1 : 0);
+}
+
+static void onOutputWrite(BLECharacteristic &characteristic, const BLEConnInfo &)
+{
+  size_t length = 0;
+  const uint8_t *value = characteristic.getValue(&length);
+  ++ledWrites;
+  lastLeds = value != nullptr && length != 0 ? value[0] : 0;
+  // The LED report travels host to device, so this is the return direction of
+  // the same cross-stack path the input reports take.
+  Serial.printf("HIDPEER_LED count=%u value=%02x\n", ledWrites, lastLeds);
+}
 
 void sendKey(uint8_t modifiers, uint8_t usage)
 {
   uint8_t report[8] = {modifiers, 0, usage, 0, 0, 0, 0, 0};
-  inputReport->setValue(report, sizeof(report));
-  inputReport->notify();
+  inputReport.setValue(report, sizeof(report));
+  inputReport.notify();
   Serial.printf("HIDPEER_SENT modifiers=%02x usage=%02x\n", modifiers, usage);
 }
 
@@ -130,39 +105,66 @@ void setup()
   Serial.begin(115200);
   delay(500);
 
-  BLEDevice::init("EspBle CoreHost Keyboard");
-  BLEDevice::setSecurityCallbacks(new SecurityCallbacks());
-  BLESecurity::setAuthenticationMode(ESP_LE_AUTH_REQ_SC_BOND);
-  BLESecurity::setCapability(ESP_IO_CAP_NONE);
+  const BTStatus began = BLE.begin("EspBle CoreHost Keyboard");
+  if (!began)
+  {
+    Serial.printf("HIDPEER_INIT_FAILED stage=begin status=%s\n", began.toString());
+    return;
+  }
+  BLESecurity security = BLE.getSecurity();
+  // Just Works: accept every request and confirmation, as the old callbacks did.
+  security.onPassKeyRequest([](const BLEConnInfo &) -> uint32_t { return 0; });
+  security.onSecurityRequest([](const BLEConnInfo &) { return true; });
+  security.onConfirmPassKey([](const BLEConnInfo &, uint32_t) { return true; });
+  security.onAuthenticationComplete(onAuthenticationComplete);
+  // Bonding and LE Secure Connections without MITM (ESP_LE_AUTH_REQ_SC_BOND).
+  security.setAuthenticationMode(true, false, true);
+  security.setIOCapability(BLEIOCapability::NoInputNoOutput);
 
-  server = BLEDevice::createServer();
-  server->setCallbacks(new ServerCallbacks());
+  server = BLE.createServer();
+  server.onConnect(onConnect);
+  server.onDisconnect(onDisconnect);
+  server.advertiseOnDisconnect(true);
 
   hid = new BLEHIDDevice(server);
   inputReport = hid->inputReport(0);
   outputReport = hid->outputReport(0);
-  outputReport->setCallbacks(new OutputCallbacks());
-  hid->manufacturer()->setValue("EspBle interop");
+  // The reports stay behind encryption, as the Bluedroid BLEHIDDevice of the
+  // 3.x core published them; the library now creates them open.
+  inputReport.setPermissions(BLEPermission::ReadEncrypted);
+  outputReport.setPermissions(BLEPermission::ReadWriteEncrypted);
+  outputReport.onWrite(onOutputWrite);
+  hid->manufacturer("EspBle interop");
   hid->pnp(0x02, 0xe502, 0xa111, 0x0210);
   hid->hidInfo(0x00, 0x01);
-  hid->reportMap(const_cast<uint8_t *>(ReportMap), sizeof(ReportMap));
+  hid->reportMap(ReportMap, sizeof(ReportMap));
   hid->setBatteryLevel(77);
-  hid->startServices();
+  const BTStatus started = server.start();
+  if (!started)
+  {
+    Serial.printf("HIDPEER_INIT_FAILED stage=server status=%s\n", started.toString());
+    return;
+  }
 
-  BLEAdvertising *advertising = BLEDevice::getAdvertising();
-  advertising->setAppearance(HID_KEYBOARD);
-  advertising->addServiceUUID(hid->hidService()->getUUID());
-  advertising->setScanResponse(true);
-  BLEDevice::startAdvertising();
+  // BLEHIDDevice has already put the HID service UUID into the advertising data.
+  BLEAdvertising advertising = BLE.getAdvertising();
+  advertising.setAppearance(BLE_APPEARANCE_HID_KEYBOARD);
+  advertising.setScanResponse(true);
+  const BTStatus advertising_started = BLE.startAdvertising();
+  if (!advertising_started)
+  {
+    Serial.printf("HIDPEER_INIT_FAILED stage=advertise status=%s\n", advertising_started.toString());
+    return;
+  }
 
   reportReady();
 
   // onDisconnect advertises again on its own, so RECOVER only drops the link.
-  // deinit() takes the radio down synchronously, so STOP is complete at once.
+  // end() takes the radio down synchronously, so STOP is complete at once.
   EspBleTestLifecycle::Hooks hooks;
   hooks.stop = []() {
     stackStopped = true;
-    BLEDevice::deinit(false);
+    BLE.end(false);
   };
   EspBleTestLifecycle::begin(hooks);
 }
@@ -195,7 +197,7 @@ void loop()
     }
     else if (command == "d" && linkUp)
     {
-      server->disconnect(connectionId);
+      server.disconnect(connectionId);
       Serial.println("HIDPEER_DISCONNECT requested=1");
     }
   }

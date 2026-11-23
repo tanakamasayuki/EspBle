@@ -2,20 +2,17 @@
 // code: the MIDI service is assembled by hand from the BLE wrapper
 // Arduino-ESP32 ships, so the packets the DUT decodes were framed by another
 // implementation rather than by EspBle's own encoder.
-#include <BLE2902.h>
-#include <BLEDevice.h>
-#include <BLEServer.h>
-#include <BLEUtils.h>
+#include <BLE.h>
 
 #include "../../../sketch_support/EspBleTestLifecycle.h"
 
 // The MIDI service and its single I/O characteristic, as defined by the
 // MIDI over Bluetooth Low Energy specification.
-static const char *MidiServiceUuid = "03b80e5a-ede8-4b33-a751-6ce34ec4c700";
-static const char *MidiIoUuid = "7772e5db-3868-4112-a1a9-f2669d106bf3";
+static const BLEUUID MidiServiceUuid("03b80e5a-ede8-4b33-a751-6ce34ec4c700");
+static const BLEUUID MidiIoUuid("7772e5db-3868-4112-a1a9-f2669d106bf3");
 
-BLEServer *server = nullptr;
-BLECharacteristic *io = nullptr;
+BLEServer server;
+BLECharacteristic io;
 bool linkUp = false;
 uint16_t connectionId = 0;
 uint16_t subscription = 0;
@@ -38,61 +35,55 @@ String toHex(const uint8_t *data, size_t length)
 void reportReady()
 {
   Serial.printf("MIDIPEER_READY address=%s\n",
-    BLEDevice::getAddress().toString().c_str());
+    BLE.getAddress().toString().c_str());
   Serial.printf("MIDIPEER_STATE connected=%u cccd=%04x received=%u last=%s\n",
     linkUp ? 1 : 0, subscription, received,
     lastReceivedHex.length() != 0 ? lastReceivedHex.c_str() : "none");
 }
 
-class ServerCallbacks : public BLEServerCallbacks
+// The handlers below run on the BLE stack task.
+static void onConnect(BLEServer &, const BLEConnInfo &connection)
 {
-  void onConnect(BLEServer *serverInstance, esp_ble_gatts_cb_param_t *param) override
-  {
-    linkUp = true;
-    connectionId = param->connect.conn_id;
-    Serial.printf("MIDIPEER_CONNECTED id=%u\n", connectionId);
-  }
+  linkUp = true;
+  connectionId = connection.getHandle();
+  Serial.printf("MIDIPEER_CONNECTED id=%u\n", connectionId);
+}
 
-  void onDisconnect(BLEServer *serverInstance) override
-  {
-    linkUp = false;
-    subscription = 0;
-    Serial.println("MIDIPEER_DISCONNECTED");
-    BLEDevice::startAdvertising();
-  }
-};
-
-class IoCallbacks : public BLECharacteristicCallbacks
+static void onDisconnect(BLEServer &, const BLEConnInfo &, uint8_t)
 {
-  void onWrite(BLECharacteristic *characteristic) override
-  {
-    const String value = characteristic->getValue();
-    ++received;
-    lastReceivedHex =
-      toHex(reinterpret_cast<const uint8_t *>(value.c_str()), value.length());
-    // Printed raw: the header and timestamp bytes EspBle produced are part of
-    // what this test checks, not just the MIDI status and data bytes.
-    Serial.printf("MIDIPEER_RX count=%u length=%u hex=%s\n", received,
-      static_cast<unsigned>(value.length()), lastReceivedHex.c_str());
-  }
-};
+  linkUp = false;
+  subscription = 0;
+  Serial.println("MIDIPEER_DISCONNECTED");
+  // The server advertises again by itself (advertiseOnDisconnect).
+}
 
-class CccdCallbacks : public BLEDescriptorCallbacks
+static void onIoWrite(BLECharacteristic &characteristic, const BLEConnInfo &)
 {
-  void onWrite(BLEDescriptor *descriptor) override
+  size_t length = 0;
+  const uint8_t *value = characteristic.getValue(&length);
+  if (value == nullptr)
   {
-    const uint8_t *value = descriptor->getValue();
-    subscription = descriptor->getLength() >= 2
-                     ? static_cast<uint16_t>(value[0] | (value[1] << 8))
-                     : 0;
-    Serial.printf("MIDIPEER_CCCD value=%04x\n", subscription);
+    length = 0;
   }
-};
+  ++received;
+  lastReceivedHex = toHex(value, length);
+  // Printed raw: the header and timestamp bytes EspBle produced are part of
+  // what this test checks, not just the MIDI status and data bytes.
+  Serial.printf("MIDIPEER_RX count=%u length=%u hex=%s\n", received,
+    static_cast<unsigned>(length), lastReceivedHex.c_str());
+}
+
+// The library owns the CCCD and reports each change of its value here.
+static void onIoSubscribe(BLECharacteristic &, const BLEConnInfo &, uint16_t bits)
+{
+  subscription = bits;
+  Serial.printf("MIDIPEER_CCCD value=%04x\n", subscription);
+}
 
 void sendPacket(const uint8_t *packet, size_t length)
 {
-  io->setValue(const_cast<uint8_t *>(packet), length);
-  io->notify();
+  io.setValue(packet, length);
+  io.notify();
   Serial.printf("MIDIPEER_TX hex=%s\n", toHex(packet, length).c_str());
 }
 
@@ -101,34 +92,47 @@ void setup()
   Serial.begin(115200);
   delay(500);
 
-  BLEDevice::init("EspBle CoreHost MIDI");
-  server = BLEDevice::createServer();
-  server->setCallbacks(new ServerCallbacks());
+  if (!BLE.begin("EspBle CoreHost MIDI"))
+  {
+    Serial.println("MIDIPEER_INIT_FAILED");
+    return;
+  }
+  server = BLE.createServer();
+  server.onConnect(onConnect);
+  server.onDisconnect(onDisconnect);
+  server.advertiseOnDisconnect(true);
 
-  BLEService *service = server->createService(BLEUUID(MidiServiceUuid), 20);
-  io = service->createCharacteristic(
-    BLEUUID(MidiIoUuid),
-    BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE_NR
-      | BLECharacteristic::PROPERTY_NOTIFY);
-  io->setCallbacks(new IoCallbacks());
-  BLE2902 *cccd = new BLE2902();
-  cccd->setCallbacks(new CccdCallbacks());
-  io->addDescriptor(cccd);
-  service->start();
+  BLEService service = server.createService(MidiServiceUuid, 20);
+  // The CCCD is created with the characteristic.
+  io = service.createCharacteristic(
+    MidiIoUuid,
+    BLEProperty::Read | BLEProperty::WriteNR | BLEProperty::Notify,
+    BLEPermission::ReadWriteOpen);
+  io.onWrite(onIoWrite);
+  io.onSubscribe(onIoSubscribe);
+  if (!server.start())
+  {
+    Serial.println("MIDIPEER_INIT_FAILED");
+    return;
+  }
 
-  BLEAdvertising *advertising = BLEDevice::getAdvertising();
-  advertising->addServiceUUID(BLEUUID(MidiServiceUuid));
-  advertising->setScanResponse(true);
-  BLEDevice::startAdvertising();
+  BLEAdvertising advertising = BLE.getAdvertising();
+  advertising.addServiceUUID(MidiServiceUuid);
+  advertising.setScanResponse(true);
+  if (!BLE.startAdvertising())
+  {
+    Serial.println("MIDIPEER_INIT_FAILED");
+    return;
+  }
 
   reportReady();
 
   // onDisconnect advertises again on its own, so RECOVER only drops the link.
-  // deinit() takes the radio down synchronously, so STOP is complete at once.
+  // end() takes the radio down synchronously, so STOP is complete at once.
   EspBleTestLifecycle::Hooks hooks;
   hooks.stop = []() {
     stackStopped = true;
-    BLEDevice::deinit(false);
+    BLE.end(false);
   };
   EspBleTestLifecycle::begin(hooks);
 }
@@ -169,7 +173,7 @@ void loop()
     }
     else if (command == "d" && linkUp)
     {
-      server->disconnect(connectionId);
+      server.disconnect(connectionId);
       Serial.println("MIDIPEER_DISCONNECT requested=1");
     }
   }

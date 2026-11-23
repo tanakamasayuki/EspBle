@@ -16,10 +16,10 @@
 #if defined(CONFIG_IDF_TARGET_ESP32) && defined(CONFIG_BT_CLASSIC_ENABLED)
 #if ESP_ARDUINO_VERSION < ESP_ARDUINO_VERSION_VAL(3, 2, 0)
 #error "EspBle on the original ESP32 requires Arduino-ESP32 3.2.0 or newer. This applies whether or not the sketch uses Bluetooth Classic."
-#elif ESP_ARDUINO_VERSION > ESP_ARDUINO_VERSION_VAL(3, 3, 13)
+#elif ESP_ARDUINO_VERSION > ESP_ARDUINO_VERSION_VAL(4, 0, 0)
 // Newer cores are not blocked, because only their ABI is unverified, not known
 // to be wrong. A silent mismatch would be worse than saying so.
-#warning "EspBle's Bluetooth Classic host is built against ESP-IDF 5.5.5 and has been verified up to Arduino-ESP32 3.3.13. This core version has not been verified."
+#warning "EspBle's Bluetooth Classic host is built against ESP-IDF 5.5.5 and has been verified up to Arduino-ESP32 4.0.0. This core version has not been verified."
 #endif
 #endif
 

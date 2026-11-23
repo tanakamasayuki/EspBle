@@ -1,14 +1,10 @@
 // midi_device DUT: a BLE MIDI central implemented with the Arduino-ESP32
-// bundled NimBLE API (not EspBle), so it independently validates the exact BLE
+// bundled BLE API (not EspBle), so it independently validates the exact BLE
 // MIDI wire bytes EspBleMidiDevice notifies. It subscribes to the MIDI I/O
 // characteristic, captures raw notification bytes, and can write a raw BLE MIDI
 // packet back to the peripheral.
 #include <Arduino.h>
-#include <BLEClient.h>
-#include <BLEDevice.h>
-#include <BLEScan.h>
-#include <BLERemoteCharacteristic.h>
-#include <BLERemoteService.h>
+#include <BLE.h>
 
 #include "../../sketch_support/EspBleTestLifecycle.h"
 
@@ -16,12 +12,13 @@
 #error "EspBle peer tests require the Arduino-ESP32 NimBLE backend"
 #endif
 
-static BLEUUID MIDI_SERVICE_UUID("03B80E5A-EDE8-4B33-A751-6CE34EC4C700");
-static BLEUUID MIDI_IO_UUID("7772E5DB-3868-4112-A1A9-F2669D106BF3");
+static const BLEUUID MIDI_SERVICE_UUID("03B80E5A-EDE8-4B33-A751-6CE34EC4C700");
+static const BLEUUID MIDI_IO_UUID("7772E5DB-3868-4112-A1A9-F2669D106BF3");
 
-BLEAdvertisedDevice *target = nullptr;
-BLEClient *client = nullptr;
-BLERemoteCharacteristic *ioCharacteristic = nullptr;
+BLEAdvertisedDevice target;
+volatile bool targetFound = false;
+BLEClient client;
+BLERemoteCharacteristic ioCharacteristic;
 bool stackStopped = false;
 
 volatile uint32_t notifyCount = 0;
@@ -86,19 +83,18 @@ static void feedSysEx(const uint8_t *data, size_t length)
   }
 }
 
-class ScanCallbacks : public BLEAdvertisedDeviceCallbacks
+// Runs on the BLE stack task.
+static void onScanResult(const BLEAdvertisedDevice &device)
 {
-  void onResult(BLEAdvertisedDevice device) override
+  if (!targetFound && device.haveServiceUUID() && device.isAdvertisingService(MIDI_SERVICE_UUID))
   {
-    if (target == nullptr && device.haveServiceUUID() && device.isAdvertisingService(MIDI_SERVICE_UUID))
-    {
-      target = new BLEAdvertisedDevice(device);
-      BLEDevice::getScan()->stop();
-    }
+    target = device;
+    targetFound = true;
   }
-};
+}
 
-static void midiNotification(BLERemoteCharacteristic *, uint8_t *data, size_t length, bool)
+static void midiNotification(
+  BLERemoteCharacteristic &, const uint8_t *data, size_t length, BLESubscription)
 {
   size_t copy = length < sizeof(lastNotify) ? length : sizeof(lastNotify);
   for (size_t i = 0; i < copy; ++i)
@@ -110,41 +106,53 @@ static void midiNotification(BLERemoteCharacteristic *, uint8_t *data, size_t le
 
 static bool connectAndSubscribe()
 {
-  target = nullptr;
-  ioCharacteristic = nullptr;
-  BLEScan *scan = BLEDevice::getScan();
-  scan->setAdvertisedDeviceCallbacks(new ScanCallbacks(), true);
-  scan->setActiveScan(true);
-  scan->start(10, false);
-  if (target == nullptr)
+  targetFound = false;
+  ioCharacteristic = BLERemoteCharacteristic();
+  BLEScan scan = BLE.getScan();
+  scan.onResult(onScanResult);
+  scan.setFilterDuplicates(false);
+  scan.setActiveScan(true);
+  // Wait here for onScanResult (up to ten seconds) and stop the scan from this
+  // task: stopping it from inside its own callback stalls the BLE task.
+  if (scan.start(10000))
+  {
+    const uint32_t started = millis();
+    while (!targetFound && scan.isScanning() && millis() - started < 10000)
+    {
+      delay(10);
+    }
+    scan.stop();
+  }
+  if (!targetFound)
   {
     Serial.println("MIDI_SCAN_FAILED");
     return false;
   }
 
-  client = BLEDevice::createClient();
-  if (client == nullptr || !client->connect(target))
+  client = BLE.createClient();
+  if (!client || !client.connect(target))
   {
     Serial.println("MIDI_CONNECT_FAILED");
     return false;
   }
 
-  BLERemoteService *service = client->getService(MIDI_SERVICE_UUID);
-  if (service == nullptr)
+  BLERemoteService service = client.getService(MIDI_SERVICE_UUID);
+  if (!service)
   {
     Serial.println("MIDI_SERVICE_MISSING");
     return false;
   }
-  ioCharacteristic = service->getCharacteristic(MIDI_IO_UUID);
-  if (ioCharacteristic == nullptr)
+  ioCharacteristic = service.getCharacteristic(MIDI_IO_UUID);
+  if (!ioCharacteristic)
   {
     Serial.println("MIDI_CHAR_MISSING");
     return false;
   }
   // A BLE MIDI read must return an empty value.
-  const String initial = ioCharacteristic->readValue();
+  const String initial = ioCharacteristic.readValue();
   Serial.printf("MIDI_READ length=%u\n", static_cast<unsigned>(initial.length()));
-  const bool subscribed = ioCharacteristic->subscribe(true, midiNotification, true);
+  const bool subscribed =
+    static_cast<bool>(ioCharacteristic.subscribe(BLESubscription::Notify, midiNotification));
   return subscribed;
 }
 
@@ -152,16 +160,16 @@ void setup()
 {
   Serial.begin(115200);
   delay(500);
-  BLEDevice::init("EspBle MIDI Peer Host");
+  BLE.begin("EspBle MIDI Peer Host");
 
   // RECOVER mirrors the 'd' command and forgets the I/O handle, which belongs
   // to the connection that just ended. The capture counters keep their own
-  // reset command ('c'), so the tests stay in charge of them. deinit() takes
+  // reset command ('c'), so the tests stay in charge of them. end() takes
   // the radio down synchronously, so STOP is complete at once.
   EspBleTestLifecycle::Hooks hooks;
   hooks.stop = []() {
     stackStopped = true;
-    BLEDevice::deinit(false);
+    BLE.end(false);
   };
   EspBleTestLifecycle::begin(hooks);
 }
@@ -211,16 +219,16 @@ void loop()
         lastNotifyLength > 3 ? lastNotify[3] : 0,
         lastNotifyLength > 4 ? lastNotify[4] : 0);
     }
-    else if (command == 'w' && ioCharacteristic != nullptr)
+    else if (command == 'w' && ioCharacteristic)
     {
       // Write a raw BLE MIDI packet: timestamp 0, Control Change ch0 ctrl7 val100.
       uint8_t packet[] = {0x80, 0x80, 0xB0, 0x07, 0x64};
-      const bool wrote = ioCharacteristic->writeValue(packet, sizeof(packet), false);
+      const bool wrote = static_cast<bool>(ioCharacteristic.writeValue(packet, sizeof(packet), false));
       Serial.printf("WRITE_DONE %u\n", wrote ? 1 : 0);
     }
-    else if (command == 'd' && client != nullptr)
+    else if (command == 'd' && client)
     {
-      client->disconnect();
+      client.disconnect();
       Serial.println("PEER_DISCONNECTED");
     }
   }

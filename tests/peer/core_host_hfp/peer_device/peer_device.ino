@@ -170,7 +170,7 @@ void setup()
     return;
   }
 
-  esp_bt_dev_set_device_name("EspBle CoreHost AG");
+  esp_bt_gap_set_device_name("EspBle CoreHost AG");
   esp_bt_gap_register_callback(gapCallback);
 
   esp_bt_io_cap_t ioCapability = ESP_BT_IO_CAP_NONE;

@@ -2,23 +2,23 @@
 // everything here is the BLE wrapper Arduino-ESP32 ships, which on the original
 // ESP32 runs on Bluedroid. The DUT runs EspBle on a NimBLE host, so every
 // exchange in this suite crosses a stack boundary.
-#include <BLE2902.h>
-#include <BLEDevice.h>
-#include <BLEServer.h>
-#include <BLEUtils.h>
+#include <BLE.h>
 
 #include "../../../sketch_support/EspBleTestLifecycle.h"
 
-static const char *ServiceUuid = "2f7a1000-9d0b-4f6a-9b41-1c8f3a5d0001";
-static const char *DataUuid = "2f7a1001-9d0b-4f6a-9b41-1c8f3a5d0001";
-static const char *NotifyUuid = "2f7a1002-9d0b-4f6a-9b41-1c8f3a5d0001";
-static const char *IndicateUuid = "2f7a1003-9d0b-4f6a-9b41-1c8f3a5d0001";
+static const BLEUUID ServiceUuid("2f7a1000-9d0b-4f6a-9b41-1c8f3a5d0001");
+static const BLEUUID DataUuid("2f7a1001-9d0b-4f6a-9b41-1c8f3a5d0001");
+static const BLEUUID NotifyUuid("2f7a1002-9d0b-4f6a-9b41-1c8f3a5d0001");
+static const BLEUUID IndicateUuid("2f7a1003-9d0b-4f6a-9b41-1c8f3a5d0001");
 
-BLEServer *server = nullptr;
-BLECharacteristic *dataCharacteristic = nullptr;
-BLECharacteristic *notifyCharacteristic = nullptr;
-BLECharacteristic *indicateCharacteristic = nullptr;
+BLEServer server;
+BLECharacteristic dataCharacteristic;
+BLECharacteristic notifyCharacteristic;
+BLECharacteristic indicateCharacteristic;
 bool linkUp = false;
+// Set by onDisconnect, printed from loop(): server.disconnect() can deliver
+// the callback before it returns, and the test reads the request line first.
+volatile bool disconnectedPending = false;
 uint16_t connectionId = 0;
 uint16_t notifySubscribers = 0;
 uint16_t indicateSubscribers = 0;
@@ -42,123 +42,123 @@ void reportReady()
   // The address and the readiness line are printed at boot and repeated on "?",
   // so the test can ask instead of racing the flash of the other board.
   Serial.printf("COREPEER_READY address=%s\n",
-    BLEDevice::getAddress().toString().c_str());
+    BLE.getAddress().toString().c_str());
   Serial.printf("COREPEER_LINK connected=%u mtu=%u notify_cccd=%u indicate_cccd=%u\n",
     linkUp ? 1 : 0,
-    linkUp && server != nullptr ? server->getPeerMTU(connectionId) : 0,
+    linkUp && server ? server.getPeerMTU(connectionId) : 0,
     notifySubscribers, indicateSubscribers);
 }
 
-class ServerCallbacks : public BLEServerCallbacks
+// The handlers below run on the BLE stack task.
+static void onConnect(BLEServer &, const BLEConnInfo &connection)
 {
-  void onConnect(BLEServer *serverInstance, esp_ble_gatts_cb_param_t *param) override
-  {
-    linkUp = true;
-    connectionId = param->connect.conn_id;
-    Serial.printf("COREPEER_CONNECTED id=%u\n", connectionId);
-  }
+  linkUp = true;
+  connectionId = connection.getHandle();
+  Serial.printf("COREPEER_CONNECTED id=%u\n", connectionId);
+}
 
-  void onDisconnect(BLEServer *serverInstance) override
-  {
-    linkUp = false;
-    notifySubscribers = 0;
-    indicateSubscribers = 0;
-    Serial.println("COREPEER_DISCONNECTED");
-    // Bluedroid stops advertising on disconnect; restart so the DUT can
-    // reconnect within the same test.
-    BLEDevice::startAdvertising();
-  }
-
-  void onMtuChanged(BLEServer *serverInstance, esp_ble_gatts_cb_param_t *param) override
-  {
-    Serial.printf("COREPEER_MTU value=%u\n", param->mtu.mtu);
-  }
-};
-
-class DataCallbacks : public BLECharacteristicCallbacks
+static void onDisconnect(BLEServer &, const BLEConnInfo &, uint8_t)
 {
-  void onRead(BLECharacteristic *characteristic) override
-  {
-    Serial.println("COREPEER_READ_SERVED");
-  }
+  linkUp = false;
+  notifySubscribers = 0;
+  indicateSubscribers = 0;
+  disconnectedPending = true;
+  // The server advertises again by itself (advertiseOnDisconnect), so the DUT
+  // can reconnect within the same test.
+}
 
-  void onWrite(BLECharacteristic *characteristic) override
-  {
-    const String value = characteristic->getValue();
-    // Printed as hex because the DUT writes a payload containing 0x00: a stack
-    // that treats the value as a C string truncates it here.
-    Serial.printf("COREPEER_WRITTEN length=%u hex=%s\n",
-      static_cast<unsigned>(value.length()),
-      toHex(reinterpret_cast<const uint8_t *>(value.c_str()), value.length()).c_str());
-  }
-};
-
-class SubscriptionCallbacks : public BLEDescriptorCallbacks
+static void onMtuChanged(BLEServer &, const BLEConnInfo &, uint16_t mtu)
 {
-public:
-  SubscriptionCallbacks(const char *label, uint16_t *counter)
-    : label_(label), counter_(counter) {}
+  Serial.printf("COREPEER_MTU value=%u\n", mtu);
+}
 
-  void onWrite(BLEDescriptor *descriptor) override
-  {
-    const uint8_t *value = descriptor->getValue();
-    const uint16_t bits = descriptor->getLength() >= 2
-                            ? static_cast<uint16_t>(value[0] | (value[1] << 8))
-                            : 0;
-    *counter_ = bits;
-    Serial.printf("COREPEER_CCCD name=%s value=%04x\n", label_, bits);
-  }
+static void onDataRead(BLECharacteristic &, const BLEConnInfo &)
+{
+  Serial.println("COREPEER_READ_SERVED");
+}
 
-private:
-  const char *label_;
-  uint16_t *counter_;
-};
+static void onDataWrite(BLECharacteristic &characteristic, const BLEConnInfo &)
+{
+  size_t length = 0;
+  const uint8_t *value = characteristic.getValue(&length);
+  // Printed as hex because the DUT writes a payload containing 0x00: a stack
+  // that treats the value as a C string truncates it here.
+  Serial.printf("COREPEER_WRITTEN length=%u hex=%s\n",
+    static_cast<unsigned>(length),
+    toHex(value, value == nullptr ? 0 : length).c_str());
+}
+
+// The library owns the CCCD and reports each change of its value here.
+static void onNotifySubscribe(BLECharacteristic &, const BLEConnInfo &, uint16_t bits)
+{
+  notifySubscribers = bits;
+  Serial.printf("COREPEER_CCCD name=%s value=%04x\n", "notify", bits);
+}
+
+static void onIndicateSubscribe(BLECharacteristic &, const BLEConnInfo &, uint16_t bits)
+{
+  indicateSubscribers = bits;
+  Serial.printf("COREPEER_CCCD name=%s value=%04x\n", "indicate", bits);
+}
 
 void setup()
 {
   Serial.begin(115200);
   delay(500);
 
-  BLEDevice::init("EspBle CoreHost GATT");
-  server = BLEDevice::createServer();
-  server->setCallbacks(new ServerCallbacks());
+  if (!BLE.begin("EspBle CoreHost GATT"))
+  {
+    Serial.println("COREPEER_INIT_FAILED");
+    return;
+  }
+  server = BLE.createServer();
+  server.onConnect(onConnect);
+  server.onDisconnect(onDisconnect);
+  server.onMtuChanged(onMtuChanged);
+  server.advertiseOnDisconnect(true);
 
-  BLEService *service = server->createService(BLEUUID(ServiceUuid), 30);
+  BLEService service = server.createService(ServiceUuid, 30);
 
-  dataCharacteristic = service->createCharacteristic(
-    BLEUUID(DataUuid),
-    BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE
-      | BLECharacteristic::PROPERTY_WRITE_NR);
-  dataCharacteristic->setCallbacks(new DataCallbacks());
-  dataCharacteristic->setValue("core-host-value");
+  dataCharacteristic = service.createCharacteristic(
+    DataUuid,
+    BLEProperty::Read | BLEProperty::Write | BLEProperty::WriteNR,
+    BLEPermission::ReadWriteOpen);
+  dataCharacteristic.onRead(onDataRead);
+  dataCharacteristic.onWrite(onDataWrite);
+  dataCharacteristic.setValue("core-host-value");
 
+  // The CCCDs are created with the characteristics.
   notifyCharacteristic =
-    service->createCharacteristic(BLEUUID(NotifyUuid), BLECharacteristic::PROPERTY_NOTIFY);
-  BLE2902 *notifyCccd = new BLE2902();
-  notifyCccd->setCallbacks(new SubscriptionCallbacks("notify", &notifySubscribers));
-  notifyCharacteristic->addDescriptor(notifyCccd);
+    service.createCharacteristic(NotifyUuid, BLEProperty::Notify, BLEPermission::None);
+  notifyCharacteristic.onSubscribe(onNotifySubscribe);
 
   indicateCharacteristic =
-    service->createCharacteristic(BLEUUID(IndicateUuid), BLECharacteristic::PROPERTY_INDICATE);
-  BLE2902 *indicateCccd = new BLE2902();
-  indicateCccd->setCallbacks(new SubscriptionCallbacks("indicate", &indicateSubscribers));
-  indicateCharacteristic->addDescriptor(indicateCccd);
+    service.createCharacteristic(IndicateUuid, BLEProperty::Indicate, BLEPermission::None);
+  indicateCharacteristic.onSubscribe(onIndicateSubscribe);
 
-  service->start();
+  if (!server.start())
+  {
+    Serial.println("COREPEER_INIT_FAILED");
+    return;
+  }
 
-  BLEAdvertising *advertising = BLEDevice::getAdvertising();
-  advertising->addServiceUUID(BLEUUID(ServiceUuid));
-  advertising->setScanResponse(true);
-  BLEDevice::startAdvertising();
+  BLEAdvertising advertising = BLE.getAdvertising();
+  advertising.addServiceUUID(ServiceUuid);
+  advertising.setScanResponse(true);
+  if (!BLE.startAdvertising())
+  {
+    Serial.println("COREPEER_INIT_FAILED");
+    return;
+  }
 
   reportReady();
 
   // onDisconnect advertises again on its own, so RECOVER only drops the link.
-  // deinit() takes the radio down synchronously, so STOP is complete at once.
+  // end() takes the radio down synchronously, so STOP is complete at once.
   EspBleTestLifecycle::Hooks hooks;
   hooks.stop = []() {
     stackStopped = true;
-    BLEDevice::deinit(false);
+    BLE.end(false);
   };
   EspBleTestLifecycle::begin(hooks);
 }
@@ -166,6 +166,11 @@ void setup()
 void loop()
 {
   EspBleTestLifecycle::update();
+  if (disconnectedPending)
+  {
+    disconnectedPending = false;
+    Serial.println("COREPEER_DISCONNECTED");
+  }
   if (Serial.available())
   {
     String command = Serial.readStringUntil('\n');
@@ -181,26 +186,31 @@ void loop()
     {
       // Payload carries a zero byte for the same reason as the write above.
       uint8_t payload[4] = {0xa5, 0x00, 0x5a, static_cast<uint8_t>(++notifyCounter)};
-      notifyCharacteristic->setValue(payload, sizeof(payload));
-      notifyCharacteristic->notify();
+      notifyCharacteristic.setValue(payload, sizeof(payload));
+      notifyCharacteristic.notify();
       Serial.printf("COREPEER_NOTIFIED hex=%s\n", toHex(payload, sizeof(payload)).c_str());
     }
     else if (command == "i")
     {
       uint8_t payload[3] = {0x0f, 0x00, 0xf0};
-      indicateCharacteristic->setValue(payload, sizeof(payload));
-      indicateCharacteristic->indicate();
+      indicateCharacteristic.setValue(payload, sizeof(payload));
+      indicateCharacteristic.indicate();
       Serial.printf("COREPEER_INDICATED hex=%s\n", toHex(payload, sizeof(payload)).c_str());
     }
     else if (command == "v")
     {
-      dataCharacteristic->setValue("core-host-second");
+      dataCharacteristic.setValue("core-host-second");
       Serial.println("COREPEER_VALUE_SET core-host-second");
     }
     else if (command == "d" && linkUp)
     {
-      server->disconnect(connectionId);
-      Serial.println("COREPEER_DISCONNECT requested=1");
+      const bool requested = static_cast<bool>(server.disconnect(connectionId));
+      Serial.printf("COREPEER_DISCONNECT requested=%u\n", requested ? 1 : 0);
+      if (disconnectedPending)
+      {
+        disconnectedPending = false;
+        Serial.println("COREPEER_DISCONNECTED");
+      }
     }
   }
   delay(10);

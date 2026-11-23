@@ -47,7 +47,7 @@ void setup()
     Serial.println("COREPEER_BEGIN_FAILED");
     return;
   }
-  Serial.println("COREPEER_READY");
+  EspBleTestLifecycle::announceReady([] { Serial.println("COREPEER_READY"); });
 
   // disconnect() returns only once the link has dropped and end() takes the
   // whole stack down, so both transitions are complete when they return.
@@ -97,8 +97,11 @@ void loop()
         return;
       }
       // Channel 0 lets BluetoothSerial resolve the server channel over SDP,
-      // which also exercises the EspBle server's service record.
-      const bool requested = serialBluetooth.connect(address, 0);
+      // which also exercises the EspBle server's service record. BTAddress
+      // takes raw bytes LSB first, the reverse of the parsed (printed) order,
+      // so it is built from the validated text instead.
+      const bool requested =
+        static_cast<bool>(serialBluetooth.connect(BTAddress(line.substring(1)), 0));
       Serial.printf("COREPEER_CONNECT requested=%u\n", requested ? 1 : 0);
     }
     else if (command == 'w')
