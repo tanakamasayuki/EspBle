@@ -63,6 +63,7 @@ espble_hci_command_scope_t espble_hci_controller_policy_classify_opcode(
     case 0x200b: // LE Set Scan Parameters
     case 0x200c: // LE Set Scan Enable
     case 0x200d: // LE Create Connection
+    case 0x200e: // LE Create Connection Cancel
     case 0x2018: // LE Rand
       return ESPBLE_HCI_COMMAND_SCOPE_NIMBLE_RADIO;
     case 0x2016: // LE Read Remote Features

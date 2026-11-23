@@ -32,7 +32,7 @@ int
 ble_store_read(int obj_type, const union ble_store_key *key,
                union ble_store_value *val)
 {
-#if NIMBLE_BLE_CONNECT && MYNEWT_VAL(BLE_SM_SC)
+#if NIMBLE_BLE_CONNECT
 
     int rc;
 
@@ -55,7 +55,7 @@ ble_store_read(int obj_type, const union ble_store_key *key,
 int
 ble_store_write(int obj_type, const union ble_store_value *val)
 {
-#if NIMBLE_BLE_CONNECT && MYNEWT_VAL(BLE_SM_SC)
+#if NIMBLE_BLE_CONNECT
     int rc;
 
     while (1) {
@@ -96,7 +96,7 @@ ble_store_write(int obj_type, const union ble_store_value *val)
 int
 ble_store_delete(int obj_type, const union ble_store_key *key)
 {
-#if NIMBLE_BLE_CONNECT && MYNEWT_VAL(BLE_SM_SC)
+#if NIMBLE_BLE_CONNECT
 
     int rc;
 
@@ -116,7 +116,7 @@ ble_store_delete(int obj_type, const union ble_store_key *key)
 #endif
 }
 
-#if NIMBLE_BLE_CONNECT && MYNEWT_VAL(BLE_SM_SC)
+#if NIMBLE_BLE_CONNECT
 static int
 ble_store_status(struct ble_store_status_event *event)
 {
@@ -137,9 +137,9 @@ ble_store_status(struct ble_store_status_event *event)
 int
 ble_store_overflow_event(int obj_type, const union ble_store_value *value)
 {
-#if NIMBLE_BLE_CONNECT && MYNEWT_VAL(BLE_SM_SC)
+#if NIMBLE_BLE_CONNECT
 
-    struct ble_store_status_event event;
+    struct ble_store_status_event event = {0};
 
     event.event_code = BLE_STORE_EVENT_OVERFLOW;
     event.overflow.obj_type = obj_type;
@@ -154,9 +154,9 @@ ble_store_overflow_event(int obj_type, const union ble_store_value *value)
 int
 ble_store_full_event(int obj_type, uint16_t conn_handle)
 {
-#if NIMBLE_BLE_CONNECT && MYNEWT_VAL(BLE_SM_SC)
+#if NIMBLE_BLE_CONNECT
 
-    struct ble_store_status_event event;
+    struct ble_store_status_event event = {0};
 
     event.event_code = BLE_STORE_EVENT_FULL;
     event.full.obj_type = obj_type;
@@ -212,6 +212,44 @@ ble_store_persist_sec(int obj_type,
     rc = ble_store_write(obj_type, store_value);
     return rc;
 }
+
+#if MYNEWT_VAL(BLE_HS_PVCY) && MYNEWT_VAL(BLE_SM_SC)
+struct ble_store_pvcy_irk_cleanup_entry {
+    const uint8_t *irk;
+    ble_addr_t peer_addr;
+};
+
+static int
+ble_store_remove_stale_pvcy_entry_cb(int obj_type,
+                                     union ble_store_value *val,
+                                     void *arg)
+{
+    struct ble_store_pvcy_irk_cleanup_entry *cleanup = arg;
+
+    BLE_HS_DBG_ASSERT(obj_type == BLE_STORE_OBJ_TYPE_PEER_SEC);
+
+    /* Current peer is handled by add/replace below; only purge other peers
+     * that still hold this IRK in the controller resolving list.
+     */
+    if (ble_addr_cmp(&val->sec.peer_addr, &cleanup->peer_addr) == 0) {
+        return 0;
+    }
+
+    if (!val->sec.irk_present ||
+        memcmp(val->sec.irk, cleanup->irk, sizeof(val->sec.irk)) != 0) {
+        return 0;
+    }
+
+#if !MYNEWT_VAL(BLE_HOST_BASED_PRIVACY)
+    ble_gap_preempt();
+#endif
+    ble_hs_pvcy_remove_entry(val->sec.peer_addr.type, val->sec.peer_addr.val);
+#if !MYNEWT_VAL(BLE_HOST_BASED_PRIVACY)
+    ble_gap_preempt_done();
+#endif
+    return 0;
+}
+#endif
 #endif
 
 int
@@ -233,11 +271,11 @@ ble_store_delete_our_sec(const struct ble_store_key_sec *key_sec)
 {
 #if NIMBLE_BLE_CONNECT
 
-    union ble_store_key *store_key;
+    union ble_store_key store_key = {0};
     int rc;
 
-    store_key = (void *)key_sec;
-    rc = ble_store_delete(BLE_STORE_OBJ_TYPE_OUR_SEC, store_key);
+    store_key.sec = *key_sec;
+    rc = ble_store_delete(BLE_STORE_OBJ_TYPE_OUR_SEC, &store_key);
     return rc;
 #else
     return BLE_HS_ENOTSUP;
@@ -263,16 +301,16 @@ int
 ble_store_read_peer_sec(const struct ble_store_key_sec *key_sec,
                         struct ble_store_value_sec *value_sec)
 {
-#if NIMBLE_BLE_CONNECT && MYNEWT_VAL(BLE_SM_SC)
+#if NIMBLE_BLE_CONNECT
 
     union ble_store_value *store_value;
-    union ble_store_key *store_key;
+    const union ble_store_key *store_key;
     int rc;
 
     BLE_HS_DBG_ASSERT(key_sec->peer_addr.type == BLE_ADDR_PUBLIC ||
                       key_sec->peer_addr.type == BLE_ADDR_RANDOM);
 
-    store_key = (void *)key_sec;
+    store_key = (const union ble_store_key *)key_sec;
     store_value = (void *)value_sec;
     rc = ble_store_read(BLE_STORE_OBJ_TYPE_PEER_SEC, store_key, store_value);
 
@@ -285,25 +323,115 @@ ble_store_read_peer_sec(const struct ble_store_key_sec *key_sec,
 int
 ble_store_write_peer_sec(const struct ble_store_value_sec *value_sec)
 {
-#if NIMBLE_BLE_CONNECT && MYNEWT_VAL(BLE_SM_SC)
+#if NIMBLE_BLE_CONNECT
 
     int rc;
+    int valid_peer_addr;
+
+    valid_peer_addr = ble_addr_cmp(&value_sec->peer_addr, BLE_ADDR_ANY);
+#if MYNEWT_VAL(BLE_DEFER_CONN_EVENTS) && MYNEWT_VAL(BLE_HS_PVCY)
+    struct ble_store_key_sec key_sec;
+    struct ble_store_value_sec old_sec;
+    int replace_entry;
+
+    replace_entry = 0;
+    if (ble_addr_cmp(&value_sec->peer_addr, BLE_ADDR_ANY) &&
+        value_sec->irk_present) {
+        memset(&key_sec, 0, sizeof key_sec);
+        key_sec.peer_addr = value_sec->peer_addr;
+        rc = ble_store_read_peer_sec(&key_sec, &old_sec);
+        replace_entry = rc == 0 && old_sec.irk_present;
+    }
+#endif /* BLE_DEFER_CONN_EVENTS && BLE_HS_PVCY */
 
     rc = ble_store_persist_sec(BLE_STORE_OBJ_TYPE_PEER_SEC, value_sec);
     if (rc != 0) {
         return rc;
     }
 
-    if (ble_addr_cmp(&value_sec->peer_addr, BLE_ADDR_ANY) &&
+    if (valid_peer_addr &&
         value_sec->irk_present) {
 #if MYNEWT_VAL(BLE_HS_PVCY)
-        /* Write the peer IRK to the controller keycache
-         * There is not much to do here if it fails */
+#if MYNEWT_VAL(BLE_DEFER_CONN_EVENTS)
+        /* Defer the controller resolving-list update only until the CONNECT
+         * event has been delivered. Once the application knows about the
+         * connection, resolving-list setup must proceed so scanning can use
+         * the newly exchanged IRK while the connection remains active.
+         */
+#if !MYNEWT_VAL(BLE_HOST_BASED_PRIVACY)
+        ble_hs_lock();
+        struct ble_hs_conn *conn = ble_hs_conn_find_by_addr(&value_sec->peer_addr);
+        if (conn != NULL && !conn->bhc_connect_delivered) {
+            BLE_HS_LOG(INFO, "PVCY: deferring controller resolving-list add "
+                       "until CONNECT is delivered\n");
+            conn->bhc_deferred_pvcy_add = 1;
+            conn->bhc_deferred_pvcy_replace = replace_entry;
+            conn->bhc_deferred_pvcy_addr = value_sec->peer_addr;
+            memcpy(conn->bhc_deferred_pvcy_irk, value_sec->irk,
+                   sizeof conn->bhc_deferred_pvcy_irk);
+            ble_hs_unlock();
+            return 0;
+        }
+        ble_hs_unlock();
+#endif
+#endif /* MYNEWT_VAL(BLE_DEFER_CONN_EVENTS) */
+
+#if MYNEWT_VAL(BLE_SM_SC)
+        /* Drop stale resolving-list entries that share this IRK (or this peer)
+         * before programming the controller. Skip when the add was deferred
+         * above (already returned). */
+        {
+            struct ble_store_pvcy_irk_cleanup_entry cleanup = {
+                .irk = value_sec->irk,
+                .peer_addr = value_sec->peer_addr,
+            };
+            int rc_iter;
+
+            rc_iter = ble_store_iterate(BLE_STORE_OBJ_TYPE_PEER_SEC,
+                                        ble_store_remove_stale_pvcy_entry_cb,
+                                        &cleanup);
+            if (rc_iter != 0) {
+                BLE_HS_LOG(WARN, "failed to clean stale IRK entries for peer; rc=%d\n",
+                           rc_iter);
+            }
+        }
+#endif
+
+        /* Write the peer IRK to the controller keycache.
+         * The bond is already persisted at this point, so if programming the
+         * controller resolving list fails (e.g. error 0x07 - Memory Capacity
+         * Exceeded), log the failure but do not fail the bond. This matches
+         * the best-effort handling in ble_hs_misc_restore_one_irk().
+         */
+#if MYNEWT_VAL(BLE_DEFER_CONN_EVENTS)
+        if (replace_entry) {
+            rc = ble_hs_pvcy_replace_entry(value_sec->peer_addr.val,
+                                           value_sec->peer_addr.type,
+                                           value_sec->irk);
+        } else {
+            rc = ble_hs_pvcy_add_entry(value_sec->peer_addr.val,
+                                       value_sec->peer_addr.type,
+                                       value_sec->irk);
+            if (rc == BLE_HS_EINVAL ||
+                rc == BLE_HS_HCI_ERR(BLE_ERR_CMD_DISALLOWED) ||
+                rc == BLE_HS_HCI_ERR(BLE_ERR_INV_HCI_CMD_PARMS)) {
+                /* Entry already present in resolving list; replace it.
+                 * Occurs when the store entry was deleted and re-written
+                 * without first removing the resolving list entry (e.g.
+                 * sign-counter increment with BLE_HOST_BASED_PRIVACY=1). */
+                rc = ble_hs_pvcy_replace_entry(value_sec->peer_addr.val,
+                                               value_sec->peer_addr.type,
+                                               value_sec->irk);
+            }
+        }
+#else
         rc = ble_hs_pvcy_add_entry(value_sec->peer_addr.val,
-                                          value_sec->peer_addr.type,
-                                          value_sec->irk);
+                                   value_sec->peer_addr.type,
+                                   value_sec->irk);
+#endif /* MYNEWT_VAL(BLE_DEFER_CONN_EVENTS) */
         if (rc != 0) {
-            return rc;
+            BLE_HS_LOG(ERROR, "%s pvcy_add_entry failed; rc=%d\n",
+                       __func__, rc);
         }
 #endif
     }
@@ -336,7 +464,7 @@ ble_store_read_cccd(const struct ble_store_key_cccd *key,
 int
 ble_store_write_cccd(const struct ble_store_value_cccd *value)
 {
-#if NIMBLE_BLE_CONNECT && MYNEWT_VAL(BLE_SM_SC)
+#if NIMBLE_BLE_CONNECT
 
     union ble_store_value *store_value;
     int rc;
@@ -352,7 +480,7 @@ ble_store_write_cccd(const struct ble_store_value_cccd *value)
 int
 ble_store_delete_cccd(const struct ble_store_key_cccd *key)
 {
-#if NIMBLE_BLE_CONNECT && MYNEWT_VAL(BLE_SM_SC)
+#if NIMBLE_BLE_CONNECT
 
     union ble_store_key *store_key;
     int rc;
@@ -389,11 +517,11 @@ ble_store_write_csfc(const struct ble_store_value_csfc *value)
 {
 #if NIMBLE_BLE_CONNECT
 
-    union ble_store_value *store_value;
+    union ble_store_value store_value = {0};
     int rc;
 
-    store_value = (void *)value;
-    rc = ble_store_write(BLE_STORE_OBJ_TYPE_CSFC, store_value);
+    store_value.csfc = *value;
+    rc = ble_store_write(BLE_STORE_OBJ_TYPE_CSFC, &store_value);
     return rc;
 #else
     return BLE_HS_ENOTSUP;
@@ -420,7 +548,7 @@ void
 ble_store_key_from_value_cccd(struct ble_store_key_cccd *out_key,
                               const struct ble_store_value_cccd *value)
 {
-#if NIMBLE_BLE_CONNECT && MYNEWT_VAL(BLE_SM_SC)
+#if NIMBLE_BLE_CONNECT
 
     out_key->peer_addr = value->peer_addr;
     out_key->chr_val_handle = value->chr_val_handle;
@@ -449,10 +577,10 @@ ble_store_read_ead(const struct ble_store_key_ead *key,
 #if NIMBLE_BLE_CONNECT
 
     union ble_store_value *store_value;
-    union ble_store_key *store_key;
+    const union ble_store_key *store_key;
     int rc;
 
-    store_key = (void *)key;
+    store_key = (const union ble_store_key *)key;
     store_value = (void *)out_value;
     rc = ble_store_read(BLE_STORE_OBJ_TYPE_ENC_ADV_DATA, store_key, store_value);
     return rc;
@@ -482,11 +610,11 @@ ble_store_delete_ead(const struct ble_store_key_ead *key)
 {
 #if NIMBLE_BLE_CONNECT
 
-    union ble_store_key *store_key;
+    union ble_store_key store_key = {0};
     int rc;
 
-    store_key = (void *)key;
-    rc = ble_store_delete(BLE_STORE_OBJ_TYPE_ENC_ADV_DATA, store_key);
+    store_key.ead = *key;
+    rc = ble_store_delete(BLE_STORE_OBJ_TYPE_ENC_ADV_DATA, &store_key);
     return rc;
 #else
     return BLE_HS_ENOTSUP;
@@ -509,7 +637,7 @@ int
 ble_store_read_local_irk(const struct ble_store_key_local_irk *key,
                    struct ble_store_value_local_irk *out_value)
 {
-#if NIMBLE_BLE_CONNECT && MYNEWT_VAL(BLE_SM_SC)
+#if NIMBLE_BLE_CONNECT
 
     union ble_store_value *store_value;
     union ble_store_key *store_key;
@@ -529,13 +657,13 @@ ble_store_read_local_irk(const struct ble_store_key_local_irk *key,
 int
 ble_store_write_local_irk(const struct ble_store_value_local_irk *value)
 {
-#if NIMBLE_BLE_CONNECT && MYNEWT_VAL(BLE_SM_SC)
+#if NIMBLE_BLE_CONNECT
 
-    union ble_store_value *store_value;
+    union ble_store_value store_value = {0};
     int rc;
 
-    store_value = (void *)value;
-    rc = ble_store_write(BLE_STORE_OBJ_TYPE_LOCAL_IRK, store_value);
+    store_value.local_irk = *value;
+    rc = ble_store_write(BLE_STORE_OBJ_TYPE_LOCAL_IRK, &store_value);
     return rc;
 #else
     return BLE_HS_ENOTSUP;
@@ -548,11 +676,11 @@ ble_store_delete_local_irk(const struct ble_store_key_local_irk *key)
 {
 #if NIMBLE_BLE_CONNECT
 
-    union ble_store_key *store_key;
+    union ble_store_key store_key = {0};
     int rc;
 
-    store_key = (void *)key;
-    rc = ble_store_delete(BLE_STORE_OBJ_TYPE_LOCAL_IRK, store_key);
+    store_key.local_irk = *key;
+    rc = ble_store_delete(BLE_STORE_OBJ_TYPE_LOCAL_IRK, &store_key);
     return rc;
 #else
     return BLE_HS_ENOTSUP;
@@ -610,11 +738,11 @@ ble_store_delete_rpa_rec(const struct ble_store_key_rpa_rec *key)
 {
 #if NIMBLE_BLE_CONNECT
 
-    union ble_store_key *store_key;
+    union ble_store_key store_key = {0};
     int rc;
 
-    store_key = (void *)key;
-    rc = ble_store_delete(BLE_STORE_OBJ_TYPE_PEER_ADDR, store_key);
+    store_key.rpa_rec = *key;
+    rc = ble_store_delete(BLE_STORE_OBJ_TYPE_PEER_ADDR, &store_key);
     return rc;
 #else
     return BLE_HS_ENOTSUP;
@@ -689,7 +817,7 @@ ble_store_iterate(int obj_type,
                   ble_store_iterator_fn *callback,
                   void *cookie)
 {
-#if NIMBLE_BLE_CONNECT && MYNEWT_VAL(BLE_SM_SC)
+#if NIMBLE_BLE_CONNECT
 
     union ble_store_key key;
     union ble_store_value value;

@@ -698,7 +698,7 @@ ble_hs_hci_evt_le_cs_sec_enable_complete(uint8_t subevent, const void *data,
     struct ble_gap_conn_desc desc;
 
     if (len != sizeof(*ev) || ev->status) {
-        BLE_HS_LOG(INFO, "Failed to enable CS security BLE_HS_ECNOTEROLLER");
+        BLE_HS_LOG(INFO, "Failed to enable CS security");
 
         BLE_HS_LOG(ERROR, "%s rc=%d\n", __func__, BLE_HS_ECONTROLLER);
         return BLE_HS_ECONTROLLER;
@@ -720,7 +720,7 @@ ble_hs_hci_evt_le_cs_sec_enable_complete(uint8_t subevent, const void *data,
     cmd.min_procedure_interval = 10;
     cmd.max_procedure_interval = 10;
     /* Minimum/maximum suggested durations for each CS subevent in microseconds.
-     * 1250us and 5000us selected.
+     * 60000us selected for both min and max.
      */
     cmd.min_subevent_len = 60000;
     cmd.max_subevent_len = 60000;
@@ -830,6 +830,11 @@ ble_hs_hci_evt_le_cs_subevent_result(uint8_t subevent, const void *data,
     int steps_remaining = 0;
     int step_size = 0;
 
+    if (len < sizeof(*event)) {
+        BLE_HS_LOG(ERROR, "%s rc=%d\n", __func__, BLE_HS_ECONTROLLER);
+        return BLE_HS_ECONTROLLER;
+    }
+
     expected_len += sizeof(*event);
     steps_remaining = event->num_steps_reported;
     step_ptr = (void *)event->steps;
@@ -874,6 +879,10 @@ ble_hs_hci_evt_le_cs_subevent_result_continue(uint8_t subevent, const void *data
     void *step_ptr = NULL;
     int step_size = 0;
 
+    if (len < sizeof(*event)) {
+        BLE_HS_LOG(ERROR, "%s rc=%d\n", __func__, BLE_HS_ECONTROLLER);
+        return BLE_HS_ECONTROLLER;
+    }
     expected_len = sizeof(*event);
     steps_remaining = event->num_steps_reported;
     step_ptr = (void *)event->steps;
@@ -894,7 +903,7 @@ ble_hs_hci_evt_le_cs_subevent_result_continue(uint8_t subevent, const void *data
         }
 
         expected_len += step_size;
-        step_ptr += step_size;
+        step_ptr = (uint8_t *)step_ptr + step_size;
         steps_remaining--;
     }
 
@@ -934,6 +943,10 @@ ble_cs_initiator_procedure_start(const struct ble_cs_initiator_procedure_start_p
         return rc;
     }
 #endif
+    if (params == NULL) {
+        BLE_HS_LOG(ERROR, "%s rc=%d\n", __func__, BLE_HS_EINVAL);
+        return BLE_HS_EINVAL;
+    }
 
     /* Channel Sounding setup phase:
      * 1. Set local default CS settings
@@ -949,7 +962,7 @@ ble_cs_initiator_procedure_start(const struct ble_cs_initiator_procedure_start_p
     cmd.conn_handle = params->conn_handle;
     rc = ble_cs_rd_rem_supp_cap(&cmd);
     if (rc) {
-        BLE_HS_LOG(DEBUG, "Failed to read local supported CS capabilities,"
+        BLE_HS_LOG(DEBUG, "Failed to read remote supported CS capabilities, "
                    "err %d", rc);
     }
 

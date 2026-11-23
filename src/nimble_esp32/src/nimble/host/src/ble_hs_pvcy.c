@@ -85,7 +85,7 @@ ble_hs_pvcy_set_addr_timeout(uint16_t timeout)
     struct ble_hci_le_set_rpa_tmo_cp cmd;
 
     if (timeout == 0 || timeout > BLE_MAX_RPA_TIMEOUT_VAL) {
-        return BLE_ERR_INV_HCI_CMD_PARMS;
+        return BLE_HS_EINVAL;
     }
 
     cmd.rpa_timeout = htole16(timeout);
@@ -104,9 +104,12 @@ int ble_hs_set_rpa_timeout(uint16_t timeout)
         return BLE_HS_ENOMEM;
     }
 #endif
-    l_rpa_timeout = timeout;
+    int rc = ble_hs_pvcy_set_addr_timeout(timeout);
+    if (rc == 0) {
+        l_rpa_timeout = timeout;
+    }
 
-    return ble_hs_pvcy_set_addr_timeout(l_rpa_timeout);
+    return rc;
 }
 
 uint16_t ble_hs_get_rpa_timeout(void)
@@ -130,17 +133,57 @@ void ble_hs_reset_rpa_timeout(void)
 }
 
 #if (!MYNEWT_VAL(BLE_HOST_BASED_PRIVACY))
+#if MYNEWT_VAL(BLE_DEFER_CONN_EVENTS)
+static uint8_t ble_hs_pvcy_resolve_en;
+#endif
+
 int
 ble_hs_pvcy_set_resolve_enabled(int enable)
 {
     struct ble_hci_le_set_addr_res_en_cp cmd;
+#if MYNEWT_VAL(BLE_DEFER_CONN_EVENTS)
+    int rc;
 
+    cmd.enable = !!enable;
+
+    rc = ble_hs_hci_cmd_tx(BLE_HCI_OP(BLE_HCI_OGF_LE,
+                                        BLE_HCI_OCF_LE_SET_ADDR_RES_EN),
+                             &cmd, sizeof(cmd), NULL, 0);
+    if (rc == 0) {
+        ble_hs_pvcy_resolve_en = cmd.enable;
+    }
+
+    return rc;
+#else
     cmd.enable = enable;
 
     return ble_hs_hci_cmd_tx(BLE_HCI_OP(BLE_HCI_OGF_LE,
                                         BLE_HCI_OCF_LE_SET_ADDR_RES_EN),
                              &cmd, sizeof(cmd), NULL, 0);
+#endif
 }
+
+#if MYNEWT_VAL(BLE_DEFER_CONN_EVENTS)
+static void
+ble_hs_pvcy_restore_resolve_if_needed(uint8_t was_enabled)
+{
+    int rc_en;
+
+    if (!was_enabled) {
+        return;
+    }
+
+    rc_en = BLE_HS_EUNKNOWN;
+    for (int i = 0; i < 3 && rc_en != 0; i++) {
+        rc_en = ble_hs_pvcy_set_resolve_enabled(1);
+    }
+    if (rc_en != 0) {
+        BLE_HS_LOG(ERROR,
+                   "ble_hs_pvcy: address resolution restore failed after "
+                   "retries; privacy broken\n");
+    }
+}
+#endif
 #endif
 
 int
@@ -225,6 +268,7 @@ ble_hs_pvcy_add_entry_hci(const uint8_t *addr, uint8_t addr_type,
     memcpy(peer_addr.val, addr, sizeof peer_addr.val);
     rc = ble_hs_pvcy_set_mode(&peer_addr, BLE_GAP_PRIVATE_MODE_DEVICE);
     if (rc != 0) {
+        ble_hs_pvcy_remove_entry(addr_type, addr);
         return rc;
     }
 #endif
@@ -232,11 +276,53 @@ ble_hs_pvcy_add_entry_hci(const uint8_t *addr, uint8_t addr_type,
     return 0;
 }
 
+#if MYNEWT_VAL(BLE_DEFER_CONN_EVENTS)
+int
+ble_hs_pvcy_replace_entry(const uint8_t *addr, uint8_t addr_type,
+                          const uint8_t *irk)
+{
+#if (MYNEWT_VAL(BLE_HOST_BASED_PRIVACY))
+    (void)ble_hs_pvcy_remove_entry(addr_type, addr);
+    return ble_hs_pvcy_add_entry(addr, addr_type, irk);
+#else
+    int rc;
+    uint8_t resolve_was_en;
+
+    STATS_INC(ble_hs_stats, pvcy_add_entry);
+
+    ble_gap_preempt();
+    resolve_was_en = ble_hs_pvcy_resolve_en;
+
+    rc = ble_hs_pvcy_set_resolve_enabled(0);
+    if (rc == 0) {
+        (void)ble_hs_pvcy_remove_entry(addr_type, addr);
+        rc = ble_hs_pvcy_add_entry_hci(addr, addr_type, irk);
+        ble_hs_pvcy_restore_resolve_if_needed(resolve_was_en);
+    }
+
+    ble_gap_preempt_done();
+
+    if (rc != 0) {
+        STATS_INC(ble_hs_stats, pvcy_add_entry_fail);
+    }
+
+    return rc;
+#endif
+}
+#endif /* MYNEWT_VAL(BLE_DEFER_CONN_EVENTS) */
+
 int
 ble_hs_pvcy_add_entry(const uint8_t *addr, uint8_t addr_type,
                       const uint8_t *irk)
 {
     int rc;
+
+#if MYNEWT_VAL(BLE_STATIC_TO_DYNAMIC)
+    if (ble_hs_pvcy_ctx == NULL) {
+        BLE_HS_LOG(ERROR, "%s rc=%d\n", __func__, BLE_HS_ENOMEM);
+        return BLE_HS_ENOMEM;
+    }
+#endif
 
     STATS_INC(ble_hs_stats, pvcy_add_entry);
 
@@ -249,8 +335,20 @@ ble_hs_pvcy_add_entry(const uint8_t *addr, uint8_t addr_type,
 #else
     ble_gap_preempt();
 
+#if MYNEWT_VAL(BLE_DEFER_CONN_EVENTS)
+    uint8_t resolve_was_en;
+
+    resolve_was_en = ble_hs_pvcy_resolve_en;
+    rc = ble_hs_pvcy_set_resolve_enabled(0);
+    if (rc == 0) {
+        /* Try to add the entry now that GAP is halted and address resolution is disabled. */
+        rc = ble_hs_pvcy_add_entry_hci(addr, addr_type, irk);
+        ble_hs_pvcy_restore_resolve_if_needed(resolve_was_en);
+    }
+#else
     /* Try to add the entry now that GAP is halted. */
     rc = ble_hs_pvcy_add_entry_hci(addr, addr_type, irk);
+#endif
 
     /* Allow GAP procedures to be started again. */
     ble_gap_preempt_done();
@@ -338,8 +436,13 @@ void ble_hs_pvcy_set_default_irk(void)
         }
     }
 
-    void ble_store_config_init(void);
-    ble_store_config_init();
+    /* Only call ble_store_config_init on the first initialization.
+     * Calling it at runtime resets all in-memory bonds/CCCDs.
+     */
+    if (!ble_hs_pvcy_ctx->pvcy_started) {
+        void ble_store_config_init(void);
+        ble_store_config_init();
+    }
 #endif
 
     rc = ble_store_read_local_irk(&key_local_irk, &value_local_irk);
@@ -375,16 +478,18 @@ void ble_hs_pvcy_set_default_irk(void)
     }
 }
 
-#if MYNEWT_VAL(BLE_STATIC_TO_DYNAMIC)
 void
 ble_hs_pvcy_irk_deinit(void)
 {
+#if MYNEWT_VAL(BLE_STATIC_TO_DYNAMIC)
     if (ble_hs_pvcy_ctx) {
         nimble_platform_mem_free(ble_hs_pvcy_ctx);
         ble_hs_pvcy_ctx = NULL;
     }
-}
+#else
+    ble_hs_pvcy_started = 0;
 #endif
+}
 
 int
 ble_hs_pvcy_set_our_irk(const uint8_t *irk)
@@ -425,17 +530,22 @@ ble_hs_pvcy_set_our_irk(const uint8_t *irk)
        ble_hs_unlock_nested();
    }
 #else
+    ble_gap_preempt();
+
     rc = ble_hs_pvcy_set_resolve_enabled(0);
     if (rc != 0) {
-       return rc;
+       goto done;
     }
 
     rc = ble_hs_pvcy_clear_entries();
     if (rc != 0) {
-       return rc;
+       goto done;
     }
 
     rc = ble_hs_pvcy_set_resolve_enabled(1);
+
+done:
+    ble_gap_preempt_done();
     if (rc != 0) {
        return rc;
     }
@@ -492,12 +602,15 @@ ble_hs_pvcy_set_mode(const ble_addr_t *addr, uint8_t priv_mode)
         return BLE_HS_EINVAL;
     }
 
-    if (addr->type > BLE_ADDR_RANDOM) {
-        return BLE_ERR_INV_HCI_CMD_PARMS;
+    /* Reject address types that are not in the expected set */
+    if (addr->type != BLE_ADDR_PUBLIC && addr->type != BLE_ADDR_RANDOM &&
+        addr->type != BLE_ADDR_PUBLIC_ID && addr->type != BLE_ADDR_RANDOM_ID) {
+        return BLE_HS_EINVAL;
     }
 
     cmd.mode = priv_mode;
-    cmd.peer_id_addr_type = addr->type;
+    /* HCI only accepts public (0) or random (1); map identity types to base */
+    cmd.peer_id_addr_type = addr->type % 2;
     memcpy(cmd.peer_id_addr, addr->val, BLE_DEV_ADDR_LEN);
 
     return ble_hs_hci_cmd_tx(BLE_HCI_OP(BLE_HCI_OGF_LE,
@@ -521,12 +634,23 @@ int
 ble_hs_pvcy_rpa_config(uint8_t enable)
 {
     int rc = 0;
+    bool was_resolv_enabled;
+    bool was_nrpa;
+
+    if (enable != NIMBLE_HOST_DISABLE_PRIVACY &&
+        enable != NIMBLE_HOST_ENABLE_RPA &&
+        enable != NIMBLE_HOST_ENABLE_NRPA) {
+        return BLE_HS_EINVAL;
+    }
 
     if (enable != NIMBLE_HOST_DISABLE_PRIVACY) {
         rc = ble_hs_pvcy_ensure_started();
         if (rc != 0) {
             return rc;
         }
+
+        was_resolv_enabled = is_ble_hs_resolv_enabled();
+        was_nrpa = was_resolv_enabled && !ble_host_rpa_enabled();
 
         ble_hs_resolv_enable(true);
 
@@ -539,6 +663,16 @@ ble_hs_pvcy_rpa_config(uint8_t enable)
 
         /* Generate local RPA address and set it in controller */
         rc = ble_hs_gen_own_private_rnd();
+        if (rc != 0) {
+            if (!was_resolv_enabled) {
+                ble_hs_resolv_enable(false);
+            }
+            if (was_nrpa) {
+                ble_hs_resolv_nrpa_enable();
+            } else {
+                ble_hs_resolv_nrpa_disable();
+            }
+        }
     } else {
         ble_hs_resolv_enable(false);
     }

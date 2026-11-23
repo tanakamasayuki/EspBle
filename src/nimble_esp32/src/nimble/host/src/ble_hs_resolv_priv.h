@@ -41,6 +41,12 @@ struct ble_hs_resolv_entry {
 #if MYNEWT_VAL(BLE_STORE_CONFIG_PERSIST)
 /* Persist peer records in NVS. XXX Need to handle this in `store` module */
 int ble_store_persist_peer_records(void);
+#else
+static inline int
+ble_store_persist_peer_records(void)
+{
+    return 0;
+}
 #endif
 
 struct ble_hs_peer_sec {
@@ -108,6 +114,8 @@ int ble_hs_resolv_rpa(uint8_t *rpa, uint8_t *irk);
 
 /* Initialize resolv*/
 void ble_hs_resolv_init(void);
+
+uint8_t is_ble_hs_resolv_enabled(void);
 
 #ifdef __cplusplus
 }

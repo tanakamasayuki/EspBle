@@ -41,12 +41,16 @@ from pathlib import Path
 
 # --- pinned upstream versions -------------------------------------------------
 
-# esp-idf v5.5.5 pins this commit as components/bt/host/nimble/nimble.
-ESP_NIMBLE_SHA = "685675c0128deafdd201c9eb82e61d227364646c"
-ESP_IDF_TAG = "v5.5.5"
+# The esp-idf snapshot Arduino-ESP32 3.3.13 is built from (release/v5.5 at
+# a45de8cc, named in that core's versions.txt) pins this commit as
+# components/bt/host/nimble/nimble. It also contains every fix in the pin of
+# esp-idf v6.1.1 (Arduino-ESP32 4.0.0), which sits earlier on the same line.
+ESP_NIMBLE_SHA = "41057af9846bbf7b08f8c342fa9d2e3f03cc0ce1"
+# A tag or a commit: the ESP glue is fetched from this esp-idf ref.
+ESP_IDF_TAG = "a45de8ccca14543ede6e6342f1e16931a9c601ac"
 # The Arduino-ESP32 release whose prebuilt libraries were built from ESP_IDF_TAG.
 # Its ESP32-S3 sdkconfig is the source of the frozen NimBLE configuration.
-REFERENCE_CORE = "3.3.11"
+REFERENCE_CORE = "3.3.13"
 REFERENCE_TARGET = "esp32s3"
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -200,6 +204,39 @@ INCLUDE_DIRS = [
 PATCHES = [
     (
         "porting/nimble/src/nimble_port.c",
+        "#include \"bt_osal.h\"\n"
+        "#include \"bt_prf_task.h\"\n",
+        "/* bt_osal and the shared profile task are off in every Arduino-ESP32\n"
+        " * original-ESP32 build (CONFIG_BT_OSAL_ENABLED, CONFIG_BT_PRF_TASK_ENABLED\n"
+        " * unset) and this host uses neither; their headers exist only from\n"
+        " * Arduino-ESP32 3.3.13 on, so they are left out. */\n",
+        "drop the bt_osal headers, which older cores do not ship",
+    ),
+    (
+        "porting/nimble/src/nimble_port.c",
+        "    /* Bring up the host-agnostic bt_osal function table before host bring-up; */\n"
+        "    bt_osal_freertos_funcs_init();\n",
+        "",
+        "drop the bt_osal table bring-up, a no-op with bt_osal disabled",
+    ),
+    (
+        "porting/nimble/src/nimble_port.c",
+        "    /* Release the bt_osal function table set up in esp_nimble_init(). */\n"
+        "    bt_osal_freertos_funcs_deinit();\n",
+        "",
+        "drop the bt_osal table release, a no-op with bt_osal disabled",
+    ),
+    (
+        "porting/nimble/src/nimble_port.c",
+        "#if CONFIG_BT_PRF_TASK_ENABLED\n"
+        "    /* Start the shared BLE profile task",
+        "#if CONFIG_BT_PRF_TASK_ENABLED\n"
+        "#error \"the vendored NimBLE host does not support CONFIG_BT_PRF_TASK_ENABLED\"\n"
+        "    /* Start the shared BLE profile task",
+        "refuse a core that enables the shared profile task the host left out",
+    ),
+    (
+        "porting/nimble/src/nimble_port.c",
         "    struct ble_npl_sem stop_sem;\n"
         "    struct ble_npl_event ev_stop;\n",
         "    struct ble_npl_sem stop_sem;\n"
@@ -261,22 +298,46 @@ PATCHES = [
         "    err = ble_hs_stop(&stop_listener, ble_hs_stop_cb,\n"
         "                     NULL);\n"
         "    if (err != 0) {\n"
-        "        ble_npl_sem_deinit(&ble_hs_stop_sem);\n"
-        "        return err;\n"
-        "    }\n\n"
-        "    /* Wait till the host stop procedure is complete */\n"
-        "    ble_npl_sem_pend(&ble_hs_stop_sem, BLE_NPL_TIME_FOREVER);\n",
-        "    /* Serialize stop with callout events already dequeued by the host. */\n"
+        "        if (err != BLE_HS_EALREADY) {\n"
+        "            ble_npl_sem_deinit(&ble_hs_stop_sem);\n"
+        "            return err;\n"
+        "        }\n"
+        "        if (!nimble_port_run_active) {\n"
+        "            ble_npl_sem_deinit(&ble_hs_stop_sem);\n"
+        "            return ESP_OK;\n"
+        "        }\n"
+        "    } else {\n"
+        "        /* Wait till the host stop procedure is complete */\n"
+        "        ble_npl_sem_pend(&ble_hs_stop_sem, BLE_NPL_TIME_FOREVER);\n"
+        "    }\n",
         "    ble_hs_stop_result = 0;\n"
         "    ble_npl_event_init(&ble_hs_ev_stop_begin,\n"
         "                       nimble_port_stop_begin_cb, NULL);\n"
-        "    ble_npl_eventq_put(&g_eventq_dflt, &ble_hs_ev_stop_begin);\n\n"
-        "    /* Wait till the host stop procedure is complete. */\n"
-        "    ble_npl_sem_pend(&ble_hs_stop_sem, BLE_NPL_TIME_FOREVER);\n"
-        "    err = ble_hs_stop_result;\n"
+        "    if (nimble_port_run_active) {\n"
+        "        /* Serialize stop with callout events already dequeued by the\n"
+        "         * host: the host task starts the stop itself. */\n"
+        "        ble_npl_eventq_put(&g_eventq_dflt, &ble_hs_ev_stop_begin);\n"
+        "        ble_npl_sem_pend(&ble_hs_stop_sem, BLE_NPL_TIME_FOREVER);\n"
+        "        err = ble_hs_stop_result;\n"
+        "    } else {\n"
+        "        /* No host task to hand the request to: stop from here. */\n"
+        "        err = ble_hs_stop(&stop_listener, ble_hs_stop_cb, NULL);\n"
+        "        if (err == 0) {\n"
+        "            ble_npl_sem_pend(&ble_hs_stop_sem, BLE_NPL_TIME_FOREVER);\n"
+        "            err = ble_hs_stop_result;\n"
+        "        }\n"
+        "    }\n"
         "    if (err != 0) {\n"
-        "        ble_npl_sem_deinit(&ble_hs_stop_sem);\n"
-        "        return err;\n"
+        "        if (err != BLE_HS_EALREADY) {\n"
+        "            ble_npl_event_deinit(&ble_hs_ev_stop_begin);\n"
+        "            ble_npl_sem_deinit(&ble_hs_stop_sem);\n"
+        "            return err;\n"
+        "        }\n"
+        "        if (!nimble_port_run_active) {\n"
+        "            ble_npl_event_deinit(&ble_hs_ev_stop_begin);\n"
+        "            ble_npl_sem_deinit(&ble_hs_stop_sem);\n"
+        "            return ESP_OK;\n"
+        "        }\n"
         "    }\n",
         "serialize NimBLE stop initiation with event queue consumption",
     ),
@@ -322,11 +383,17 @@ PATCHES = [
     (
         "nimble/host/src/ble_hs_stop.c",
         "    ble_hs_unlock();\n\n"
-        "    SLIST_FOREACH(listener, &slist, link) {\n",
+        "    if (status != 0) {\n"
+        "        ble_hs_timer_resched();\n"
+        "    }\n",
         "    ble_hs_unlock();\n\n"
-        "    espble_hci_broker_set_receive_enabled(\n"
-        "        ESPBLE_HCI_HOST_NIMBLE, false);\n\n"
-        "    SLIST_FOREACH(listener, &slist, link) {\n",
+        "    if (status != 0) {\n"
+        "        ble_hs_timer_resched();\n"
+        "    } else {\n"
+        "        /* A failed stop returns the host to ON; only OFF closes delivery. */\n"
+        "        espble_hci_broker_set_receive_enabled(\n"
+        "            ESPBLE_HCI_HOST_NIMBLE, false);\n"
+        "    }\n",
         "close NimBLE receive delivery as soon as the host reaches OFF state",
     ),
     (
@@ -551,47 +618,12 @@ PATCHES = [
         "do not reset the controller underneath an attached Classic host",
     ),
     (
-        "porting/npl/freertos/src/npl_os_freertos.c",
-        "        count = uxQueueMessagesWaitingFromISR(eventq->q);\n"
-        "        for (i = 0; i < count; i++) {\n"
-        "            ret = xQueueReceiveFromISR(eventq->q, &tmp_ev, &woken2);\n"
-        "            BLE_LL_ASSERT(ret == pdPASS);\n",
-        "        count = uxQueueMessagesWaitingFromISR(eventq->q);\n"
-        "        for (i = 0; i < count; i++) {\n"
-        "            ret = xQueueReceiveFromISR(eventq->q, &tmp_ev, &woken2);\n"
-        "            /* The queue is only sampled, not locked against the host\n"
-        "             * task on the other core, so it can drain between the\n"
-        "             * count and this receive.  Removal is best effort. */\n"
-        "            if (ret != pdPASS) {\n"
-        "                break;\n"
-        "            }\n",
-        "stop rotating instead of asserting when the ISR event queue drains early",
-    ),
-    (
-        "porting/npl/freertos/src/npl_os_freertos.c",
-        "        count = uxQueueMessagesWaiting(eventq->q);\n"
-        "        for (i = 0; i < count; i++) {\n"
-        "            ret = xQueueReceive(eventq->q, &tmp_ev, 0);\n"
-        "            BLE_LL_ASSERT(ret == pdPASS);\n",
-        "        count = uxQueueMessagesWaiting(eventq->q);\n"
-        "        for (i = 0; i < count; i++) {\n"
-        "            ret = xQueueReceive(eventq->q, &tmp_ev, 0);\n"
-        "            /* ble_npl_mut is a function-local spinlock, so it does not\n"
-        "             * serialize this rotation against the host task dequeuing\n"
-        "             * on the other core.  A concurrent dequeue empties the\n"
-        "             * queue early; stop instead of asserting. */\n"
-        "            if (ret != pdPASS) {\n"
-        "                break;\n"
-        "            }\n",
-        "stop rotating instead of asserting when the event queue drains early",
-    ),
-    (
         "nimble/host/src/ble_sm.c",
-        "        ble_hs_unlock();\n\n"
+        "        ble_sm_maybe_remove_bond_on_fail(conn_handle, res);\n\n"
         "        if (proc == NULL) {\n"
         "            break;\n"
         "        }\n",
-        "        ble_hs_unlock();\n\n"
+        "        ble_sm_maybe_remove_bond_on_fail(conn_handle, res);\n\n"
         "        if (proc == NULL) {\n"
         "            /* An unsolicited controller encryption event has no SM\n"
         "             * procedure to retire, but it still changes GAP security\n"
@@ -600,6 +632,9 @@ PATCHES = [
         "                if (res->app_status != BLE_HS_ENOTCONN) {\n"
         "                    ble_gap_pairing_complete_event(conn_handle, res->sm_err);\n"
         "                }\n"
+        "#if MYNEWT_VAL(BLE_DEFER_CONN_EVENTS)\n"
+        "                if (res->app_status != BLE_HS_ENOTCONN)\n"
+        "#endif\n"
         "                ble_gap_enc_event(conn_handle, res->app_status,\n"
         "                                  res->restore, res->bonded);\n"
         "            }\n"
@@ -609,7 +644,6 @@ PATCHES = [
     ),
     (
         "nimble/host/src/ble_sm.c",
-        "    struct ble_sm_proc *proc;\n"
         "    int authenticated;\n"
         "    int bonded;\n"
         "    int key_size;\n\n"
@@ -617,13 +651,13 @@ PATCHES = [
         "    /* Assume no change in authenticated and bonded statuses. */\n"
         "    authenticated = 0;\n"
         "    bonded = 0;\n"
-        "    key_size = 0;\n\n"
+        "    key_size = 0;\n"
+        "    terminate_conn = false;\n\n"
         "    ble_hs_lock();\n",
-        "    struct ble_sm_proc *proc;\n"
-        "    struct ble_store_value_sec stored_bond;\n"
         "    int authenticated;\n"
         "    int bonded;\n"
         "    int key_size;\n"
+        "    struct ble_store_value_sec stored_bond;\n"
         "    int stored_bond_valid;\n\n"
         "    memset(&res, 0, sizeof res);\n\n"
         "    /* If no local procedure survives until Encryption Change, recover\n"
@@ -634,7 +668,8 @@ PATCHES = [
         "    /* Assume no change in authenticated and bonded statuses. */\n"
         "    authenticated = 0;\n"
         "    bonded = 0;\n"
-        "    key_size = 0;\n\n"
+        "    key_size = 0;\n"
+        "    terminate_conn = false;\n\n"
         "    ble_hs_lock();\n",
         "prepare stored bond metadata for an unsolicited encryption change",
     ),
@@ -654,29 +689,6 @@ PATCHES = [
         "    }\n\n"
         "    if (evt_status == 0) {\n",
         "restore bond flags when Encryption Change arrives without an SM procedure",
-    ),
-    (
-        "nimble/host/src/ble_gap.c",
-        "        if (rl != NULL && rl->rl_isrpa) {\n"
-        "            memcpy(bhc_peer_addr.val, rl->rl_peer_rpa, BLE_DEV_ADDR_LEN);\n"
-        "            bhc_peer_addr.type = rl->rl_addr_type;\n"
-        "        }\n",
-        "        if (rl != NULL && rl->rl_isrpa) {\n"
-        "            memcpy(bhc_peer_addr.val, rl->rl_peer_rpa, BLE_DEV_ADDR_LEN);\n"
-        "            bhc_peer_addr.type = BLE_ADDR_RANDOM;\n"
-        "        }\n",
-        "send a resolved peer RPA to the controller with its OTA random type",
-    ),
-    (
-        "nimble/host/src/ble_hs_resolv.c",
-        "        if(ble_hs_resolv_rpa(addr, rl->rl_peer_irk) == 0) {\n"
-        "            memcpy(g_ble_hs_resolv_list[i].rl_peer_rpa, addr, BLE_DEV_ADDR_LEN);\n"
-        "            g_ble_hs_resolv_list[i].rl_addr_type = addr_type;\n"
-        "            return rl;\n",
-        "        if(ble_hs_resolv_rpa(addr, rl->rl_peer_irk) == 0) {\n"
-        "            memcpy(g_ble_hs_resolv_list[i].rl_peer_rpa, addr, BLE_DEV_ADDR_LEN);\n"
-        "            return rl;\n",
-        "do not overwrite a resolved peer's identity type with its RPA type",
     ),
     (
         "nimble/host/src/ble_hs_hci_evt.c",
@@ -747,20 +759,14 @@ PATCHES = [
     (
         "nimble/host/src/ble_store_util.c",
         "        rc = ble_rpa_remove_peer_dev_rec(peer_rec);\n"
-        "        if (rc != 0) {\n"
-        "            if (needs_unlock) {\n"
-        "                ble_hs_unlock();\n"
-        "            }\n"
-        "            return rc;\n"
+        "        if (rc != 0 && err == 0) {\n"
+        "            err = rc;\n"
         "        }\n"
         "    }\n"
         "    if (needs_unlock) {\n",
         "        rc = ble_rpa_remove_peer_dev_rec(peer_rec);\n"
-        "        if (rc != 0) {\n"
-        "            if (needs_unlock) {\n"
-        "                ble_hs_unlock();\n"
-        "            }\n"
-        "            return rc;\n"
+        "        if (rc != 0 && err == 0) {\n"
+        "            err = rc;\n"
         "        }\n"
         "    } else {\n"
         "        /* Restored IRKs can exist in the host resolving list without a\n"
@@ -1070,7 +1076,19 @@ def main() -> int:
         default=Path.home() / ".arduino15/packages/esp32/tools",
         help="directory holding <target>-libs/<core>/sdkconfig of the reference core",
     )
+    parser.add_argument(
+        "--out",
+        type=Path,
+        default=OUT_DIR,
+        help="directory to write the vendored tree to (default: src/nimble_esp32)",
+    )
+    parser.add_argument(
+        "--keep-going",
+        action="store_true",
+        help="report every patch that no longer applies instead of stopping at the first",
+    )
     args = parser.parse_args()
+    out_dir = args.out.resolve()
 
     reference_sdkconfig = (
         args.core_libs / (REFERENCE_TARGET + "-libs") / REFERENCE_CORE / "sdkconfig"
@@ -1087,10 +1105,10 @@ def main() -> int:
 
     nimble = nimble_checkout()
 
-    if OUT_DIR.exists():
-        shutil.rmtree(OUT_DIR)
-    include_dir = OUT_DIR / "include"
-    source_dir = OUT_DIR / "src"
+    if out_dir.exists():
+        shutil.rmtree(out_dir)
+    include_dir = out_dir / "include"
+    source_dir = out_dir / "src"
     include_dir.mkdir(parents=True)
     source_dir.mkdir(parents=True)
 
@@ -1134,14 +1152,22 @@ def main() -> int:
         shutil.copyfile(idf_file(path), out)
 
     print("patches")
+    failed = 0
     for rel, old, new, why in PATCHES:
         target = source_dir / rel
         text = target.read_text(errors="surrogateescape")
         if old not in text:
             print("patch no longer applies:", rel, "--", why, file=sys.stderr)
-            return 1
+            failed += 1
+            if not args.keep_going:
+                return 1
+            continue
         target.write_text(text.replace(old, new, 1), errors="surrogateescape")
         print("  patched", rel, "--", why)
+
+    if failed:
+        print("%d patches no longer apply" % failed, file=sys.stderr)
+        return 1
 
     print("configuration")
     frozen = write_config_header(
@@ -1161,9 +1187,9 @@ def main() -> int:
         guarded += 1
 
     print("license and version records")
-    shutil.copyfile(nimble / "LICENSE", OUT_DIR / "LICENSE")
-    shutil.copyfile(nimble / "NOTICE", OUT_DIR / "NOTICE")
-    (OUT_DIR / "VERSIONS").write_text(
+    shutil.copyfile(nimble / "LICENSE", out_dir / "LICENSE")
+    shutil.copyfile(nimble / "NOTICE", out_dir / "NOTICE")
+    (out_dir / "VERSIONS").write_text(
         "\n".join(
             [
                 "# Generated by tools/vendor_nimble_esp32.py -- do not edit.",

@@ -58,6 +58,13 @@
 #if (BT_HCI_LOG_INCLUDED == TRUE)
 #include "hci_log/bt_hci_log.h"
 #endif
+/* bt_osal and the shared profile task are off in every Arduino-ESP32
+ * original-ESP32 build (CONFIG_BT_OSAL_ENABLED, CONFIG_BT_PRF_TASK_ENABLED
+ * unset) and this host uses neither; their headers exist only from
+ * Arduino-ESP32 3.3.13 on, so they are left out. */
+#if CONFIG_BLE_LOG_ENABLED && !CONFIG_BT_CONTROLLER_ENABLED
+#include "ble_log.h"
+#endif
 
 #define NIMBLE_PORT_LOG_TAG          "BLE_INIT"
 
@@ -108,11 +115,10 @@ static struct ble_hs_stop_listener stop_listener;
 
 #endif
 
+static bool nimble_port_run_active;
+
 extern void os_msys_init(void);
 extern void os_mempool_module_init(void);
-#if MYNEWT_VAL(MP_RUNTIME_ALLOC)
-extern void os_mempool_deinit(bool is_controller);
-#endif
 
 #if MYNEWT_VAL(BLE_STATIC_TO_DYNAMIC)
 static int
@@ -193,7 +199,17 @@ esp_err_t esp_nimble_init(void)
     /* Initialize the function pointers for OS porting */
     npl_freertos_funcs_init();
 
-    npl_freertos_mempool_init();
+    if (npl_freertos_mempool_init() != 0) {
+        ESP_LOGE(NIMBLE_PORT_LOG_TAG, "npl mempool init failed\n");
+        npl_freertos_funcs_deinit();
+#if MYNEWT_VAL(BLE_STATIC_TO_DYNAMIC)
+        if (ble_npl_ctx) {
+            nimble_platform_mem_free(ble_npl_ctx);
+            ble_npl_ctx = NULL;
+        }
+#endif
+        return ESP_FAIL;
+    }
 
 #if CONFIG_BT_CONTROLLER_ENABLED
     if(esp_nimble_hci_init() != ESP_OK) {
@@ -219,6 +235,15 @@ esp_err_t esp_nimble_init(void)
 #endif // !SOC_ESP_NIMBLE_CONTROLLER || !CONFIG_BT_CONTROLLER_ENABLED
 
 
+#if CONFIG_BT_PRF_TASK_ENABLED
+#error "the vendored NimBLE host does not support CONFIG_BT_PRF_TASK_ENABLED"
+    /* Start the shared BLE profile task now that the bt_osal table is up, so
+     * profiles can post work without spawning their own tasks. */
+    if (bt_prf_task_init() != BT_OSAL_OK) {
+        ESP_LOGW(NIMBLE_PORT_LOG_TAG, "bt_prf_task_init failed");
+    }
+#endif
+
 #if MYNEWT_VAL(BLE_QUEUE_CONG_CHECK)
     ble_adv_list_init();
 #endif
@@ -234,6 +259,12 @@ esp_err_t esp_nimble_init(void)
     }
 #endif
 
+#if CONFIG_BLE_LOG_ENABLED && !CONFIG_BT_CONTROLLER_ENABLED
+    if (!ble_log_init()) {
+        ESP_LOGW(NIMBLE_PORT_LOG_TAG, "BLE Log init failed");
+    }
+#endif
+
     return ESP_OK;
 }
 
@@ -245,7 +276,14 @@ esp_err_t esp_nimble_init(void)
 esp_err_t esp_nimble_deinit(void)
 {
 #if MYNEWT_VAL(BLE_STATIC_TO_DYNAMIC)
+    if (ble_npl_ctx == NULL) {
+        return ESP_OK;
+    }
     ble_npl_deiniting = true;
+#endif
+
+#if CONFIG_BLE_LOG_ENABLED && !CONFIG_BT_CONTROLLER_ENABLED
+    ble_log_deinit();
 #endif
 
     ble_transport_ll_deinit();
@@ -274,15 +312,15 @@ esp_err_t esp_nimble_deinit(void)
 
 #endif
 
-    ble_npl_eventq_deinit(&g_eventq_dflt);
-
     ble_hs_deinit();
+
+    ble_npl_eventq_deinit(&g_eventq_dflt);
 
 #if !SOC_ESP_NIMBLE_CONTROLLER || !CONFIG_BT_CONTROLLER_ENABLED
     npl_freertos_funcs_deinit();
 #endif
 
-#if !SOC_ESP_NIMBLE_CONTROLLER
+#if !SOC_ESP_NIMBLE_CONTROLLER || !CONFIG_BT_CONTROLLER_ENABLED
     npl_freertos_mempool_deinit();
 #endif
 
@@ -297,8 +335,16 @@ esp_err_t esp_nimble_deinit(void)
      * of the next init cycle (in ble_npl_reset_deinit_flag). */
 
 #endif
+
+#if CONFIG_BT_PRF_TASK_ENABLED
+    /* Stop the shared BLE profile task while the bt_osal table is still up,
+     * symmetrically with the init in esp_nimble_init(). */
+    bt_prf_task_deinit();
+#endif
+
+
 #if MYNEWT_VAL(MP_RUNTIME_ALLOC)
-    os_mempool_deinit(0);
+    os_mempool_deinit_all(false);
 #endif
 
     return ESP_OK;
@@ -473,18 +519,34 @@ nimble_port_stop(void)
 	return rc;
     }
 
-    /* Serialize stop with callout events already dequeued by the host. */
     ble_hs_stop_result = 0;
     ble_npl_event_init(&ble_hs_ev_stop_begin,
                        nimble_port_stop_begin_cb, NULL);
-    ble_npl_eventq_put(&g_eventq_dflt, &ble_hs_ev_stop_begin);
-
-    /* Wait till the host stop procedure is complete. */
-    ble_npl_sem_pend(&ble_hs_stop_sem, BLE_NPL_TIME_FOREVER);
-    err = ble_hs_stop_result;
+    if (nimble_port_run_active) {
+        /* Serialize stop with callout events already dequeued by the
+         * host: the host task starts the stop itself. */
+        ble_npl_eventq_put(&g_eventq_dflt, &ble_hs_ev_stop_begin);
+        ble_npl_sem_pend(&ble_hs_stop_sem, BLE_NPL_TIME_FOREVER);
+        err = ble_hs_stop_result;
+    } else {
+        /* No host task to hand the request to: stop from here. */
+        err = ble_hs_stop(&stop_listener, ble_hs_stop_cb, NULL);
+        if (err == 0) {
+            ble_npl_sem_pend(&ble_hs_stop_sem, BLE_NPL_TIME_FOREVER);
+            err = ble_hs_stop_result;
+        }
+    }
     if (err != 0) {
-        ble_npl_sem_deinit(&ble_hs_stop_sem);
-        return err;
+        if (err != BLE_HS_EALREADY) {
+            ble_npl_event_deinit(&ble_hs_ev_stop_begin);
+            ble_npl_sem_deinit(&ble_hs_stop_sem);
+            return err;
+        }
+        if (!nimble_port_run_active) {
+            ble_npl_event_deinit(&ble_hs_ev_stop_begin);
+            ble_npl_sem_deinit(&ble_hs_stop_sem);
+            return ESP_OK;
+        }
     }
 
     ble_npl_event_init(&ble_hs_ev_stop, nimble_port_stop_cb,
@@ -509,13 +571,40 @@ void nimble_port_run(void)
 {
     struct ble_npl_event *ev;
 
+#if MYNEWT_VAL(BLE_STATIC_TO_DYNAMIC)
+    if (ble_npl_ctx == NULL) {
+        ESP_LOGE(NIMBLE_PORT_LOG_TAG, "nimble context not initialized, host task exiting");
+        return;
+    }
+#endif
+#if CONFIG_BT_DUAL_MODE_ARCH
+    if (g_eventq_dflt.eventq.eventq == NULL) {
+#else
+    if (g_eventq_dflt.eventq == NULL) {
+#endif
+        ESP_LOGE(NIMBLE_PORT_LOG_TAG, "nimble event queue not initialized, host task exiting");
+        return;
+    }
+
+    /* Snapshot stop_ev and stop_sem addresses before entering the loop.
+     * When BLE_STATIC_TO_DYNAMIC is enabled, after ble_npl_sem_release(stop_sem)
+     * at the end of stop-event handling, the caller of nimble_port_stop() can
+     * wake up and free ble_npl_ctx. Any subsequent use of the &ble_hs_ev_stop
+     * or &ble_hs_stop_sem macros (which dereference ble_npl_ctx) would be a
+     * use-after-free. Using local snapshots avoids that.
+     */
+    struct ble_npl_event *stop_ev  = &ble_hs_ev_stop;
+    struct ble_npl_sem  *stop_sem  = &ble_hs_stop_sem;
+
+    nimble_port_run_active = true;
     while (1) {
         ev = ble_npl_eventq_get(&g_eventq_dflt, BLE_NPL_TIME_FOREVER);
         if (ev) {
             ble_npl_event_run(ev);
-            if (ev == &ble_hs_ev_stop) {
-                ble_npl_event_deinit(&ble_hs_ev_stop);
-                ble_npl_sem_release(&ble_hs_stop_sem);
+            if (ev == stop_ev) {
+                ble_npl_event_deinit(stop_ev);
+                nimble_port_run_active = false;
+                ble_npl_sem_release(stop_sem);
                 break;
             }
         }
@@ -529,16 +618,16 @@ struct ble_npl_eventq *
 nimble_port_get_dflt_eventq(void)
 {
 #if MYNEWT_VAL(BLE_STATIC_TO_DYNAMIC)
+    /* Check deiniting first: context may still be non-NULL during the deinit
+     * window after ble_npl_deiniting is set but before ble_npl_ctx is freed.
+     * Return the fallback to prevent callers from using a deinitialized queue. */
+    if (ble_npl_deiniting) {
+        return &g_eventq_shutdown_fallback;
+    }
+
     /* If context exists, return the real eventq */
     if (ble_npl_ctx != NULL) {
         return &g_eventq_dflt;
-    }
-
-    /* Context is NULL - either not yet allocated or already freed during deinit.
-     * If we're in shutdown, return the static fallback to prevent crashes.
-     * The fallback eventq is not functional but callers can safely reference it. */
-    if (ble_npl_deiniting) {
-        return &g_eventq_shutdown_fallback;
     }
 
     /* Normal case: try to allocate context */

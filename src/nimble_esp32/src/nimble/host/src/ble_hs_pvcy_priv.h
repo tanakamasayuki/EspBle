@@ -39,6 +39,10 @@ int ble_hs_pvcy_our_irk(const uint8_t **out_irk);
 int ble_hs_pvcy_remove_entry(uint8_t addr_type, const uint8_t *addr);
 int ble_hs_pvcy_add_entry(const uint8_t *addr, uint8_t addrtype,
                           const uint8_t *irk);
+#if MYNEWT_VAL(BLE_DEFER_CONN_EVENTS)
+int ble_hs_pvcy_replace_entry(const uint8_t *addr, uint8_t addr_type,
+                              const uint8_t *irk);
+#endif
 int ble_hs_pvcy_ensure_started(void);
 int ble_hs_pvcy_set_mode(const ble_addr_t *addr, uint8_t priv_mode);
 #if MYNEWT_VAL(BLE_HOST_BASED_PRIVACY)
@@ -46,9 +50,7 @@ bool ble_hs_pvcy_enabled(void);
 #endif
 bool ble_hs_pvcy_resolve_with_irk(const uint8_t rpa[6], const uint8_t irk[16]);
 
-#if MYNEWT_VAL(BLE_STATIC_TO_DYNAMIC)
 void ble_hs_pvcy_irk_deinit(void);
-#endif
 #ifdef __cplusplus
 }
 #endif

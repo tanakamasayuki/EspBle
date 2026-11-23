@@ -35,6 +35,7 @@ struct hci_disconn_complete;
 struct hci_encrypt_change;
 struct ble_hs_hci_ack;
 struct ble_hs_adv;
+struct ble_hs_conn;
 
 STATS_SECT_START(ble_gap_stats)
     STATS_SECT_ENTRY(wl_set)
@@ -83,10 +84,12 @@ void ble_gap_rx_le_scan_timeout(void);
 void ble_gap_rx_ext_adv_report(struct ble_gap_ext_disc_desc *desc);
 void ble_gap_rx_adv_set_terminated(const struct ble_hci_ev_le_subev_adv_set_terminated *ev);
 #if MYNEWT_VAL(BLE_PERIODIC_ADV)
-void ble_gap_rx_peroidic_adv_sync_estab(const struct ble_hci_ev_le_subev_periodic_adv_sync_estab *ev);
+void ble_gap_rx_peroidic_adv_sync_estab(const struct ble_hci_ev_le_subev_periodic_adv_sync_estab *ev,
+                                        uint8_t subevent);
 void ble_gap_rx_periodic_adv_rpt(const struct ble_hci_ev_le_subev_periodic_adv_rpt *ev);
 void ble_gap_rx_periodic_adv_sync_lost(const struct ble_hci_ev_le_subev_periodic_adv_sync_lost *ev);
-void ble_gap_rx_periodic_adv_sync_transfer(const struct ble_hci_ev_le_subev_periodic_adv_sync_transfer *ev);
+void ble_gap_rx_periodic_adv_sync_transfer(const struct ble_hci_ev_le_subev_periodic_adv_sync_transfer *ev,
+                                           uint8_t subevent);
 #endif
 #if MYNEWT_VAL(BLE_PERIODIC_ADV_SYNC_BIGINFO_REPORTS) && !MYNEWT_VAL(BLE_ISO)
 void ble_gap_rx_biginfo_adv_rpt(const struct ble_hci_ev_le_subev_biginfo_adv_report *ev);
@@ -97,6 +100,10 @@ void ble_gap_rx_adv_report(struct ble_gap_disc_desc *desc);
 void ble_gap_rx_rd_rem_sup_feat_complete(const struct ble_hci_ev_le_subev_rd_rem_used_feat *ev);
 void ble_gap_rx_rd_rem_ver_info_complete(const struct ble_hci_ev_rd_rem_ver_info_cmp *ev);
 void ble_gap_event_connect_call(uint16_t conn_handle, int status);
+#if MYNEWT_VAL(BLE_DEFER_CONN_EVENTS) && NIMBLE_BLE_CONNECT
+void ble_gap_conn_deferred_init(struct ble_hs_conn *conn);
+void ble_gap_conn_deferred_cleanup(struct ble_hs_conn *conn);
+#endif
 #if MYNEWT_VAL(BLE_CONN_SUBRATING)
 void ble_gap_rx_subrate_change(const struct ble_hci_ev_le_subev_subrate_change *ev);
 #endif
@@ -187,6 +194,7 @@ void ble_gap_preempt(void);
 void ble_gap_preempt_done(void);
 
 int ble_gap_terminate_with_conn(struct ble_hs_conn *conn, uint8_t hci_reason);
+int ble_gap_unpair_keep_conn(const ble_addr_t *peer_addr);
 void ble_gap_reset_state(int reason);
 void ble_gap_conn_broken(uint16_t conn_handle, int reason);
 int32_t ble_gap_timer(void);
@@ -200,6 +208,9 @@ int ble_gap_dbg_update_active(uint16_t conn_handle);
 
 #if MYNEWT_VAL(BLE_ENABLE_CONN_REATTEMPT)
 void ble_gap_reattempt_count(uint16_t conn_handle, uint8_t count);
+#if NIMBLE_BLE_CONNECT && (MYNEWT_VAL(BLE_ROLE_CENTRAL) || MYNEWT_VAL(BLE_ROLE_OBSERVER))
+int ble_gap_master_connect_reattempt(uint16_t conn_handle, uint8_t reattempt_count);
+#endif
 #endif
 
 void ble_gap_rx_data_len_change(const struct ble_hci_ev_le_subev_data_len_chg *ev);

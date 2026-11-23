@@ -148,9 +148,7 @@ int ble_att_svr_register(const ble_uuid_t *uuid, uint8_t flags,
                          uint8_t min_key_size, uint16_t *handle_id,
                          ble_att_svr_access_fn *cb, void *cb_arg);
 
-#if MYNEWT_VAL(BLE_DYNAMIC_SERVICE)
 int ble_att_svr_deregister(uint16_t start_handle, uint16_t end_group_handle);
-#endif
 #if MYNEWT_VAL(BLE_GATT_CACHING)
 int ble_att_get_database_size(int *out_size);
 int ble_att_fill_database_info(uint8_t *out_data);
@@ -182,6 +180,9 @@ void ble_att_truncate_to_mtu(const struct ble_l2cap_chan *att_chan,
 void ble_att_set_peer_mtu(struct ble_l2cap_chan *chan, uint16_t peer_mtu);
 uint16_t ble_att_chan_mtu(const struct ble_l2cap_chan *chan);
 uint16_t ble_att_mtu_by_cid(uint16_t conn_handle, uint16_t cid);
+#if MYNEWT_VAL(BLE_DEFER_CONN_EVENTS)
+int ble_att_rx_extended(uint16_t conn_handle, uint16_t cid, struct os_mbuf **om);
+#endif
 int ble_att_init(void);
 void ble_att_deinit(void);
 /*** @svr */
