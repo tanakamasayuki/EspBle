@@ -14,11 +14,11 @@ on:
     inputs:
       core_version:
         description: "arduino-esp32 core version to build against"
-        default: "3.3.11"
+        default: "4.0.0"
         required: true
       targets:
         description: "Comma-separated target boards"
-        default: "esp32s3,esp32,esp32c3,esp32c6,esp32h2,esp32p4"
+        default: "esp32s3,esp32,esp32c3,esp32c6,esp32h2,esp32p4,esp32s31"
         required: true
 
 permissions:

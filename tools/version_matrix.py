@@ -21,8 +21,8 @@ Examples:
   python tools/version_matrix.py --core-versions auto --targets esp32s3
 
   # board sweep on the verified core with every example
-  python tools/version_matrix.py --core-versions 3.3.11 \
-      --targets esp32s3,esp32,esp32c3,esp32c6,esp32h2,esp32p4 --examples all
+  python tools/version_matrix.py --core-versions 4.0.0 \
+      --targets esp32s3,esp32,esp32c3,esp32c6,esp32h2,esp32p4,esp32s31 --examples all
 
   # CI decomposition: one core per job writes a JSON payload, then merge them
   python tools/version_matrix.py --core-versions 3.3.11 --json-only --json out/3.3.11.json
@@ -71,6 +71,9 @@ KNOWN_TARGET_FQBNS = {
     "esp32c6": "esp32:esp32:esp32c6",
     "esp32h2": "esp32:esp32:esp32h2",
     "esp32p4": "esp32:esp32:esp32p4",
+    # Arduino-ESP32 4.0.0 and later only; older cores report the FQBN as invalid,
+    # which is recorded as "board not in core" rather than as a failure.
+    "esp32s31": "esp32:esp32:esp32s31",
 }
 
 PASS, FAIL, ABSENT, NO_PROFILE, NA_BOARD = "pass", "fail", "absent", "no-profile", "na-board"
