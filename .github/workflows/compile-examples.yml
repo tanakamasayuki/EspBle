@@ -52,10 +52,10 @@ jobs:
         # docs/BOARDS.*.md); m5stack_tab5 is a board variant of esp32p4 used by two
         # examples and is left to the manual board matrix. Examples without the
         # job's profile (the Classic ones outside esp32) are skipped.
-        profile: [esp32s3, esp32, esp32c3, esp32c6, esp32h2, esp32p4]
+        profile: [esp32s3, esp32, esp32c3, esp32c6, esp32h2, esp32p4, esp32s31]
         # Each target is split into shards over the sorted example list to cut
-        # wall time (~20 s per example). 6 targets x 3 shards = 18 jobs stays
-        # under the 20 concurrent jobs a free account runs at once.
+        # wall time (~20 s per example). 7 targets x 3 shards = 21 jobs, one
+        # more than the 20 a free account runs at once, so one shard queues.
         shard: [1, 2, 3]
     env:
       SHARDS: 3
