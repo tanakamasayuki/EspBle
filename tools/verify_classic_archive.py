@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
@@ -144,12 +145,15 @@ def sha256_file(path: Path) -> str:
 
 
 def run_output(command: list[str]) -> str:
+    # The checks match binutils' English output ("ELF Header:" and so on); a
+    # translated locale would make every header look missing.
     result = subprocess.run(
         command,
         cwd=ROOT,
         check=False,
         capture_output=True,
         text=True,
+        env={**os.environ, "LC_ALL": "C"},
     )
     if result.returncode != 0:
         raise VerificationError(
