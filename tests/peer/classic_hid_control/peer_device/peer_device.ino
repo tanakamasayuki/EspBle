@@ -56,7 +56,7 @@ void setup()
     Serial.printf("CONTROL_HOST_FAILED error=%s\n", bluetooth.lastErrorName());
     return;
   }
-  Serial.println("CONTROL_HOST_READY");
+  EspBleTestLifecycle::announceReady([] { Serial.println("CONTROL_HOST_READY"); });
 
   EspBleTestLifecycle::beginClassic(bluetooth);
 }

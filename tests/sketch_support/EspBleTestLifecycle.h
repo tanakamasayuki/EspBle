@@ -1,10 +1,22 @@
-// The reserved stop command for the peer test sketches.
+// The reserved commands for the peer test sketches.
 //
 // The autouse fixture in tests/peer/conftest.py sends one reserved command to
 // the primary DUT and every connected peer after each test, from fixture
 // teardown so that a failed test, and Ctrl-C, are cleaned up as well:
 //
 //   0x04 (EOT)  STOP  nothing connected, advertising or scanning
+//
+// The other asks a sketch whether its setup has finished:
+//
+//   0x05 (ENQ)  READY?  prints the sketch's ready line again
+//
+// A ready line printed once at the end of setup() is lost whenever the serial
+// reader attaches after the board has booted, which on a fast-booting core and a
+// USB-UART bridge is most of the time. A sketch hands the code that prints it to
+// announceReady() instead, which prints it now and again on every READY?, and a
+// test asks with the `ready` fixture until the line comes. A sketch whose setup
+// failed never calls announceReady(), so READY? stays unanswered and the test
+// fails on the line it was waiting for.
 //
 // There is nothing to restore. Every module holds one test and every module
 // begins with an upload, which resets the board, so no state is ever carried
@@ -20,7 +32,7 @@
 // costs one timeout and a note on the pytest side, never a failure, which is
 // what a hung or crashed sketch looks like.
 //
-// Byte-dispatch sketch (filter() turns the stop byte into '\0', which no
+// Byte-dispatch sketch (filter() turns a reserved byte into '\0', which no
 // command branch matches):
 //
 //   const char command = EspBleTestLifecycle::filter(Serial.read());
@@ -42,6 +54,7 @@
 namespace EspBleTestLifecycle
 {
 constexpr char StopCommand = '\x04';
+constexpr char ReadyQuery = '\x05';
 
 typedef void (*Action)();
 typedef bool (*Predicate)();
@@ -65,6 +78,12 @@ inline bool &pending()
   static bool value = false;
   return value;
 }
+
+inline Action &ready()
+{
+  static Action value = nullptr;
+  return value;
+}
 }
 
 inline void begin(const Hooks &hooks)
@@ -72,9 +91,23 @@ inline void begin(const Hooks &hooks)
   detail::hooks() = hooks;
 }
 
-// Consumes the stop byte and starts the transition. Any other byte returns false.
+// Prints the ready line now and on every later READY?. Call it where setup()
+// has succeeded, in place of printing the line directly.
+inline void announceReady(Action print)
+{
+  detail::ready() = print;
+  if (print != nullptr) print();
+}
+
+// Consumes a reserved byte: STOP starts the transition, READY? repeats the
+// ready line once there is one. Any other byte returns false.
 inline bool handle(char command)
 {
+  if (command == ReadyQuery)
+  {
+    if (detail::ready() != nullptr) detail::ready()();
+    return true;
+  }
   if (command != StopCommand)
   {
     return false;
@@ -84,7 +117,7 @@ inline bool handle(char command)
   return true;
 }
 
-// Serial.read() wrapper for byte-dispatch sketches: the stop byte is consumed
+// Serial.read() wrapper for byte-dispatch sketches: a reserved byte is consumed
 // and comes back as '\0'; every other value comes back unchanged.
 inline char filter(int value)
 {

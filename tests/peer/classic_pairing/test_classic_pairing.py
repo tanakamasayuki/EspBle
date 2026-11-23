@@ -7,7 +7,7 @@ import re
 ADDRESS = rb"([0-9a-f]{2}(?::[0-9a-f]{2}){5})"
 
 
-def test_numeric_comparison_pairing_and_bond_management(dut, peers):
+def test_numeric_comparison_pairing_and_bond_management(dut, peers, ready):
     """Classic pairing driven by the application instead of auto-accepted.
 
     Both boards run DisplayYesNo, so the controllers produce the same six-digit
@@ -17,11 +17,9 @@ def test_numeric_comparison_pairing_and_bond_management(dut, peers):
     checks here.
     """
     peer = peers["device"]
-    peer_ready = peer.expect(
-        re.compile(rb"PAIR_PEER_READY address=" + ADDRESS), timeout=30
-    )
-    ready = dut.expect(re.compile(rb"PAIR_READY address=" + ADDRESS), timeout=30)
-    dut_address = ready.group(1).decode()
+    peer_ready = ready(peer, re.compile(rb"PAIR_PEER_READY address=" + ADDRESS))
+    dut_ready = ready(dut, re.compile(rb"PAIR_READY address=" + ADDRESS))
+    dut_address = dut_ready.group(1).decode()
     peer_address = peer_ready.group(1).decode()
 
     # Start from no bonds so the pairing below is a first pairing, not a

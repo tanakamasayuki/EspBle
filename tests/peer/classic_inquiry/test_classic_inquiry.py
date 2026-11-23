@@ -1,7 +1,7 @@
 import re
 
 
-def test_inquiry_finds_the_peer_and_reports_completion(dut, peers):
+def test_inquiry_finds_the_peer_and_reports_completion(dut, peers, ready):
     """Classic device discovery, the entry point for every address-based API.
 
     The peer only makes itself discoverable; everything asserted here is what
@@ -9,11 +9,10 @@ def test_inquiry_finds_the_peer_and_reports_completion(dut, peers):
     the outcome.
     """
     peer = peers["device"]
-    peer_ready = peer.expect(
-        re.compile(rb"INQUIRY_PEER_READY address=([0-9a-f:]+) visibility=2"),
-        timeout=30,
+    peer_ready = ready(
+        peer, re.compile(rb"INQUIRY_PEER_READY address=([0-9a-f:]+) visibility=2")
     )
-    dut.expect(re.compile(rb"INQUIRY_READY address=[0-9a-f:]+"), timeout=30)
+    ready(dut, re.compile(rb"INQUIRY_READY address=[0-9a-f:]+"))
     peer_address = peer_ready.group(1).decode()
 
     # The class the peer asked for only reaches the air once its service

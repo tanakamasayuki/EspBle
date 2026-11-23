@@ -46,10 +46,14 @@ void hostCallback(
   }
 }
 
-void setup()
+// The sequence runs on 'g' rather than from setup(): a line printed while the
+// board boots is gone if the serial reader attaches after it.
+static void startSequence()
 {
-  Serial.begin(115200);
-  delay(500);
+  static bool started = false;
+  if (started) return;
+  started = true;
+
   EspBleClassicConfig config;
   config.deviceName = "EspBle Classic HID Profile Test";
   if (!bluetooth.begin(config))
@@ -67,13 +71,23 @@ void setup()
   const esp_err_t hostInitStatus = espble_bd_esp_bt_hid_host_init();
   Serial.printf(
     "CLASSIC_HIDH_START %d %d\n", hostCallbackStatus, hostInitStatus);
+}
+
+void setup()
+{
+  Serial.begin(115200);
+  delay(500);
 
   EspBleTestLifecycle::beginClassic(bluetooth);
+  EspBleTestLifecycle::announceReady([] { Serial.println("HID_PROFILES_READY"); });
 }
 
 void loop()
 {
-  if (Serial.available() > 0) EspBleTestLifecycle::handle(static_cast<char>(Serial.read()));
+  if (Serial.available() > 0 && EspBleTestLifecycle::filter(Serial.read()) == 'g')
+  {
+    startSequence();
+  }
   bluetooth.update();
   EspBleTestLifecycle::update();
   if (deviceInitialized && hostInitialized && !deinitStarted)

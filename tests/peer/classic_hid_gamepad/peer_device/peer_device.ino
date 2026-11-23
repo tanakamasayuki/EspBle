@@ -32,7 +32,7 @@ void setup()
     Serial.printf("GAMEPAD_HOST_FAILED error=%s\n", bluetooth.lastErrorName());
     return;
   }
-  Serial.println("GAMEPAD_HOST_READY");
+  EspBleTestLifecycle::announceReady([] { Serial.println("GAMEPAD_HOST_READY"); });
 
   EspBleTestLifecycle::beginClassic(bluetooth);
 }

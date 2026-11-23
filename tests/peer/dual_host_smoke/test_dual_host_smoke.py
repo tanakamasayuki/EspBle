@@ -92,17 +92,14 @@ def read_heap(device, command, prefix):
     return tuple(int(match.group(index)) for index in range(1, 4))
 
 
-def test_nimble_and_custom_classic_host_run_together(dut, peers):
+def test_nimble_and_custom_classic_host_run_together(dut, peers, ready):
     peer = peers["device"]
-    peer.expect_exact("DUAL_PEER_READY", timeout=20)
-    ready = dut.expect(
-        re.compile(
-            rb"DUAL_READY classic=([0-9a-f:]+) ble=([0-9a-f:]+) type=(\d+)"
-        ),
-        timeout=30,
+    ready(peer, "DUAL_PEER_READY")
+    ready_line = ready(
+        dut, re.compile(rb"DUAL_READY classic=([0-9a-f:]+) ble=([0-9a-f:]+) type=(\d+)")
     )
 
-    assert ready.group(3) == b"0"
+    assert ready_line.group(3) == b"0"
     # Pair from scratch on both sides. A stored link key skips the pairing
     # exchange entirely, and the HCI commands it needs — the link key and
     # Secure Simple Pairing replies — then never reach the broker, so a gap in
@@ -111,7 +108,7 @@ def test_nimble_and_custom_classic_host_run_together(dut, peers):
     dut.expect(re.compile(rb"DUAL_CLASSIC_BONDS_CLEARED 1 count=0"), timeout=20)
     peer.write("B\n")
     peer.expect(re.compile(rb"DUAL_PEER_BONDS_CLEARED 1 count=0"), timeout=20)
-    peer.write(b"c" + ready.group(1) + b"\n")
+    peer.write(b"c" + ready_line.group(1) + b"\n")
     peer.expect_exact("DUAL_PEER_CONNECT 1", timeout=10)
     dut.expect_exact("DUAL_CLASSIC_CONNECTED", timeout=30)
     peer.expect_exact("DUAL_PEER_CONNECTED", timeout=30)
@@ -217,7 +214,7 @@ def test_nimble_and_custom_classic_host_run_together(dut, peers):
     peer.expect_exact(
         "DUAL_BLE_READ success=1 value=dual-ready classic=0", timeout=10
     )
-    peer.write(b"c" + ready.group(1) + b"\n")
+    peer.write(b"c" + ready_line.group(1) + b"\n")
     peer.expect_exact("DUAL_PEER_CONNECT 1", timeout=10)
     dut.expect_exact("DUAL_CLASSIC_CONNECTED", timeout=30)
     peer.expect_exact("DUAL_PEER_CONNECTED", timeout=30)
@@ -464,7 +461,7 @@ def test_nimble_and_custom_classic_host_run_together(dut, peers):
         b"DUAL_CLASSIC_DISCONNECTED",
     }
 
-    peer.write(b"c" + ready.group(1) + b"\n")
+    peer.write(b"c" + ready_line.group(1) + b"\n")
     peer.expect_exact("DUAL_PEER_CONNECT 1", timeout=10)
     dut.expect_exact("DUAL_CLASSIC_CONNECTED", timeout=30)
     peer.expect_exact("DUAL_PEER_CONNECTED", timeout=30)
@@ -536,7 +533,7 @@ def test_nimble_and_custom_classic_host_run_together(dut, peers):
         "DUAL_BLE_READ success=1 value=dual-ready classic=0", timeout=10
     )
 
-    peer.write(b"c" + ready.group(1) + b"\n")
+    peer.write(b"c" + ready_line.group(1) + b"\n")
     peer.expect_exact("DUAL_PEER_CONNECT 1", timeout=10)
     dut.expect_exact("DUAL_CLASSIC_CONNECTED", timeout=30)
     peer.expect_exact("DUAL_PEER_CONNECTED", timeout=30)
@@ -670,7 +667,7 @@ def test_nimble_and_custom_classic_host_run_together(dut, peers):
         assert after >= before - 8192
 
     # The radios must still work after the churn, on both transports.
-    peer.write(b"c" + ready.group(1) + b"\n")
+    peer.write(b"c" + ready_line.group(1) + b"\n")
     peer.expect_exact("DUAL_PEER_CONNECT 1", timeout=10)
     dut.expect_exact("DUAL_CLASSIC_CONNECTED", timeout=30)
     peer.expect_exact("DUAL_PEER_CONNECTED", timeout=30)

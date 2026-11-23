@@ -1,7 +1,7 @@
 import re
 
 
-def test_spp_interoperates_with_the_core_bluedroid_host(dut, peers):
+def test_spp_interoperates_with_the_core_bluedroid_host(dut, peers, ready):
     """EspBle's Classic host against the Bluedroid host Arduino-ESP32 ships.
 
     Both boards are ESP32s, but only the DUT runs EspBle's independently built
@@ -10,13 +10,12 @@ def test_spp_interoperates_with_the_core_bluedroid_host(dut, peers):
     resolves, the RFCOMM channel, and the payloads in both directions.
     """
     peer = peers["device"]
-    peer.expect_exact("COREPEER_READY", timeout=30)
-    ready = dut.expect(
-        re.compile(rb"COREHOST_SERVER_READY address=([0-9a-f:]+) heap=(\d+)"),
-        timeout=30,
+    ready(peer, "COREPEER_READY")
+    ready_line = ready(
+        dut, re.compile(rb"COREHOST_SERVER_READY address=([0-9a-f:]+) heap=(\d+)")
     )
     dut.expect_exact("COREHOST_SERVER_STARTED", timeout=10)
-    address = ready.group(1)
+    address = ready_line.group(1)
 
     # Channel 0 makes the peer resolve the channel from the EspBle server's
     # service record, so a missing or malformed SDP entry fails here.
@@ -101,4 +100,4 @@ def test_spp_interoperates_with_the_core_bluedroid_host(dut, peers):
     dut.expect(re.compile(rb"COREHOST_RX id=\d+ length=4 hex=11002233"), timeout=20)
 
     # A restart that leaks heap would show up across the two ready lines.
-    assert int(restarted.group(2)) >= int(ready.group(2)) - 8192
+    assert int(restarted.group(2)) >= int(ready_line.group(2)) - 8192

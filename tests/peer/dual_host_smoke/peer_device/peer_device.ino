@@ -396,7 +396,7 @@ void setup()
   if (esp_reset_reason() != ESP_RST_SW)
     (void)ble.deleteAllBonds();
 #endif
-  Serial.println("DUAL_PEER_READY");
+  EspBleTestLifecycle::announceReady([] { Serial.println("DUAL_PEER_READY"); });
 
   beginDualLifecycle();
 }

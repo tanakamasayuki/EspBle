@@ -1,7 +1,7 @@
 import re
 
 
-def test_classic_hid_profiles_match_the_ble_api(dut, peers, probe):
+def test_classic_hid_profiles_match_the_ble_api(dut, peers, probe, ready):
     """Classic HID through the profile API, decoded by the Classic HID Host.
 
     Both sides use the calls and the event shapes the BLE side uses. What makes
@@ -10,12 +10,11 @@ def test_classic_hid_profiles_match_the_ble_api(dut, peers, probe):
     packed reports disagree, the usages arrive wrong or not at all.
     """
     peer = peers["device"]
-    peer.expect_exact("HOST_READY", timeout=30)
-    ready = dut.expect(
-        re.compile(rb"DEVICE_READY address=([0-9a-f:]+) keyboard=1 mouse=1"),
-        timeout=30,
+    ready(peer, "HOST_READY")
+    ready_line = ready(
+        dut, re.compile(rb"DEVICE_READY address=([0-9a-f:]+) keyboard=1 mouse=1")
     )
-    address = ready.group(1).decode()
+    address = ready_line.group(1).decode()
 
     peer.write("c" + address + "\n")
     peer.expect_exact("HOST_CONNECT requested=1", timeout=20)

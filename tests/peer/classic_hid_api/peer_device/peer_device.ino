@@ -49,7 +49,7 @@ void setup()
     Serial.printf("HOST_BEGIN_FAILED error=%s\n", bluetooth.lastErrorName());
     return;
   }
-  Serial.println("HOST_READY");
+  EspBleTestLifecycle::announceReady([] { Serial.println("HOST_READY"); });
 
   EspBleTestLifecycle::beginClassic(bluetooth);
 }

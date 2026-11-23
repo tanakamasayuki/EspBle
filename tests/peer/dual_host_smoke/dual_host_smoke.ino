@@ -402,12 +402,14 @@ void setup()
   (void)ble.deleteAllBonds();
 #endif
 
-  uint8_t address[6] = {};
-  esp_read_mac(address, ESP_MAC_BT);
-  Serial.printf(
-    "DUAL_READY classic=%02x:%02x:%02x:%02x:%02x:%02x ble=%s type=%u\n",
-    address[0], address[1], address[2], address[3], address[4], address[5],
-    ble.localAddress().c_str(), static_cast<unsigned>(ble.localAddressType()));
+  EspBleTestLifecycle::announceReady([] {
+    uint8_t address[6] = {};
+    esp_read_mac(address, ESP_MAC_BT);
+    Serial.printf(
+      "DUAL_READY classic=%02x:%02x:%02x:%02x:%02x:%02x ble=%s type=%u\n",
+      address[0], address[1], address[2], address[3], address[4], address[5],
+      ble.localAddress().c_str(), static_cast<unsigned>(ble.localAddressType()));
+  });
 
   beginDualLifecycle();
 }

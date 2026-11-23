@@ -4,7 +4,7 @@ import re
 ADDRESS = rb"([0-9a-f]{2}(?::[0-9a-f]{2}){5})"
 
 
-def test_classic_gamepad_reports_reach_the_host(dut, peers):
+def test_classic_gamepad_reports_reach_the_host(dut, peers, ready):
     """The gamepad is the profile Classic exists for.
 
     An older console accepts BR/EDR HID only, so BLE is not an alternative. The
@@ -13,12 +13,11 @@ def test_classic_gamepad_reports_reach_the_host(dut, peers):
     sent, and the buttons are a little-endian bit field.
     """
     peer = peers["device"]
-    peer.expect_exact("GAMEPAD_HOST_READY", timeout=30)
-    ready = dut.expect(
-        re.compile(rb"GAMEPAD_DEVICE_READY address=" + ADDRESS + rb" gamepad=1"),
-        timeout=30,
+    ready(peer, "GAMEPAD_HOST_READY")
+    ready_line = ready(
+        dut, re.compile(rb"GAMEPAD_DEVICE_READY address=" + ADDRESS + rb" gamepad=1")
     )
-    address = ready.group(1).decode()
+    address = ready_line.group(1).decode()
 
     peer.write("c" + address + "\n")
     peer.expect_exact("GAMEPAD_HOST_CONNECT requested=1", timeout=20)

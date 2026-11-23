@@ -49,7 +49,7 @@ void setup()
       failure.peerAddress.c_str(), static_cast<unsigned>(failure.error),
       failure.detail.c_str());
   });
-  Serial.println("CLASSIC_PEER_READY");
+  EspBleTestLifecycle::announceReady([] { Serial.println("CLASSIC_PEER_READY"); });
 
   EspBleTestLifecycle::beginClassic(bluetooth);
 }

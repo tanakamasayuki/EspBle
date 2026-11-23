@@ -107,11 +107,13 @@ void setup()
       bluetooth.lastErrorName(), bluetooth.lastErrorDetail().c_str());
     return;
   }
-  uint8_t address[6] = {};
-  esp_read_mac(address, ESP_MAC_BT);
-  Serial.printf(
-    "CONTROL_DEVICE_READY address=%02x:%02x:%02x:%02x:%02x:%02x\n",
-    address[0], address[1], address[2], address[3], address[4], address[5]);
+  EspBleTestLifecycle::announceReady([] {
+    uint8_t address[6] = {};
+    esp_read_mac(address, ESP_MAC_BT);
+    Serial.printf(
+      "CONTROL_DEVICE_READY address=%02x:%02x:%02x:%02x:%02x:%02x\n",
+      address[0], address[1], address[2], address[3], address[4], address[5]);
+  });
 
   EspBleTestLifecycle::beginClassic(bluetooth);
 }

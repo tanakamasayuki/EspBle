@@ -18,6 +18,20 @@ const char *pendingEvent = nullptr;
 // task, and the library re-asserts it after a profile registration overwrites
 // it. So a sketch that needs to know when the class is live reads it back until
 // it matches, which is also what makes the value observable to a test.
+EspBleClassicClassOfDevice bootClass;
+
+void printReady()
+{
+  uint8_t address[6] = {};
+  esp_read_mac(address, ESP_MAC_BT);
+  Serial.printf(
+    "INQUIRY_PEER_READY address=%02x:%02x:%02x:%02x:%02x:%02x visibility=%u\n",
+    address[0], address[1], address[2], address[3], address[4], address[5],
+    static_cast<unsigned>(bluetooth.visibility()));
+  Serial.printf("INQUIRY_PEER_COD_LIVE %02x:%02x:%03x\n",
+    bootClass.majorDeviceClass, bootClass.minorDeviceClass, bootClass.serviceClass);
+}
+
 void reportWhenClassOfDeviceIsLive()
 {
   if (pendingEvent == nullptr) return;
@@ -27,6 +41,15 @@ void reportWhenClassOfDeviceIsLive()
       live.minorDeviceClass != requested.minorDeviceClass ||
       live.serviceClass != requested.serviceClass)
   {
+    return;
+  }
+  if (strcmp(pendingEvent, "COD_LIVE") == 0)
+  {
+    // The boot class going live is when the peer is ready: READY? repeats the
+    // ready line together with it.
+    pendingEvent = nullptr;
+    bootClass = live;
+    EspBleTestLifecycle::announceReady(printReady);
     return;
   }
   Serial.printf("INQUIRY_PEER_%s %02x:%02x:%03x\n", pendingEvent,
@@ -53,13 +76,7 @@ void setup()
       bluetooth.lastErrorName(), bluetooth.lastErrorDetail().c_str());
     return;
   }
-  uint8_t address[6] = {};
-  esp_read_mac(address, ESP_MAC_BT);
-  Serial.printf(
-    "INQUIRY_PEER_READY address=%02x:%02x:%02x:%02x:%02x:%02x visibility=%u\n",
-    address[0], address[1], address[2], address[3], address[4], address[5],
-    static_cast<unsigned>(bluetooth.visibility()));
-
+  // The ready line follows once the class is live (reportWhenClassOfDeviceIsLive).
   EspBleTestLifecycle::beginClassic(bluetooth);
 }
 

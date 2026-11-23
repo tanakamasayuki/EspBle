@@ -144,3 +144,19 @@ def probe():
         raise AssertionError(f"no answer to {command!r} matching {pattern!r}")
 
     return ask
+
+
+# EspBleTestLifecycle's READY? (ENQ). A sketch that passes its ready line to
+# EspBleTestLifecycle::announceReady() prints it again on this command.
+READY_QUERY = b"\x05\n"
+
+
+@pytest.fixture
+def ready(probe):
+    """Wait for a sketch's ready line by asking for it (READY?), not by hoping
+    to catch the copy setup() printed before the serial reader attached."""
+
+    def wait(target, pattern, timeout=60):
+        return probe(target, READY_QUERY, pattern, attempts=max(1, timeout // 5))
+
+    return wait

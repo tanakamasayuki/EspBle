@@ -15,15 +15,14 @@ def connect_and_echo(dut, peer, address):
     peer.expect(re.compile(rb"CLASSIC_PEER_ECHO id=\d+ length=7 hex=" + PAYLOAD_HEX), timeout=10)
 
 
-def test_classic_spp_server_client_and_restart(dut, peers):
+def test_classic_spp_server_client_and_restart(dut, peers, ready):
     peer = peers["device"]
-    peer.expect_exact("CLASSIC_PEER_READY", timeout=20)
-    ready = dut.expect(
-        re.compile(rb"CLASSIC_SERVER_READY address=([0-9a-f:]+) heap=(\d+)"),
-        timeout=20,
+    ready(peer, "CLASSIC_PEER_READY")
+    ready_line = ready(
+        dut, re.compile(rb"CLASSIC_SERVER_READY address=([0-9a-f:]+) heap=(\d+)")
     )
-    address = ready.group(1).decode()
-    initial_heap = int(ready.group(2))
+    address = ready_line.group(1).decode()
+    initial_heap = int(ready_line.group(2))
     dut.expect_exact("CLASSIC_SERVER_STARTED", timeout=10)
 
     connect_and_echo(dut, peer, address)

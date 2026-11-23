@@ -4,7 +4,7 @@ import re
 ADDRESS = rb"([0-9a-f]{2}(?::[0-9a-f]{2}){5})"
 
 
-def test_get_report_set_report_and_protocol_mode(dut, peers):
+def test_get_report_set_report_and_protocol_mode(dut, peers, ready):
     """The HID control channel, which real Hosts use and EspBle did not answer.
 
     Every exchange here is a round trip between two boards, so a request that is
@@ -13,10 +13,9 @@ def test_get_report_set_report_and_protocol_mode(dut, peers):
     Set_Report; the host side is the one under test for the requests.
     """
     peer = peers["device"]
-    peer.expect_exact("CONTROL_HOST_READY", timeout=30)
-    ready = dut.expect(
-        re.compile(rb"CONTROL_DEVICE_READY address=" + ADDRESS), timeout=30)
-    address = ready.group(1).decode()
+    ready(peer, "CONTROL_HOST_READY")
+    ready_line = ready(dut, re.compile(rb"CONTROL_DEVICE_READY address=" + ADDRESS))
+    address = ready_line.group(1).decode()
 
     peer.write("c" + address + "\n")
     peer.expect_exact("CONTROL_HOST_CONNECT requested=1", timeout=20)

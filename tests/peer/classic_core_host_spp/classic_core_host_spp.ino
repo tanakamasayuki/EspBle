@@ -10,6 +10,14 @@
 EspBleClassic bluetooth;
 EspBleClassicSppSessionId sessionId = 0;
 
+// The heap right after the server started, the moment the ready line describes.
+uint32_t readyHeap = 0;
+// The first ready line waits for the server's start event, so that READY? can
+// repeat it together with the channel line that follows it. Lines after a
+// restart are printed as they happen.
+bool readyAnnounced = false;
+uint8_t firstChannel = 0;
+
 void printAddress()
 {
   uint8_t address[6] = {};
@@ -21,7 +29,13 @@ void printAddress()
   Serial.printf(
     "COREHOST_SERVER_READY address=%02x:%02x:%02x:%02x:%02x:%02x heap=%u\n",
     address[0], address[1], address[2], address[3], address[4], address[5],
-    static_cast<unsigned>(ESP.getFreeHeap()));
+    static_cast<unsigned>(readyHeap != 0 ? readyHeap : ESP.getFreeHeap()));
+}
+
+void noteReady()
+{
+  readyHeap = ESP.getFreeHeap();
+  if (readyAnnounced) printAddress();
 }
 
 bool startStack()
@@ -52,6 +66,16 @@ void setup()
 
   bluetooth.spp().onServerStarted(
     [](const EspBleClassicSppServer &server) {
+      if (!readyAnnounced)
+      {
+        readyAnnounced = true;
+        firstChannel = server.channel;
+        EspBleTestLifecycle::announceReady([] {
+          printAddress();
+          Serial.printf("COREHOST_SERVER_STARTED channel=%u\n", firstChannel);
+        });
+        return;
+      }
       Serial.printf("COREHOST_SERVER_STARTED channel=%u\n", server.channel);
     });
   bluetooth.spp().onConnected([](const EspBleClassicSppSession &session) {
@@ -76,7 +100,7 @@ void setup()
   });
 
   if (!startStack()) return;
-  printAddress();
+  noteReady();
 
   EspBleTestLifecycle::beginClassic(bluetooth);
 }
@@ -118,7 +142,7 @@ void loop()
       sessionId = 0;
       const bool restarted = startStack();
       Serial.printf("COREHOST_RESTART started=%u\n", restarted ? 1 : 0);
-      if (restarted) printAddress();
+      if (restarted) noteReady();
     }
   }
   delay(1);
