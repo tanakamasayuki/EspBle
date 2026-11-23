@@ -10,7 +10,7 @@ Coreでも動かせるのか、動かないのかを実測で確定するため�
 
 | host | 形態 | 版の紐付け | 古いCoreでの想定される壊れ方 |
 | --- | --- | --- | --- |
-| NimBLE（[../src/nimble_esp32/](../src/nimble_esp32/)） | sourceをvendoring（.c 83 / .h 121） | `VERSIONS`にesp-nimble commit、ESP-IDF v5.5.5、arduino-esp32 3.3.11、config取得元を記録 | sketchと一緒にcompileされるので、CoreのIDF headerやporting layerと食い違えばcompile error。**通ってしまえば実機で壊れる** |
+| NimBLE（[../src/nimble_esp32/](../src/nimble_esp32/)） | sourceをvendoring（.c 83 / .h 121） | `VERSIONS`にesp-nimble commit、ESP-IDF、arduino-esp32の版、config取得元を記録（計画時はIDF v5.5.5 / 3.3.11、2026-11からは`release/v5.5` `a45de8cc` / 3.3.13） | sketchと一緒にcompileされるので、CoreのIDF headerやporting layerと食い違えばcompile error。**通ってしまえば実機で壊れる** |
 | Bluedroid Classic（[../src/esp32/](../src/esp32/)） | 事前buildしたarchive | ESP-IDF v5.5.5 / GCC 14.2.0のABIに固定（[archive再生成手順](CLASSIC_HOST_BUILD.ja.md)） | ABIが違えばlink error。通ってもstruct layoutの差が実行時に出る |
 
 **危険度が高いのはNimBLE側です。** 既に生成済みの[COMPATIBILITY.1.2.0.md](COMPATIBILITY.1.2.0.md)を見ると、
@@ -455,6 +455,7 @@ IDF v5.5.5とbyte一致）、`src/`のbluedroid API includeを自前へ張り替
 | 3.3.10 | 5.5.4 | ✅ | ✅ 4 passed | ✅ 6 suite | ✅ |
 | 3.3.11 | 5.5.5 | ✅ | 全回帰 | ✅ 6 passed（契約vendor後の回帰） | ✅ |
 | 3.3.13 | 5.5.6相当（`release/v5.5` `a45de8cc`） | ✅ | 全回帰 | ✅ 全Peer suite | ✅ |
+| 4.0.0 | 6.1.1 | ✅ | 全回帰 | ✅ 全Peer suite | ✅（`classic_hfp_cvsd`が1回失敗、再実行で成功） |
 
 3.3.12は測定していない。
 
@@ -472,6 +473,54 @@ NimBLEはcompile / linkが通り、実機でも動いた。
 | `s3_esp32` | 70 passed |
 | `p4_s3` | 29 passed、2 failed（bond後の再接続でP4のSecurity eventが出ない。ESP-Hostedの既知制限。C6 Slaveを2.13.1へ揃えても同じ） |
 | `s3_p4` | 29 passed（`lifecycle_stress`のpeer lossはHostedでは作れないためskip） |
+
+### 4.0.0の全回帰（2026-11-22〜23）
+
+Arduino-ESP32 4.0.0（ESP-IDF v6.1.1、GCC 15.2）へ全sketch.yamlをpinし、全Peer suiteを組ごとに
+実行した。ESP32-S31はこの版から使えるため、S3と組ませる`s31_s3` / `s3_s31`を追加した。
+失敗は下に書いた修正後にすべて解消し、どの組も0 failedで終わった。
+
+| 組（Central_Peripheral） | 結果 |
+| --- | --- |
+| `s3_s3` | 70 passed |
+| `s31_s3` | 89 passed / 27 skipped |
+| `s3_s31` | 89 passed / 27 skipped |
+| `esp32_esp32` | 90 passed（3.3.13と同じ） |
+| `esp32_s3` | 86 passed / 30 skipped |
+| `s3_esp32` | 89 passed / 27 skipped |
+| `p4_s3` | 50 passed / 66 skipped（`security_bond`と`hid_keyboard_host`も成功） |
+| `s3_p4` | 48 passed / 68 skipped（1件は`lifecycle_stress`のpeer loss。Hosted側のpeerは自分の無線を止められない） |
+
+`classic_hfp_cvsd`は1回だけ、2回目のaudio接続でAG側のLMP衝突により失敗し、再実行では成功した。
+再現していないため、不安定なtestとして記録する。
+
+4.0.0で必要になった修正:
+
+- Core 4.0.0は同梱の全NimBLE hostを`BLE_EXT_ADV`有効でbuildしており、legacyの`ble_gap_adv_*`が
+  `BLE_HS_ENOTSUP`を返す。EspBleはextended advertisingのset 0からlegacy PDUで広告し、
+  extended scanで届くlegacy reportも受け取るようにした。3.x系Coreと無印ESP32向けの同梱hostは
+  従来のlegacy呼び出しのまま。
+- Core同梱NimBLEは、bond後の再接続でCentralの暗号化要求とPeripheralのSecurity Requestが交差すると
+  Encryption Changeを落とす。S31とP4の先のC6では毎回起きるため、暗号化済みのまま300 ms eventが無く、
+  相手のbondが保存されているlinkを保存済みのbond flagで報告するようにした。これでP4 centralの
+  bond再接続の既知制限も解消した（[ESP-Hostedの既知制限](ESP_HOSTED_LIMITATIONS.ja.md)）。
+- 無印ESP32向けの同梱NimBLEをesp-nimble `41057af`（ESP-IDF `release/v5.5` `a45de8cc`のpin）へ
+  更新した（[無印ESP32対応計画](PLAN_ESP32.ja.md)）。Classic archiveはESP-IDF v5.5.5のまま
+  4.0.0で動作した（据え置いた理由は[archive再生成手順](CLASSIC_HOST_BUILD.ja.md)）。
+
+test側の変更:
+
+- 4.0.0はCore同梱`BLE`ライブラリの3.x API（`BLEDevice`、`BLE2902`など）を`BLE.h`へ置き換えた。
+  Core同梱stackを使う相手側sketch 10本をこのAPIで書き直したため、**test sketchは4.0.0が必要**に
+  なった。古いCoreを`--core-version`で測るときは、4.0.0へ移る前のcommitのsuiteを使う。
+- 4.0.0は起動が速く、setup()の最後に1回だけ出すready行をserial readerが取り逃がすことが多い。
+  予約command READY?（ENQ、0x05）と`ready` fixtureで、sketchに準備完了を問い合わせるようにした。
+- P4 profileに`ChipVariant=prev3`（検証機のP4はv1.3）と`CDCOnBoot=default`（4.0.0は`Serial`の既定が
+  USB CDC）を加えた。`dual_host_smoke` / `dual_host_rpa` / `dual_host_hfp`は1.25 MBのapp領域を
+  超えたため`PartitionScheme=huge_app`を使う。
+
+ライブラリ本体は、これらの変更後に3.3.13のesp32とesp32s3でもcompileを確認した。それより古い3.x系の
+CoreはCIの`compile-examples`を`core_version`指定で実行して確認する想定だが、まだ実行していない。
 
 ## 残っているリスク
 

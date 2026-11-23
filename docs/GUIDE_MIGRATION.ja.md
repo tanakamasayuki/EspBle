@@ -147,7 +147,8 @@ EspBleをtransport、PCMFlowBluetoothをSBC codec／PCM境界として組み合�
 - **BLE Audio（LE Audio）**はありません。
 - **無印ESP32ではExtended / Periodic Advertising、LE 2M / Coded PHYが使えません。**このchipの
   controllerはBLE 4.2相当で、同梱hostはextended advertisingを無効にしてbuildしています。
-  coreのhostがそれを提供するcontroller内蔵targetでは使えます。
+  LE 2M / Coded PHYはcontroller内蔵targetで使えます。Extended / Periodic Advertisingはどのtargetでも
+  提供していません（[機能対応マトリクス](FEATURE_MATRIX.ja.md)）。
 - **ClassicのHID Hostは同時1 device**、HID Host接続も1本です。
 
 何が在り、何が実機検証済みで、何がそうでないかは[機能対応マトリクス](FEATURE_MATRIX.ja.md)と、

@@ -8,14 +8,33 @@
 
 | 項目 | 値 | 理由 |
 |---|---|---|
-| ESP-IDF | cleanな`v5.5.5` tag | 対応対象をArduino-ESP32 3.3.11に限定し、そのIDFとABIを合わせる |
+| ESP-IDF | cleanな`v5.5.5` tag | 当初はArduino-ESP32 3.3.11のIDFとABIを合わせるため。以降の版へ上げない理由は[v5.5.5に据え置く理由](#v555に据え置く理由) |
 | target | `esp32` | Classic radioを持つ無印ESP32だけが対象 |
-| compiler | xtensa-esp32 GCC 14.2.0 | Arduino-ESP32 3.3.11とtoolchain ABIを合わせる |
+| compiler | xtensa-esp32 GCC 14.2.0（`esp-14.2.0_20260121`） | Arduino-ESP32 3.3.11とtoolchain ABIを合わせる。esp-14.4.0で作ったobjectはCore 4.0.0のbinutilsでlinkできない（後述） |
 | Kconfig | `tools/classic_bluedroid_host/sdkconfig.defaults` | host-only、Classic-only、profileとexternal codec境界を固定する |
 
 スクリプトはIDF tag、dirty checkout、compiler versionを検査し、一致しなければ生成を中止します。
 ESP-IDFやArduino Coreを更新するときは、archiveだけを作り直さず、ABI、公開symbol、実機回帰を
 まとめて再検証します。
+
+## v5.5.5に据え置く理由
+
+2026-11のArduino-ESP32 4.0.0（ESP-IDF v6.1.1、GCC 15.2）への移行で、archiveを新しいESP-IDFから
+作り直すかを検討し、v5.5.5のまま据え置くことにした。v5.5.5のarchiveは4.0.0で実機回帰を通っている
+（Classicの`#warning`は4.0.0までを検証済みとして扱う）。
+
+- **v5.5.6以降はClassic hostの終了時にassertする。** v5.5.6と`release/v5.5` `a45de8cc`（Arduino-ESP32
+  3.3.13のbuild元）から作り直したarchiveは、どちらもClassic hostを`end()`すると
+  `xQueueSemaphoreTake`でassertした。`hci_layer`で、`hci_layer_deinit_env`がlockを解放した後に
+  HCI taskが`restart_command_waiting_response_timer`を実行する競合で、v5.5.5とv5.5.6の間に
+  入ったものである。
+- **esp-14.4.0のtoolchainは使えない。** esp-14.4.0で作ったobjectは、Core 4.0.0のbinutils 2.45で
+  `assertion fail elf32-xtensa.c:950`となりlinkできない。今後作り直す場合も、compilerは
+  `esp-14.2.0_20260121`を使う。
+
+このため、v5.5.5以降に入ったBluedroidのセキュリティ修正（L2CAP / A2DP / AVRCP / HFP / HID / SDP /
+RFCOMMの境界検査、link keyの扱い）はまだ取り込んでいない。上流で上記の終了時の競合が直ったら、
+その版から作り直し、[archive更新後の必須確認](#archive更新後の必須確認)を実行する。
 
 ## 初回セットアップ
 

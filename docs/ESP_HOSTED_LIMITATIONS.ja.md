@@ -1,7 +1,9 @@
 # ESP32-P4 / ESP-Hostedの既知制限
 
 この文書はArduino-ESP32 3.3.11、ESP-Hosted Host/Slave 2.12.11、
-ESP32-P4 + ESP32-C6（SDIO）で実機確認した制限を記録する。
+ESP32-P4 + ESP32-C6（SDIO）で実機確認した制限を記録する。その後のCore 3.3.13と4.0.0
+（どちらもHost/Slave 2.13.1）での再測定は各節に追記している。LE Secure Connectionsとbondingは
+Core 4.0.0で解消した。
 compile、scan、接続、GATT read/write、notify/indicate、MTU交換に加え、Wi-Fi/BLEの
 同時利用と共有transportの最終所有者までの維持は動作する。
 
@@ -87,6 +89,30 @@ C6 Slave 2.12.11で`security_bond`と`hid_keyboard_host`をP4 central / S3 perip
 - `lifecycle_stress`はP4 central / peripheralの両方で成功した（peer lossはHostedでは作れないためskip）。
 
 このためCore 3.3.13でもP4/C6のSecurity、bondingとそれを前提にするHIDは対応済みと扱わない。
+
+### Core 4.0.0での解消（2026-11-22〜23）
+
+Core 4.0.0（ESP-IDF v6.1.1）、ESP-Hosted 2.13.1（P4側Host、C6側Slaveとも）で再測定した。
+
+原因はHosted経路ではなく、Core同梱NimBLE hostにあった。bond後の再接続でCentralの暗号化要求と
+PeripheralのSecurity Requestが交差すると、hostはEncryption Changeを落とし、linkは暗号化済みなのに
+eventが出ず`bonded=0`のままになる。応答の速いcontroller（ESP32-S31、P4の先のC6）では毎回の
+再接続でこれが起きる。上では「bond状態や鍵長を推測して成功扱いすることはできない」としていたが、
+原因が分かったので、EspBleは次の条件がそろったlinkだけをSecurity完了として報告するようにした。
+
+- linkが暗号化済みのまま、Security eventが出ずに300 ms経過した。
+- 相手のbondがbond storeに保存されている。
+
+報告するbond情報は推測ではなく、保存済みのbondのflagを使う。無印ESP32向けの同梱hostに
+入れているpatchと同じ扱いである。
+
+- P4 central / S3 peripheralの`security_bond`と`hid_keyboard_host`が、bond後の再接続を含めて
+  成功した。
+- `p4_s3`は50 passed / 66 skipped、`s3_p4`は48 passed / 68 skippedで、失敗は無い。`s3_p4`の
+  skipのうち1件は`lifecycle_stress`のpeer loss（Hosted側のpeerは自分の無線を止められない）。
+
+このためCore 4.0.0ではP4/C6のSecurity、bondingとそれを前提にするHIDを検証済みと扱う。
+測定したのは4.0.0だけである。3.3.x系のCoreは、この修正を入れたEspBleでも未測定のため、引き続き対応済みと扱わない。
 
 ## `end()`後の再`begin()`
 

@@ -7,8 +7,8 @@
 BLE connection, disconnection, discovery, subscription, security, and bonding span multiple asynchronous events. Peer tests are therefore a primary implementation tool, not merely supplementary smoke tests.
 
 - unit: validate keymap conversion, the HID Report Map parser, and similar pure logic with host-side g++ (`tests/unit/`).
-- examples_compile: detect public-API and target-SoC build regressions. `.github/workflows/compile-examples.yml` compiles every example on pushes and pull requests, each sketch with the profile it declares -- `esp32` for the original-ESP32-only Classic examples, `esp32s3` otherwise. A ✅ in the build column of the coverage table refers to this check.
-- peer: use two ESP32-S3 boards as the baseline fixture and exercise the real radio, controller, and host stack. An ESP32-P4 + ESP32-C6 fixture additionally covers the ESP-Hosted path.
+- examples_compile: detect public-API and target-SoC build regressions. `.github/workflows/compile-examples.yml` compiles every example on pushes and pull requests, once for each target profile it declares -- `esp32` only for the original-ESP32-only Classic examples, and `esp32s3`, `esp32s31`, `esp32`, `esp32c3`, `esp32c6`, `esp32h2` and `esp32p4` for the rest. A ✅ in the build column of the coverage table refers to this check.
+- peer: use two ESP32-S3 boards as the baseline fixture and exercise the real radio, controller, and host stack. An ESP32-P4 + ESP32-C6 fixture additionally covers the ESP-Hosted path, and a single ESP32-S31 paired with an S3 covers that chip. Every sketch is pinned to Arduino-ESP32 4.0.0.
 - manual: validate interoperability with Android, iOS, Windows, Linux, macOS, and commercial devices.
 
 Suites that need no peer live under `peer/` as single-board suites (`classic_hid_profiles`, `classic_a2dp_sink_profile` and `classic_radio_settings`, none of which has a `peer_device/`). There is no separate `single` layer: the fixture and the way they run are the same, so splitting them buys nothing. **Passing `--peer-profile` to one of them is rejected as an unknown peer**, so run them as their own command.
@@ -46,13 +46,14 @@ run: everything above it needs the fixture.
 
 ## Peer Hardware
 
-Peer tests use three fixture configurations.
+Peer tests use four fixture configurations.
 
 | Fixture | Parent DUT | Second peer | Purpose | Connection policy |
 |---|---|---|---|---|
 | Baseline regression | ESP32-S3 | ESP32-S3 | All EspBle features and the normal NimBLE path | Keeping both connected is recommended |
 | Original-ESP32 regression | ESP32 | ESP32 or ESP32-S3 | The NimBLE host EspBle bundles, Bluetooth Classic, and dual-host | Keeping both connected is recommended |
 | ESP-Hosted regression | ESP32-P4 + ESP32-C6, or ESP32-S3 | ESP32-S3, or ESP32-P4 + ESP32-C6 | SDIO, ESP-Hosted, C6 controller, and Wi-Fi/BLE coexistence, with the P4 as both Central and Peripheral | Connect only when required |
+| ESP32-S31 regression | ESP32-S31, or ESP32-S3 | ESP32-S3, or ESP32-S31 | The S31's BT 5.4 controller with the core's NimBLE (core 4.0.0 or newer), with the S31 as both Central and Peripheral (`--combo s31_s3` / `s3_s31`) | Connect only when required |
 
 The baseline reuses the two ESP32-S3 boards kept connected for EspUsbHost/EspUsbDevice. No signal wiring is required between BLE peers; each board only needs serial, power, and a connection to the test host.
 
@@ -64,6 +65,7 @@ The setup follows the existing pytest-embedded-cli conventions:
 - P4 parent profile: `p4_peer_host`
 - second-board profile: `s3_peer_device`
 - P4 second-board profile: `p4_peer_device` (the P4 as the Peripheral; the same board as `p4_peer_host`)
+- S31 profiles: `s31_peer_host` / `s31_peer_device` (one board, as with the P4; every suite with an S3 profile has an S31 twin)
 - second-board directory: `peer_device/`
 - Python fixture: `peers["device"]`
 
@@ -120,7 +122,9 @@ uv run --env-file .env pytest \
   --peer-profile device:s3_peer_device
 ```
 
-For a quick connectivity check, run only `peer/connect_disconnect/` with the same profile arguments. Security and repeated full initialization/deinitialization affected by current Core/ESP-Hosted limitations are not mandatory pass criteria for the representative suite. Re-run them after a Core or C6 firmware update and check whether the [known ESP-Hosted limitations (Japanese)](../docs/ESP_HOSTED_LIMITATIONS.ja.md) have been resolved.
+For a quick connectivity check, run only `peer/connect_disconnect/` with the same profile arguments. Security and repeated full initialization/deinitialization affected by current Core/ESP-Hosted limitations are not mandatory pass criteria for the representative suite. On core 4.0.0, `security_bond` and `hid_keyboard_host` pass with the P4 as Central, bonded reconnect included.
+
+Under core 4.0.0 the P4 profiles carry `ChipVariant=prev3` (the reference P4 is a v1.3 chip; the default image panics in the bootloader) and `CDCOnBoot=default` (4.0.0 defaults `Serial` to USB CDC, not the UART the tests read). Re-run them after a Core or C6 firmware update and check whether the [known ESP-Hosted limitations (Japanese)](../docs/ESP_HOSTED_LIMITATIONS.ja.md) have been resolved.
 
 ## Original-ESP32 Regression
 
@@ -151,6 +155,9 @@ needed. Only two kinds of sketch are left without one:
    original-ESP32 coverage -- it is a smoke test of the bundled wrapper, not of EspBle.
 2. **`phy_update`** -- the original ESP32 has a BLE 4.2 controller and no LE 2M PHY, so it cannot pass.
 
+Under core 4.0.0, `dual_host_smoke`, `dual_host_rpa` and `dual_host_hfp` outgrow the 1.25 MB app slot
+and build with `PartitionScheme=huge_app`.
+
 When re-running the same suite with the roles swapped, **flash one of the boards with another suite
 first**. A suite that selects its target by service UUID, such as `local_identity`, otherwise observes
 the board still advertising the previous run's peer firmware.
@@ -165,12 +172,12 @@ second pytest run against the same board waits its turn. Do not use `arduino-cli
 | documentation-only change | none |
 | ordinary `src/` change | representative smoke (`gatt_read_write`, `security_bond`, `hid_keyboard_host`, `mtu`, `connection_parameters`; parent role is enough, ~15 min) |
 | changes to `src/nimble_esp32/`, `EspBleNimbleHost.h`, lifecycle, controller paths or the vendor tool | full sweep in both roles (~1 h each) |
-| Arduino-ESP32 core update | full sweep in both roles, and check that the pins in `tools/vendor_nimble_esp32.py` match that core's esp-idf |
+| Arduino-ESP32 core update | full sweep in both roles, and check that the pins in `tools/vendor_nimble_esp32.py` are at least as new as that core's esp-idf NimBLE pin (today the `release/v5.5` snapshot of 3.3.13, which contains everything in 4.0.0's ESP-IDF v6.1.1 pin) |
 | release candidate | full sweep in both roles (see the [release checklist](../docs/RELEASE_CHECKLIST.md)) |
 
 The original ESP32 runs the host **EspBle bundles**, not the core's, so a `src/` change can affect it
-in ways the S3 fixture cannot reproduce. The host is the same snapshot as the other targets, though,
-so a full sweep every time is not required -- the table above is the granularity.
+in ways the S3 fixture cannot reproduce. The host is the snapshot of 3.3.13, which contains everything
+the other targets' host has on 4.0.0, though, so a full sweep every time is not required -- the table above is the granularity.
 
 ## Peer-Test Principles
 
@@ -447,7 +454,13 @@ HFP audio alone needs 3.3.8 because of the core's prebuilt controller). Use
 `--core-version` to re-confirm the lower end of that range on hardware, and
 `--peer-core-version` with the suites whose peer links no EspBle (`core_host_*`
 and `classic_core_host_spp`). Both are manual runs: the routine regression stays
-on 3.3.11.
+on 4.0.0.
+
+**The suite itself now needs 4.0.0.** Ten counterpart sketches that use the core's own stack are
+written with 4.0's `BLE.h` API, which replaced the 3.x one (`BLEDevice`, `BLE2902`, ...), and the
+Classic counterparts follow 4.0's `BluetoothSerial` and ESP-IDF 6. Rewriting the pins to an older core
+therefore cannot build them. To measure an older core, check out a commit of the suite from before the
+move to 4.0.0 and run it there.
 
 ## Do not wait for a startup banner
 
@@ -464,6 +477,18 @@ the test asks until it is answered. The `probe` fixture in `tests/conftest.py` d
 this; a test takes it as an argument. State that a sketch announces when it happens —
 a BLE link coming up, for instance — is answered by the same command, so a test asks
 for the current state rather than waiting for the announcement.
+
+Core 4.0.0 boots fast enough that the ready line at the end of `setup()` was missed most
+of the time, and `dual_host_smoke` and a dozen Classic suites failed that way. **Every
+sketch now announces readiness through a reserved command**: it hands the code that
+prints its ready line to `announceReady()` in `EspBleTestLifecycle.h`, which prints it
+then and again on every READY? (ENQ, `0x05`), and the test waits with the `ready`
+fixture, which asks until the line comes. A sketch whose setup failed never announces,
+so the test still fails on the line it waited for. Where more boot output follows the
+ready line (the SPP server's channel, the inquiry peer's class of device), readiness is
+announced after it and READY? repeats both lines. Sketches that used to run their whole
+procedure from `setup()` (`classic_a2dp_sink_profile`, `classic_hid_profiles`,
+`stack_smoke`) now start it on `g` once the test has seen them ready.
 
 ## Anchor a trailing variable-length field
 

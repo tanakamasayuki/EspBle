@@ -31,7 +31,7 @@ EspUsbHost / EspUsbDeviceで扱っている機能のBLE版、およびBLEで一�
 | MTUを超える値のRead | ✅ | Characteristic / Descriptor のReadは`ble_gattc_read_long()`で発行し、1 MTUに収まらない値も最後まで読む（HID Report Mapのような数百byteの値が黙って切り詰められない）。短い値は最初の応答で完結するので往復は増えない |
 | GATT Serverの読み取りフック | ✅ | `EspBleGattServer::onRead()`。peerがCharacteristicを読んだ瞬間に呼ばれ、その場で`setValue()`した値が返る（センサー値を都度作る用途）。**BLEスタックタスク上で実行される**ため、重い処理を書くとスタックが止まりpeer側はreadがtimeoutする |
 | 複数Serviceの合成（composite） | ✅ | HID+DIS+Battery合成を実装済み |
-| Just Works Pairing / Bonding | ✅ | LE Secure Connections |
+| Just Works Pairing / Bonding | ✅ | LE Secure Connections。P4 + C6（ESP-Hosted）ではCore 4.0.0でのみ検証済みで、P4をCentralにしたbond後の再接続も含む（`security_bond`、`hid_keyboard_host`）。[ESP-Hostedの既知制限](ESP_HOSTED_LIMITATIONS.ja.md)を参照 |
 | 静的passkey / MITM認証 / 暗号化・認証permission | ✅ | `Security/*` example |
 | 実行時passkey入力 | ✅ | 静的passkeyなしのKeyboardOnly + MITMで、`providePasskey()`によりpairing中に実行時入力。表示側は静的passkeyなしのDisplayOnlyで動的passkey生成→`onPasskeyDisplayed`。応答待ちは30秒で打ち切り。Peer検証済み、`Security/RuntimePasskey{Server,Client}` example |
 | Numeric Comparison | ✅ | LE Secure Connections、両側DisplayYesNo + MITM。`onNumericComparison`で比較値を提示し`confirmNumericComparison()`で確認。応答待ちは30秒で打ち切り。Peer検証済み、`Security/NumericComparison{Server,Client}` example |
@@ -101,7 +101,7 @@ EspUsbHost / EspUsbDeviceで扱っている機能のBLE版、およびBLEで一�
 | iBeacon（Apple beacon layout） | ✅ | backend非依存codec `EspBleIBeacon.h`（`espBleEncodeIBeacon`/`espBleDecodeIBeacon`）。company ID 0x004C＋UUID＋major/minor＋measured power。unit test＋`ibeacon` Peerでbroadcast/decodeを検証済み |
 | Advertising Service Data（AD 0x16） | ✅ | `EspBleAdvertising::addServiceData(uuid, data, length)`で最大4ブロック送信、`EspBleScanResult::serviceData[]`/`serviceDataCount`/`serviceDataFor(uuid, data)`で受信。複数ブロックとUUID検索を`service_data` Peerで検証済み |
 | Filter Accept List（Peripheral側の接続制限） | ✅ | `EspBle::addToAcceptList()` ＋ `EspBleAdvertising::setFilterPolicy()`（Any / ScanRequest / Connection / Both）。コントローラが弾くのでアプリまで届かない。同梱wrapperのwhite-list APIはlinkできないため`ble_gap_wl_set()`を直接使う。`accept_list` Peerで検証済み |
-| Directed Advertising（送信） | ✅ | `EspBleAdvertising::setDirectedTarget(address, addressType, highDuty)` / `clearDirectedTarget()`。`ble_gap_adv_start()`を直接呼ぶ。仕様上ADデータを載せられないためpayloadは送出されず、指定した相手だけが接続できる。highDutyは3.75 ms間隔・最大1.28秒。相手がRPAを使う場合はボンド経由で解決するため先にボンディングが必要。`directed_advertising` Peerで検証済み |
+| Directed Advertising（送信） | ✅ | `EspBleAdvertising::setDirectedTarget(address, addressType, highDuty)` / `clearDirectedTarget()`。`ble_gap_adv_start()`を直接呼ぶ（Core 4.0.0ではextended advertisingのset 0からlegacyのdirected PDUで送る）。仕様上ADデータを載せられないためpayloadは送出されず、指定した相手だけが接続できる。highDutyは3.75 ms間隔・最大1.28秒。相手がRPAを使う場合はボンド経由で解決するため先にボンディングが必要。`directed_advertising` Peerで検証済み |
 | Directed Advertising（受信） | ⚠️ | 自分宛のADV_DIRECT_INDはスキャン結果として届き、address / addressType / rssi / connectable=true / scannable=false を持つ（仕様上ADデータを載せないため他は空）。そのまま接続可。ただし**advertisement typeを公開していないため判別不能**で、「connectable かつ non-scannable かつ payload空」からの推測になる |
 | スキャン側のFilter Accept List | ✅ | `EspBleScanConfig::acceptListOnly`。`ble_gap_disc()` の filter policy に渡すため、許可リスト外のアドバタイズはコントローラが捨てアプリまで届かない。`accept_list` Peerで、リストが空なら1件も報告されず、アドレス追加後は報告されることを検証済み |
 | 送信電力の変更 | ✅ | `EspBle::setTxPower(dBm)` / `txPower()`。無線が対応する飛び飛びの値（-12..+9 dBm、3 dB刻み）へ丸める。`local_identity` Peerで、設定値がadvertisingのTx Power Levelとして電波に出ることを検証済み。ESP-Hosted（P4 + C6）では送信電力をco-processorが持つため、`setTxPower()`は`BackendFailure`で失敗し、`txPower()`は`INT8_MIN`を返す（`local_identity`のP4 Peerで確認） |
@@ -109,8 +109,8 @@ EspUsbHost / EspUsbDeviceで扱っている機能のBLE版、およびBLEで一�
 | 接続時のパラメータ / PHY指定 | 🔧 | `connect()`でConnection IntervalやPHYを指定できない。接続確立後に`updateConnectionParameters()`/`updatePhy()`で変更する |
 | 切断理由の指定（送信側） | ✅ | `disconnect(id, reason)`。`disconnectReason`はHCIコードへ正規化して公開する（backendは0x200オフセット付きで報告するため）ので、渡した値がそのまま相手に現れる。`local_identity` Peerで検証済み |
 | Advertisingチャネルマップの選択 | ✅ | `EspBleAdvertising::setChannelMap(mask)`（`EspBleAdvertisingChannel37/38/39`のビットマスク、0で3チャネル全部）。Wi-Fiと重なるチャネルを避けられる代わりに、見つかるまでの時間は延びる。`directed_advertising` Peerでチャネル39のみでの接続を検証済み |
-| Extended Advertising / 複数Advertising Set | ❌ | 同梱NimBLEが`CONFIG_BT_NIMBLE_EXT_ADV`無効でビルドされており、Arduinoライブラリからは有効化不可 |
-| Periodic Advertising | ❌ | Extended Advertising（`CONFIG_BT_NIMBLE_EXT_ADV`）に依存するため同上で対応不可 |
+| Extended Advertising / 複数Advertising Set | ❌ | 3.x系CoreのNimBLEと無印ESP32向けの同梱hostは`CONFIG_BT_NIMBLE_EXT_ADV`無効でビルドされており、Arduinoライブラリからは有効化不可。Core 4.0.0では有効で、EspBleはlegacyのadvertisingを送るために内部でset 0を使うが、Extended Advertisingや追加のsetは公開しない |
+| Periodic Advertising | ❌ | Extended Advertising（`CONFIG_BT_NIMBLE_EXT_ADV`）に依存するため同上の理由で提供しない |
 | 2M PHY / Coded PHY（Long Range） | ✅ | 接続後のPHY更新で対応（下記「PHY更新」）。2Mは実機Peer検証済み、Coded（Long Range）は無線対応依存。**無印ESP32はBLE 4.2 controllerのため利用不可** |
 | 接続パラメータ更新 | ✅ | `updateConnectionParameters()`要求＋`onConnectionParametersUpdated()`で結果配送。`EspBleConnection`にinterval/latency/timeoutを公開。両役割・両パスをPeerで検証済み |
 | PHY更新（2M / Coded） | ✅ | `updatePhy()`要求＋`onPhyUpdated()`で結果配送。`EspBleConnection`にtx/rx PHYを公開。2M PHYへの更新をPeerで検証済み（Codedは無線対応依存）。**無印ESP32はBLE 4.2 controllerのため利用不可** |
@@ -120,12 +120,12 @@ EspUsbHost / EspUsbDeviceで扱っている機能のBLE版、およびBLEで一�
 ## Bluetooth Classic（BR/EDR）— 無印ESP32限定
 
 ESP32-S3/C3/C6/H2等はBluetooth Classicを搭載しないため利用できません。無印ESP32では`EspBleClassic`の利用時に
-独自buildしたClassic-only Bluedroid hostを自動選択します。このprecompiled hostはESP-IDF 5.5.5 / xtensa-esp32 GCC 14.2.0のABIに固定しており、
-対応Coreは実測でArduino-ESP32 3.2.0〜3.3.11と3.3.13です（HFP audio（SCO）のみ3.3.8以上）。Classicは1.3.0から同梱しており、サポートや互換性の保証は掲げません。各⚠️行に書いてあるのが実機で確認した範囲であり、外部機器との相互運用は未検証です。dual-hostは実験扱いのままです。
+独自buildしたClassic-only Bluedroid hostを自動選択します。このprecompiled hostはESP-IDF 5.5.5 / xtensa-esp32 GCC 14.2.0のABIに固定しており（以降のESP-IDF 5.5ではClassic hostの終了時にassertするため意図して据え置き）、
+対応Coreは実測でArduino-ESP32 3.2.0〜3.3.11、3.3.13、4.0.0です（HFP audio（SCO）のみ3.3.8以上）。Classicは1.3.0から同梱しており、サポートや互換性の保証は掲げません。各⚠️行に書いてあるのが実機で確認した範囲であり、外部機器との相互運用は未検証です。dual-hostは実験扱いのままです。
 
 | 機能 | 状況 | 備考 |
 |---|---|---|
-| Bluetooth Classic（BR/EDR）全般 | ⚠️ | 無印ESP32で`EspBleClassic`利用時に自動選択（対応Coreは実測で3.2.0〜3.3.11と3.3.13）。他SoCはBR/EDR無線を持たない |
+| Bluetooth Classic（BR/EDR）全般 | ⚠️ | 無印ESP32で`EspBleClassic`利用時に自動選択（対応Coreは実測で3.2.0〜3.3.11、3.3.13、4.0.0）。他SoCはBR/EDR無線を持たない |
 | A2DP（オーディオストリーミング） | ⚠️ | Sink/SourceのSBC negotiationとencode済みpayload transport。SBC encode/decode、PCM、speaker／microphone exampleは正式リリース済みの[PCMFlowBluetooth](https://github.com/tanakamasayuki/PCMFlowBluetooth)が担当 |
 | HFP（ハンズフリー） | ⚠️ | Client/Audio GatewayのSLC、発信・着信・応答・終了、CVSD・mSBC raw SCO API、AG codec選択、role排他に加え、Client側のoperator名・subscriber番号・memory dial・NREC・Apple電池残量通知を実装し実機確認済み。通話待ち・三者通話（CHLD / BTRH）は未実装。外部機器相互運用は未確認 |
 | AVRCP（メディア操作） | ⚠️ | CT/TG passthrough、metadata/play-status要求、absolute volume。metadata応答の外部Target相互運用は未完了 |

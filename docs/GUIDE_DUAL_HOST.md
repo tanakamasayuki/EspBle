@@ -462,7 +462,7 @@ and Controller ownership.
 - HCI policy fails closed until every new opcode is classified and tested.
 - Linking Classic preserves BTDM memory and costs more heap than BLE-only use.
 - Radio, heap, CPU and application callback queues are shared resources.
-- The measured Classic archive Core range is Arduino-ESP32 3.2.0–3.3.11; HFP
+- The measured Classic archive Core range is Arduino-ESP32 3.2.0–3.3.11, 3.3.13 and 4.0.0; HFP
   audio requires 3.3.8 or newer.
 
 The first isolation step is to `end()` one Host. If the problem disappears in

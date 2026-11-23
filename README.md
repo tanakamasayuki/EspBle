@@ -15,8 +15,8 @@ from chip to chip is which radio features exist and how much has been verified**
 the table under [Compatibility](#compatibility) lays the differences out.
 
 > [!IMPORTANT]
-> **ESP32-S3 / C3 / C6 / H2** are the standard case: EspBle uses the NimBLE host
-> that ships with the Core.
+> **ESP32-S3 / S31 / C3 / C6 / H2** are the standard case: EspBle uses the NimBLE host
+> that ships with the Core (the ESP32-S31 needs Core 4.0.0 or newer).
 > **The original ESP32** has no Core-provided NimBLE, since its prebuilt libraries
 > are Bluedroid, so EspBle bundles a NimBLE host for it. Its BLE 4.2 controller
 > rules out some features, and in exchange the chip has Bluetooth Classic.
@@ -79,19 +79,21 @@ suite plus host-side unit tests. What is covered per SoC is in
 
 ### What differs per SoC
 
-| | ESP32-S3 / C3 / C6 / H2 | Original ESP32 | ESP32-P4 + slave (ESP-Hosted) |
+| | ESP32-S3 / S31 / C3 / C6 / H2 | Original ESP32 | ESP32-P4 + slave (ESP-Hosted) |
 |---|---|---|---|
 | BLE radio | On-chip | On-chip | **On the slave chip** (over SDIO; needs its own firmware) |
 | NimBLE host | From the Core | **Bundled by EspBle** (`src/nimble_esp32/`) | From the Core (HCI carried over SDIO to the slave) |
 | Public BLE API | Same | Same | Same |
-| Security / bonding | Supported | Supported | **Unavailable** (upstream ECC defect) |
+| Security / bonding | Supported | Supported | **Core 4.0.0 only** (verified on 4.0.0; not yet measured on 3.3.x) |
 | 2M / Coded PHY | Supported | **Unavailable** (BLE 4.2 controller) | Depends on the slave chip and its firmware (outside the representative suite) |
 | Bluetooth Classic | No BR/EDR radio | **Supported** (SPP / HID / A2DP / AVRCP / HFP; core 3.2.0+, HFP audio 3.3.8+) | No BR/EDR radio |
-| Verified scope | Every feature, on a two-S3 peer suite (C3 / C6 / H2 are build-verified in CI) | A two-board peer sweep in both roles; only what passes counts | Representative suite (connect, GATT, notify, MTU, Wi-Fi coexistence), **verified only with a C6 slave on firmware 2.12.11** |
+| Verified scope | Every feature, on a two-S3 peer suite; the S31 runs the peer suites against an S3 in both roles (C3 / C6 / H2 are build-verified in CI) | A two-board peer sweep in both roles; only what passes counts | Peer suites with the P4 as Central and as Peripheral against an S3, **verified only with a C6 slave** (firmware 2.12.11, and 2.13.1 on Core 3.3.13 / 4.0.0) |
 
-Some limits apply across the whole family. Extended and periodic advertising are unavailable on
-every target, because the NimBLE the Core ships is built with
-`CONFIG_BT_NIMBLE_EXT_ADV` disabled. The simultaneous-connection limit comes from
+Some limits apply across the whole family. Extended and periodic advertising are not
+offered on any target: the NimBLE that 3.x Cores ship, and the host EspBle bundles for
+the original ESP32, are built with `CONFIG_BT_NIMBLE_EXT_ADV` disabled. Core 4.0.0
+enables it, and there EspBle sends its ordinary (legacy) advertising through
+extended-advertising set 0, with no change for sketches. The simultaneous-connection limit comes from
 the controller and is 3 in the verified configurations. For API-level support, see
 the [feature matrix](docs/FEATURE_MATRIX.md).
 
@@ -181,11 +183,13 @@ supplies. **In this setup the BLE radio work happens on the slave, not on the P4
 Verified host/slave versions, the slave firmware update procedure and the supported
 subset are in the Japanese [ESP-Hosted setup guide](docs/ESP_HOSTED_SETUP.ja.md).
 
-On P4 + C6, LE Secure Connections, bonding and dependent HID paths, and repeated
-`begin()` after `end()`, have known limitations. With Core 3.3.11 a P4 ECC defect in
-the bundled IDF made the first pairing fail. With Core 3.3.13 the first pairing and
-bond succeed, but the P4 reports no security event when a bonded peer reconnects, so
-these paths are still not treated as supported. Both are recorded in the Japanese
+On P4 + C6, LE Secure Connections, bonding and dependent HID paths are verified on
+Core 4.0.0 only. With Core 3.3.11 a P4 ECC defect in the bundled IDF made the first
+pairing fail. With Core 3.3.13 the first pairing and bond succeeded, but the P4
+reported no security event when a bonded peer reconnected. That last gap came from the
+core's NimBLE dropping the event, which EspBle now recovers from; on 4.0.0 (ESP-Hosted
+2.13.1 on both sides) bonded reconnects with the P4 as Central pass. Repeated
+`begin()` after `end()` remains limited. Both are recorded in the Japanese
 [known limitations](docs/ESP_HOSTED_LIMITATIONS.ja.md).
 
 For a Tab5 or a custom board whose SDIO wiring differs from the generic P4, select
@@ -195,7 +199,7 @@ the bilingual [Hosted/CustomPins example](examples/Hosted/CustomPins/)).
 
 ### Core version
 
-Development and the peer tests run on arduino-esp32 3.3.13 (every peer suite on S3, the original ESP32, and P4 + C6). The minimum
+Development and the peer tests run on arduino-esp32 4.0.0 (ESP-IDF v6.1.1; every peer suite on S3, the original ESP32, P4 + C6 and the ESP32-S31). The minimum
 supported core differs per chip, and the reason is always the same question:
 who brings the BLE host.
 
@@ -204,18 +208,21 @@ who brings the BLE host.
 | Original ESP32 (BLE / Classic) | **EspBle bundles it** (NimBLE source + Classic archive) | **3.2.0** | Nearly independent of the core version: the Classic host ships the API headers it was built against in `src/esp32/include/`, so declarations and struct layouts cannot drift, and only stable platform APIs (FreeRTOS and the like) come from the core. Below 3.2.0 is unmeasured and stops at an `#error` that says so |
 | Original ESP32, HFP audio (SCO) only | Same, but the controller is the core's | **3.3.8** | Cores up to 3.3.7 ship a prebuilt controller built with the PCM audio path (for an external codec chip), which cannot carry the HCI-path SCO EspBle uses. Bundling the host does not help: the controller binary belongs to the core |
 | ESP32-S3 / C3 / C6 / H2 | **The core's bundled NimBLE** | **3.3.0** | The 3.2.x-generation prebuilt libraries were built with Bluedroid as the BLE host, so the NimBLE EspBle calls does not exist there. The core switched to NimBLE in 3.3.0. Those versions stop at the `EspBle requires the NimBLE backend` `#error` |
-| ESP32-P4 (+C6 ESP-Hosted) | **The core provides it** (NimBLE over Hosted) | **3.3.1** | 3.3.0 does not provide NimBLE for the P4's Hosted configuration |
+| ESP32-S31 | **The core's bundled NimBLE** | **4.0.0** | The chip first appears in Arduino-ESP32 4.0.0 |
+| ESP32-P4 (+C6 ESP-Hosted) | **The core provides it** (NimBLE over Hosted) | **3.3.1** | 3.3.0 does not provide NimBLE for the P4's Hosted configuration. Security and bonding are verified on 4.0.0 only |
 
-The original-ESP32 range is measured: 3.2.0 through 3.3.11 and 3.3.13 all compile and link,
-and 3.2.1 / 3.3.0 / 3.3.7 / 3.3.8 / 3.3.10 / 3.3.11 / 3.3.13 are hardware-verified (3.3.12 was not measured) (Japanese
-[core-version test plan](docs/PLAN_CORE_VERSION_MATRIX.ja.md)). The other chips'
+The original-ESP32 range is measured: 3.2.0 through 3.3.11, 3.3.13 and 4.0.0 all compile and link,
+and 3.2.1 / 3.3.0 / 3.3.7 / 3.3.8 / 3.3.10 / 3.3.11 / 3.3.13 / 4.0.0 are hardware-verified (3.3.12 was not measured) (Japanese
+[core-version test plan](docs/PLAN_CORE_VERSION_MATRIX.ja.md)). The code changes for
+4.0.0 were compile-checked again on 3.3.13 (ESP32 and ESP32-S3); the older cores in the
+range have not yet been rebuilt with them. The other chips'
 ranges are measured by CI.
 
 - **Core Compatibility Matrix** workflow → `docs/COMPATIBILITY.<version>.md` (representative BLE examples across arduino-esp32 releases)
 - **Board Build Coverage** workflow → `docs/BOARDS.<version>.md` (the examples present when the workflow runs, across ESP32-S3 / ESP32 / C3 / C6 / H2 / P4 at one Core version)
 
 Both are manual (`workflow_dispatch`) because a full sweep rewrites and rebuilds
-every sketch. Cores newer than 3.3.13 are treated as unverified rather than
+every sketch. Cores newer than 4.0.0 are treated as unverified rather than
 known-broken: on the original ESP32 they build with a `#warning`.
 
 ## Getting started

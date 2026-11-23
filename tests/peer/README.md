@@ -2,7 +2,7 @@
 
 > 日本語版: [README.ja.md](README.ja.md)
 
-Automated Bluetooth LE tests using two ESP32-S3 boards as the baseline fixture. An ESP32-P4 + ESP32-C6 parent DUT can also use an ESP32-S3 as its wireless peer to exercise the ESP-Hosted path. No signal wiring is required between the BLE peers.
+Automated Bluetooth LE tests using two ESP32-S3 boards as the baseline fixture. An ESP32-P4 + ESP32-C6 parent DUT can also use an ESP32-S3 as its wireless peer to exercise the ESP-Hosted path, and an ESP32-S31 pairs with an ESP32-S3 on either side. Every sketch is pinned to Arduino-ESP32 4.0.0, which the suite requires. No signal wiring is required between the BLE peers.
 
 ```sh
 uv run --env-file .env pytest peer/
@@ -14,12 +14,14 @@ The profiles and environment variables reuse the existing EspUsbHost/EspUsbDevic
 |---|---|---|
 | normal parent | `s3_peer_host` | `TEST_SERIAL_PORT_S3_PEER_HOST` |
 | ESP-Hosted parent | `p4_peer_host` | `TEST_SERIAL_PORT_P4_PEER_HOST` |
+| ESP32-S31 parent | `s31_peer_host` | `TEST_SERIAL_PORT_S31_PEER_HOST` |
 | original-ESP32 parent | `esp32_peer_host` | `TEST_SERIAL_PORT_ESP32_PEER_HOST` |
 | second peer | `s3_peer_device` | `TEST_SERIAL_PORT_PEER_DEVICE_S3_PEER_DEVICE` |
 | second peer (original ESP32) | `esp32_peer_device` | `TEST_SERIAL_PORT_PEER_DEVICE_ESP32_PEER_DEVICE` |
 | second peer (ESP-Hosted) | `p4_peer_device` | `TEST_SERIAL_PORT_PEER_DEVICE_P4_PEER_DEVICE` |
+| second peer (ESP32-S31) | `s31_peer_device` | `TEST_SERIAL_PORT_PEER_DEVICE_S31_PEER_DEVICE` |
 
-The P4+C6 fixture is a single board, so `p4_peer_host` and `p4_peer_device` point at the same port. One run never puts it on both sides; it pairs with an S3 once as the parent and once as the peer.
+The P4+C6 fixture is a single board, so `p4_peer_host` and `p4_peer_device` point at the same port. One run never puts it on both sides; it pairs with an S3 once as the parent and once as the peer. The ESP32-S31 is a single board in the same way (`s31_peer_host` and `s31_peer_device` share a port). Every suite with an S3 profile has an S31 twin, which exists only from core 4.0.0 on.
 
 The routine pairings are named in `arduino_combos` in `tests/pyproject.toml` and are selected with `--combo <name>`. A name reads `<parent>_<peer>`; the parent is the Central and the peer is the Peripheral.
 
@@ -31,6 +33,8 @@ The routine pairings are named in `arduino_combos` in `tests/pyproject.toml` and
 | `s3_esp32` | `s3_peer_host` | `esp32_peer_device` |
 | `p4_s3` | `p4_peer_host` | `s3_peer_device` |
 | `s3_p4` | `s3_peer_host` | `p4_peer_device` |
+| `s31_s3` | `s31_peer_host` | `s3_peer_device` |
+| `s3_s31` | `s3_peer_host` | `s31_peer_device` |
 
 The profile names do not describe BLE roles. Sketches are flashed to and run on both boards, and both serial ports are observed from pytest. Within a suite the parent-side sketch is the central and the `peer_device/` sketch the peripheral; which physical board takes which side is chosen with `--profile` and `--peer-profile`.
 
@@ -78,7 +82,9 @@ peer/<suite>/
 
 Every sketch also answers the reserved STOP command that the autouse fixture in
 [`conftest.py`](conftest.py) sends after each test, through [`../sketch_support/EspBleTestLifecycle.h`](../sketch_support/EspBleTestLifecycle.h);
-a sketch that does not is reported as a warning after every test. The header comment
+a sketch that does not is reported as a warning after every test. The same header
+answers READY? (ENQ, `0x05`) with the line a sketch handed to `announceReady()`, and a
+test waits for that line with the `ready` fixture instead of hoping to catch it at boot. The header comment
 describes the four edits a new sketch needs, and the [tests README](../README.md#board-state-between-tests)
 describes what pytest sends.
 

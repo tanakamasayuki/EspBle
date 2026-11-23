@@ -248,7 +248,7 @@ brokerが**やらないこと**が1つあります。送信ACL bufferを2つのh
 
 EspBleのコストは、呼ぶ機能の数よりも**どのhostをlinkするか**で決まります。
 
-- **controller内蔵target**（S3 / C3 / C6 / H2）ではNimBLE hostがcoreから来るので、EspBleは
+- **controller内蔵target**（S3 / S31 / C3 / C6 / H2）ではNimBLE hostがcoreから来るので、EspBleは
   自分のcodeだけを足します。
 - **無印ESP32**ではcoreのprebuiltがBluedroidなので、EspBleがこのchip向けにNimBLE hostを
   同梱します（`src/nimble_esp32/`）。このtargetで最も大きい追加です。

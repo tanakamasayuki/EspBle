@@ -156,8 +156,8 @@ hardware-verified, unverified or unimplemented — is written down in the
 [Classic feature inventory](CLASSIC_FEATURE_INVENTORY.ja.md) (Japanese). Running
 BLE and Classic together is hardware-verified but stays experimental. The
 precompiled Classic host is ABI-bound to ESP-IDF 5.5.5 / xtensa-esp32 GCC
-14.2.0; the measured core range is Arduino-ESP32 3.2.0 through 3.3.11, with
-HFP audio (SCO) needing 3.3.8 or newer. The history
+14.2.0; the measured core range is Arduino-ESP32 3.2.0 through 3.3.11, 3.3.13 and
+4.0.0, with HFP audio (SCO) needing 3.3.8 or newer. The history
 and the measurements are in the
 [Classic implementation plan](PLAN_ESP32_CLASSIC.ja.md) and the
 [handover notes](HANDOFF_ESP32_CLASSIC.ja.md) (both Japanese).

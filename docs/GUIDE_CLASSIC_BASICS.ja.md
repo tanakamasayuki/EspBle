@@ -7,11 +7,11 @@
 BLEについては[BLE通信の入門ガイド](GUIDE_BLE_BASICS.ja.md)、どちらを使うかの判断は
 [BLEとClassicの選び方](CLASSIC_VS_BLE.ja.md)を参照してください。
 
-**Classicは無印ESP32でしか使えません。** ESP32-S3/C3/C6/H2/P4はBR/EDRの無線を持ちません。
+**Classicは無印ESP32でしか使えません。** ESP32-S3/S31/C3/C6/H2/P4はBR/EDRの無線を持ちません。
 機能ごとの検証状態（実機検証済み / 未検証 / 未実装）は
 [Classic機能の棚卸し](CLASSIC_FEATURE_INVENTORY.ja.md)が正本です。
 precompiled Classic hostはESP-IDF 5.5.5 / xtensa-esp32 GCC 14.2.0のABIに固定しています。
-buildに使ったBluedroid headerを同梱しているため、対応Coreは実測で3.2.0〜3.3.11です
+buildに使ったBluedroid headerを同梱しているため、対応Coreは実測で3.2.0〜3.3.11、3.3.13、4.0.0です
 （HFP audio（SCO）のみ3.3.8以上）。
 
 ## 1. BLEとは別の通信モデル

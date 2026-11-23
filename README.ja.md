@@ -13,7 +13,7 @@ Arduino-ESP32同梱の`BLEDevice` / `BLEClient` / `BLEServer`などのラッパ�
 検証範囲だけです**——違いは[対応環境](#対応環境)の表にまとめてあります。
 
 > [!IMPORTANT]
-> **ESP32-S3 / C3 / C6 / H2**はCore同梱のNimBLEをそのまま使う標準構成です。
+> **ESP32-S3 / S31 / C3 / C6 / H2**はCore同梱のNimBLEをそのまま使う標準構成です（ESP32-S31はCore 4.0.0以上）。
 > **無印ESP32**はCoreのプリビルドがBluedroidのため、EspBleがNimBLE hostを同梱して動かします。
 > BLE 4.2 controllerなので使えない機能があり、代わりにBluetooth Classicが使えます。
 > **ESP32-P4**はBLE無線を持たず、SDIOでつないだslave側のチップがBLEを担当します（ESP-Hosted）。
@@ -66,18 +66,20 @@ API単位の対応状況と制限は[機能対応マトリクス](docs/FEATURE_M
 
 ### SoCごとの違い
 
-| | ESP32-S3 / C3 / C6 / H2 | 無印ESP32 | ESP32-P4 + slave（ESP-Hosted） |
+| | ESP32-S3 / S31 / C3 / C6 / H2 | 無印ESP32 | ESP32-P4 + slave（ESP-Hosted） |
 |---|---|---|---|
 | BLE無線 | 内蔵 | 内蔵 | **slave側のチップ**（SDIO接続。別途firmwareが必要） |
 | NimBLE host | Core同梱 | **EspBleが同梱**（`src/nimble_esp32/`） | Core同梱（HCIをSDIOでslaveへ流す） |
 | BLEの公開API | 同一 | 同一 | 同一 |
-| Security / bonding | 対応 | 対応 | **不可**（上流のECC不具合） |
+| Security / bonding | 対応 | 対応 | **Core 4.0.0のみ**（4.0.0で検証済み。3.3.x系では未測定） |
 | 2M / Coded PHY | 対応 | **不可**（BLE 4.2 controller） | slaveのチップとfirmware次第（代表suiteの対象外） |
 | Bluetooth Classic | 無線が無いため不可 | **対応**（SPP / HID / A2DP / AVRCP / HFP。Core 3.2.0以上、HFP audioのみ3.3.8以上） | 不可 |
-| 検証範囲 | S3の2台で全機能をPeer test（C3 / C6 / H2はCIのbuild検証） | 2台でPeer testを両role掃引し、通った範囲のみ | 代表suite（接続、GATT、notify、MTU、Wi-Fi共存）。**C6 slave / firmware 2.12.11でのみ確認** |
+| 検証範囲 | S3の2台で全機能をPeer test。S31はS3を相手に両roleでPeer test（C3 / C6 / H2はCIのbuild検証） | 2台でPeer testを両role掃引し、通った範囲のみ | P4をCentral / Peripheralの両方にしてS3相手にPeer test。**C6 slaveでのみ確認**（firmware 2.12.11、Core 3.3.13 / 4.0.0では2.13.1） |
 
-シリーズ共通の制限もあります。Extended / Periodic Advertisingは、Coreが同梱するNimBLEが
-`CONFIG_BT_NIMBLE_EXT_ADV`無効でbuildされているためどのtargetでも使えません。同時接続数の上限は
+シリーズ共通の制限もあります。Extended / Periodic Advertisingはどのtargetでも提供しません。3.x系Coreが
+同梱するNimBLEと、無印ESP32向けにEspBleが同梱するhostは`CONFIG_BT_NIMBLE_EXT_ADV`無効でbuildされています。
+Core 4.0.0ではこれが有効になっており、EspBleは通常の（legacyの）advertisingをextended advertisingの
+set 0から送ります。sketch側の変更は要りません。同時接続数の上限は
 controller由来で、検証済みの構成では3です。API単位の対応状況は[機能対応マトリクス](docs/FEATURE_MATRIX.ja.md)を
 参照してください。
 
@@ -150,10 +152,12 @@ ESP-Hosted NimBLE構成で利用します。**この構成ではBLEを実行す�
 検証済みのHost/Slave version、slave firmwareの更新方法、対応済み範囲は
 [ESP-Hostedセットアップ](docs/ESP_HOSTED_SETUP.ja.md)にあります。
 
-P4 + C6では、LE Secure Connections、bonding、それを前提とするHID、および`end()`後の複数回の再`begin()`に
-[既知制限](docs/ESP_HOSTED_LIMITATIONS.ja.md)があります。Core 3.3.11では同梱IDFのP4 ECC不具合で初回の
-pairingが失敗しました。Core 3.3.13では初回のpairingとbondは成功しますが、bond後の再接続でP4側のSecurity
-eventが出ないため、まだ対応済みとは扱いません。
+P4 + C6のLE Secure Connections、bonding、それを前提とするHIDは、Core 4.0.0でのみ検証済みです。
+Core 3.3.11では同梱IDFのP4 ECC不具合で初回のpairingが失敗しました。Core 3.3.13では初回のpairingとbondは
+成功しましたが、bond後の再接続でP4側のSecurity eventが出ませんでした。この最後の問題はCore同梱NimBLEが
+eventを落とすことが原因で、EspBleがそれを補うようにしたため、4.0.0（両側ともESP-Hosted 2.13.1）では
+P4をCentralにしたbond再接続も成功します。`end()`後の複数回の再`begin()`には引き続き制限があります。
+どちらも[既知制限](docs/ESP_HOSTED_LIMITATIONS.ja.md)に記録しています。
 
 Tab5や独自基板でSDIO pin配置がgeneric P4と異なる場合は、正しいboard variantを選ぶか、初期化前にCoreの
 pin設定を上書きします（[SDIO pinの選択と上書き](docs/ESP_HOSTED_SETUP.ja.md#sdio-pinの選択と上書き)、
@@ -161,7 +165,7 @@ pin設定を上書きします（[SDIO pinの選択と上書き](docs/ESP_HOSTED
 
 ### coreバージョン
 
-開発とPeerテストはarduino-esp32 3.3.13で行っています（S3、無印ESP32、P4 + C6の全Peer suite）。対応下限はチップごとに違い、
+開発とPeerテストはarduino-esp32 4.0.0で行っています（ESP-IDF v6.1.1。S3、無印ESP32、P4 + C6、ESP32-S31の全Peer suite）。対応下限はチップごとに違い、
 その理由は「BLE hostを誰が持ってくるか」で決まります。
 
 | 対象 | hostの出所 | 最小Core | なぜそこか |
@@ -169,17 +173,19 @@ pin設定を上書きします（[SDIO pinの選択と上書き](docs/ESP_HOSTED
 | 無印ESP32（BLE / Classic） | **EspBleが持ち込む**（NimBLE source + Classic archive） | **3.2.0** | Coreの版にほぼ依存しないため。Classic hostはbuildに使ったAPI headerを`src/esp32/include/`へ同梱していて宣言と構造体レイアウトがずれず、CoreからはFreeRTOS等の安定APIだけを使う。3.2.0未満は未測定で、理由付きの`#error`で止まる |
 | 無印ESP32のHFP audio（SCO）のみ | 同上（ただしcontrollerはCore同梱） | **3.3.8** | 3.3.7以前のCoreはprebuilt controllerがPCM audio path（外部codec chip向け）でbuildされており、EspBleが使うHCI経由のSCOを受けられない。hostを持ち込んでいても、controllerのbinaryはCore側なので変更できない |
 | ESP32-S3 / C3 / C6 / H2 | **Core同梱のNimBLE** | **3.3.0** | 3.2.x世代のprebuilt libraryはBLE hostがBluedroidで、EspBleが呼ぶNimBLEが存在しない。CoreがNimBLEへ切り替えたのが3.3.0。該当版では`EspBle requires the NimBLE backend`の`#error`で止まる |
-| ESP32-P4（+C6 ESP-Hosted） | **Coreが提供**（Hosted経由のNimBLE） | **3.3.1** | 3.3.0のP4はHosted構成のNimBLEが未提供 |
+| ESP32-S31 | **Core同梱のNimBLE** | **4.0.0** | Arduino-ESP32 4.0.0で初めて対応したチップ |
+| ESP32-P4（+C6 ESP-Hosted） | **Coreが提供**（Hosted経由のNimBLE） | **3.3.1** | 3.3.0のP4はHosted構成のNimBLEが未提供。Securityとbondingは4.0.0でのみ検証済み |
 
-無印ESP32の範囲は実測です。3.2.0〜3.3.11と3.3.13のcompile / linkが全て通り、3.2.1 / 3.3.0 / 3.3.7 /
-3.3.8 / 3.3.10 / 3.3.11 / 3.3.13は実機でも確認済みです（3.3.12は未測定）（[core版数のテスト計画](docs/PLAN_CORE_VERSION_MATRIX.ja.md)）。
-他チップの範囲はCIが計測します。
+無印ESP32の範囲は実測です。3.2.0〜3.3.11、3.3.13、4.0.0のcompile / linkが全て通り、3.2.1 / 3.3.0 / 3.3.7 /
+3.3.8 / 3.3.10 / 3.3.11 / 3.3.13 / 4.0.0は実機でも確認済みです（3.3.12は未測定）（[core版数のテスト計画](docs/PLAN_CORE_VERSION_MATRIX.ja.md)）。
+4.0.0向けのcode変更は3.3.13（ESP32とESP32-S3）でcompileを再確認済みで、範囲内のそれより古いCoreでは
+まだbuildし直していません。他チップの範囲はCIが計測します。
 
 - **Core Compatibility Matrix** ワークフロー → `docs/COMPATIBILITY.<version>.md`（代表BLE exampleをarduino-esp32の各リリースに対してビルド）
 - **Board Build Coverage** ワークフロー → `docs/BOARDS.<version>.md`（workflow実行時点のexampleを1つのCoreバージョンでESP32-S3 / ESP32 / C3 / C6 / H2 / P4に対してビルド）
 
 どちらもフルsweepが全sketchを書き換えて再ビルドするため、手動実行（`workflow_dispatch`）です。
-なお3.3.13より新しいCoreは、壊れると分かっているのではなく未検証という扱いで、
+なお4.0.0より新しいCoreは、壊れると分かっているのではなく未検証という扱いで、
 無印ESP32では`#warning`を出したうえでbuildは通します。
 
 ## はじめかた

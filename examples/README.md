@@ -52,6 +52,11 @@ Every example ships with a `sketch.yaml` profile pinned to the verified Arduino-
 arduino-cli compile --profile esp32s3 examples/<path>
 ```
 
+The pinned version is Arduino-ESP32 4.0.0. The BLE examples carry the profiles
+`esp32s3`, `esp32s31`, `esp32`, `esp32c3`, `esp32c6`, `esp32h2` and `esp32p4`
+(the ESP32-S31 exists only from core 4.0.0 on); the Classic examples carry
+`esp32` only.
+
 ## Index
 
 Examples are grouped by area. Each standard-service directory holds a matching
@@ -237,7 +242,7 @@ covered in the [Classic communication guide](../docs/GUIDE_CLASSIC_BASICS.md).
 
 Using `EspBleClassic` selects the separately built Classic host automatically.
 The precompiled host's measured core range is Arduino-ESP32 3.2.0 through
-3.3.11 plus 3.3.13 (HFP audio needs 3.3.8 or newer).
+3.3.11, 3.3.13 and 4.0.0 (HFP audio needs 3.3.8 or newer).
 There is no build flag: starting both `EspBle` and `EspBleClassic` is what makes
 a sketch dual-host, and starting one is what makes it single-host.
 

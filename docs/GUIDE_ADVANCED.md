@@ -291,7 +291,7 @@ alone, so neither can account for the other's.
 EspBle's cost is dominated by which host you link, not by how many features you
 call.
 
-- **On the native-controller targets** (S3 / C3 / C6 / H2) the NimBLE host comes
+- **On the native-controller targets** (S3 / S31 / C3 / C6 / H2) the NimBLE host comes
   from the core, and EspBle adds its own code only.
 - **On the original ESP32** the core's prebuilt libraries are Bluedroid, so
   EspBle bundles a NimBLE host for that chip (`src/nimble_esp32/`). That is the

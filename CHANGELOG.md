@@ -12,6 +12,74 @@
   無印ESP32の未検証Coreの`#warning`は3.3.13超から出る。P4 + C6では初回のLE Secure
   Connections pairingが成功するようになったが、bond後の再接続でSecurityが報告されないため、
   そこでのSecurity/bondingは引き続き未対応。
+- (EN) Moved to Arduino-ESP32 4.0.0 (ESP-IDF v6.1.1, GCC 15.2): the examples and tests
+  now pin 4.0.0, and every peer pairing passes on it (S3, the original ESP32, P4 + C6,
+  ESP32-S31). The original-ESP32 `#warning` for unverified cores now starts above
+  4.0.0. The measured original-ESP32 range is 3.2.0 through 3.3.11, 3.3.13 and 4.0.0
+  (3.3.12 is still unmeasured). The test sketches now need 4.0.0, because ten
+  counterpart sketches use the core's new `BLE.h` API; measuring an older core uses an
+  earlier commit of the suite.
+- (JA) Arduino-ESP32 4.0.0（ESP-IDF v6.1.1、GCC 15.2）へ移行した。exampleとtestのpinを4.0.0にし、
+  全Peerの組（S3、無印ESP32、P4 + C6、ESP32-S31）が4.0.0で成功する。無印ESP32の未検証Coreの
+  `#warning`は4.0.0超から出る。無印ESP32の実測範囲は3.2.0〜3.3.11、3.3.13、4.0.0（3.3.12は
+  未測定のまま）。相手側sketchのうち10本がCoreの新しい`BLE.h` APIを使うため、test sketchは
+  4.0.0が必要になった。古いCoreを測るときはsuiteの以前のcommitを使う。
+- (EN) Added the ESP32-S31 (BT 5.4 LE, built-in controller, the core's bundled
+  NimBLE), available from core 4.0.0 only. Examples gain an `esp32s31` profile that
+  the compile-examples workflow builds, and the peer tests gain `s31_peer_host` /
+  `s31_peer_device` with the combos `s31_s3` and `s3_s31`.
+- (JA) ESP32-S31（BT 5.4 LE、内蔵controller、Core同梱NimBLE）に対応した。Core 4.0.0以降のみ。
+  exampleに`esp32s31` profileを追加してcompile-examples workflowでbuildし、Peer testに
+  `s31_peer_host` / `s31_peer_device`と組`s31_s3` / `s3_s31`を追加した。
+- (EN) Core 4.0.0 builds every bundled NimBLE host with extended advertising, which
+  makes the legacy advertising calls fail. EspBle now advertises through
+  extended-advertising set 0 with legacy PDUs and accepts legacy reports that arrive
+  through extended scanning; nothing changes for sketches. 3.x cores and the host
+  bundled for the original ESP32 keep the legacy calls.
+- (JA) Core 4.0.0は同梱の全NimBLE hostをextended advertising有効でbuildしており、legacyの
+  advertising呼び出しが失敗する。EspBleはextended advertisingのset 0からlegacy PDUで広告し、
+  extended scanで届くlegacy reportも受け取るようにした。sketch側の変更は不要。3.x系Coreと
+  無印ESP32向けの同梱hostは従来どおりlegacyの呼び出しを使う。
+- (EN) The core's NimBLE drops the Encryption Change of a bonded reconnect when the
+  Central's encryption and the Peripheral's Security Request cross; fast controllers
+  (the ESP32-S31, and the C6 behind a P4) hit it on every reconnect. EspBle now
+  reports such a link once it has stayed encrypted for 300 ms without an event and
+  the peer has a stored bond, taking the bond flags from the store. This resolves the
+  missing security event on a P4 central's bonded reconnect: on 4.0.0 (ESP-Hosted
+  2.13.1 on both the P4 and the C6) `security_bond` and `hid_keyboard_host` pass with
+  the P4 as Central, so Security, bonding and HID on P4 + C6 are now verified on
+  4.0.0. Earlier cores have not been re-measured with this recovery.
+- (JA) Core同梱のNimBLEは、bond後の再接続でCentralの暗号化要求とPeripheralのSecurity Requestが
+  交差するとEncryption Changeを落とす。応答の速いcontroller（ESP32-S31、P4の先のC6）では毎回の
+  再接続で起きる。EspBleは、eventが無いまま300 ms暗号化が続き、相手のbondが保存されている
+  linkを、保存済みのbond情報で報告するようにした。これでP4 centralのbond再接続でSecurity eventが
+  出ない問題が解消し、4.0.0（P4とC6ともESP-Hosted 2.13.1）ではP4をCentralにした
+  `security_bond`と`hid_keyboard_host`が成功する。P4 + C6のSecurity、bonding、HIDは4.0.0で
+  検証済みになった。それより前のCoreは、この対処を入れてからは未測定。
+- (EN) The NimBLE host bundled for the original ESP32 moves from esp-nimble `685675c`
+  (ESP-IDF v5.5.5) to `41057af`, the pin of ESP-IDF `release/v5.5` `a45de8cc` that
+  Arduino-ESP32 3.3.13 is built from (it contains everything in ESP-IDF v6.1.1's pin).
+  It brings the fixes for CVE-2026-45816 and CVE-2026-45815, hardened BLERP re-pairing
+  and bond-store fixes. The configuration is frozen from 3.3.13's ESP32-S3 sdkconfig,
+  which adds hardened SMP re-pairing, bond removal on a failed pairing as Central and
+  deferred connection events. In dual-host mode the HCI broker now routes LE Create
+  Connection Cancel (0x200E) to NimBLE.
+- (JA) 無印ESP32向けの同梱NimBLE hostを、esp-nimble `685675c`（ESP-IDF v5.5.5）から`41057af`へ
+  更新した。Arduino-ESP32 3.3.13のbuild元であるESP-IDF `release/v5.5` `a45de8cc`のpinで、
+  ESP-IDF v6.1.1のpinの内容をすべて含む。CVE-2026-45816 / CVE-2026-45815の修正、BLERP
+  再pairingの強化、bond storeの修正が入る。設定は3.3.13のESP32-S3 sdkconfigから固定し、
+  SMPの再pairing強化、Central側でのpairing失敗時のbond削除、接続eventの遅延処理が加わった。
+  dual-host動作ではHCI brokerがLE Create Connection Cancel（0x200E）をNimBLEへroutingする。
+- (EN) The Classic Bluedroid archive deliberately stays at ESP-IDF v5.5.5 / GCC 14.2.0,
+  verified on 4.0.0. Archives rebuilt from v5.5.6 and from `release/v5.5` `a45de8cc`
+  assert in `xQueueSemaphoreTake` when the Classic host is ended (a shutdown race in
+  `hci_layer` introduced after v5.5.5), so the Bluedroid security fixes made since
+  v5.5.5 are not taken yet. Details are in `docs/CLASSIC_HOST_BUILD.ja.md`.
+- (JA) Classic Bluedroid archiveは意図してESP-IDF v5.5.5 / GCC 14.2.0のままとし、4.0.0で動作を
+  確認した。v5.5.6と`release/v5.5` `a45de8cc`から作り直したarchiveは、Classic hostの終了時に
+  `xQueueSemaphoreTake`でassertする（v5.5.5より後に入った`hci_layer`の終了処理の競合）。この
+  ため、v5.5.5以降のBluedroidのセキュリティ修正はまだ取り込んでいない。詳細は
+  `docs/CLASSIC_HOST_BUILD.ja.md`にある。
 
 ## 1.3.0
 - (EN) No breaking change: every public declaration of 1.2.0 keeps its signature,

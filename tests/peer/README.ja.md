@@ -2,7 +2,7 @@
 
 > English: [README.md](README.md)
 
-ESP32-S3 2台を標準fixtureとしてBLEで接続する自動テストです。加えて、ESP32-P4 + ESP32-C6を親側DUT、ESP32-S3を無線PeerとしてESP-Hosted固有経路を回帰できます。S3と無線Peerの間に信号配線は不要です。
+ESP32-S3 2台を標準fixtureとしてBLEで接続する自動テストです。加えて、ESP32-P4 + ESP32-C6を親側DUT、ESP32-S3を無線PeerとしてESP-Hosted固有経路を回帰できます。ESP32-S31はESP32-S3と組ませ、どちら側にも置けます。全sketchはArduino-ESP32 4.0.0にpinしてあり、suiteは4.0.0を必要とします。S3と無線Peerの間に信号配線は不要です。
 
 ```sh
 uv run --env-file .env pytest peer/
@@ -14,12 +14,14 @@ profileと環境変数はEspUsbHost/EspUsbDeviceの既存環境を再利用し�
 |---|---|---|
 | 通常の親側 | `s3_peer_host` | `TEST_SERIAL_PORT_S3_PEER_HOST` |
 | ESP-Hosted親側 | `p4_peer_host` | `TEST_SERIAL_PORT_P4_PEER_HOST` |
+| ESP32-S31の親側 | `s31_peer_host` | `TEST_SERIAL_PORT_S31_PEER_HOST` |
 | 無印ESP32の親側 | `esp32_peer_host` | `TEST_SERIAL_PORT_ESP32_PEER_HOST` |
 | 2台目Peer | `s3_peer_device` | `TEST_SERIAL_PORT_PEER_DEVICE_S3_PEER_DEVICE` |
 | 2台目Peer（無印ESP32） | `esp32_peer_device` | `TEST_SERIAL_PORT_PEER_DEVICE_ESP32_PEER_DEVICE` |
 | 2台目Peer（ESP-Hosted） | `p4_peer_device` | `TEST_SERIAL_PORT_PEER_DEVICE_P4_PEER_DEVICE` |
+| 2台目Peer（ESP32-S31） | `s31_peer_device` | `TEST_SERIAL_PORT_PEER_DEVICE_S31_PEER_DEVICE` |
 
-P4+C6は1台なので、`p4_peer_host`と`p4_peer_device`は同じportを指します。同じ実行の中で両側に置くことはありません（S3との組で、親側とPeer側を1回ずつ）。
+P4+C6は1台なので、`p4_peer_host`と`p4_peer_device`は同じportを指します。同じ実行の中で両側に置くことはありません（S3との組で、親側とPeer側を1回ずつ）。ESP32-S31も同じく1台です（`s31_peer_host`と`s31_peer_device`は同じport）。S3 profileを持つsuiteにはS31用のprofileも並んでおり、これはCore 4.0.0以降にのみ存在します。
 
 よく使う組は`tests/pyproject.toml`の`arduino_combos`に名前で置いてあり、`--combo <名前>`で選べます。名前は`<親側>_<Peer側>`で、親側がCentral、Peer側がPeripheralです。
 
@@ -31,6 +33,8 @@ P4+C6は1台なので、`p4_peer_host`と`p4_peer_device`は同じportを指し�
 | `s3_esp32` | `s3_peer_host` | `esp32_peer_device` |
 | `p4_s3` | `p4_peer_host` | `s3_peer_device` |
 | `s3_p4` | `s3_peer_host` | `p4_peer_device` |
+| `s31_s3` | `s31_peer_host` | `s3_peer_device` |
+| `s3_s31` | `s3_peer_host` | `s31_peer_device` |
 
 profile名はBLE roleを表しません。両側へsketchを転送・実行でき、両側のSerialをpytestから観測できます。1つのsuite内では親側sketchがCentral、`peer_device/`側sketchがPeripheralで固定です。どちらの物理boardをどちらへ置くかは`--profile` / `--peer-profile`で決めます。
 
@@ -77,7 +81,9 @@ peer/<suite>/
 
 全sketchは[`conftest.py`](conftest.py)のautouse fixtureが毎test後に送る予約STOP commandにも
 [`../sketch_support/EspBleTestLifecycle.h`](../sketch_support/EspBleTestLifecycle.h)で応答します。
-応答しないsketchは毎testの後にwarningとして報告されます。新しいsketchに必要な4つの変更は
+応答しないsketchは毎testの後にwarningとして報告されます。同じheaderはREADY?（ENQ、`0x05`）にも
+応答し、sketchが`announceReady()`へ渡したready行をもう一度出します。testは起動時の出力を
+取り逃がさないことに賭けるのではなく、`ready` fixtureでこの行を待ちます。新しいsketchに必要な4つの変更は
 headerのcommentに、pytestが何を送るかは[tests README](../README.ja.md#test間のboard状態)にあります。
 
 **全suiteの目的と合格条件は[テスト計画](../TEST_PLAN.ja.md)が正本です。**ここでは重複させません。

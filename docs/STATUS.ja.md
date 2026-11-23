@@ -6,17 +6,18 @@
 
 ## 現在地
 
-Arduino-ESP32 3.3.11に同梱されるNimBLEホストAPIを直接使い、Central / Peripheral、GATT Client / Server、Security、複合HID Device / Hostが動作しています。**同梱の`BLE`ラッパクラス（`BLEDevice` / `BLEClient` / `BLEServer` / `BLEScan` / `BLEAdvertising` など）には依存していません**（理由は[DECISIONS.ja.md](DECISIONS.ja.md)の「アーキテクチャで確定」）。ESP32-S3 2台を使うPeerテスト環境とhost unit testがあり、公開exampleはESP32-S3でコンパイル検証されています。
+Arduino-ESP32 4.0.0に同梱されるNimBLEホストAPIを直接使い、Central / Peripheral、GATT Client / Server、Security、複合HID Device / Hostが動作しています。**同梱の`BLE`ラッパクラス（`BLEDevice` / `BLEClient` / `BLEServer` / `BLEScan` / `BLEAdvertising` など）には依存していません**（理由は[DECISIONS.ja.md](DECISIONS.ja.md)の「アーキテクチャで確定」）。ESP32-S3 2台を使うPeerテスト環境とhost unit testがあり、公開exampleは宣言している全targetでコンパイル検証されています。ESP32-S31（BT 5.4 LE、内蔵controller、Core同梱NimBLE。Core 4.0.0以上）は、S3を相手に両roleでPeer suiteを実行して確認しています（`s31_s3` / `s3_s31`）。
 
 ESP32-P4 + ESP32-C6のESP-Hosted構成は、compile、scan、接続、GATT read/write、
-notify/indicate、MTU、Wi-Fi/BLE共存と共有transport lifecycleに加え、Security非依存の
-代表Peer testをP4/S3で実機確認済みです。
-Security/bondingはbond後の再接続でP4側のSecurity eventが出ないこと（Core 3.3.13。3.3.11ではP4 ECC不具合）、複数回の完全再初期化は
-Hosted 2.12.11のresource leakにより、
-[ESP-Hostedの既知制限](ESP_HOSTED_LIMITATIONS.ja.md)として上流修正取り込み待ちです。
+notify/indicate、MTU、Wi-Fi/BLE共存と共有transport lifecycleに加え、P4をCentral / Peripheralの
+両方にしたPeer testをP4/S3で実機確認済みです。Security/bondingとそれを前提とするHIDは
+Core 4.0.0でのみ検証済みです。3.3.11ではP4 ECC不具合で初回pairingが失敗し、3.3.13ではbond後の
+再接続でP4側のSecurity eventが出ませんでした（後者はEspBle側で補うようにしました）。
+複数回の完全再初期化はHosted 2.12.11のresource leakにより上流修正取り込み待ちです。どちらも
+[ESP-Hostedの既知制限](ESP_HOSTED_LIMITATIONS.ja.md)に記録しています。
 この構成でBLEを実行するのはslave側のチップで、slave firmwareはEspBleの配布物ではなく別途
 書き込みます。使える範囲はslaveのchipとfirmware versionで変わるため、**検証済みと言えるのは
-C6 slave / firmware 2.12.11の組み合わせだけ**です（[slaveのチップとfirmware](ESP_HOSTED_SETUP.ja.md#slaveのチップとfirmware)）。
+C6 slaveだけ**です（firmware 2.12.11、Core 3.3.13 / 4.0.0では2.13.1）（[slaveのチップとfirmware](ESP_HOSTED_SETUP.ja.md#slaveのチップとfirmware)）。
 
 HIDはKeyboard（6KRO / NKRO）、Mouse、Consumer Control、System Control、Gamepad、Vendor Input / Output / Featureを1つのServiceへ合成できます。Hostは対応する全Input ReportをDiscoveryし、種別別eventへ配送します。
 
@@ -24,7 +25,8 @@ BLE MIDIはbackend非依存のpacket codec（timestamp・running status・複数
 
 ## 検証状況
 
-- P4/C6 Hosted + S3 Peer: Security非依存のGAP/controller、advertising、GATT state回帰が成功
+- P4/C6 Hosted + S3 Peer: P4をCentral / Peripheralの両方にしてGAP/controller、advertising、GATT state回帰が成功。Core 4.0.0ではSecurity、bonding、HID Host（`security_bond`、`hid_keyboard_host`）も成功
+- ESP32-S31 + S3 Peer: S31をCentral / Peripheralの両方にしてPeer suiteが成功（Core 4.0.0）
 - P4/C6 Hosted Wi-Fi/BLE共存: DHCP取得中も含むWi-Fi接続、GATT read/write/notify、BLE終了後のWi-Fi維持、Wi-Fi終了後のtransport解放が成功
 
 - Peer test: 接続、GATT、接続ごとdiscovery cache、persistent subscription（再接続時に自動で再購読、registry上限超過の計数）、address privacy（random static address）、iBeacon broadcast/decode、Service Data送受信、Fitness Machine（Indoor Bike Data）、Security、標準Service、複合HID、NKRO、任意Report DescriptorのCustom HID、non-connectable Beacon、BLE MIDI、Health Thermometer、Blood Pressure、Weight Scale、Body Composition、Cycling / Running Speed and Cadence、Cycling Power、Pulse Oximeter、Glucose（RACP手続き）、Location and Navigation、User Data（書き込み→onWritten→notify）、Alert Notification（Control Point→notify）、Immediate Alert（Write Without Response）、Phone Alert Status（Control Point→状態変更notify）、Proximity（Link Loss + Tx Power、2 Service同居）、Reference Time Update（Control Point→state遷移）、Bond Management（Feature Read + Control Point）、Continuous Glucose Monitoring（E2E-CRC）、切断理由コード、接続パラメータ更新、PHY更新（2M）、Service Changed、実行時passkey入力、Numeric Comparison、Directed Advertising（チャネル絞り込み含む）、切断時のGATT queue purgeとGATT op中`disconnect()`の遅延実行、NKROのMTU下限拒否、多重listenerの配送・解除・上限（generic側・接続系・HID Host側）、接続系listenerのprimary→登録順の配送、HID Deviceの`ready()`が購読gateどおりに真偽を返すこと、NKRO全状態の1 report送信、`heldState()`が全送信経路に追従すること、`ledState()`がHostの書いたLEDを返すこと（callback未設定でqueueが溢れている間も追従すること）、HIDの便利入力API（`pressKey()` / `tapKey()` / `write()` / `tapUsage()` / `setLayout()` / mouse `wheel()` / `click()` / consumer・system `sendUsage()` / gamepad `send()`）が電波へ出すReport、Custom HIDのFeature Report、HID Boot Protocol切替、Custom HID Report Descriptor、non-connectable Beacon（送信間隔制御）、異常系、再接続を実機検証
@@ -33,28 +35,34 @@ BLE MIDIはbackend非依存のpacket codec（timestamp・running status・複数
 - Unit test: keymap変換、HID Report Map parser、BLE MIDI codec、IEEE-11073 medical float codec、CGM E2E-CRC codec、iBeacon codec、HCI router、HCI command scheduler
 - 追加RPA Peer test: 無印ESP32 2台でhost-based RPAの初回pairing、両端再起動後のbond/LTK復元、暗号化GATT、復元bond削除、再pairingが成功。dual-host変種ではClassic HID ACLを維持したまま両roleのRPAをhost timerでrotationし、preemptされたadvertisingとscanを再開し、有限のGAP手続きは元の締切を維持する。10回転のsoakはClassic HID双方向通信を維持したままLE Set Random AddressをNimBLEへroutingし、brokerのunknown event・queue overflow・command-response mismatchすべて0で完走。新RPA経由でbond済みLEへ再接続し、両側の完全なstackを再起動した後もClassicとbond済みRPA/LEを復元する試験が成功
 - Classic Peer test（無印ESP32 2台）: inquiryとSDP照会、pairing、SPP（複数server・channel指定・binary往復）、HIDのAPI形状・制御チャネル・report、gamepadのraw report byte列、無線設定（送信電力・page timeout・暗号鍵最小長。page timeoutは接続試行の所要時間で反映を確認）、SPPのStream adapter（分割送信の順序、write timeout 0の非待機、`flush()`の送信完了待ち）、HFP Clientのoperator名・subscriber番号・memory dial・NREC・Apple電池残量通知、A2DP・AVRCP・HFP audioを実機検証
-- Example compile: 公開exampleをESP32-S3向けに検証。Classic exampleは無印ESP32専用条件で検証
+- Example compile: 公開exampleを宣言している全target（ESP32-S3、S31、無印ESP32、C3、C6、H2、P4）向けに検証。Classic exampleは無印ESP32だけで検証
 
 実行方法は[tests/TEST_PLAN.ja.md](../tests/TEST_PLAN.ja.md)、リリース時の確認項目は[RELEASE_CHECKLIST.ja.md](RELEASE_CHECKLIST.ja.md)を参照してください。
 
 ## 既知の制限
 
 - Classicは1.3.0から同梱しており、compiler flagは不要です（`EspBleClassic`を使うかどうかだけで決まります）。
-  precompiled hostはESP-IDF 5.5.5 / GCC 14.2.0のABIに固定しています（対応Core範囲は次項のとおり実測で確定）。
+  precompiled hostはESP-IDF 5.5.5 / GCC 14.2.0のABIに固定しており、意図してこの版に留めています
+  （以降のESP-IDF 5.5から作り直したarchiveはClassic hostの終了時にassertするため。
+  [archive再生成手順](CLASSIC_HOST_BUILD.ja.md)を参照）。対応Core範囲は次項のとおり実測で確定しています。
   このhostのサポートや互換性は保証しません。そのぶん**機能ごとの状態——実機検証済み / 未検証 /
   未実装——を[Classic機能の棚卸し](CLASSIC_FEATURE_INVENTORY.ja.md)に明記**します。外部機器との相互運用は
   未検証です。BLEとClassicの同時利用もflagは不要で（`begin()`したhostで決まります）、ただし実験扱いのままです。
 - 無印ESP32の対応Coreは3.2.0以上です（BLEもClassicも）。Classic hostのbuildに使った
   Bluedroid API headerを`src/esp32/include/`へ同梱しているため、宣言と構造体レイアウトは
-  Coreの版に依存しません。実測で3.2.0〜3.3.11と3.3.13のcompile / linkが全て通り、3.2.1 / 3.3.0 / 3.3.7 /
-  3.3.8 / 3.3.10 / 3.3.11は実機（BLE代表smokeとClassic主要suite。3.3.7はClassic suiteのみ）、3.3.13は全Peer suiteで確認済みです（3.3.12は未測定）。例外はHFP audio
+  Coreの版に依存しません。実測で3.2.0〜3.3.11、3.3.13、4.0.0のcompile / linkが全て通り、3.2.1 / 3.3.0 / 3.3.7 /
+  3.3.8 / 3.3.10 / 3.3.11は実機（BLE代表smokeとClassic主要suite。3.3.7はClassic suiteのみ）、3.3.13と4.0.0は全Peer suiteで確認済みです（3.3.12は未測定）。例外はHFP audio
   （SCO）で、3.3.7以前のCoreはprebuilt controllerがPCM audio pathのため使えず、実機確認済みの
-  下限は3.3.8です。3.2.0未満は未測定のため理由付きの`#error`、3.3.13超は未検証である旨の
+  下限は3.3.8です。3.2.0未満は未測定のため理由付きの`#error`、4.0.0超は未検証である旨の
   `#warning`を出します。測定記録は[core版数のテスト計画](PLAN_CORE_VERSION_MATRIX.ja.md)です。
-- P4/C6 ESP-Hosted構成のSecurity、bonding、それを前提とするHIDは未対応です。Core 3.3.11では
+- P4/C6 ESP-Hosted構成のSecurity、bonding、それを前提とするHIDは、Core 4.0.0（P4とC6とも
+  ESP-Hosted 2.13.1）でのみ検証済みで、それより前のCoreでは未確認です。Core 3.3.11では
   同梱ESP-IDF 5.5.5のTinyCrypt/ECC不具合でLE Secure ConnectionsがDHKey check failureと
   なりました。修正（ESP-IDF `9fd7cb7`）を含むCore 3.3.13では初回のpairingとbondは成功しますが、
-  bond後の再接続でP4側のSecurity eventが出ません。またArduino-ESP32 3.3.11の
+  bond後の再接続でP4側のSecurity eventが出ません。Core同梱NimBLEは、Centralの暗号化要求と
+  PeripheralのSecurity Requestが交差するとこのeventを落とします。EspBleは保存済みのbondから
+  そのlinkを報告するようにし、4.0.0ではP4をCentralにした`security_bond`と`hid_keyboard_host`が
+  成功します。またArduino-ESP32 3.3.11の
   Hosted 2.12.11では複数回の完全deinit/initでSDIO mempool確保に失敗するため、
   `begin()`は起動後1回とし、再開にはP4を再起動します。詳細は
   [ESP-Hostedの既知制限](ESP_HOSTED_LIMITATIONS.ja.md)を参照してください。
@@ -71,9 +79,9 @@ BLE MIDIはbackend非依存のpacket codec（timestamp・running status・複数
 - 切断理由は`EspBleConnection::disconnectReason`、接続パラメータは`EspBleConnection`のinterval/latency/timeoutと`updateConnectionParameters()` / `onConnectionParametersUpdated()`、LE PHYは`EspBleConnection`のtx/rxPhyと`updatePhy()` / `onPhyUpdated()`、実行時passkey入力は`providePasskey()`（動的passkey表示は静的passkeyなしのDisplayOnly）、Numeric Comparisonは両側DisplayYesNo + MITMで`onNumericComparison()` / `confirmNumericComparison()`で扱えます。
 - Descriptor Write eventは`EspBleGattDescriptorWrite::connectionId`でどの接続からの書き込みかを持ちます（属性テーブルをNimBLEホストAPIで自前に組んでおり、ホストのaccess callbackが`conn_handle`を渡すため）。ただしこのフィールドはPeerテストでassertしていません。
 - MTU交換はグローバルGAPイベント（`BLE_GAP_EVENT_MTU`）で両役割とも追跡し、`onMtuChanged`へ配送します。Central側で接続確立後に完了するMTU交換も反映されます。
-- Advertisingはconnectable（既定）とnon-connectable（`setConnectable(false)`。Beacon/broadcaster）を選べ、`setScanResponseEnabled(false)`でnon-scannable、`setInterval(minMs, maxMs)`で送信間隔（20〜10240 ms、non-connectableは100 ms以上）を制御できます。Address privacyは`EspBleConfig::ownAddressType`（`Public`（既定） / `RandomStatic` / `ResolvablePrivate`）で選べます。RandomStaticはpublic addressを隠す固定random static address、ResolvablePrivateはcontrollerまたは無印ESP32の同梱hostが周期回転するRPA（既定900秒）で、RPAはpeerがbonding時のIRKで解決するためsecurity/bonding併用時のみ有用です。Extended / Periodic Advertisingは同梱NimBLEが`CONFIG_BT_NIMBLE_EXT_ADV`無効でビルドされているため現構成では対応不可です。
+- Advertisingはconnectable（既定）とnon-connectable（`setConnectable(false)`。Beacon/broadcaster）を選べ、`setScanResponseEnabled(false)`でnon-scannable、`setInterval(minMs, maxMs)`で送信間隔（20〜10240 ms、non-connectableは100 ms以上）を制御できます。Address privacyは`EspBleConfig::ownAddressType`（`Public`（既定） / `RandomStatic` / `ResolvablePrivate`）で選べます。RandomStaticはpublic addressを隠す固定random static address、ResolvablePrivateはcontrollerまたは無印ESP32の同梱hostが周期回転するRPA（既定900秒）で、RPAはpeerがbonding時のIRKで解決するためsecurity/bonding併用時のみ有用です。Extended / Periodic Advertisingは提供しません。3.x系CoreのNimBLEと無印ESP32向けの同梱hostは`CONFIG_BT_NIMBLE_EXT_ADV`無効でビルドされています。Core 4.0.0ではこれが有効でlegacyのadvertising呼び出しが失敗するため、EspBleはextended advertisingのset 0からlegacy PDUで広告し、extended scanで届くlegacy reportも受け取ります。sketchから見える動作は変わりません。
 - 同時複数接続に対応します（接続ごとのcache・購読・GATT routingで分離）。同時接続数の上限は同梱NimBLE controller（`CONFIG_BT_NIMBLE_MAX_CONNECTIONS`、esp32s3で3）で決まります。auto-reconnect（`setAutoReconnect`、既定off）と併せて3台manual test `multi_connection`で検証済みです。
-- 自動実機検証はESP32-S3中心です。市販機器およびAndroid / Linux / Windows / macOSとの相互運用確認は未完了です。
+- 自動実機検証はESP32-S3中心です（ESP32-S31とP4 + C6はS3を相手に、無印ESP32はS3相手と無印同士でPeer suiteを実行します）。市販機器およびAndroid / Linux / Windows / macOSとの相互運用確認は未完了です。
 - 外部NimBLE-Arduinoは対象外です。無印ESP32はEspBleがNimBLE Hostを同梱して動かします（`src/nimble_esp32/`）。独自buildしたClassic-only Bluedroid hostがSPP、generic HID Device/Host、A2DP、AVRCP、HFPを提供します。BLEとClassicの同時利用（dual-host）は実験扱いのままです。このmodeはbrokerが所有するHCI command FIFOとcontroller creditのschedulerを持ち、Classic HIDと反復する暗号化LE GATT通信の同時実行を通過しています。BLE GATT接続中のHFP mSBC SCO双方向payloadとA2DP encode済みmedia転送＋AVRCP再生/音量操作も、各audio link中・切断後にLE GATTが使えること（broker異常診断0）まで確認済みです。General / Page 2 / LEのevent maskはhostごとの要求をmergeし、再attachしたClassic hostへはHCI Resetとhost flow control設定のvirtual completionを返すため、稼働中のLE controllerをresetも再設定もしません。Classic HID接続を維持したままのpairing、bond永続化、bond再接続、暗号化GATT accessも通過しています。controller停止はbrokerが所有し、最後のlogical hostが離脱した後に行うため、どちらのhostを先に停止・破棄しても構いません。数時間級soakと観測HCI commandのpolicy分類も完了し、dual-host modeでは未知・別host宛のcommandはfail closedになります。nullや上限超過のHID reportはどちらの接続も落とさずに拒否し、突然再起動したpeerはbond済みLE暗号化とClassic HIDを復元できます。誤ったpasskeyはbondを残さず再試行でき、HIDの非同期接続失敗後も暗号化LEは使え、Classicは正しいpeerへ接続し直せます。SPP/HIDのcallback解除は登録mutexと参照lifetime barrierで行います。受信ACL flow controlはbrokerが所有し受信packetごとにcontrollerへcreditを返しますが、送信側bufferは2つのhost間で按分しておらず、互いのtrafficを考慮できません。実機Peer testが通った範囲だけを対応とみなします——理由と検証記録は[PLAN_ESP32.ja.md](PLAN_ESP32.ja.md)と[PLAN_ESP32_CLASSIC.ja.md](PLAN_ESP32_CLASSIC.ja.md)にあります。
 - 名前空間化した清浄なClassic archiveは外部codec前提のA2DP/AVRCPとVoice over HCI・外部codecのHFPを有効化し、APIのlink検査を通過しています。Classic-onlyのA2DP Sink/Source raw transportとAVRCP CT/TG passthrough＋absolute volume操作はESP32 2台で併用できます。公開HFP Client/Audio Gateway APIはSLC、単一call modelの発信・着信・応答・終了、CVSD/mSBCを選べるraw SCO transport（AGのcodec選択付き）、bad-frame通知、packet statisticsを備え、CVSDには120-byteのraw viewがあります。2台構成のfixtureで両codecの双方向転送、同一call内のCVSD SCO再接続、SLC完全切断・再接続後のCVSD audio復元（再発信）を確認し、非対応のClient/AG同時構成はprocess-wide排他で防ぎます。metadata/play-status応答の受信は外部AVRCP Targetが、HFPは外部機器相互運用が残っています。EspBleはnegotiate済みcodecとencode済みmedia/SCO payloadのtransportまでを扱い、codec・PCM処理・device I/Oは外に置きます。正式リリース済みの[PCMFlowBluetooth](https://github.com/tanakamasayuki/PCMFlowBluetooth)がA2DPのSBC encode/decode、PCM境界、M5Stack speaker／microphone exampleを提供します。decoder reset修正とsuspend/resume・再接続を含むESP32 2台回帰は[完了報告](https://github.com/tanakamasayuki/PCMFlowBluetooth/blob/main/docs/A2DP_VALIDATION_REPORT.ja.md)どおり完了しています。配布はNimBLE sourceと再現可能生成のBluedroid host archiveのmixed方式を意図的に維持します。詳細は[Classic計画](PLAN_ESP32_CLASSIC.ja.md#配布形式の方針)と[Classic Audio計画](PLAN_ESP32_CLASSIC_AUDIO.ja.md)にあります。
 

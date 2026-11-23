@@ -109,14 +109,14 @@ uv run --env-file .env pytest --clean \
 See the [ESP-Hosted setup guide (Japanese)](ESP_HOSTED_SETUP.ja.md) for fixture and pin requirements, the [test policy](../tests/TEST_PLAN.md#p4c6-esp-hosted-regression) for frequency and pass criteria, and the [known limitations (Japanese)](ESP_HOSTED_LIMITATIONS.ja.md) for current exclusions. Security and repeated full initialization/deinitialization cases affected by those limitations are not current release gates; re-run them after any Core or C6 firmware update to check whether the limitation has been resolved.
 
 Core-version gate for the original ESP32 (no hardware). The supported range is
-3.2.0 through 3.3.11; the vendored contract headers keep it from drifting with the
+3.2.0 through 3.3.11, 3.3.13 and 4.0.0 (3.3.12 unmeasured); the vendored contract headers keep it from drifting with the
 core version, but every release re-measures it. All cells passing is the pass
 criterion. The measurement record is the Japanese
 [core-version test plan](PLAN_CORE_VERSION_MATRIX.ja.md).
 
 ```sh
 python3 tools/version_matrix.py \
-  --core-versions 3.2.0,3.2.1,3.3.0,3.3.11 --targets esp32 \
+  --core-versions 3.2.0,3.2.1,3.3.0,3.3.11,3.3.13,4.0.0 --targets esp32 \
   --examples CompileSmoke,Gap/Connect,Security/StaticPasskeyServer,Classic/SppServer,Classic/HidKeyboard,Classic/A2dpSinkAvrcp,Classic/HfpClientRaw \
   --output /tmp/esp32_core_matrix.md
 ```

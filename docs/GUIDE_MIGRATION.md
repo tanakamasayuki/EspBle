@@ -163,8 +163,9 @@ Do not plan a port around these:
 - **No BLE audio (LE Audio).**
 - **Extended and periodic advertising, LE 2M and LE Coded PHY are unavailable on
   the original ESP32** — that chip has a BLE 4.2-class controller, and the
-  bundled host is built with extended advertising compiled out. They work on the
-  native-controller targets where the core's host provides them.
+  bundled host is built with extended advertising compiled out. LE 2M and Coded
+  PHY work on the native-controller targets; extended and periodic advertising are
+  not offered on any target (see the [feature matrix](FEATURE_MATRIX.md)).
 - **One HID Host device at a time on Classic**, and one HID Host connection.
 
 The full picture of what exists, what is verified and what is not is in the

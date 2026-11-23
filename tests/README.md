@@ -6,17 +6,20 @@ EspBle tests use pytest-embedded with the Arduino CLI backend. See the [test pla
 
 ```text
 unit/   pure C++/data-conversion tests that run on the host (no boards required)
-peer/   hardware BLE tests for the S3 baseline and P4+C6 ESP-Hosted paths
+peer/   hardware BLE tests for the S3 baseline, ESP32-S31, original-ESP32 and P4+C6 ESP-Hosted paths
 ```
 
 | Fixture | Purpose | Normal use |
 |---|---|---|
 | ESP32-S3 + ESP32-S3 | Full functional baseline | Keep connected if practical; this is the default for `pytest peer/` |
 | ESP32-P4 + ESP32-C6, with an ESP32-S3 peer | SDIO/ESP-Hosted/C6-controller and Wi-Fi/BLE coexistence regression | One fixture connected on demand; select the P4 profile explicitly |
+| ESP32-S31, with an ESP32-S3 peer | The S31's controller with the core's NimBLE (core 4.0.0 or newer) | One board, on either side of an S3; select it with `--combo s31_s3` or `--combo s3_s31` |
+
+Every sketch is pinned to Arduino-ESP32 4.0.0, and the suite needs that version: ten counterpart sketches are written with the core's 4.0 `BLE.h` API. To measure an older core, use a commit of the suite from before the move to 4.0.0 (see the [test plan](TEST_PLAN.md#running-against-another-core-version)).
 
 Compiling for P4 does not exercise the ESP-Hosted transport, and S3-only tests cannot detect Hosted initialization or SDIO failures. P4 hardware testing is therefore required, but the fixture does not need to remain connected. Run it for Hosted-related changes, after an Arduino-ESP32 Core or C6 firmware update, and for every release candidate. See the [test plan](TEST_PLAN.md#p4c6-esp-hosted-regression) for the detailed policy, the [ESP-Hosted setup guide (Japanese)](../docs/ESP_HOSTED_SETUP.ja.md) for preparation, and the [known limitations (Japanese)](../docs/ESP_HOSTED_LIMITATIONS.ja.md) for current exclusions.
 
-Example build regressions are caught by GitHub Actions (`.github/workflows/compile-examples.yml`), which compiles every example with the esp32s3 profile. Interoperability with OSes and commercial BLE devices is covered by manual tests.
+Example build regressions are caught by GitHub Actions (`.github/workflows/compile-examples.yml`), which compiles every example for each target profile it declares (esp32s3, esp32s31, esp32, esp32c3, esp32c6, esp32h2, esp32p4). Interoperability with OSes and commercial BLE devices is covered by manual tests.
 
 ## Setup
 
@@ -32,6 +35,8 @@ TEST_SERIAL_PORT_S3_PEER_HOST=/dev/ttyUSB0
 TEST_SERIAL_PORT_PEER_DEVICE_S3_PEER_DEVICE=/dev/ttyUSB1
 TEST_SERIAL_PORT_P4_PEER_HOST=/dev/ttyUSB2
 TEST_SERIAL_PORT_PEER_DEVICE_P4_PEER_DEVICE=/dev/ttyUSB2
+TEST_SERIAL_PORT_S31_PEER_HOST=/dev/ttyUSB5
+TEST_SERIAL_PORT_PEER_DEVICE_S31_PEER_DEVICE=/dev/ttyUSB5
 TEST_SERIAL_PORT_ESP32_PEER_HOST=/dev/ttyUSB3
 TEST_SERIAL_PORT_PEER_DEVICE_ESP32_PEER_DEVICE=/dev/ttyUSB4
 TEST_WIFI_SSID=example-test-ssid
@@ -52,6 +57,8 @@ uv run --env-file .env pytest peer/stack_smoke/
 ```
 
 The recommended reference fixture is an Espressif ESP32-P4-Function-EV-Board with its onboard C6, or a P4+C6 fixture using the same standard SDIO wiring expected by Arduino-ESP32's generic `esp32p4` variant. This gives contributors a shared configuration without a board-specific pin override. Tab5 and custom wiring are also supported, but require the matching board variant or `hostedSetPins()` before `ble.begin()`. See [SDIO pin selection and override (Japanese)](../docs/ESP_HOSTED_SETUP.ja.md#sdio-pinの選択と上書き).
+
+Under core 4.0.0 the P4 profiles add two board options to the FQBN: `ChipVariant=prev3`, because the reference P4 is a v1.3 chip and the default image panics in its bootloader, and `CDCOnBoot=default`, because 4.0.0 defaults `Serial` to USB CDC rather than the UART the tests read.
 
 Run a quick P4-to-S3 smoke test using the ports from `.env`:
 
@@ -84,7 +91,7 @@ uv run --env-file .env pytest peer/wifi_ble_coexistence/ \
 The Wi-Fi values are passed as compile-time defines and may appear in verbose
 Arduino CLI command output. Use credentials dedicated to a disposable test AP.
 
-Security and repeated full initialization/deinitialization cases affected by the current Core/ESP-Hosted known limitations are not mandatory pass criteria for the representative P4 suite. Re-run them whenever the upstream versions change to determine whether those limitations have been resolved.
+Security and repeated full initialization/deinitialization cases affected by the current Core/ESP-Hosted known limitations are not mandatory pass criteria for the representative P4 suite. On core 4.0.0, security and bonding with the P4 as Central (`security_bond`, `hid_keyboard_host`) pass as well. Re-run them whenever the upstream versions change to determine whether those limitations have been resolved.
 
 `stack_smoke` uses no EspBle code: it connects the parent side as central and `peer_device/` as peripheral through the BLE API of the NimBLE backend bundled with Arduino-ESP32. It is the base that shows the two ports, flashing, the radio link, both serial monitors and the fixture itself work independently of the library, which is what tells you whether a failure elsewhere is the fixture's doing.
 
@@ -119,6 +126,22 @@ teardown so that a failed test, and Ctrl-C, are covered too:
 | Command | Byte | Reply once the target state holds |
 |---|---|---|
 | STOP | `0x04` (EOT) | `STOPPED`: nothing connected, advertising or scanning |
+
+The same header defines a second reserved command, which a test sends at its start
+rather than at teardown:
+
+| Command | Byte | Reply |
+|---|---|---|
+| READY? | `0x05` (ENQ) | the sketch's ready line, printed again |
+
+A ready line printed once at the end of `setup()` is lost whenever the serial reader
+attaches after the board has booted, which with core 4.0.0's faster boot is most of
+the time. A sketch therefore hands the code that prints its ready line to
+`announceReady()`, which prints it then and again on every READY?, and a test waits
+with the `ready` fixture in [`conftest.py`](conftest.py), which asks until the line
+comes. A sketch whose setup failed never announces, so the test still fails on the
+line it was waiting for. Sketches that used to run their whole procedure from
+`setup()` now start it on `g`, once the test has seen them ready.
 
 The reply means the state has been reached, not that the byte arrived. The fixture
 waits up to two seconds per board and prints a note when nothing comes back; a

@@ -185,6 +185,17 @@ bonding経路と複数回の完全再初期化は未合格であり、ESP-Hosted
 しない。SecurityはArduino CoreがESP-IDF修正`9fd7cb7`を取り込むまでの制約とし、
 再初期化問題とは提出先を分けてcoreの修正状況を追跡する。
 
+### その後の経過（Core 3.3.13 / 4.0.0）
+
+Core 3.3.13（`9fd7cb7`を含む）では初回のSC pairingとbondが成功したが、bond後の再接続で
+P4側のSecurity eventが出ない症状は残った。原因はCore同梱NimBLE hostで、Centralの暗号化要求と
+PeripheralのSecurity Requestが交差するとEncryption Changeを落とすことだった。EspBleは、
+暗号化済みのまま300 ms eventが無く、相手のbondが保存されているlinkを、保存済みのbond flagで
+報告するようにした。Core 4.0.0（Host / Slaveとも2.13.1）ではP4 centralの`security_bond`と
+`hid_keyboard_host`が成功し、Security、bonding、HIDは4.0.0で検証済みとした。詳細は
+[ESP-Hostedの既知制限](ESP_HOSTED_LIMITATIONS.ja.md)にある。複数回の完全再初期化の制限は
+この経過では再評価していない。
+
 ## 完了時の記録
 
 実装完了後、この文書へ実行したcore version、対象test、成功・失敗結果、既知の

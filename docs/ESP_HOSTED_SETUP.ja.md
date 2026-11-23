@@ -131,6 +131,16 @@ Core 3.3.13ではP4側のHostが2.13.1になる。2026-11-19の3.3.13の回帰�
 suiteを再実行した（結果は[既知制限](ESP_HOSTED_LIMITATIONS.ja.md)）。更新は起動時のlogに何も
 出さずに終わることがあるため、成否はEspBleのtest logの`ESP_HOSTED_VERSION`で確認する。
 
+2026-11-22〜23のCore 4.0.0の回帰は、Host / Slaveとも2.13.1で実施した（Securityを含む結果は
+[既知制限](ESP_HOSTED_LIMITATIONS.ja.md)）。Core 4.0.0では、P4のboard設定に次の2点が必要だった。
+
+- 検証機のP4はchip revision v1.3で、既定のimageではbootloaderでpanicする。`ChipVariant=prev3`
+  （v3より前のchip向け）を選ぶ。
+- 4.0.0は`Serial`の既定をUSB CDCに変えた。UARTでlogを読む場合は`CDCOnBoot=default`を選ぶ。
+
+EspBleのtestの`p4_peer_host` / `p4_peer_device` profileは、fqbnにこの2つを指定している。
+exampleの`esp32p4` profileはCoreの既定のままなので、v3より前のP4で使う場合は同じ指定を加える。
+
 HostとSlaveはArduino Coreが提供する同じversionへ揃える。実機に入っていたSlave
 2.3.2では、基本的なGATT通信は成功したがLE Secure ConnectionsのDHKey checkに
 失敗した。2.12.11へ更新後もDHKey check failureは再現したため、versionを揃えることは

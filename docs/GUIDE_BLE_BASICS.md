@@ -118,7 +118,7 @@ The mechanism that relieves this is the **scan response**. When a receiver asks 
 If you do not specify a scan response, EspBle **places the device name there automatically**, so the name does not eat into the 31 bytes. To decide the split yourself, `advertising().data()` and `advertising().scanResponse()` return the builder for each side.
 
 > **Why 31 bytes, and why it cannot be raised**
-> This is the specification limit of **legacy advertising**, present since BLE 4.0. BLE 5.0's **extended advertising** raises it to 255 bytes, but EspBle cannot use it: the NimBLE bundled with Arduino-ESP32 is built with `CONFIG_BT_NIMBLE_EXT_ADV` disabled, and an Arduino library has no way to change that setting.
+> This is the specification limit of **legacy advertising**, present since BLE 4.0. BLE 5.0's **extended advertising** raises it to 255 bytes, but EspBle does not offer it: the NimBLE bundled with Arduino-ESP32 3.x is built with `CONFIG_BT_NIMBLE_EXT_ADV` disabled, and an Arduino library has no way to change that setting. Core 4.0.0 enables it, but EspBle still sends legacy advertising there (through extended-advertising set 0), so the limit is the same on every core.
 
 #### Connectable and non-connectable advertising
 
@@ -396,7 +396,7 @@ Features that exist in the BLE specification but are unavailable in EspBle, with
 
 Added in BLE 5.0: payloads up to 255 bytes (extended) and receiving periodic data without connecting (periodic).
 
-**Unavailable.** The bundled NimBLE is built with `CONFIG_BT_NIMBLE_EXT_ADV` disabled, and an Arduino library has no way to change that setting. Periodic advertising is built on extended advertising, so it is unavailable for the same reason.
+**Unavailable.** The NimBLE bundled with 3.x cores, and the host EspBle bundles for the original ESP32, are built with `CONFIG_BT_NIMBLE_EXT_ADV` disabled, and an Arduino library has no way to change that setting. Core 4.0.0 enables it; EspBle uses it there only to send ordinary legacy advertising and exposes no extended-advertising API. Periodic advertising is built on extended advertising, so it is unavailable for the same reason.
 
 The consequence is that advertising is capped at 31 bytes × 2 payloads (the advertisement and the scan response).
 

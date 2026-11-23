@@ -144,6 +144,6 @@ Classicは1.3.0から同梱されています。このhostのサポートや互�
 「実機検証済み / 未検証 / 未実装」を[棚卸し](CLASSIC_FEATURE_INVENTORY.ja.md)に書きます。
 BLEとClassicの同時利用（dual-host）は実機検証済みですが実験扱いのままです。
 precompiled Classic hostはESP-IDF 5.5.5 / xtensa-esp32 GCC 14.2.0のABIに固定しており、
-対応Coreは実測で3.2.0〜3.3.11です（HFP audio（SCO）のみ3.3.8以上）。
+対応Coreは実測で3.2.0〜3.3.11、3.3.13、4.0.0です（HFP audio（SCO）のみ3.3.8以上）。
 経緯と検証結果は[Classic実装計画](PLAN_ESP32_CLASSIC.ja.md)と
 [引き継ぎ](HANDOFF_ESP32_CLASSIC.ja.md)にあります。

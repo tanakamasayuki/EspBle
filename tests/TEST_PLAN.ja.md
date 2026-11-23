@@ -7,8 +7,8 @@
 BLEは接続、切断、Discovery、購読、Security、Bondingが複数の非同期イベントにまたがります。このためPeerテストを補助的なsmokeではなく、実装を進めるための主要な自動テストにします。
 
 - unit: keymap変換、HID Report Map parserなどをhost上のg++で検証する（`tests/unit/`）。
-- examples_compile: 公開APIと対象SoCのbuild回帰を検出する。`.github/workflows/compile-examples.yml`が全exampleを、各sketchが持つprofile（無印ESP32専用のClassic exampleは`esp32`、それ以外は`esp32s3`）でコンパイルする（push/PRで自動実行。カバレッジ表のbuild列✅はこの検証を指す）。
-- peer: ESP32-S3 2台を標準fixtureとし、実際のradio、controller、host stackを通した接続を検証する。ESP32-P4 + ESP32-C6はESP-Hosted固有経路の追加fixtureとして使用する。
+- examples_compile: 公開APIと対象SoCのbuild回帰を検出する。`.github/workflows/compile-examples.yml`が全exampleを、各sketchが持つtarget profileごとにコンパイルする（無印ESP32専用のClassic exampleは`esp32`のみ、それ以外は`esp32s3`、`esp32s31`、`esp32`、`esp32c3`、`esp32c6`、`esp32h2`、`esp32p4`）（push/PRで自動実行。カバレッジ表のbuild列✅はこの検証を指す）。
+- peer: ESP32-S3 2台を標準fixtureとし、実際のradio、controller、host stackを通した接続を検証する。ESP32-P4 + ESP32-C6はESP-Hosted固有経路の追加fixtureとして、ESP32-S31 1台はS3と組ませてそのチップの検証に使用する。全sketchはArduino-ESP32 4.0.0にpinする。
 - manual: Android/iOS/Windows/Linux/macOSや市販機器との相互運用を検証する。
 
 Peerを必要としないsuiteは`peer/`の中に1台構成として置きます（`classic_hid_profiles`、`classic_a2dp_sink_profile`、`classic_radio_settings`。いずれも`peer_device/`を持ちません）。別の「single」層は設けません——fixtureも実行方法も同じで、分ける理由が無いためです。**これらへ`--peer-profile`を渡すとpytestがunknown peerとして拒否する**ので、掃引commandは分けて実行します。
@@ -44,13 +44,14 @@ coreやlibraryを動かした直後だけ正しいです。普段の速さを支
 
 ## Peerハードウェア
 
-Peerテストは次の3構成を使い分けます。
+Peerテストは次の4構成を使い分けます。
 
 | fixture | 親側DUT | 2台目Peer | 目的 | 接続方針 |
 |---|---|---|---|---|
 | 標準回帰 | ESP32-S3 | ESP32-S3 | EspBleの全機能と通常のNimBLE経路 | 常時接続を推奨 |
 | 無印ESP32回帰 | ESP32 | ESP32またはESP32-S3 | EspBle同梱NimBLE host、Bluetooth Classic、dual-host | 常時接続を推奨 |
 | ESP-Hosted回帰 | ESP32-P4 + ESP32-C6、またはESP32-S3 | ESP32-S3、またはESP32-P4 + ESP32-C6 | SDIO、ESP-Hosted、C6 controller、Wi-Fi/BLE共存。P4をCentralとPeripheralの両方に置く | 必要時の接続でよい |
+| ESP32-S31回帰 | ESP32-S31、またはESP32-S3 | ESP32-S3、またはESP32-S31 | S31のBT 5.4 controllerとCore同梱NimBLE（Core 4.0.0以上）。S31をCentralとPeripheralの両方に置く（`--combo s31_s3` / `s3_s31`） | 必要時の接続でよい |
 
 標準回帰にはEspUsbHost/EspUsbDeviceなどで常時接続されているESP32-S3 2台を共用します。BLE通信のためのボード間配線は不要です。各ボードをPCへ接続するSerial/給電だけを使用します。
 
@@ -62,6 +63,7 @@ pytest-embedded-cliの既存規約に従います。
 - P4親側profile: `p4_peer_host`
 - 2台目profile: `s3_peer_device`
 - P4の2台目profile: `p4_peer_device`（P4がPeripheralになる側。`p4_peer_host`と同じ実機）
+- S31のprofile: `s31_peer_host` / `s31_peer_device`（P4と同じく1台。S3 profileを持つsuiteにはS31用も並ぶ）
 - 2台目directory: `peer_device/`
 - Python fixture: `peers["device"]`
 
@@ -118,7 +120,9 @@ uv run --env-file .env pytest \
   --peer-profile device:s3_peer_device
 ```
 
-短時間の疎通確認には`peer/connect_disconnect/`だけを同じprofile指定で実行します。現行Core/ESP-Hostedで既知制限の影響を受けるSecurityおよび完全な初期化・終了反復は、代表suiteの必須合格項目に含めません。CoreまたはC6 firmware更新時には別途再実行し、[ESP-Hostedの既知制限](../docs/ESP_HOSTED_LIMITATIONS.ja.md)が解消したか確認します。
+短時間の疎通確認には`peer/connect_disconnect/`だけを同じprofile指定で実行します。現行Core/ESP-Hostedで既知制限の影響を受けるSecurityおよび完全な初期化・終了反復は、代表suiteの必須合格項目に含めません。Core 4.0.0では、P4をCentralにした`security_bond`と`hid_keyboard_host`がbond後の再接続を含めて成功します。
+
+Core 4.0.0ではP4 profileに`ChipVariant=prev3`（基準のP4はv1.3のchipで、既定のimageはbootloaderでpanicする）と`CDCOnBoot=default`（4.0.0は`Serial`の既定がtestの読むUARTではなくUSB CDC）を指定しています。CoreまたはC6 firmware更新時には別途再実行し、[ESP-Hostedの既知制限](../docs/ESP_HOSTED_LIMITATIONS.ja.md)が解消したか確認します。
 
 ## 無印ESP32回帰
 
@@ -148,6 +152,9 @@ profileを置いていないのは次の2種類だけです。
    EspBleのテストではないため）。
 2. **`phy_update`** — 無印ESP32はBLE 4.2 controllerでLE 2M PHYを持たず、構造上通りません。
 
+Core 4.0.0では`dual_host_smoke`、`dual_host_rpa`、`dual_host_hfp`が1.25 MBのapp領域に収まらないため、
+`PartitionScheme=huge_app`でbuildします。
+
 役割を入れ替えて同じsuiteを続けて実行するときは、**片方のボードを別suiteのfirmwareで上書きしてから**
 実行してください。`local_identity`のようにService UUIDで対象を選ぶsuiteは、前の実行のPeer firmwareが
 載ったままのボードが広告していると意図しない側を観測します。
@@ -162,11 +169,11 @@ profileを置いていないのは次の2種類だけです。
 | 文書だけの変更 | 不要 |
 | 通常の`src/`変更 | 代表smoke（`gatt_read_write` / `security_bond` / `hid_keyboard_host` / `mtu` / `connection_parameters`、親側のみで可。約15分） |
 | `src/nimble_esp32/`、`EspBleNimbleHost.h`、lifecycle・controller・vendorツールの変更 | 両役割の全掃引（各約1時間） |
-| Arduino-ESP32 Coreの更新 | 両役割の全掃引。`tools/vendor_nimble_esp32.py`のpinがそのcoreのesp-idfと一致しているかも確認する |
+| Arduino-ESP32 Coreの更新 | 両役割の全掃引。`tools/vendor_nimble_esp32.py`のpinが、そのcoreのesp-idfのNimBLE pinと同じかそれより新しいことも確認する（現在は3.3.13の`release/v5.5`のsnapshotで、4.0.0のESP-IDF v6.1.1のpinの内容をすべて含む） |
 | リリース候補 | 両役割の全掃引（[リリースチェックリスト](../docs/RELEASE_CHECKLIST.ja.md)参照） |
 
 無印ESP32はcore同梱ではなく**EspBleが持ち込んだhost**で動くため、`src/`の変更はS3では
-再現しない形で影響し得ます。一方でhostは他ターゲットと同一スナップショットなので、
+再現しない形で影響し得ます。一方でhostは3.3.13のスナップショットで、4.0.0の他ターゲットのhostの内容をすべて含むので、
 毎回の全掃引までは求めず、上表の粒度とします。
 
 ## Peerテスト原則
@@ -556,7 +563,12 @@ sketch.yamlの再pinとbuild directoryは共有のままなので、片方の書
 [core版数のテスト計画](../docs/PLAN_CORE_VERSION_MATRIX.ja.md)。HFP audioだけはcontrollerの
 都合で3.3.8以上）。`--core-version`はこの範囲の下限側を実機で再確認するときに使います。
 `--peer-core-version`はpeerがEspBleをlinkしないsuite（`core_host_*`と`classic_core_host_spp`）で
-使い、実行頻度はどちらもmanualです。毎回の回帰は3.3.11のままにします。
+使い、実行頻度はどちらもmanualです。毎回の回帰は4.0.0のままにします。
+
+**suite自体は4.0.0を必要とします。** Core同梱stackを使う相手側sketch 10本は、3.x系のAPI
+（`BLEDevice`、`BLE2902`など）に代わった4.0の`BLE.h` APIで書かれており、Classicの相手側も4.0の
+`BluetoothSerial`とESP-IDF 6に合わせています。pinを古いCoreへ書き換えてもこれらはbuildできません。
+古いCoreを測るときは、4.0.0へ移る前のcommitのsuiteをcheckoutして実行します。
 
 ## 起動banner待ちを避ける
 
@@ -570,6 +582,16 @@ probeで行います**。sketch側は起動時だけでなくcommand（audio系�
 答えが来るまで数回問い合わせます。実装は`tests/conftest.py`の`probe` fixtureで、必要なtestが
 引数に取ります。BLE linkの確立のように「起きた瞬間に1度だけ知らせる」状態も同じcommandで
 現在値を答えるようにし、testは通知を待たずに状態を問い合わせます。
+
+Core 4.0.0では起動が速く、`setup()`の最後に出すready行をほとんどの場合取りこぼし、
+`dual_host_smoke`と十数個のClassic suiteがこの形で落ちました。そこで**全sketchが予約commandで
+準備完了を答えるようにしました**。sketchはready行を出す処理を`EspBleTestLifecycle.h`の
+`announceReady()`へ渡し、その場で1回、以後READY?（ENQ、`0x05`）のたびにもう一度出します。testは
+`ready` fixtureで、行が来るまで問い合わせます。setupに失敗したsketchはannounceしないので、testは
+待っていた行で失敗します。ready行の後にも起動時の出力が続くもの（SPP serverのchannel、inquiry
+peerのClass of Device）は、それが出た後でannounceし、READY?には両方の行を返します。手順全体を
+`setup()`から実行していたsketch（`classic_a2dp_sink_profile`、`classic_hid_profiles`、
+`stack_smoke`）は、testがready行を確認した後に`g`で開始します。
 
 ## 末尾の可変長fieldは行末で止める
 

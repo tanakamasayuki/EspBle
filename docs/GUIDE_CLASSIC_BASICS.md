@@ -7,12 +7,12 @@ boundaries are. The code lives in the [Classic examples](../examples/README.md).
 For BLE see the [BLE communication beginner guide](GUIDE_BLE_BASICS.md); for
 deciding between the two radios see [BLE and Classic](CLASSIC_VS_BLE.md).
 
-**Classic works on the original ESP32 only.** ESP32-S3/C3/C6/H2/P4 have no
+**Classic works on the original ESP32 only.** ESP32-S3/S31/C3/C6/H2/P4 have no
 BR/EDR radio. Which features are hardware-verified, unverified or unimplemented
 is tracked in the [Classic feature inventory](CLASSIC_FEATURE_INVENTORY.ja.md).
 The precompiled Classic host is ABI-bound to ESP-IDF 5.5.5 and xtensa-esp32 GCC
 14.2.0; because the Bluedroid headers it was built against ship with the library,
-the measured core range is Arduino-ESP32 3.2.0 through 3.3.11, with HFP audio
+the measured core range is Arduino-ESP32 3.2.0 through 3.3.11, 3.3.13 and 4.0.0, with HFP audio
 (SCO) needing 3.3.8 or newer.
 
 ## 1. A different model from BLE

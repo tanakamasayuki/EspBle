@@ -483,7 +483,7 @@ Serial.printf("qmax=%u qfull=%lu mismatch=%lu unknown=%lu credits=%lu/%lu\n",
 - HCI command policyはfail closedです。新しいopcodeは分類と検証を追加するまでDual Hostでは拒否されます。
 - ClassicをlinkしたsketchはBTDM memoryを保持するため、BLE専用よりheapが減ります。
 - radio、heap、CPU、各application callback queueは共有資源です。application側にも上限のあるqueueとdrop監視が必要です。
-- precompiled Classic Hostの実測対応CoreはArduino-ESP32 3.2.0〜3.3.11です。HFP audioは3.3.8以上が必要です。
+- precompiled Classic Hostの実測対応CoreはArduino-ESP32 3.2.0〜3.3.11、3.3.13、4.0.0です。HFP audioは3.3.8以上が必要です。
 
 不具合を切り分ける最初の操作は、一方を`end()`して単一Hostに戻すことです。単一Hostで再現しなければ、
 broker policy、共有resource、起動停止境界を優先して調べます。

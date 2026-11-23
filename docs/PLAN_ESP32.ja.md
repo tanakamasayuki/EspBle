@@ -70,13 +70,15 @@ bonding・MTUのAPI上の意味は一致させる。それでも**controller差�
 
 | 取るもの | 取得元 | 内容 |
 |---|---|---|
-| NimBLE host本体・porting | **espressif/esp-nimble** @ `685675c0128deafdd201c9eb82e61d227364646c` | `nimble/`（host・transport）、`porting/nimble`（os_mbuf, os_mempool, nimble_port ほか）、`porting/npl/freertos`、`ext/`（tinycrypt） |
-| ESP glue | **espressif/esp-idf** @ `v5.5.5` の`components/bt/host/nimble/` | `esp-hci/src/esp_nimble_hci.c`（VHCI transport）、`port/src/esp_nimble_mem.c`、`port/src/nvs_port.c`、`port/include/esp_nimble_cfg.h` |
-| 不足ヘッダ | 同 esp-idf v5.5.5 | `bt_common.h`、`bt_osi_mem.h`（esp32-libsのinclude treeに存在しない。`hci_log/bt_hci_log.h`、`ble_log.h`、`esp_compiler.h`はcore側にある） |
-| 設定値 | core 3.3.11の`esp32s3-libs/include/bt/host/nimble/port/include/esp_nimble_cfg.h` | 生成物。これを起点にすることで既存ターゲットと同一設定を保証する（target差は`MSYS_1_BLOCK_COUNT`程度） |
+| NimBLE host本体・porting | **espressif/esp-nimble** @ `41057af9846bbf7b08f8c342fa9d2e3f03cc0ce1`（2026-11に`685675c0128deafdd201c9eb82e61d227364646c`から更新） | `nimble/`（host・transport）、`porting/nimble`（os_mbuf, os_mempool, nimble_port ほか）、`porting/npl/freertos`、`ext/`（tinycrypt） |
+| ESP glue | **espressif/esp-idf** @ `release/v5.5` `a45de8cc`（更新前は`v5.5.5`）の`components/bt/host/nimble/` | `esp-hci/src/esp_nimble_hci.c`（VHCI transport）、`port/src/esp_nimble_mem.c`、`port/src/nvs_port.c`、`port/include/esp_nimble_cfg.h` |
+| 不足ヘッダ | 同 esp-idf | `bt_common.h`、`bt_osi_mem.h`（esp32-libsのinclude treeに存在しない。`hci_log/bt_hci_log.h`、`ble_log.h`、`esp_compiler.h`はcore側にある） |
+| 設定値 | core 3.3.13（更新前は3.3.11）の`esp32s3-libs/include/bt/host/nimble/port/include/esp_nimble_cfg.h` | 生成物。これを起点にすることで既存ターゲットと同一設定を保証する（target差は`MSYS_1_BLOCK_COUNT`程度） |
 
-`685675c…`はesp-idf v5.5.5の`components/bt/host/nimble/nimble` submoduleが指すcommitで、
-**core 3.3.11のS3で動いているhostと同一スナップショット**である。
+当初の`685675c…`はesp-idf v5.5.5の`components/bt/host/nimble/nimble` submoduleが指すcommitで、
+**core 3.3.11のS3で動いているhostと同一スナップショット**だった。現在の`41057af…`は
+Arduino-ESP32 3.3.13のbuild元であるesp-idf `release/v5.5` `a45de8cc`のpinで、core 3.3.13のS3と
+同一スナップショットである（経緯は[2026-11 同梱hostの更新](#2026-11-同梱hostの更新esp-nimble-41057af)）。
 
 補足:
 
@@ -306,6 +308,29 @@ upstreamには存在しない問題。**vendorツールのパッチとして**`c
   巻き込んだ。pytest同士を同時に走らせるのは問題ない。
 - README / STATUS / FEATURE_MATRIX / `library.properties`への反映は完了済み。今後の対応範囲は
   実機で確認できた経路だけを「対応済み」とする。
+
+## 2026-11 同梱hostの更新（esp-nimble `41057af`）
+
+Arduino-ESP32 4.0.0への移行に合わせて、同梱hostをesp-nimble `685675c`（ESP-IDF v5.5.5）から
+`41057af`へ更新した。`41057af`はArduino-ESP32 3.3.13のbuild元であるESP-IDF `release/v5.5`
+`a45de8cc`のpinで、ESP-IDF v6.1.1（Arduino-ESP32 4.0.0）のpinの内容をすべて含む。
+
+- **取り込んだ修正:** CVE-2026-45816とCVE-2026-45815の修正、SMPの比較の定数時間化、BLERP
+  再pairingの強化、bond storeのoverflowとunpairの修正、GATTのuse-after-free修正など。
+- **設定:** 3.3.13のESP32-S3 sdkconfigから固定し直した。従来との差は、SMPの再pairing強化、
+  Centralとしてのpairing失敗時のbond削除、接続eventの遅延処理の3点である。
+- **local patch:** 上流が同じ修正を持つようになった5件（event queueのrotation assert、RPAの
+  address type）を削除し、4件（host停止の直列化と上流のEALREADY処理、停止成功時だけの受信close、
+  要求していないEncryption Changeの配送、peer recordの無いresolving listの掃除）を新しいsourceへ
+  当て直した。OSALは無印ESP32のどのCoreでも無効で、headerも3.3.13以降にしか無いため、
+  `bt_osal`のhookはpatchで外している。
+- **dual-host:** 新しいhostはscan前に保留中のLE接続をcancelするため、HCI brokerはLE Create
+  Connection Cancel（0x200E）を未分類として拒否せず、他のNimBLE無線commandと同じくNimBLEへ
+  routingするようにした。
+
+`tools/vendor_nimble_esp32.py`には`--out`と`--keep-going`を追加した。更新後のhostは4.0.0で
+`esp32_esp32` 90 passed、`esp32_s3` 86 passed / 30 skipped、`s3_esp32` 89 passed / 27 skippedだった
+（[core版数のテスト計画](PLAN_CORE_VERSION_MATRIX.ja.md)）。
 
 ## 参考: 試作で得た実測値（core 3.3.11、`Hid/KeyboardDevice`）
 

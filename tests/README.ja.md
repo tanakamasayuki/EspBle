@@ -6,17 +6,20 @@
 
 ```text
 unit/   host上で実行する純粋C++/データ変換テスト（実機不要）
-peer/   ESP32-S3標準回帰、およびP4+C6 ESP-Hosted回帰のBLE実機テスト
+peer/   ESP32-S3標準回帰、ESP32-S31、無印ESP32、およびP4+C6 ESP-Hosted回帰のBLE実機テスト
 ```
 
 | 構成 | 用途 | 普段の扱い |
 |---|---|---|
 | ESP32-S3 + ESP32-S3 | 全機能の標準回帰 | 常時接続を推奨。`pytest peer/`の既定構成 |
 | ESP32-P4 + ESP32-C6、Peer ESP32-S3 | SDIO/ESP-Hosted/C6 controllerとWi-Fi/BLE共存の回帰 | 1組を必要時に接続。明示的にP4 profileを指定 |
+| ESP32-S31、Peer ESP32-S3 | S31のcontrollerとCore同梱NimBLE（Core 4.0.0以上） | 1台をS3のどちら側にも置く。`--combo s31_s3`または`--combo s3_s31`で選ぶ |
+
+全sketchはArduino-ESP32 4.0.0にpinしてあり、suiteは4.0.0を必要とします。相手側sketchのうち10本がCoreの4.0の`BLE.h` APIで書かれているためです。古いCoreを測るときは、4.0.0へ移る前のcommitのsuiteを使います（[テスト計画](TEST_PLAN.ja.md#coreバージョンを変えて回す)）。
 
 P4向けcompileだけではESP-Hostedの実通信経路を検証できず、S3だけではHosted固有の初期化やSDIOの不具合を検出できません。そのためP4実機は必要ですが、常時接続は不要です。Hosted関連変更ごと、Arduino-ESP32 Core/C6 firmware更新時、リリース候補で実行します。詳しい頻度と合格範囲は[テスト計画](TEST_PLAN.ja.md#p4c6-esp-hosted回帰)、準備は[ESP-Hostedセットアップ](../docs/ESP_HOSTED_SETUP.ja.md)、除外理由は[既知制限](../docs/ESP_HOSTED_LIMITATIONS.ja.md)を参照してください。
 
-examplesのbuild回帰はGitHub Actions（`.github/workflows/compile-examples.yml`）が全exampleをesp32s3 profileでコンパイルして検出します。OSや市販BLE機器との相互運用はmanualテストとして初回リリース前に実施します。
+examplesのbuild回帰はGitHub Actions（`.github/workflows/compile-examples.yml`）が全exampleを、宣言している各target profile（esp32s3、esp32s31、esp32、esp32c3、esp32c6、esp32h2、esp32p4）でコンパイルして検出します。OSや市販BLE機器との相互運用はmanualテストとして初回リリース前に実施します。
 
 ## セットアップ
 
@@ -32,6 +35,8 @@ TEST_SERIAL_PORT_S3_PEER_HOST=/dev/ttyUSB0
 TEST_SERIAL_PORT_PEER_DEVICE_S3_PEER_DEVICE=/dev/ttyUSB1
 TEST_SERIAL_PORT_P4_PEER_HOST=/dev/ttyUSB2
 TEST_SERIAL_PORT_PEER_DEVICE_P4_PEER_DEVICE=/dev/ttyUSB2
+TEST_SERIAL_PORT_S31_PEER_HOST=/dev/ttyUSB5
+TEST_SERIAL_PORT_PEER_DEVICE_S31_PEER_DEVICE=/dev/ttyUSB5
 TEST_SERIAL_PORT_ESP32_PEER_HOST=/dev/ttyUSB3
 TEST_SERIAL_PORT_PEER_DEVICE_ESP32_PEER_DEVICE=/dev/ttyUSB4
 TEST_WIFI_SSID=example-test-ssid
@@ -52,6 +57,8 @@ uv run --env-file .env pytest peer/stack_smoke/
 ```
 
 P4+C6 fixtureには、C6搭載済みのEspressif ESP32-P4-Function-EV-Board、またはArduino-ESP32の汎用`esp32p4` variantが想定するものと同じ標準SDIO配線を推奨します。これならboard固有のpin上書きなしで共通条件を再現できます。Tab5や独自配線でも実行できますが、正しいvariantまたは`hostedSetPins()`が必要です。pin条件は[SDIO pinの選択と上書き](../docs/ESP_HOSTED_SETUP.ja.md#sdio-pinの選択と上書き)を参照してください。
+
+Core 4.0.0ではP4 profileのFQBNにboard optionを2つ加えています。`ChipVariant=prev3`は、基準のP4がv1.3のchipで、既定のimageではbootloaderでpanicするためです。`CDCOnBoot=default`は、4.0.0が`Serial`の既定をtestが読むUARTではなくUSB CDCにしたためです。
 
 P4を`.env`の`TEST_SERIAL_PORT_P4_PEER_HOST`、S3をPeerとして短い疎通testを実行する例:
 
@@ -84,7 +91,7 @@ uv run --env-file .env pytest peer/wifi_ble_coexistence/ \
 Wi-Fi情報はcompile-time defineとして渡され、verboseなArduino CLI compile commandには
 表示され得る。公開されてもよいテスト専用APを使用し、実運用の認証情報は設定しない。
 
-現行Core/ESP-Hostedの既知制限に該当するSecurityと完全な初期化・終了反復は、P4代表suiteの必須合格項目から除外しています。上流versionを更新したときに再実行し、制限が解消したか確認します。
+現行Core/ESP-Hostedの既知制限に該当するSecurityと完全な初期化・終了反復は、P4代表suiteの必須合格項目から除外しています。Core 4.0.0では、P4をCentralにしたSecurityとbonding（`security_bond`、`hid_keyboard_host`）も成功します。上流versionを更新したときに再実行し、制限が解消したか確認します。
 
 `stack_smoke`はEspBleを使わず、Arduino-ESP32同梱NimBLE backendのBLE APIだけで親側をCentral、`peer_device/`側をPeripheralとして接続します。2台のポート、書き込み、無線接続、双方のSerial、テストfixture自体が動くことを、libraryと切り離して確認するための土台です。他のsuiteが落ちたときに、原因がfixture側かどうかを切り分けられます。
 
@@ -115,6 +122,19 @@ sketchはmoduleごとに1回だけflashされ、全moduleが1テストなので�
 | command | byte | 目標状態に到達したときの応答 |
 |---|---|---|
 | STOP | `0x04`（EOT） | `STOPPED`: 接続・advertise・scanのいずれもない |
+
+同じheaderには、teardownではなくtestの開始時に送る2つ目の予約commandもあります。
+
+| command | byte | 応答 |
+|---|---|---|
+| READY? | `0x05`（ENQ） | sketchのready行をもう一度出す |
+
+`setup()`の最後に1回だけ出すready行は、serial readerがboardの起動後につながると失われます。
+Core 4.0.0は起動が速く、ほとんどの場合そうなります。そのためsketchはready行を出す処理を
+`announceReady()`へ渡し、その場で1回、以後READY?のたびにもう一度出します。testは
+[`conftest.py`](conftest.py)の`ready` fixtureで、行が来るまで問い合わせます。setupに失敗した
+sketchはannounceしないので、testは待っていた行で失敗します。手順全体を`setup()`から実行して
+いたsketchは、testがready行を確認した後に`g`で開始するようにしました。
 
 応答は「byteを受け取った」ではなく「状態に到達した」の合図です。fixtureはboardごとに2秒まで
 待ち、返らなければその旨を出すだけでtest結果は変えません。応答できないboardは、固まったか

@@ -118,7 +118,7 @@ void loop() {
 EspBleは、Scan Responseに何も指定しなければ**デバイス名を自動的にそちらへ置きます**。31バイトを名前で消費しないためです。どちらの面に何を載せるかを自分で決めるときは、`advertising().data()` と `advertising().scanResponse()` がそれぞれの面のビルダーを返します。
 
 > **なぜ31バイトなのか、増やせないのか**
-> これはBLE 4.0からある**Legacy Advertising**の仕様上の上限です。BLE 5.0の**Extended Advertising**を使えば255バイトまで拡張できますが、EspBleでは利用できません。Arduino-ESP32に同梱されているNimBLEが `CONFIG_BT_NIMBLE_EXT_ADV` を無効にしてビルドされており、Arduinoライブラリ側からこの設定を変更する手段がないためです。
+> これはBLE 4.0からある**Legacy Advertising**の仕様上の上限です。BLE 5.0の**Extended Advertising**を使えば255バイトまで拡張できますが、EspBleでは利用できません。Arduino-ESP32 3.x系に同梱されているNimBLEが `CONFIG_BT_NIMBLE_EXT_ADV` を無効にしてビルドされており、Arduinoライブラリ側からこの設定を変更する手段がないためです。Core 4.0.0ではこれが有効ですが、EspBleはそこでもLegacy Advertisingを（Extended Advertisingのset 0から）送るので、上限はどのCoreでも同じです。
 
 #### 接続できるアドバタイズ、できないアドバタイズ
 
@@ -396,7 +396,7 @@ BLEの仕様にはあるが、EspBleでは使えない機能です。理由も�
 
 BLE 5.0で追加された、255バイトまでのペイロードを扱う仕組み（Extended）と、接続せずに定期的なデータ配信を受ける仕組み（Periodic）です。
 
-**使えません。** 同梱NimBLEが `CONFIG_BT_NIMBLE_EXT_ADV` を無効にしてビルドされており、Arduinoライブラリ側からこの設定を変更する手段がないためです。Periodic AdvertisingはExtended Advertisingの上に成り立つ仕組みなので、同じ理由で使えません。
+**使えません。** 3.x系Coreに同梱のNimBLEと、無印ESP32向けにEspBleが同梱するhostは `CONFIG_BT_NIMBLE_EXT_ADV` を無効にしてビルドされており、Arduinoライブラリ側からこの設定を変更する手段がないためです。Core 4.0.0ではこれが有効ですが、EspBleは通常のLegacy Advertisingを送るためだけに使い、Extended AdvertisingのAPIは提供しません。Periodic AdvertisingはExtended Advertisingの上に成り立つ仕組みなので、同じ理由で使えません。
 
 結果として、アドバタイズは31バイト × 2面（本体とScan Response）が上限になります。
 
