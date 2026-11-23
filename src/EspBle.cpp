@@ -425,6 +425,33 @@ bool isValidAddressType(EspBleAddressType type)
   return static_cast<uint8_t>(type) <=
     static_cast<uint8_t>(EspBleAddressType::RandomIdentity);
 }
+
+// Arduino-ESP32 4.0 builds every bundled NimBLE host with BLE_EXT_ADV. With it
+// on, the legacy ble_gap_adv_* calls return BLE_HS_ENOTSUP, so the same
+// advertisement goes out through this advertising set, sent with legacy PDUs.
+// The NimBLE host vendored for the original ESP32 keeps it off.
+constexpr uint8_t LegacyAdvertisingInstance = 0;
+
+int stopBackendAdvertising()
+{
+#if MYNEWT_VAL(BLE_EXT_ADV)
+  // Stopping a set that was never configured is an error rather than
+  // BLE_HS_EALREADY, so answer the not-advertising case here.
+  if (!ble_gap_ext_adv_active(LegacyAdvertisingInstance)) return BLE_HS_EALREADY;
+  return ble_gap_ext_adv_stop(LegacyAdvertisingInstance);
+#else
+  return ble_gap_adv_stop();
+#endif
+}
+
+bool backendAdvertisingActive()
+{
+#if MYNEWT_VAL(BLE_EXT_ADV)
+  return ble_gap_ext_adv_active(LegacyAdvertisingInstance) != 0;
+#else
+  return ble_gap_adv_active() != 0;
+#endif
+}
 } // namespace
 
 // Raw GATT client discovery, bypassing the bundled wrapper.
@@ -785,6 +812,10 @@ struct EspBleImpl
     // the op completes, instead of rejecting the disconnect() call.
     bool pendingDisconnect = false;
     uint8_t pendingDisconnectReason = 0x13;
+    // When the backend was first seen reporting this link encrypted without a
+    // security event having reached EspBle (0: not seen). See
+    // EspBle::recoverUnreportedEncryption().
+    uint32_t unreportedEncryptionSinceMs = 0;
   };
 
   struct GattDatabaseSnapshot
@@ -4993,6 +5024,28 @@ struct EspBleScannerImpl
     {
       impl->handleReport(event->disc);
     }
+#if MYNEWT_VAL(BLE_EXT_ADV)
+    else if (event->type == BLE_GAP_EVENT_EXT_DISC)
+    {
+      // With extended advertising enabled, ble_gap_disc() runs an extended
+      // scan and every report arrives here, legacy PDUs included. Only those
+      // are passed on: an extended advertisement never reached a scan before,
+      // and EspBleScanResult describes a legacy report.
+      const ble_gap_ext_disc_desc &report = event->ext_disc;
+      if ((report.props & BLE_HCI_ADV_LEGACY_MASK) == 0) return 0;
+      ble_gap_disc_desc legacy{};
+      legacy.event_type = report.legacy_event_type;
+      legacy.length_data = report.length_data;
+      legacy.addr = report.addr;
+      legacy.rssi = report.rssi;
+      legacy.data = report.data;
+      legacy.direct_addr = report.direct_addr;
+#if MYNEWT_VAL(BLE_HOST_BASED_PRIVACY)
+      legacy.ota_addr = report.ota_addr;
+#endif
+      impl->handleReport(legacy);
+    }
+#endif
     else if (event->type == BLE_GAP_EVENT_DISC_COMPLETE)
     {
       impl->flushPending();
@@ -5502,9 +5555,13 @@ bool EspBleAdvertising::start(uint32_t durationSeconds)
     return false;
   }
 
-  ble_gap_adv_stop();
+  (void)stopBackendAdvertising();
 
   ble_addr_t directTarget{};
+  // Built before any backend call: the extended-advertising backend takes the
+  // data only after the set is configured, the legacy one before it starts.
+  Payload advertisingPayload;
+  Payload responsePayload;
   if (directed_)
   {
     directTarget.type = static_cast<uint8_t>(directedAddressType_);
@@ -5529,18 +5586,11 @@ bool EspBleAdvertising::start(uint32_t durationSeconds)
       primary.name_ = "";
     }
 
-    Payload advertisingPayload;
     if (!buildPayload(primary, advertisingPayload, true, "advertising"))
     {
       return false;
     }
-    if (ble_gap_adv_set_data(advertisingPayload.bytes, advertisingPayload.length) != 0)
-    {
-      owner_->setError(EspBleError::BackendFailure, "failed to set advertising data");
-      return false;
-    }
 
-    Payload responsePayload;
     if (scanResponseEnabled_)
     {
       EspBleAdvertisingData responseSource = scanResponseData_;
@@ -5553,6 +5603,130 @@ bool EspBleAdvertising::start(uint32_t durationSeconds)
       {
         return false;
       }
+    }
+  }
+
+  // Advertising interval: convert milliseconds to 0.625 ms units. A directed
+  // high duty cycle advertisement has its timing fixed by the controller.
+  uint16_t intervalMin = 0;
+  uint16_t intervalMax = 0;
+  if (intervalMinMs_ != 0 && intervalMaxMs_ != 0)
+  {
+    intervalMin = static_cast<uint16_t>((static_cast<uint32_t>(intervalMinMs_) * 8) / 5);
+    intervalMax = static_cast<uint16_t>((static_cast<uint32_t>(intervalMaxMs_) * 8) / 5);
+  }
+  uint8_t filterPolicy = BLE_HCI_ADV_FILT_NONE;
+  switch (filterPolicy_)
+  {
+  case EspBleAdvertisingFilterPolicy::ScanRequestFromAcceptList:
+    filterPolicy = BLE_HCI_ADV_FILT_SCAN;
+    break;
+  case EspBleAdvertisingFilterPolicy::ConnectionFromAcceptList:
+    filterPolicy = BLE_HCI_ADV_FILT_CONN;
+    break;
+  case EspBleAdvertisingFilterPolicy::Both:
+    filterPolicy = BLE_HCI_ADV_FILT_BOTH;
+    break;
+  case EspBleAdvertisingFilterPolicy::Any:
+  default:
+    break;
+  }
+
+#if MYNEWT_VAL(BLE_EXT_ADV)
+  ble_gap_ext_adv_params parameters{};
+  parameters.legacy_pdu = 1;
+  if (directed_)
+  {
+    parameters.connectable = 1;
+    parameters.directed = 1;
+    parameters.high_duty_directed = directedHighDuty_ ? 1 : 0;
+    parameters.peer = directTarget;
+  }
+  else
+  {
+    // Legacy PDU types: connectable is ADV_IND (always scannable); otherwise a
+    // scan response makes it ADV_SCAN_IND and without one it is a pure
+    // broadcast, ADV_NONCONN_IND, as a beacon must be. This is the type the
+    // legacy backend below ends up with for the same settings.
+    parameters.connectable = connectable_ ? 1 : 0;
+    parameters.scannable = (connectable_ || responsePayload.length != 0) ? 1 : 0;
+  }
+  // Zero leaves the interval to the host's default, as on the legacy backend.
+  parameters.itvl_min = intervalMin;
+  parameters.itvl_max = intervalMax;
+  parameters.channel_map = channelMask_;
+  parameters.own_addr_type = owner_->impl_->ownAddressType;
+  parameters.filter_policy = filterPolicy;
+  parameters.primary_phy = BLE_HCI_LE_PHY_1M; // legacy PDUs are 1M only
+  parameters.secondary_phy = BLE_HCI_LE_PHY_1M;
+  parameters.tx_power = 127; // no preference
+  parameters.sid = 0;
+
+  // Removing the set drops whatever data the previous configuration left in it:
+  // a scan response kept on a set that is no longer scannable, or any data on a
+  // directed one, makes the controller reject the new parameters.
+  int backendCode = ble_gap_ext_adv_remove(LegacyAdvertisingInstance);
+  if (backendCode != 0 && backendCode != BLE_HS_EALREADY)
+  {
+    owner_->setError(
+      EspBleError::BackendFailure,
+      (String("failed to reset advertising set, backend code ") + backendCode).c_str());
+    return false;
+  }
+  backendCode = ble_gap_ext_adv_configure(
+    LegacyAdvertisingInstance, &parameters, nullptr, EspBleImpl::advertisingGapEvent, owner_->impl_);
+  if (backendCode != 0)
+  {
+    owner_->setError(
+      EspBleError::BackendFailure,
+      (String("failed to configure advertising, backend code ") + backendCode).c_str());
+    return false;
+  }
+  // A directed PDU carries no advertising data or scan response.
+  if (!directed_)
+  {
+    // ble_gap_ext_adv_set_data() and ..._rsp_set_data() take ownership of the
+    // buffer whether they succeed or not.
+    os_mbuf *data = ble_hs_mbuf_from_flat(advertisingPayload.bytes, advertisingPayload.length);
+    if (data == nullptr)
+    {
+      owner_->setError(EspBleError::ResourceExhausted, "failed to allocate advertising data");
+      return false;
+    }
+    if (ble_gap_ext_adv_set_data(LegacyAdvertisingInstance, data) != 0)
+    {
+      owner_->setError(EspBleError::BackendFailure, "failed to set advertising data");
+      return false;
+    }
+    if (responsePayload.length != 0)
+    {
+      os_mbuf *response = ble_hs_mbuf_from_flat(responsePayload.bytes, responsePayload.length);
+      if (response == nullptr)
+      {
+        owner_->setError(EspBleError::ResourceExhausted, "failed to allocate scan response data");
+        return false;
+      }
+      if (ble_gap_ext_adv_rsp_set_data(LegacyAdvertisingInstance, response) != 0)
+      {
+        owner_->setError(EspBleError::BackendFailure, "failed to set scan response data");
+        return false;
+      }
+    }
+  }
+  // The set counts its duration in 10 ms units, up to 65535. A longer finite
+  // duration runs unbounded here and expireFiniteDuration() ends it on time.
+  const uint32_t durationUnits = durationSeconds * 100;
+  backendCode = ble_gap_ext_adv_start(
+    LegacyAdvertisingInstance,
+    durationSeconds != 0 && durationUnits <= 0xFFFF ? static_cast<int>(durationUnits) : 0,
+    0);
+#else
+  if (!directed_)
+  {
+    if (ble_gap_adv_set_data(advertisingPayload.bytes, advertisingPayload.length) != 0)
+    {
+      owner_->setError(EspBleError::BackendFailure, "failed to set advertising data");
+      return false;
     }
     // Only published when there is something to send: setting scan response
     // data at all makes a non-connectable advertisement scannable, which a
@@ -5585,32 +5759,10 @@ bool EspBleAdvertising::start(uint32_t durationSeconds)
   // scan response has nothing to answer with, so it advertises as the latter.
   const bool scannable = connectable_ || (scanResponseEnabled_ && !scanResponseData_.isEmpty());
   parameters.disc_mode = scannable ? BLE_GAP_DISC_MODE_GEN : BLE_GAP_DISC_MODE_NON;
-  // Advertising interval: convert milliseconds to 0.625 ms units. A directed
-  // high duty cycle advertisement has its timing fixed by the controller.
-  if (intervalMinMs_ != 0 && intervalMaxMs_ != 0)
-  {
-    parameters.itvl_min =
-      static_cast<uint16_t>((static_cast<uint32_t>(intervalMinMs_) * 8) / 5);
-    parameters.itvl_max =
-      static_cast<uint16_t>((static_cast<uint32_t>(intervalMaxMs_) * 8) / 5);
-  }
+  parameters.itvl_min = intervalMin;
+  parameters.itvl_max = intervalMax;
   parameters.channel_map = channelMask_;
-  switch (filterPolicy_)
-  {
-  case EspBleAdvertisingFilterPolicy::ScanRequestFromAcceptList:
-    parameters.filter_policy = BLE_HCI_ADV_FILT_SCAN;
-    break;
-  case EspBleAdvertisingFilterPolicy::ConnectionFromAcceptList:
-    parameters.filter_policy = BLE_HCI_ADV_FILT_CONN;
-    break;
-  case EspBleAdvertisingFilterPolicy::Both:
-    parameters.filter_policy = BLE_HCI_ADV_FILT_BOTH;
-    break;
-  case EspBleAdvertisingFilterPolicy::Any:
-  default:
-    parameters.filter_policy = BLE_HCI_ADV_FILT_NONE;
-    break;
-  }
+  parameters.filter_policy = filterPolicy;
 
   const int32_t duration = durationSeconds == 0
     ? BLE_HS_FOREVER
@@ -5622,6 +5774,7 @@ bool EspBleAdvertising::start(uint32_t durationSeconds)
     &parameters,
     EspBleImpl::advertisingGapEvent,
     owner_->impl_);
+#endif
   if (backendCode != 0)
   {
     owner_->setError(
@@ -5679,7 +5832,7 @@ void EspBleAdvertising::expireFiniteDuration()
 
   restartAfterPreemption_ = false;
   advertisingDeadlineMs_ = 0;
-  (void)ble_gap_adv_stop();
+  (void)stopBackendAdvertising();
 }
 
 bool EspBleAdvertising::stop()
@@ -5691,7 +5844,7 @@ bool EspBleAdvertising::stop()
   }
   restartAfterPreemption_ = false;
   advertisingDeadlineMs_ = 0;
-  const int backendCode = ble_gap_adv_stop();
+  const int backendCode = stopBackendAdvertising();
   // BLE_HS_EALREADY simply means it was not advertising.
   if (backendCode != 0 && backendCode != BLE_HS_EALREADY)
   {
@@ -5704,7 +5857,7 @@ bool EspBleAdvertising::stop()
 
 bool EspBleAdvertising::isAdvertising() const
 {
-  return owner_->initialized() && ble_gap_adv_active() != 0;
+  return owner_->initialized() && backendAdvertisingActive();
 }
 
 EspBleScanner::EspBleScanner(EspBle *owner) : owner_(owner) {}
@@ -9138,7 +9291,7 @@ void EspBle::end()
   scanner_.scanDeadlineMs_ = 0;
   if (advertising_.isAdvertising())
   {
-    ble_gap_adv_stop();
+    stopBackendAdvertising();
   }
   advertising_.restartAfterPreemption_ = false;
   advertising_.advertisingDeadlineMs_ = 0;
@@ -9278,6 +9431,7 @@ void EspBle::update()
   scanner_.dispatchPendingResults();
   dispatchConnectionEvents();
   driveAutoReconnect();
+  recoverUnreportedEncryption();
   hidKeyboardDevice_.dispatchPendingOutputReports();
   hidKeyboardDevice_.dispatchPendingProtocolMode();
   hidVendor_.dispatchPendingReports();
@@ -9296,6 +9450,96 @@ void EspBle::releaseDeferredNotifications()
   if (impl_->gattOperating || impl_->deferredNotificationCount == 0) return;
   impl_->gattCompletionPending = false;
   impl_->flushDeferredNotificationsLocked();
+}
+
+// The NimBLE host bundled with the core drops the Encryption Change of a
+// bonded reconnect when the Central's own encryption request and the
+// Peripheral's Security Request cross: the SM procedure is already gone when
+// the controller reports the link encrypted, so no GAP event is raised and the
+// link keeps bonded=0 and key_size=0. Newer controllers (ESP32-S31, and the C6
+// an ESP32-P4 reaches through ESP-Hosted) answer fast enough to hit it on
+// every bonded reconnect. The host vendored for the original ESP32 is patched
+// for it (tools/vendor_nimble_esp32.py); everywhere else EspBle reads the state
+// back. An encrypted link always runs on stored keys here, so the bond the
+// peer's record describes is the one in use.
+void EspBle::recoverUnreportedEncryption()
+{
+  if (impl_ == nullptr || !initialized_) return;
+
+  // Long enough for a security event that is already on its way to arrive
+  // first, so a link is never reported twice.
+  constexpr uint32_t GraceMilliseconds = 300;
+
+  // The backend is asked outside EspBle's mutex: ble_gap_conn_find() takes the
+  // host lock, which must never nest inside it.
+  uint16_t candidates[ConnectionCapacity];
+  size_t candidateCount = 0;
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    for (EspBleImpl::ConnectionSlot &slot : impl_->connections)
+    {
+      if (!slot.used) continue;
+      if (slot.connection.encrypted)
+      {
+        slot.unreportedEncryptionSinceMs = 0;
+        continue;
+      }
+      candidates[candidateCount++] = slot.connection.handle;
+    }
+  }
+  bool encrypted[ConnectionCapacity] = {};
+  for (size_t index = 0; index < candidateCount; ++index)
+  {
+    ble_gap_conn_desc description{};
+    encrypted[index] = ble_gap_conn_find(candidates[index], &description) == 0 &&
+      description.sec_state.encrypted;
+  }
+
+  const uint32_t now = millis();
+  uint16_t due[ConnectionCapacity];
+  size_t dueCount = 0;
+  {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    for (size_t index = 0; index < candidateCount; ++index)
+    {
+      for (EspBleImpl::ConnectionSlot &slot : impl_->connections)
+      {
+        if (!slot.used || slot.connection.handle != candidates[index]) continue;
+        if (slot.connection.encrypted || !encrypted[index])
+        {
+          slot.unreportedEncryptionSinceMs = 0;
+        }
+        else if (slot.unreportedEncryptionSinceMs == 0)
+        {
+          slot.unreportedEncryptionSinceMs = now == 0 ? 1 : now;
+        }
+        else if (now - slot.unreportedEncryptionSinceMs >= GraceMilliseconds)
+        {
+          slot.unreportedEncryptionSinceMs = 0;
+          due[dueCount++] = slot.connection.handle;
+        }
+        break;
+      }
+    }
+  }
+
+  for (size_t index = 0; index < dueCount; ++index)
+  {
+    ble_gap_conn_desc description{};
+    if (ble_gap_conn_find(due[index], &description) != 0) continue;
+    // Only a link to a peer with a stored bond is recovered. A first pairing
+    // is encrypted well before its keys are distributed and saved, and its
+    // own event follows at the end of the procedure.
+    ble_store_key_sec key{};
+    key.peer_addr = description.peer_id_addr;
+    ble_store_value_sec value{};
+    if (ble_store_read_peer_sec(&key, &value) != 0) continue;
+    ble_gap_sec_state state = description.sec_state;
+    state.bonded = 1;
+    state.authenticated = value.authenticated;
+    state.key_size = value.key_size;
+    impl_->updateSecurity(due[index], state, 0);
+  }
 }
 
 void EspBle::driveAutoReconnect()

@@ -1863,6 +1863,7 @@ private:
   bool preparePeripheral();
   void dispatchConnectionEvents();
   void driveAutoReconnect();
+  void recoverUnreportedEncryption();
   void expireGattOperation();
   bool startGattOperation(
     EspBleGattOperation operation,
