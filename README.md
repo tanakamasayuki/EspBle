@@ -211,15 +211,12 @@ who brings the BLE host.
 | ESP32-S31 | **The core's bundled NimBLE** | **4.0.0** | The chip first appears in Arduino-ESP32 4.0.0 |
 | ESP32-P4 (+C6 ESP-Hosted) | **The core provides it** (NimBLE over Hosted) | **3.3.1** | 3.3.0 does not provide NimBLE for the P4's Hosted configuration. Security and bonding are verified on 4.0.0 only |
 
-The original-ESP32 range is measured: 3.2.0 through 3.3.11, 3.3.13 and 4.0.0 all compile and link,
-and 3.2.1 / 3.3.0 / 3.3.7 / 3.3.8 / 3.3.10 / 3.3.11 / 3.3.13 / 4.0.0 are hardware-verified (3.3.12 was not measured) (Japanese
-[core-version test plan](docs/PLAN_CORE_VERSION_MATRIX.ja.md)). The code changes for
-4.0.0 were compile-checked again on 3.3.13 (ESP32 and ESP32-S3); the older cores in the
-range have not yet been rebuilt with them. The other chips'
-ranges are measured by CI.
+Which cores each release builds on is recorded per release by CI, and the
+hardware runs per core are in the Japanese
+[core-version test plan](docs/PLAN_CORE_VERSION_MATRIX.ja.md):
 
 - **Core Compatibility Matrix** workflow → `docs/COMPATIBILITY.<version>.md` (representative BLE examples across arduino-esp32 releases)
-- **Board Build Coverage** workflow → `docs/BOARDS.<version>.md` (the examples present when the workflow runs, across ESP32-S3 / ESP32 / C3 / C6 / H2 / P4 at one Core version)
+- **Board Build Coverage** workflow → `docs/BOARDS.<version>.md` (the examples present when the workflow runs, across ESP32-S3 / ESP32 / C3 / C6 / H2 / P4 / S31 at one Core version)
 
 Both are manual (`workflow_dispatch`) because a full sweep rewrites and rebuilds
 every sketch. Cores newer than 4.0.0 are treated as unverified rather than

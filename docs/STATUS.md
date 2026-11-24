@@ -48,14 +48,12 @@ For how to run them see [tests/TEST_PLAN.md](../tests/TEST_PLAN.md); for the rel
 - On the original ESP32, the supported core range is Arduino-ESP32 3.2.0 and newer,
   for BLE and Classic alike. The Bluedroid API headers the Classic host was built
   against ship in `src/esp32/include/`, so its declarations and struct layouts do
-  not depend on the core version. Measured: 3.2.0 through 3.3.11, 3.3.13 and 4.0.0 all compile and
-  link, and 3.2.1 / 3.3.0 / 3.3.7 / 3.3.8 / 3.3.10 / 3.3.11 are hardware-verified
-  (representative BLE smoke plus the main Classic suites; on 3.3.7 the Classic
-  suites only), 3.3.13 and 4.0.0 with every peer suite (3.3.12 was not measured). The exception is HFP audio (SCO), whose
+  not depend on the core version. Which cores each release builds on is in
+  `docs/COMPATIBILITY.<version>.md`. The exception is HFP audio (SCO), whose
   hardware-verified floor is 3.3.8: cores up to 3.3.7 ship a prebuilt controller
   built with the PCM audio path, which cannot carry it. Below 3.2.0 is unmeasured
   and stops at an `#error` that says why; above 4.0.0 a `#warning` states the
-  version is unverified. The measurement record is the Japanese
+  version is unverified. Hardware runs per core are in the Japanese
   [core-version test plan](PLAN_CORE_VERSION_MATRIX.ja.md).
 - On P4/C6 ESP-Hosted, Security, bonding, and dependent HID paths are verified on
   Core 4.0.0 only (ESP-Hosted 2.13.1 on both the P4 and the C6), and not verified on

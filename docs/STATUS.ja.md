@@ -50,11 +50,10 @@ BLE MIDIはbackend非依存のpacket codec（timestamp・running status・複数
   未検証です。BLEとClassicの同時利用もflagは不要で（`begin()`したhostで決まります）、ただし実験扱いのままです。
 - 無印ESP32の対応Coreは3.2.0以上です（BLEもClassicも）。Classic hostのbuildに使った
   Bluedroid API headerを`src/esp32/include/`へ同梱しているため、宣言と構造体レイアウトは
-  Coreの版に依存しません。実測で3.2.0〜3.3.11、3.3.13、4.0.0のcompile / linkが全て通り、3.2.1 / 3.3.0 / 3.3.7 /
-  3.3.8 / 3.3.10 / 3.3.11は実機（BLE代表smokeとClassic主要suite。3.3.7はClassic suiteのみ）、3.3.13と4.0.0は全Peer suiteで確認済みです（3.3.12は未測定）。例外はHFP audio
+  Coreの版に依存しません。リリースごとにbuildできるCoreは`docs/COMPATIBILITY.<version>.md`にあります。例外はHFP audio
   （SCO）で、3.3.7以前のCoreはprebuilt controllerがPCM audio pathのため使えず、実機確認済みの
   下限は3.3.8です。3.2.0未満は未測定のため理由付きの`#error`、4.0.0超は未検証である旨の
-  `#warning`を出します。測定記録は[core版数のテスト計画](PLAN_CORE_VERSION_MATRIX.ja.md)です。
+  `#warning`を出します。Coreごとの実機確認は[core版数のテスト計画](PLAN_CORE_VERSION_MATRIX.ja.md)にあります。
 - P4/C6 ESP-Hosted構成のSecurity、bonding、それを前提とするHIDは、Core 4.0.0（P4とC6とも
   ESP-Hosted 2.13.1）でのみ検証済みで、それより前のCoreでは未確認です。Core 3.3.11では
   同梱ESP-IDF 5.5.5のTinyCrypt/ECC不具合でLE Secure ConnectionsがDHKey check failureと

@@ -176,13 +176,11 @@ pin設定を上書きします（[SDIO pinの選択と上書き](docs/ESP_HOSTED
 | ESP32-S31 | **Core同梱のNimBLE** | **4.0.0** | Arduino-ESP32 4.0.0で初めて対応したチップ |
 | ESP32-P4（+C6 ESP-Hosted） | **Coreが提供**（Hosted経由のNimBLE） | **3.3.1** | 3.3.0のP4はHosted構成のNimBLEが未提供。Securityとbondingは4.0.0でのみ検証済み |
 
-無印ESP32の範囲は実測です。3.2.0〜3.3.11、3.3.13、4.0.0のcompile / linkが全て通り、3.2.1 / 3.3.0 / 3.3.7 /
-3.3.8 / 3.3.10 / 3.3.11 / 3.3.13 / 4.0.0は実機でも確認済みです（3.3.12は未測定）（[core版数のテスト計画](docs/PLAN_CORE_VERSION_MATRIX.ja.md)）。
-4.0.0向けのcode変更は3.3.13（ESP32とESP32-S3）でcompileを再確認済みで、範囲内のそれより古いCoreでは
-まだbuildし直していません。他チップの範囲はCIが計測します。
+リリースごとにどのCoreでbuildできるかはCIが記録し、Coreごとの実機確認は
+[core版数のテスト計画](docs/PLAN_CORE_VERSION_MATRIX.ja.md)にあります。
 
 - **Core Compatibility Matrix** ワークフロー → `docs/COMPATIBILITY.<version>.md`（代表BLE exampleをarduino-esp32の各リリースに対してビルド）
-- **Board Build Coverage** ワークフロー → `docs/BOARDS.<version>.md`（workflow実行時点のexampleを1つのCoreバージョンでESP32-S3 / ESP32 / C3 / C6 / H2 / P4に対してビルド）
+- **Board Build Coverage** ワークフロー → `docs/BOARDS.<version>.md`（workflow実行時点のexampleを1つのCoreバージョンでESP32-S3 / ESP32 / C3 / C6 / H2 / P4 / S31に対してビルド）
 
 どちらもフルsweepが全sketchを書き換えて再ビルドするため、手動実行（`workflow_dispatch`）です。
 なお4.0.0より新しいCoreは、壊れると分かっているのではなく未検証という扱いで、

@@ -15,14 +15,14 @@
 - (EN) Moved to Arduino-ESP32 4.0.0 (ESP-IDF v6.1.1, GCC 15.2): the examples and tests
   now pin 4.0.0, and every peer pairing passes on it (S3, the original ESP32, P4 + C6,
   ESP32-S31). The original-ESP32 `#warning` for unverified cores now starts above
-  4.0.0. The measured original-ESP32 range is 3.2.0 through 3.3.11, 3.3.13 and 4.0.0
-  (3.3.12 is still unmeasured). The test sketches now need 4.0.0, because ten
+  4.0.0. Which cores this release builds on is recorded in
+  `docs/COMPATIBILITY.<version>.md`. The test sketches now need 4.0.0, because ten
   counterpart sketches use the core's new `BLE.h` API; measuring an older core uses an
   earlier commit of the suite.
 - (JA) Arduino-ESP32 4.0.0（ESP-IDF v6.1.1、GCC 15.2）へ移行した。exampleとtestのpinを4.0.0にし、
   全Peerの組（S3、無印ESP32、P4 + C6、ESP32-S31）が4.0.0で成功する。無印ESP32の未検証Coreの
-  `#warning`は4.0.0超から出る。無印ESP32の実測範囲は3.2.0〜3.3.11、3.3.13、4.0.0（3.3.12は
-  未測定のまま）。相手側sketchのうち10本がCoreの新しい`BLE.h` APIを使うため、test sketchは
+  `#warning`は4.0.0超から出る。このリリースでbuildできるCoreは`docs/COMPATIBILITY.<version>.md`に記録する。
+  相手側sketchのうち10本がCoreの新しい`BLE.h` APIを使うため、test sketchは
   4.0.0が必要になった。古いCoreを測るときはsuiteの以前のcommitを使う。
 - (EN) Added the ESP32-S31 (BT 5.4 LE, built-in controller, the core's bundled
   NimBLE), available from core 4.0.0 only. Examples gain an `esp32s31` profile that
