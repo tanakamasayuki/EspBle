@@ -17,7 +17,7 @@ Use this checklist before releasing EspBle. The GitHub Actions workflows and `to
 
 - `library.properties` `name`, `version`, `sentence`, `paragraph`, `architectures`, and `includes` match the public package.
 - `keywords.txt` includes the main classes, report/event types, accessors, and callback/listener APIs.
-- Generated `docs/BOARDS.<version>.md` / `docs/COMPATIBILITY.<version>.md` files match the release version and current example set.
+- The generated `docs/COMPATIBILITY.<version>.md` matches the release version and current example set.
 - User-facing Classic documentation consistently states the measured support range (core 3.2.0 and newer, HFP audio 3.3.8 and newer; the archive is built with ESP-IDF 5.5.5 / GCC 14.2.0 and ships its contract headers).
 - The release zip contains the root `THIRD_PARTY_NOTICES.md`, Classic `NOTICE` / `MANIFEST.json` / `LICENSES/`, and NimBLE `LICENSE` / `NOTICE`, matching the manifest's license inventory.
 - If Classic is in scope, regenerate its archive temporarily from clean ESP-IDF v5.5.5 / GCC 14.2.0 inputs, verify its SHA-256 matches the stored `libespble_bluedroid_classic.a` and the required prefixed symbols are present, link a final ESP32 consumer, and prove that other SoCs do not link it. The authoritative procedure is [CLASSIC_HOST_BUILD.ja.md](CLASSIC_HOST_BUILD.ja.md) (Japanese).
@@ -141,7 +141,7 @@ done
 
 - Run the S3 peer suite repeatedly immediately before release; check for flaky failures, heap loss, and leaked tasks. Pass the P4 representative suite at least once on the final candidate.
 
-The local loop above covers esp32 and esp32s3. Compiling every example across the whole release board set belongs to `compile-examples.yml`, together with `board-matrix.yml` and `core-matrix.yml`; see "Workflows" below.
+The local loop above covers esp32 and esp32s3. Compiling every example across the whole release board set belongs to `compile-examples.yml`, and older cores to `core-matrix.yml`; see "Workflows" below.
 
 ## Manual Interoperability
 
@@ -162,7 +162,6 @@ Record the date and OS/device version for each result.
 
 These run in GitHub Actions. Running them locally first would not change the result, so they are release-time steps rather than gates; record the outcome.
 
-- `board-matrix.yml`: regenerate the board set and settle `docs/BOARDS.<version>.md`.
 - `core-matrix.yml`: recheck the supported Arduino-ESP32 versions and settle `docs/COMPATIBILITY.<version>.md`.
 - `compile-examples.yml`: run the Classic archive integrity, source namespace and final-link gates, then compile every example across the release board set.
 - `release.yml`: run the same Classic gate through the pre-bump hook, preview the version change, then create the version update, CHANGELOG, release branch, tag, and GitHub release.

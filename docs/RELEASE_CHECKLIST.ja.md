@@ -17,7 +17,7 @@ EspBleをリリースする前の確認項目です。GitHub Actionsと`tools/`�
 
 - `library.properties`の`name`、`version`、`sentence`、`paragraph`、`architectures`、`includes`が公開内容と一致している。
 - `keywords.txt`に主要class、report/event型、accessor、callback/listener APIが含まれている。
-- 生成済みの`docs/BOARDS.<version>.md` / `docs/COMPATIBILITY.<version>.md`がリリース対象versionと現在のexample集合を反映している。
+- 生成済みの`docs/COMPATIBILITY.<version>.md`がリリース対象versionと現在のexample集合を反映している。
 - Classicの利用者向け文書が実測済みの対応範囲（Core 3.2.0以上、HFP audioのみ3.3.8以上、
   archiveはESP-IDF 5.5.5 / GCC 14.2.0でbuildし契約headerを同梱）で一致している。
 - release zipにrootの`THIRD_PARTY_NOTICES.md`、Classic archive横の`NOTICE` / `MANIFEST.json` / `LICENSES/`、NimBLE横の`LICENSE` / `NOTICE`がすべて入り、manifestのlicense inventoryと一致している。
@@ -136,7 +136,7 @@ done
 - リリース直前にS3 Peer suiteを複数回実行し、flaky failure、heap低下、task残留がないことを確認する。P4代表suiteは最終候補で少なくとも1回通過させる。
 
 手元のloopで確認するのはesp32とesp32s3です。release対象board全体でのexample compileは
-`compile-examples.yml`の仕事で、`board-matrix.yml` / `core-matrix.yml`と同じく後述の「workflow」で扱います。
+`compile-examples.yml`の仕事で（古いCoreは`core-matrix.yml`）、後述の「workflow」で扱います。
 
 ## 手動相互運用
 
@@ -158,7 +158,6 @@ done
 次はGitHub Actionsで実行します。手元で先に回しても結果が変わらないため、gateではなくrelease時の
 手順として扱い、結果だけを記録します。
 
-- `board-matrix.yml`: 対象boardを再生成し、`docs/BOARDS.<version>.md`を確定する。
 - `core-matrix.yml`: Arduino-ESP32対応versionを再検証し、`docs/COMPATIBILITY.<version>.md`を確定する。
 - `compile-examples.yml`: Classic archiveのintegrity / source namespace / final-link gate後、release対象board全体でexample compile。
 - `release.yml`: pre-bump hookで同じClassic gateを通した後、bump scriptのpreviewでversion変更を確認し、version、CHANGELOG、release branch、tag、GitHub releaseを作成する。

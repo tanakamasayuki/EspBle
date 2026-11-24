@@ -48,19 +48,24 @@ jobs:
       fail-fast: false
       matrix:
         # One job per target so the targets build in parallel and a failure names
-        # its target. These are the targets the examples declare (see
-        # docs/BOARDS.*.md); m5stack_tab5 is a board variant of esp32p4 used by two
-        # examples and is left to the manual board matrix. Examples without the
-        # job's profile (the Classic ones outside esp32) are skipped.
+        # its target. These are the targets the examples declare. Examples
+        # without the job's profile (the Classic ones outside esp32) are skipped.
         profile: [esp32s3, esp32, esp32c3, esp32c6, esp32h2, esp32p4, esp32s31]
         # Each target is split into shards over the sorted example list to cut
-        # wall time (~20 s per example). 7 targets x 3 shards = 21 jobs, one
-        # more than the 20 a free account runs at once, so one shard queues.
+        # wall time (~20 s per example). 7 targets x 3 shards plus the Tab5 job
+        # = 22 jobs, two more than the 20 a free account runs at once, so two queue.
         shard: [1, 2, 3]
+        # m5stack_tab5 is a board variant of esp32p4 that only two examples
+        # declare, so it gets one unsharded job (three shards would leave one
+        # empty, which fails the job).
+        include:
+          - profile: m5stack_tab5
+            shard: 1
+            shards: 1
     env:
-      SHARDS: 3
+      SHARDS: ${{ matrix.shards || 3 }}
 
-    name: ${{ matrix.profile }} ${{ matrix.shard }}/3 (${{ inputs.core_version || 'pinned core' }})
+    name: ${{ matrix.profile }} ${{ matrix.shard }}/${{ matrix.shards || 3 }} (${{ inputs.core_version || 'pinned core' }})
 
     steps:
       - name: Checkout

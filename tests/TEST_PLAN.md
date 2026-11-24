@@ -24,7 +24,7 @@ and rare at the top, and each answers something the layer below cannot.
 | `peer/<suite>` | the fixture | while working on that suite | one suite, under a minute |
 | `pytest` (unit + peer) | the fixture | before merging | 113 tests, ~78 min |
 | `pytest --clean` | the fixture | before a release, and after a core or library upgrade | the above plus full compiles |
-| build matrices | nothing | per push (narrow) and on demand (exhaustive) | `compile-examples`, `board-matrix`, `core-matrix` |
+| build matrices | nothing | per push (narrow) and on demand (exhaustive) | `compile-examples`, `core-matrix` |
 | `manual/` | a third board or a person | when the thing being checked needs eyes, ears or hands | named explicitly |
 
 `pytest` with no arguments means everything that looks like a test. Nothing in

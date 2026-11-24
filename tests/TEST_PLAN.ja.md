@@ -24,7 +24,7 @@ Peerを必要としないsuiteは`peer/`の中に1台構成として置きます
 | `peer/<suite>` | 治具 | そのsuiteを触っている間 | 1 suite、1分未満 |
 | `pytest`（unit + peer） | 治具 | mergeの前 | 113 test、約78分 |
 | `pytest --clean` | 治具 | releaseの前、coreやlibraryを上げた後 | 上記 + 全compile |
-| build matrix | 不要 | 毎push（狭く）と必要時（全面） | `compile-examples`、`board-matrix`、`core-matrix` |
+| build matrix | 不要 | 毎push（狭く）と必要時（全面） | `compile-examples`、`core-matrix` |
 | `manual/` | 3台目か人 | 見る・聞く・抜き差しが要るとき | 明示して実行 |
 
 引数なしの`pytest`は、testに見えるものすべてです。設定にはdirectoryを入れる列挙も外す列挙も

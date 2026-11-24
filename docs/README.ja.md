@@ -37,7 +37,7 @@ EspBleの開発ドキュメント一覧と、初見の人が状況を把握す�
 | テスト方針・カバレッジ | [../tests/TEST_PLAN.ja.md](../tests/TEST_PLAN.ja.md) |
 | 次回リリースまでに残っている作業 | [PLAN_RELEASE_NEXT.ja.md](PLAN_RELEASE_NEXT.ja.md) |
 | リリース前の確認手順 | [RELEASE_CHECKLIST.ja.md](RELEASE_CHECKLIST.ja.md) |
-| ボード / coreビルド対応表（CI生成） | `BOARDS.<version>.md` / `COMPATIBILITY.<version>.md` |
+| coreビルド対応表（CI生成） | `COMPATIBILITY.<version>.md` |
 | 無印ESP32対応の方針・取得元・検証計画 | [PLAN_ESP32.ja.md](PLAN_ESP32.ja.md) |
 | 無印ESP32 Classicの実装計画（配布形式・段階） | [PLAN_ESP32_CLASSIC.ja.md](PLAN_ESP32_CLASSIC.ja.md) |
 | Classic Audio（A2DP / AVRCP / HFP）の拡張計画 | [PLAN_ESP32_CLASSIC_AUDIO.ja.md](PLAN_ESP32_CLASSIC_AUDIO.ja.md) |
@@ -59,7 +59,7 @@ EspBleの開発ドキュメント一覧と、初見の人が状況を把握す�
 
 - **確定仕様（正）**: [REQUIREMENTS.ja.md](REQUIREMENTS.ja.md)、[DECISIONS.ja.md](DECISIONS.ja.md)、各SPEC。仕様の最終的な根拠。
 - **現況の追跡**: [STATUS.ja.md](STATUS.ja.md)。進捗・制限・TODOを追う。まとまった作業ごとに更新。
-- **CI生成物（手動編集しない）**: `BOARDS.<version>.md`、`COMPATIBILITY.<version>.md`。`.github/workflows/`の`board-matrix.yml`/`core-matrix.yml`が生成する。
+- **CI生成物（手動編集しない）**: `COMPATIBILITY.<version>.md`。`.github/workflows/core-matrix.yml`が生成する。各exampleが宣言する全ボードのビルドは、push毎のCompile Examplesが担う。
 
 ## 現在の一言サマリ
 

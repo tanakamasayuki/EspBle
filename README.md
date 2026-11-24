@@ -211,15 +211,12 @@ who brings the BLE host.
 | ESP32-S31 | **The core's bundled NimBLE** | **4.0.0** | The chip first appears in Arduino-ESP32 4.0.0 |
 | ESP32-P4 (+C6 ESP-Hosted) | **The core provides it** (NimBLE over Hosted) | **3.3.1** | 3.3.0 does not provide NimBLE for the P4's Hosted configuration. Security and bonding are verified on 4.0.0 only |
 
-Which cores each release builds on is recorded per release by CI, and the
-hardware runs per core are in the Japanese
-[core-version test plan](docs/PLAN_CORE_VERSION_MATRIX.ja.md):
-
-- **Core Compatibility Matrix** workflow → `docs/COMPATIBILITY.<version>.md` (representative BLE examples across arduino-esp32 releases)
-- **Board Build Coverage** workflow → `docs/BOARDS.<version>.md` (the examples present when the workflow runs, across ESP32-S3 / ESP32 / C3 / C6 / H2 / P4 / S31 at one Core version)
-
-Both are manual (`workflow_dispatch`) because a full sweep rewrites and rebuilds
-every sketch. Cores newer than 4.0.0 are treated as unverified rather than
+Which cores each release builds on is recorded per release by the
+**Core Compatibility Matrix** workflow in `docs/COMPATIBILITY.<version>.md`
+(representative BLE examples across arduino-esp32 releases; manual, because a
+sweep rewrites and rebuilds every sketch), and the hardware runs per core are in
+the Japanese [core-version test plan](docs/PLAN_CORE_VERSION_MATRIX.ja.md). Every
+example is built for every board it declares on each push by **Compile Examples**. Cores newer than 4.0.0 are treated as unverified rather than
 known-broken: on the original ESP32 they build with a `#warning`.
 
 ## Getting started

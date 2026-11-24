@@ -171,7 +171,7 @@
 ## 未確定
 
 - Arduino-ESP32の最小対応版と更新ポリシー（`core-matrix.yml`が生成する`docs/COMPATIBILITY.<version>.md`で計測して確定する。ローカル実行はsketchを書き換えて環境を汚すためCIで回す）
-- ESP32-S3以外のbuild matrix（`board-matrix.yml`が生成する`docs/BOARDS.<version>.md`で計測。NimBLE不在の構成はコンパイル時`#error`で拒否する。無印ESP32だけは同梱hostで対応する予定で、[PLAN_ESP32.ja.md](PLAN_ESP32.ja.md)の実施後に✅へ変わる）
+- ESP32-S3以外のbuild matrix（当時は`board-matrix.yml`で計測し、今はCompile Examplesが全ボードをビルドする。NimBLE不在の構成はコンパイル時`#error`で拒否する。無印ESP32だけは同梱hostで対応する予定で、[PLAN_ESP32.ja.md](PLAN_ESP32.ja.md)の実施後に✅へ変わる）
 - HID Hostで追加対応するReport Mapの優先順位
 - public object handleの表現（値型、index+generation、参照class）
 - Boot Protocolの市販Host（BIOS等）との互換性と、Mouse Boot Report 0x2A33の対応要否（manual interoperabilityで確認する）

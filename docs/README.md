@@ -38,7 +38,7 @@ Start with the [example workflow](GUIDE_EXAMPLES.md) for a first working pair, u
 | Test strategy and coverage | [../tests/TEST_PLAN.md](../tests/TEST_PLAN.md) |
 | Release checks | [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) |
 | Remaining gates for the next release (Japanese) | [PLAN_RELEASE_NEXT.ja.md](PLAN_RELEASE_NEXT.ja.md) |
-| Board / core build matrices (CI-generated) | `BOARDS.<version>.md` / `COMPATIBILITY.<version>.md` |
+| Core build matrix (CI-generated) | `COMPATIBILITY.<version>.md` |
 | Original-ESP32 support: policy, upstream sources, verification plan (Japanese) | [PLAN_ESP32.ja.md](PLAN_ESP32.ja.md) |
 | Original-ESP32 Classic implementation plan: distribution form and stages (Japanese) | [PLAN_ESP32_CLASSIC.ja.md](PLAN_ESP32_CLASSIC.ja.md) |
 | Classic Audio (A2DP / AVRCP / HFP) expansion plan (Japanese) | [PLAN_ESP32_CLASSIC_AUDIO.ja.md](PLAN_ESP32_CLASSIC_AUDIO.ja.md) |
@@ -59,7 +59,7 @@ Start with the [example workflow](GUIDE_EXAMPLES.md) for a first working pair, u
 
 - **Settled specification (authoritative)**: [REQUIREMENTS.ja.md](REQUIREMENTS.ja.md), [DECISIONS.ja.md](DECISIONS.ja.md), and the SPEC files.
 - **Status tracking**: [STATUS.md](STATUS.md) — progress, limitations, TODO; updated per work batch.
-- **CI-generated (do not hand-edit)**: `BOARDS.<version>.md`, `COMPATIBILITY.<version>.md`, produced by `.github/workflows/board-matrix.yml` and `core-matrix.yml`.
+- **CI-generated (do not hand-edit)**: `COMPATIBILITY.<version>.md`, produced by `.github/workflows/core-matrix.yml`. Every board each example declares is built on each push by Compile Examples.
 
 ## One-line status
 

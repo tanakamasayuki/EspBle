@@ -99,7 +99,7 @@ release操作そのものはこのgateに含めません（後述の「GitHub Ac
 |---|---|---|
 | 完了 | CHANGELOG | Unreleasedへdual-host/Classic/RPA/lifecycle、無線設定、SPP Stream、HFP付随command、HID合成上限、制限、破壊的変更の有無を日英で記録 |
 | 完了 | 文書整合 | README / STATUS / Feature Matrix / CLASSIC_VS_BLE（日英）、棚卸し、技術検証、試験計画をscopeと突き合わせた。scope未確定を前提にした記述と、dual-hostのbuild flag opt-inという古い記述を削除。試験計画に未記載だった5 suite（`classic_hid_profiles`、`classic_a2dp_sink_profile`、`classic_a2dp_media`、`dual_host_hfp`、`dual_host_a2dp`）を日英へ追加し、`tests/peer`の全suiteが両方の計画に載っている状態にした |
-| 完了 | metadata | `library.properties`と`keywords.txt`をClassic分を含めて確認し、`EspBleClassicSppStream`とHFPの追加型・追加methodをkeywordsへ登録。version生成文書（BOARDS / COMPATIBILITY）はworkflowが作るためここでは扱わない |
+| 完了 | metadata | `library.properties`と`keywords.txt`をClassic分を含めて確認し、`EspBleClassicSppStream`とHFPの追加型・追加methodをkeywordsへ登録。version生成文書（COMPATIBILITY）はworkflowが作るためここでは扱わない |
 | 完了 | artifact監査 | 追跡binaryは`src/esp32/libespble_bluedroid_classic.a`のみ。output / build / cache / logは未追跡。`git diff --check`は無警告。archiveのSHA-256が[archive再生成手順](CLASSIC_HOST_BUILD.ja.md)の記録と一致（`d64d3a40…9421`） |
 
 ## GitHub Actionsで行う作業（gateではない）
@@ -109,7 +109,6 @@ release操作そのものはこのgateに含めません（後述の「GitHub Ac
 
 | 項目 | workflow | 備考 |
 |---|---|---|
-| board matrix | `board-matrix.yml` | 対象boardを再生成し、`docs/BOARDS.<version>.md`を確定 |
 | core matrix | `core-matrix.yml` | Arduino-ESP32対応versionを再検証し、`docs/COMPATIBILITY.<version>.md`を確定 |
 | 全example compile | `compile-examples.yml` | release対象board全体。手元ではesp32 / esp32s3のcompileをGate Cで確認する |
 | release操作 | `release.yml` | bump preview、version、CHANGELOG、release branch、tag、GitHub release |
