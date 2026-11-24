@@ -1,6 +1,8 @@
 # Changelog / 変更履歴
 
 ## Unreleased
+
+## 1.4.0
 - (EN) Verified with Arduino-ESP32 3.3.13 (ESP-IDF release/v5.5, ESP-Hosted host
   2.13.1): every peer suite on ESP32-S3, the original ESP32 and P4 + C6, and the
   examples and tests now pin 3.3.13. The original-ESP32 `#warning` for unverified
